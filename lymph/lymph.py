@@ -128,7 +128,7 @@ class Node:
         Returns
         -------
         res : numpy array
-            Transition probabilities from current state to all three other states
+            Transition probabilities from current state to all two (three) other states
         """
         if self.narity == 2:
             res = np.array([1-self.p, self.p])
