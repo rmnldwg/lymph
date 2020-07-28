@@ -1,29 +1,28 @@
 import numpy as np
-import scipy as sp
+import scipy as sp 
 import scipy.stats
+import warnings
 
+from .node import Node
+from .edge import Edge
 
 def toStr(n, base, rev=False, length=None):
     """Function that converts an integer into another base.
     
-    Parameters
-    ----------
-    n : int
-        Number to convert
+    Args:
+        n (int): Number to convert
 
-    base : int
-        Base of the resulting converted number
+        base (int): Base of the resulting converted number
 
-    rev : bool, default=False
-        If true, the converted number will be printed in reverse order
+        rev (bool): If true, the converted number will be printed in reverse 
+            order.
+            (default: ``False``)
 
-    length : int or None, default=None
-        Length of the returned string.
+        length (int or None): Length of the returned string.
+            (default: ``None``)
 
-    Returns
-    -------
-    result : str
-        (Padded) string of the converted number"""
+    This function returns the (padded) string of the converted number.
+    """
     
     if base > 16:
         raise Exception("Base must be 16 or smaller!")
@@ -49,301 +48,28 @@ def toStr(n, base, rev=False, length=None):
     else:
         return pad + result[::-1]
 
+
         
 
-class Node:
-    """Class for lymph node levels (LNLs) in a lymphatic system.
-
-    Attributes
-    ----------
-    name : str
-        Name of the node
-
-    state : int
-        Current state this LNL is in. Can be in {0, ..., narity-1}
-
-    p : float
-        Base probability. Probability that this LNL gets infected from the 
-        primary tumour.
-
-    ep : float
-        Evolution probability. In case of narity = 3 this is the probability
-        that the LNL spontaneously develops from state = 1 into state = 2.
-
-    inc : list of Node instances
-        Incoming edges from parent nodes
-
-    out : list of Node instances
-        Outgoing edges to child nodes
-
-    narity :  int
-        Number of different states this LNL can take on
-
-    n_obs : int
-        Number of observational methods that are connected to this node
-
-    obs_table : np.array
-        Kind of conditional probability table for the observational modalities.
-        Contains sensitivity and specificity for each observation method.
-    """
-    def __init__(self, name, state=0, p=0.0, ep=0.0, 
-                 obs_table=np.array([[[1, 0], [0, 1]]])):
-        self.name = name
-        self.state = state
-        # base prob for transitions from primary tumour to the node
-        self.p = p
-        # evolution prob for transitions from microscopic state to macroscopic
-        self.ep = ep
-
-        self.narity = obs_table.shape[::-1][0]
-        self.n_obs = obs_table.shape[0]
-        self.obs_table = obs_table
-
-        self.inc = []
-        self.out = []
-
-
-
-    def report(self):
-        """Just quickly prints infos about the node"""
-        print("name: {}, p = {}".format(self.name, self.p))
-        print("incoming: ", end="")
-        for i in self.inc:
-            print("{}, ".format(i.start.name), end="")
-        print("\noutgoing: ", end="")
-        for o in self.out:
-            print("{}, ".format(o.end.name))
-
-
-
-    def trans_prob(self, log=False):
-        """Computes the transition probabilities from the current state to all
-        other possible states.
-        
-        Parameters
-        ----------
-        log : bool, default=False
-            If True method returns the log-probability
-        
-        Returns
-        -------
-        res : numpy array
-            Transition probabilities from current state to all two (three) other states
-        """
-        if self.narity == 2:
-            res = np.array([1-self.p, self.p])
-
-            if self.state == 0:
-                pass
-            else:
-                if log:
-                    return np.array([-np.inf, 0.])
-                else:
-                    return np.array([0., 1.])
-
-            for edge in self.inc:
-                res[1] += res[0] * edge.t[edge.start.state]
-
-                res[0] *= 1 - edge.t[edge.start.state]
-
-        # new approach
-        if self.narity == 3:
-            res = np.array([1-self.p, self.p, 0.])
-
-            if self.state == 0:
-                for edge in self.inc:
-                    res[1] += res[0] * edge.t[edge.start.state]
-
-                    res[0] *= 1 - edge.t[edge.start.state]
-            elif self.state == 1:
-                if log:
-                    return np.array([-np.inf, np.log(1-self.ep), np.log(self.ep)])
-                else:
-                    return np.array([0., 1-self.ep, self.ep])
-            elif self.state == 2:
-                if log:
-                    return np.array([-np.inf, -np.inf, 0.])
-                else:
-                    return np.array([0., 0., 1.])
-
-        if log:
-            return np.log(res)
-        else:
-            return res
-
-
-
-    def obs_prob(self, log=False, observation=None):
-        """Computes the probability of observing a certain modality, given the 
-        current state.
-
-        Parameters
-        ----------
-        log : bool, default=False
-            If True, method returns the log-prob.
-
-        observation : array, shape=(n_obs,)
-            Contains an observation for each modality.
-
-        Returns
-        -------
-        res : numpy array
-            Observation probability
-        """
-        res = 1
-        if observation is not None:
-            for i in range(self.n_obs):
-                res *= self.obs_table[i, observation[i], self.state]
-
-        if log:
-            return np.log(res)
-        else:
-            return res
-
-
-
-    def bn_prob(self, log=False):
-        """Computes the conditional probability of a node being in the state 
-        it is in, given its parents are in the states they are in.
-
-        Parameters
-        ----------
-        log : bool, default=False
-            If True, returns the log-probability
-
-        Returns
-        -------
-        res : float
-            Conditional (log-)probability
-        """
-        res = 1.
-        for edge in self.inc:
-            res *= (1 - edge.t[edge.start.state])**edge.start.state
-
-        res *= (1 - self.p)*(-1)**self.state
-        res += self.state
-
-        if log:
-            return np.log(res)
-        else:
-            return res
-
-
-
-
-
-class Edge:
-    """Class for the connections between lymph node levels (LNLs) represented
-    by the Node class.
-
-    Attributes
-    ----------
-    start : Node instance
-        Parent node
-
-    end : Node instance
-        Child node
-
-    t_mu : float
-        Transition probability in case start-Node has state 1 (microscopic)
-
-    t_M : float
-        Transition probability in case start-Node has state 2 (MACROSCOPIC)
-
-    """
-    def __init__(self, start, end, t=None, narity=3):
-        if type(start) is not Node:
-            raise Exception("Start must be Node!")
-        if type(end) is not Node:
-            raise Exception("End must be Node!")
-
-        self.start = start 
-        self.start.out.append(self)
-        self.end = end 
-        self.end.inc.append(self)
-
-        if t is None:
-            self.t = np.zeros(shape=(narity,))
-        else:
-            self.t = t
-            self.t[0] = 0
-        for i in range(1, len(self.t)):
-            if self.t[i] < self.t[i-1]:
-                raise Exception("t cannot decrease!")
-
-
-
-    def report(self):
-        """Just quickly prints infos about the edge"""
-        print("start: {}".format(self.start.name))
-        print("end: {}".format(self.end.name))
-        print("t = {}".format(self.t))
-
-
-
-
-
-class System:
+class System(object):
     """Class that describes a whole lymphatic system with its lymph node levels 
     (LNLs) and the connections between them.
 
-    Attributes
-    ----------
-    narity : int
-        Node instances (LNLs) can have states in {0, ..., narity-1}
+    Args:
+        graph (dict): For every key in the dictionary, the :class:`system` will 
+            create a :class:`node` that represents a binary random variable. The 
+            values in the dictionary should then be the a list of names to which 
+            :class:`edges` from the current key should be created.
 
-    n_obs : int
-        Number of different observation modalities (pathology, CT, MRI, ...)
-
-    nodes : list of Node instances
-        Nodes (LNLs) the system is made up of
-
-    edges : list of Edge instances
-        Edges that connect the Nodes (LNLs) of the system
-
-    state_list : numpy array, shape=(len(nodes)**narity, len(nodes))
-        list of all possible states (more precisely their numerical 
-        representation) the system can be in.
-
-    A : numpy array, shape=(len(state_list), len(state_list)), dtype=int
-        Square transition matrix with the probabilities to transition from any
-        state into any other state.
-
-    idx_dict : dictionary
-        for every row of matrix A it gives the index of entries that are NOT zero
-
-    B : numpy array, shape=(len(state_list), len(obs_list))
-        Observation matrix with the probabilities to observe any observation
-        given any state
-
-    obs_list : numpy array, dtype=int
-        Like state_list, but for all possible observations
-
-    C : numpy arrray, shape=(len(obs_list), # of unique diagnoses)
-        Matrix for marginalization. If (unique) diagnoses contain unobserved
-        LNLs, then one needs to marginalize over all mattching observations. 
-        This matrix does so. Each column represents a unique diagnose and each
-        row an observation. Each entry can be either 0 or 1, so the computation
-        z @ C, where z is a vector of probabilities for each possible obser-
-        vation, yields the probability of each unique diagnose in the dataset
-        (only for the Bayesian network).
-
-    f : numpy array, shape=(# of unique diagnoses)
-        Counts of marginalzied unique observations corresponding to C 
-        (only for the Bayesian network).
-
-    C_dict :
-        Same as C, but with one C-matrix for every T-stage (only for the 
-        hidden Markov model).
-
-    f_dict :
-        same as f, but with one f-vector for every T-stage (only for the hidden
-        Markov model).   
+        obs_table (numpy array, 3D): A 2D arrray for each observational modality.
+            These 2D arrays contain the conditional probabilities of observations 
+            given hidden states (like sensitivity :math:`s_N` and specificity 
+            :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
     """
-    def __init__(self, graph={}, obs_table=np.array([[[1. , 0. , 0. ], 
-                                                      [0. , 1. , 1. ]], 
-                                                     [[0.8, 0.2, 0.2], 
-                                                      [0.2, 0.8, 0.8]]])):
+    def __init__(self, graph={}, obs_table=np.array([[[1. , 0. ], 
+                                                      [0. , 1. ]], 
+                                                     [[0.8, 0.2], 
+                                                      [0.2, 0.8]]])):
         self.narity = obs_table.shape[::-1][0]
         self.n_obs = obs_table.shape[0]
         self.nodes = []
@@ -365,7 +91,7 @@ class System:
 
 
     def find_node(self, name):
-        """Finds a node with name "name"
+        """Finds and returns a node with name ``name``.
         """
         for node in self.nodes:
             if node.name == name:
@@ -374,7 +100,8 @@ class System:
 
 
     def find_edge(self, startname, endname):
-        """finds and edge that starts and end with specific nodes
+        """Finds and returns the edge instance which has a parent node named 
+        ``startname`` and ends with node ``endname``.
         """
         for node in self.nodes:
             if node.name == startname:
@@ -408,7 +135,7 @@ class System:
 
 
     def set_state(self, newstate):
-        """Sets the state of the system to newstate.
+        """Sets the state of the system to ``newstate``.
         """
         for i, node in enumerate(self.nodes):
             node.state = newstate[i]
@@ -437,19 +164,20 @@ class System:
         """Fills the system with new base and transition probabilities and also 
         computes the transition matrix A again, if one is in mode "HMM".
 
-        Parameters
-        ---------
-        theta : numpy array
-            the new parameters that should be fed into the system. The first 
-            2*N numbers in the array contain the base probabilities, and evo-
-            lution probabilities (if narity = 3), where N is the number of 
-            nodes. The remaining entries contain either one or two parameters 
-            for each edge in the system (depending on the narity).
+        Args:
+            theta (numpy array): The new parameters that should be fed into the 
+                system. The first :math:`2N` numbers in the array contain the 
+                base probabilities :math:`b`, and evolution probabilities 
+                :math:`t` (if narity = 3), where :math:`N` is the number of 
+                nodes. The remaining entries contain either one or two 
+                parameters for each edge in the system (depending on the narity).
 
-        mode : str, default="HMM"
-            If one is in "BN" mode (Bayesian network), then it is not necessary
-            to compute the transition matrix A again, so it is skipped.
+            mode (str): If one is in "BN" mode (Bayesian network), then it is 
+                not necessary to compute the transition matrix A again, so it is 
+                skipped.
+                (default: ``"HMM"``)
         """
+
         for i, node in enumerate(self.nodes):
             node.p = theta[(self.narity-1)*i]
             node.ep = theta[(self.narity-1)*i+1]
@@ -467,24 +195,19 @@ class System:
         """Computes the probability to transition to newstate, given its 
         current state.
 
-        Parameters
-        ----------
-        newstate : list
-            List of new states for each node in the lymphatic system. The trans-
-            ition probability will be computed from the current states to these
-            states.
+        Args:
+            newstate (list): List of new states for each node in the lymphatic 
+                system. The transition probability :math:`t` will be computed 
+                from the current states to these states.
 
-        log : bool, default=False
-            if True, the log-probability is computed
+            log (bool): if ``True``, the log-probability is computed.
+                (default: ``False``)
 
-        acquire : bool, default=False
-            if True, after computing and returning the probability, the system 
-            updates its own state to be newstate.
+            acquire (bool): if ``True``, after computing and returning the 
+                probability, the system updates its own state to be ``newstate``.
+                (default: ``False``)
 
-        Returns
-        -------
-        res : float
-            transition probability
+        This method returns the transition probability :math:`t`.
         """
         if not log:
             res = 1
@@ -506,20 +229,16 @@ class System:
         """Computes the probability to see a certain observation, given the 
         system's current state.
 
-        Parameters
-        ----------
-        observation : numpy array, shape=(n_obs, len(self.nodes))
-            Contains the observed state of the patient. if there are N 
-            different diagnosing modalities and M nodes this has the shape 
-            (N, M) and contains zeros and ones.
+        Args:
+            observation (numpy array, shape=(n_obs, len(self.nodes))): Contains 
+                the observed state of the patient. if there are :math:`N` 
+                different diagnosing modalities and :math:`M` nodes this has the 
+                shape :math:`(N,M)` and contains zeros and ones.
 
-        log : bool, default=False
-            If True, this returns the log probability.
+            log (bool): If True, this returns the log probability.
+                (default: ``False``)
 
-        Returns
-        -------
-        res : float
-            probability to see this observaation
+        This method returns the probability to see the given observation.
         """
         if not log:
             res = 1
@@ -560,8 +279,8 @@ class System:
 
 
     def gen_mask(self):
-        """Generates a dictionary that contains for each row of A those indices 
-        where A is NOT zero.
+        """Generates a dictionary that contains for each row of :math:`\\mathbf{A}` 
+        the indices where :math:`\\mathbf{A}` is NOT zero.
         """
         self.idx_dict = {}
         for i in range(self.narity**len(self.nodes)):
@@ -574,8 +293,9 @@ class System:
 
 
     def gen_A(self):
-        """Generates the transition matrix A, which contains the P(X|X). A is 
-        a square matrix with size (# of states). the lower diagonal is zero.
+        """Generates the transition matrix :math:`\\mathbf{A}`, which contains the 
+        :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` is a 
+        square matrix with size ``(# of states)``. The lower diagonal is zero.
         """
         self.A = np.zeros(shape=(self.narity**len(self.nodes), self.narity**len(self.nodes)))
         for i in range(self.narity**len(self.nodes)):
@@ -586,8 +306,9 @@ class System:
 
 
     def gen_B(self):
-        """Generates the observation matrix B, which contains the P(Z|X). B has 
-        the shape (# of states, # of possible observations)
+        """Generates the observation matrix :math:`\\mathbf{B}`, which contains 
+        the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
+        shape ``(# of states, # of possible observations)``.
         """
         self.B = np.zeros(shape=(self.narity**len(self.nodes), 2**(self.n_obs * len(self.nodes))))
         for i in range(self.narity**len(self.nodes)):
@@ -603,23 +324,19 @@ class System:
         A from the full solution space of row-stochastic matrices with zeros
         where transitions are forbidden.
 
-        Parameters
-        ----------
-        t_stage : list, default=[1,2,3,4]
-            List of T-stages that should be included in the learning process.
+        Args:
+            t_stage (list): List of T-stages that should be included in the 
+                learning process.
+                (default: ``[1,2,3,4]``)
 
-        time_dist_dict :  dictionary
-            Dictionary with keys of T-stages in t_stage and values of time
-            priors for each of those T-stages.
+            time_dist_dict (dict): Dictionary with keys of T-stages in t_stage 
+                and values of time priors for each of those T-stages.
 
-        T : float, default=1
-            Temperature of the epoch. Can be reduced from a starting value down
-            to almost zero for an annealing approach to sampling.
+            T (float): Temperature of the epoch. Can be reduced from a starting 
+                value down to almost zero for an annealing approach to sampling.
+                (default: ``1``)
 
-        Returns
-        -------
-        likely : float
-            log-likelihood of the epoch
+        This method returns the log-likelihood of the epoch.
         """
         likely = self.likelihood(t_stage, time_dist_dict)
         for i in np.random.permutation(self.narity**len(self.nodes) -1):
@@ -650,26 +367,26 @@ class System:
         """Generates the matrix C that marginalizes over multiple states for 
         data with incomplete observation, as well as how often these obser-
         vations occur in the dataset. In the end the computation 
-        p = start @ A^t @ B @ C results in an array of probabilities that can 
-        - together with the frequencies f - be used to compute the likelihood. 
-        This also works for the Bayesian network case: p = a @ C where a is an 
-        array containing the probability for each state.
+        :math:`\\mathbf{p} = \\boldsymbol{\\pi} \cdot \\mathbf{A}^t \cdot \\mathbf{B} \\cdot \\mathbf{C}` 
+        results in an array of probabilities that can - together with the 
+        frequencies :math:`f` - be used to compute the likelihood. This also 
+        works for the Bayesian network case: :math:`\\mathbf{p} = \\mathbf{a} \\cdot \\mathbf{C}` 
+        where :math:`a` is an array containing the probability for each state.
 
-        Parameters
-        ----------
-        data : pandas dataframe
-            Contains rows of patient data. The columns must include the T-stage 
-            and at least one diagnostic modality.
+        Args:
+            data (pandas dataframe): Contains rows of patient data. The columns 
+                must include the T-stage and at least one diagnostic modality.
 
-        t_stage : list, default=[1,2,3,4]
-            List of T-stages that should be included in the learning process.
+            t_stage (list): List of T-stages that should be included in the 
+                learning process.
+                (default: ``[1,2,3,4]``)
 
-        observations : list of str, default=['pCT', 'path']
-            List of observational modalities from the pandas dataframe that 
-            should be included.
+            observations (list of str): List of observational modalities from 
+                the pandas dataframe that should be included.
+                (default: ``['pCT', 'path']``)
 
-        mode : str, default="HMM"
-            "HMM" for hidden Markov model and "BN" for Bayesian network
+            mode (str): ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian network.
+                (default: ``"HMM"``)
         """
 
         # For the Hidden Markov Model
@@ -752,28 +469,25 @@ class System:
         """Computes the likelihood of a set of parameters, given the already 
         stored data(set).
 
-        Parameters
-        ----------
-        theta : numpy array
-            Set of parameters, consisting of the base probabilities (as many as 
-            the system has nodes), the transition probabilities (as many as the 
-            system has edges) and - not yet implemented - the evolution 
-            probabilities (as many as the system has nodes).
+        Args:
+            theta (numpy array): Set of parameters, consisting of the base 
+                probabilities :math:`b` (as many as the system has nodes), the 
+                transition probabilities :math:`t` (as many as the system has 
+                edges) and - not yet implemented - the evolution probabilities 
+                :math:`e` (as many as the system has nodes).
 
-        t_stage : list, default=[1,2,3,4]
-            List of T-stages that should be included in the learning process.
+            t_stage (list): List of T-stages that should be included in the 
+                learning process.
+                (default: ``[1,2,3,4]``)
 
-        time_dist_dict :  dictionary
-            Dictionary with keys of T-stages in t_stage and values of time
-            priors for each of those T-stages.
+            time_dist_dict (dict): Dictionary with keys of T-stages in ``t_stage`` 
+                and values of time priors for each of those T-stages.
 
-        mode : str, default="HMM"
-            "HMM" for hidden Markov model and "BN" for Bayesian network
+            mode (str): ``"HMM"`` for hidden Markov model and ``"BN"`` for 
+                Bayesian network.
+                (default: ``"HMM"``)
 
-        Returns
-        -------
-        res : float
-            the log-likelihood
+        This method returns the log-likelihood of a parameter sample.
         """
         # check if all parameters are within their limits
         if np.any(np.greater(0., theta)):
@@ -872,23 +586,23 @@ class System:
         observations and a time distribution for the Markov model (and the 
         Bayesian network).
 
-        Parameters
-        ----------
-        inv : np.array, shape=(len(self.state_list)) 
-            Contains None for node levels that one is not interested in or one 
-            of the possible states for the respective involvement.
+        Args:
+            inv (numpy array): Contains None 
+                for node levels that one is not interested in or one of the 
+                possible states for the respective involvement.
+                ``shape=(len(self.state_list))``
 
-        obs : np.array, shape=(len(self.obs_list))
-            Contains None for node levels where no observation is available and 
-            0 or 1 for the respective observation.
+            obs (numpy array): Contains ``None`` for 
+                node levels where no observation is available and 0 or 1 for the 
+                respective observation.
+                ``shape=(len(self.obs_list))``
 
-        mode : str, default="HMM"
-            "HMM" for hidden Markov model and "BN" for Bayesian network
+            mode (str): ``"HMM"`` for hidden Markov model and ``"BN"`` for 
+                Bayesian network.
+                (default: ``"HMM"``)
 
-        Returns
-        -------
-        risk : float
-            The risk for the involvement of interest, given an observation
+        This method returns the risk for the involvement of interest, given an 
+        observation.
         """
         if len(inv) != len(self.nodes):
             raise Exception("The involvement array has the wrong length." + 

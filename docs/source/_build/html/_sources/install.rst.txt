@@ -1,0 +1,6 @@
+Installation
+============
+
+To install this package, type::
+
+    conda install lymph
