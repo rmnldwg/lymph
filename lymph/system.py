@@ -177,14 +177,22 @@ class System(object):
                 skipped.
                 (default: ``"HMM"``)
         """
-
         for i, node in enumerate(self.nodes):
-            node.p = theta[(self.narity-1)*i]
-            node.ep = theta[(self.narity-1)*i+1]
+            node.p = theta[i]
+            node.ep = theta[i+1]
         for i, edge in enumerate(self.edges):
             edge.t[0] = 0.0
             for j in range(1, self.narity):
-                edge.t[j] = theta[(self.narity-1)*len(self.nodes) + i*(self.narity-1) + (j-1)]
+                edge.t[j] = theta[len(self.nodes) + i + (j-1)]
+
+        # I'm not gonna use that narity stuff for a while...
+        # for i, node in enumerate(self.nodes):
+        #     node.p = theta[(self.narity-1)*i]
+        #     node.ep = theta[(self.narity-1)*i+1]
+        # for i, edge in enumerate(self.edges):
+        #     edge.t[0] = 0.0
+        #     for j in range(1, self.narity):
+        #         edge.t[j] = theta[(self.narity-1)*len(self.nodes) + i*(self.narity-1) + (j-1)]
 
         if mode=="HMM":
             self.gen_A()
@@ -367,7 +375,7 @@ class System(object):
         """Generates the matrix C that marginalizes over multiple states for 
         data with incomplete observation, as well as how often these obser-
         vations occur in the dataset. In the end the computation 
-        :math:`\\mathbf{p} = \\boldsymbol{\\pi} \cdot \\mathbf{A}^t \cdot \\mathbf{B} \\cdot \\mathbf{C}` 
+        :math:`\\mathbf{p} = \\boldsymbol{\\pi} \\cdot \\mathbf{A}^t \\cdot \\mathbf{B} \\cdot \\mathbf{C}` 
         results in an array of probabilities that can - together with the 
         frequencies :math:`f` - be used to compute the likelihood. This also 
         works for the Bayesian network case: :math:`\\mathbf{p} = \\mathbf{a} \\cdot \\mathbf{C}` 

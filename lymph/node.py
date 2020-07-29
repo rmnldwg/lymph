@@ -42,13 +42,14 @@ class Node(object):
 
     def report(self):
         """Just quickly prints infos about the node"""
-        print("name: {}, p = {}".format(self.name, self.p))
+        print(f"name: {self.name}, state: {self.state}, p = {self.p}")
         print("incoming: ", end="")
         for i in self.inc:
-            print("{}, ".format(i.start.name), end="")
+            print(f"{i.start.name}, ", end="")
         print("\noutgoing: ", end="")
         for o in self.out:
-            print("{}, ".format(o.end.name))
+            print(f"{o.end.name}, ", end="")
+        print("\n", end="")
 
 
 
@@ -79,30 +80,30 @@ class Node(object):
 
                 res[0] *= 1 - edge.t[edge.start.state]
 
-        # new approach
-        if self.narity == 3:
-            res = np.array([1-self.p, self.p, 0.])
+        # new approach... not necessary yet
+        # if self.narity == 3:
+        #     res = np.array([1-self.p, self.p, 0.])
 
-            if self.state == 0:
-                for edge in self.inc:
-                    res[1] += res[0] * edge.t[edge.start.state]
+        #     if self.state == 0:
+        #         for edge in self.inc:
+        #             res[1] += res[0] * edge.t[edge.start.state]
 
-                    res[0] *= 1 - edge.t[edge.start.state]
-            elif self.state == 1:
-                if log:
-                    return np.array([-np.inf, np.log(1-self.ep), np.log(self.ep)])
-                else:
-                    return np.array([0., 1-self.ep, self.ep])
-            elif self.state == 2:
-                if log:
-                    return np.array([-np.inf, -np.inf, 0.])
-                else:
-                    return np.array([0., 0., 1.])
+        #             res[0] *= 1 - edge.t[edge.start.state]
+        #     elif self.state == 1:
+        #         if log:
+        #             return np.array([-np.inf, np.log(1-self.ep), np.log(self.ep)])
+        #         else:
+        #             return np.array([0., 1-self.ep, self.ep])
+        #     elif self.state == 2:
+        #         if log:
+        #             return np.array([-np.inf, -np.inf, 0.])
+        #         else:
+        #             return np.array([0., 0., 1.])
 
-        if log:
-            return np.log(res)
-        else:
-            return res
+        # if log:
+        #     return np.log(res)
+        # else:
+        #     return res
 
 
 
@@ -132,8 +133,8 @@ class Node(object):
 
 
     def bn_prob(self, log=False):
-        """Computes the conditional probability of a node being in the state 
-        it is in, given its parents are in the states they are in.
+        """Computes the conditional probability of a node being in the state it 
+        is in, given its parents are in the states they are in.
 
         Args:
             log (bool): If ``True``, returns the log-probability.
