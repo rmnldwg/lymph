@@ -1,0 +1,629 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Detailed API &mdash; lymph 2020 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="License" href="license.html" />
+    <link rel="prev" title="Getting started" href="quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> lymph
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Getting started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Detailed API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-lymph.system">Lymph system</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#edge">Edge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#node">Node</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">lymph</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Detailed API</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/lymph.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="detailed-api">
+<h1>Detailed API<a class="headerlink" href="#detailed-api" title="Permalink to this headline">¶</a></h1>
+<p>The human lymph system (or rather parts of it) are modelled as directed graphs here. Hence, a <code class="xref py py-class docutils literal notranslate"><span class="pre">system</span></code> consists of multiple <code class="xref py py-class docutils literal notranslate"><span class="pre">node</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">edge</span></code> instances, which are represented by a python class each.</p>
+<div class="section" id="module-lymph.system">
+<span id="lymph-system"></span><h2>Lymph system<a class="headerlink" href="#module-lymph.system" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="lymph.system.System">
+<em class="property">class </em><code class="sig-prename descclassname">lymph.system.</code><code class="sig-name descname">System</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">graph</span><span class="o">=</span><span class="default_value">{}</span></em>, <em class="sig-param"><span class="n">obs_table</span><span class="o">=</span><span class="default_value">array([[[1.0, 0.0], [0.0, 1.0]], [[0.8, 0.2], [0.2, 0.8]]])</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class that describes a whole lymphatic system with its lymph node levels
+(LNLs) and the connections between them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>graph</strong> (<em>dict</em>) – For every key in the dictionary, the <code class="xref py py-class docutils literal notranslate"><span class="pre">system</span></code> will
+create a <code class="xref py py-class docutils literal notranslate"><span class="pre">node</span></code> that represents a binary random variable. The
+values in the dictionary should then be the a list of names to which
+<code class="xref py py-class docutils literal notranslate"><span class="pre">edges</span></code> from the current key should be created.</p></li>
+<li><p><strong>obs_table</strong> (<em>numpy array</em><em>, </em><em>3D</em>) – A 2D arrray for each observational modality.
+These 2D arrays contain the conditional probabilities of observations
+given hidden states (like sensitivity <span class="math notranslate nohighlight">\(s_N\)</span> and specificity
+<span class="math notranslate nohighlight">\(s_P\)</span>). Each of the 2D arrays must be “column-stochastic”.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="lymph.system.System.beta_likelihood">
+<code class="sig-name descname">beta_likelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">theta</span></em>, <em class="sig-param"><span class="n">beta</span></em>, <em class="sig-param"><span class="n">t_stage</span><span class="o">=</span><span class="default_value">[1, 2, 3, 4]</span></em>, <em class="sig-param"><span class="n">time_dist_dict</span><span class="o">=</span><span class="default_value">{}</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.beta_likelihood" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.binom_llh">
+<code class="sig-name descname">binom_llh</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">p</span></em>, <em class="sig-param"><span class="n">t_stage</span><span class="o">=</span><span class="default_value">['late']</span></em>, <em class="sig-param"><span class="n">T_max</span><span class="o">=</span><span class="default_value">10</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.binom_llh" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.combined_likelihood">
+<code class="sig-name descname">combined_likelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">theta</span></em>, <em class="sig-param"><span class="n">t_stage</span><span class="o">=</span><span class="default_value">['sanguineti']</span></em>, <em class="sig-param"><span class="n">time_dist_dict</span><span class="o">=</span><span class="default_value">{}</span></em>, <em class="sig-param"><span class="n">T_max</span><span class="o">=</span><span class="default_value">10</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.combined_likelihood" title="Permalink to this definition">¶</a></dt>
+<dd><p>Likelihood for learning both the system’s parameters and the center of
+a Binomially shaped time prior.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.find_edge">
+<code class="sig-name descname">find_edge</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">startname</span></em>, <em class="sig-param"><span class="n">endname</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.find_edge" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds and returns the edge instance which has a parent node named
+<code class="docutils literal notranslate"><span class="pre">startname</span></code> and ends with node <code class="docutils literal notranslate"><span class="pre">endname</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.find_node">
+<code class="sig-name descname">find_node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.find_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds and returns a node with name <code class="docutils literal notranslate"><span class="pre">name</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.gen_A">
+<code class="sig-name descname">gen_A</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.gen_A" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates the transition matrix <span class="math notranslate nohighlight">\(\mathbf{A}\)</span>, which contains the
+<span class="math notranslate nohighlight">\(P \left( X_{t+1} \mid X_t \right)\)</span>. <span class="math notranslate nohighlight">\(\mathbf{A}\)</span> is a
+square matrix with size <code class="docutils literal notranslate"><span class="pre">(#</span> <span class="pre">of</span> <span class="pre">states)</span></code>. The lower diagonal is zero.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.gen_B">
+<code class="sig-name descname">gen_B</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.gen_B" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates the observation matrix <span class="math notranslate nohighlight">\(\mathbf{B}\)</span>, which contains
+the <span class="math notranslate nohighlight">\(P \left(Z_t \mid X_t \right)\)</span>. <span class="math notranslate nohighlight">\(\mathbf{B}\)</span> has the
+shape <code class="docutils literal notranslate"><span class="pre">(#</span> <span class="pre">of</span> <span class="pre">states,</span> <span class="pre">#</span> <span class="pre">of</span> <span class="pre">possible</span> <span class="pre">observations)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.gen_C">
+<code class="sig-name descname">gen_C</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">t_stage</span><span class="o">=</span><span class="default_value">[1, 2, 3, 4]</span></em>, <em class="sig-param"><span class="n">observations</span><span class="o">=</span><span class="default_value">['pCT', 'path']</span></em>, <em class="sig-param"><span class="n">mode</span><span class="o">=</span><span class="default_value">'HMM'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.gen_C" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates the matrix C that marginalizes over multiple states for
+data with incomplete observation, as well as how often these obser-
+vations occur in the dataset. In the end the computation
+<span class="math notranslate nohighlight">\(\mathbf{p} = \boldsymbol{\pi} \cdot \mathbf{A}^t \cdot \mathbf{B} \cdot \mathbf{C}\)</span>
+results in an array of probabilities that can - together with the
+frequencies <span class="math notranslate nohighlight">\(f\)</span> - be used to compute the likelihood. This also
+works for the Bayesian network case: <span class="math notranslate nohighlight">\(\mathbf{p} = \mathbf{a} \cdot \mathbf{C}\)</span>
+where <span class="math notranslate nohighlight">\(a\)</span> is an array containing the probability for each state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>pandas dataframe</em>) – Contains rows of patient data. The columns
+must include the T-stage and at least one diagnostic modality.</p></li>
+<li><p><strong>t_stage</strong> (<em>list</em>) – List of T-stages that should be included in the
+learning process.
+(default: <code class="docutils literal notranslate"><span class="pre">[1,2,3,4]</span></code>)</p></li>
+<li><p><strong>observations</strong> (<em>list of str</em>) – List of observational modalities from
+the pandas dataframe that should be included.
+(default: <code class="docutils literal notranslate"><span class="pre">['pCT',</span> <span class="pre">'path']</span></code>)</p></li>
+<li><p><strong>mode</strong> (<em>str</em>) – <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code> for hidden Markov model and <code class="docutils literal notranslate"><span class="pre">&quot;BN&quot;</span></code> for Bayesian network.
+(default: <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.gen_mask">
+<code class="sig-name descname">gen_mask</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.gen_mask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates a dictionary that contains for each row of <span class="math notranslate nohighlight">\(\mathbf{A}\)</span>
+the indices where <span class="math notranslate nohighlight">\(\mathbf{A}\)</span> is NOT zero.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.gen_obs_list">
+<code class="sig-name descname">gen_obs_list</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.gen_obs_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates the list of possible observations.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.gen_state_list">
+<code class="sig-name descname">gen_state_list</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.gen_state_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates the list of (hidden) states.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.get_theta">
+<code class="sig-name descname">get_theta</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.get_theta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the parameters currently set. Note that this will include
+the evolution probability parameters that are currently not in use
+(will hence be set to zero). So it might return an array of unexpected
+size.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.likelihood">
+<code class="sig-name descname">likelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">theta</span></em>, <em class="sig-param"><span class="n">t_stage</span><span class="o">=</span><span class="default_value">[1, 2, 3, 4]</span></em>, <em class="sig-param"><span class="n">time_dist_dict</span><span class="o">=</span><span class="default_value">{}</span></em>, <em class="sig-param"><span class="n">mode</span><span class="o">=</span><span class="default_value">'HMM'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.likelihood" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the likelihood of a set of parameters, given the already
+stored data(set).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>theta</strong> (<em>numpy array</em>) – Set of parameters, consisting of the base
+probabilities <span class="math notranslate nohighlight">\(b\)</span> (as many as the system has nodes), the
+transition probabilities <span class="math notranslate nohighlight">\(t\)</span> (as many as the system has
+edges) and - not yet implemented - the evolution probabilities
+<span class="math notranslate nohighlight">\(e\)</span> (as many as the system has nodes).</p></li>
+<li><p><strong>t_stage</strong> (<em>list</em>) – List of T-stages that should be included in the
+learning process.
+(default: <code class="docutils literal notranslate"><span class="pre">[1,2,3,4]</span></code>)</p></li>
+<li><p><strong>time_dist_dict</strong> (<em>dict</em>) – Dictionary with keys of T-stages in <code class="docutils literal notranslate"><span class="pre">t_stage</span></code>
+and values of time priors for each of those T-stages.</p></li>
+<li><p><strong>mode</strong> (<em>str</em>) – <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code> for hidden Markov model and <code class="docutils literal notranslate"><span class="pre">&quot;BN&quot;</span></code> for
+Bayesian network.
+(default: <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This method returns the log-likelihood of a parameter sample.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.list_edges">
+<code class="sig-name descname">list_edges</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.list_edges" title="Permalink to this definition">¶</a></dt>
+<dd><p>Lists all edges of the system with its corresponding start and end states</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.list_graph">
+<code class="sig-name descname">list_graph</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.list_graph" title="Permalink to this definition">¶</a></dt>
+<dd><p>Lists the graph as it was provided when the system was created</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.obs_prob">
+<code class="sig-name descname">obs_prob</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">observation</span></em>, <em class="sig-param"><span class="n">log</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.obs_prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the probability to see a certain observation, given the
+system’s current state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>observation</strong> (<em>numpy array</em><em>, </em><em>shape=</em><em>(</em><em>n_obs</em><em>, </em><em>len</em><em>(</em><em>self.nodes</em><em>)</em><em>)</em>) – Contains
+the observed state of the patient. if there are <span class="math notranslate nohighlight">\(N\)</span>
+different diagnosing modalities and <span class="math notranslate nohighlight">\(M\)</span> nodes this has the
+shape <span class="math notranslate nohighlight">\((N,M)\)</span> and contains zeros and ones.</p></li>
+<li><p><strong>log</strong> (<em>bool</em>) – If True, this returns the log probability.
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This method returns the probability to see the given observation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.risk">
+<code class="sig-name descname">risk</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">inv</span></em>, <em class="sig-param"><span class="n">obs</span></em>, <em class="sig-param"><span class="n">time_dist</span><span class="o">=</span><span class="default_value">[]</span></em>, <em class="sig-param"><span class="n">mode</span><span class="o">=</span><span class="default_value">'HMM'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.risk" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the risk for involvement (or no involvement), given some
+observations and a time distribution for the Markov model (and the
+Bayesian network).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inv</strong> (<em>numpy array</em>) – Contains None
+for node levels that one is not interested in or one of the
+possible states for the respective involvement.
+<code class="docutils literal notranslate"><span class="pre">shape=(len(self.state_list))</span></code></p></li>
+<li><p><strong>obs</strong> (<em>numpy array</em>) – Contains <code class="docutils literal notranslate"><span class="pre">None</span></code> for
+node levels where no observation is available and 0 or 1 for the
+respective observation.
+<code class="docutils literal notranslate"><span class="pre">shape=(len(self.obs_list))</span></code></p></li>
+<li><p><strong>mode</strong> (<em>str</em>) – <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code> for hidden Markov model and <code class="docutils literal notranslate"><span class="pre">&quot;BN&quot;</span></code> for
+Bayesian network.
+(default: <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This method returns the risk for the involvement of interest, given an
+observation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.set_state">
+<code class="sig-name descname">set_state</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">newstate</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.set_state" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the state of the system to <code class="docutils literal notranslate"><span class="pre">newstate</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.set_theta">
+<code class="sig-name descname">set_theta</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">theta</span></em>, <em class="sig-param"><span class="n">mode</span><span class="o">=</span><span class="default_value">'HMM'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.set_theta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fills the system with new base and transition probabilities and also
+computes the transition matrix A again, if one is in mode “HMM”.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>theta</strong> (<em>numpy array</em>) – The new parameters that should be fed into the
+system. The first <span class="math notranslate nohighlight">\(2N\)</span> numbers in the array contain the
+base probabilities <span class="math notranslate nohighlight">\(b\)</span>, and evolution probabilities
+<span class="math notranslate nohighlight">\(t\)</span> (if narity = 3), where <span class="math notranslate nohighlight">\(N\)</span> is the number of
+nodes. The remaining entries contain either one or two
+parameters for each edge in the system (depending on the narity).</p></li>
+<li><p><strong>mode</strong> (<em>str</em>) – If one is in “BN” mode (Bayesian network), then it is
+not necessary to compute the transition matrix A again, so it is
+skipped.
+(default: <code class="docutils literal notranslate"><span class="pre">&quot;HMM&quot;</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.trans_prob">
+<code class="sig-name descname">trans_prob</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">newstate</span></em>, <em class="sig-param"><span class="n">log</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">acquire</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.trans_prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the probability to transition to newstate, given its
+current state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>newstate</strong> (<em>list</em>) – List of new states for each node in the lymphatic
+system. The transition probability <span class="math notranslate nohighlight">\(t\)</span> will be computed
+from the current states to these states.</p></li>
+<li><p><strong>log</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probability is computed.
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p></li>
+<li><p><strong>acquire</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, after computing and returning the
+probability, the system updates its own state to be <code class="docutils literal notranslate"><span class="pre">newstate</span></code>.
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This method returns the transition probability <span class="math notranslate nohighlight">\(t\)</span>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.system.System.unparametrized_epoch">
+<code class="sig-name descname">unparametrized_epoch</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t_stage</span><span class="o">=</span><span class="default_value">[1, 2, 3, 4]</span></em>, <em class="sig-param"><span class="n">time_dist_dict</span><span class="o">=</span><span class="default_value">{}</span></em>, <em class="sig-param"><span class="n">T</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">scale</span><span class="o">=</span><span class="default_value">0.01</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.unparametrized_epoch" title="Permalink to this definition">¶</a></dt>
+<dd><p>An attempt at unparametrized sampling, where the algorithm samples
+A from the full solution space of row-stochastic matrices with zeros
+where transitions are forbidden.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>t_stage</strong> (<em>list</em>) – List of T-stages that should be included in the
+learning process.
+(default: <code class="docutils literal notranslate"><span class="pre">[1,2,3,4]</span></code>)</p></li>
+<li><p><strong>time_dist_dict</strong> (<em>dict</em>) – Dictionary with keys of T-stages in t_stage
+and values of time priors for each of those T-stages.</p></li>
+<li><p><strong>T</strong> (<em>float</em>) – Temperature of the epoch. Can be reduced from a starting
+value down to almost zero for an annealing approach to sampling.
+(default: <code class="docutils literal notranslate"><span class="pre">1</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This method returns the log-likelihood of the epoch.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt id="lymph.system.toStr">
+<code class="sig-prename descclassname">lymph.system.</code><code class="sig-name descname">toStr</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">n</span></em>, <em class="sig-param"><span class="n">base</span></em>, <em class="sig-param"><span class="n">rev</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">length</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.toStr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function that converts an integer into another base.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n</strong> (<em>int</em>) – Number to convert</p></li>
+<li><p><strong>base</strong> (<em>int</em>) – Base of the resulting converted number</p></li>
+<li><p><strong>rev</strong> (<em>bool</em>) – If true, the converted number will be printed in reverse
+order.
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p></li>
+<li><p><strong>length</strong> (<em>int</em><em> or </em><em>None</em>) – Length of the returned string.
+(default: <code class="docutils literal notranslate"><span class="pre">None</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This function returns the (padded) string of the converted number.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="edge">
+<h2>Edge<a class="headerlink" href="#edge" title="Permalink to this headline">¶</a></h2>
+<p>Represents a lymphatic drainage pathway and therefore are spread probability.</p>
+<span class="target" id="module-lymph.edge"></span><dl class="py class">
+<dt id="lymph.edge.Edge">
+<em class="property">class </em><code class="sig-prename descclassname">lymph.edge.</code><code class="sig-name descname">Edge</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">start</span></em>, <em class="sig-param"><span class="n">end</span></em>, <em class="sig-param"><span class="n">t</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">narity</span><span class="o">=</span><span class="default_value">3</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.edge.Edge" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class for the connections between lymph node levels (LNLs) represented
+by the Node class.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start</strong> (<em>Node instance</em>) – Parent node</p></li>
+<li><p><strong>end</strong> (<em>Node instance</em>) – Child node</p></li>
+<li><p><strong>t</strong> (<em>float</em>) – Transition probability in case start-Node has state 1
+(microscopic involvement).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="lymph.edge.Edge.report">
+<code class="sig-name descname">report</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.edge.Edge.report" title="Permalink to this definition">¶</a></dt>
+<dd><p>Just quickly prints infos about the edge</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="node">
+<h2>Node<a class="headerlink" href="#node" title="Permalink to this headline">¶</a></h2>
+<p>Represents a lymph node level (LNL) or rather a random variable associated with it. It encodes the microscopic involvement of the LNL and - if involved - might spread along outgoing edges.</p>
+<span class="target" id="module-lymph.node"></span><dl class="py class">
+<dt id="lymph.node.Node">
+<em class="property">class </em><code class="sig-prename descclassname">lymph.node.</code><code class="sig-name descname">Node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span></em>, <em class="sig-param"><span class="n">state</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">p</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">ep</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">obs_table</span><span class="o">=</span><span class="default_value">array([[[1, 0], [0, 1]]])</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class for lymph node levels (LNLs) in a lymphatic system.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – Name of the node</p></li>
+<li><p><strong>state</strong> (<em>int</em>) – Current state this LNL is in. Can be in {0, …, narity-1}</p></li>
+<li><p><strong>p</strong> (<em>float</em>) – Base probability <span class="math notranslate nohighlight">\(b\)</span>. Probability that this LNL gets
+infected from the primary tumour.</p></li>
+<li><p><strong>ep</strong> (<em>float</em>) – Evolution probability <span class="math notranslate nohighlight">\(e\)</span>. In case of narity = 3 this
+is the probability that the LNL spontaneously develops from state = 1
+into state = 2.</p></li>
+<li><p><strong>obs_table</strong> (<em>numpy array</em><em>, </em><em>3D</em>) – A 2D arrray for each observational modality.
+These 2D arrays contain the conditional probabilities of observations
+given hidden states (like sensitivity <span class="math notranslate nohighlight">\(s_N\)</span> and specificity
+<span class="math notranslate nohighlight">\(s_P\)</span>). Each of the 2D arrays must be “column-stochastic”.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="lymph.node.Node.bn_prob">
+<code class="sig-name descname">bn_prob</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">log</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node.bn_prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the conditional probability of a node being in the state it
+is in, given its parents are in the states they are in.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log</strong> (<em>bool</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns the log-probability.
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p>
+</dd>
+</dl>
+<p>This method returns the conditional (log-)probability.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.node.Node.obs_prob">
+<code class="sig-name descname">obs_prob</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">log</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">observation</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node.obs_prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the probability of observing a certain modality, given the
+current state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>log</strong> (<em>bool</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, method returns the log-prob.</p></li>
+<li><p><strong>observation</strong> (<em>array</em>) – Contains an observation for
+each modality. <code class="docutils literal notranslate"><span class="pre">shape=(n_obs,)</span></code>
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p></li>
+</ul>
+</dd>
+</dl>
+<p>This method returns the observation probability.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.node.Node.report">
+<code class="sig-name descname">report</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node.report" title="Permalink to this definition">¶</a></dt>
+<dd><p>Just quickly prints infos about the node</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="lymph.node.Node.trans_prob">
+<code class="sig-name descname">trans_prob</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">log</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node.trans_prob" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the transition probabilities from the current state to all
+other possible states.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>log</strong> (<em>bool</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> method returns the log-probability.
+(default: <code class="docutils literal notranslate"><span class="pre">False</span></code>)</p>
+</dd>
+</dl>
+<p>This method returns the transition probabilities from current state to
+all two (three) other states.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="license.html" class="btn btn-neutral float-right" title="License" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="quickstart.html" class="btn btn-neutral float-left" title="Getting started" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Roman Ludwig
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
