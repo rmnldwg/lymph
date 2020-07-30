@@ -1,5 +1,5 @@
 import numpy as np
-import lymph.node
+import lymph
 # actually, I should also include testing with several parent nodes...
 
 obs_table = np.array([[[0.9, 0.2], 
@@ -13,6 +13,7 @@ def test_trans_prob():
     test_node.state = 0
     p = test_node.p
     trans_prob = test_node.trans_prob(log=False)
+    print(trans_prob)
     assert trans_prob[0] == 1 - p, "stay prob wrong"
     assert trans_prob[1] == p, "trans prob wrong"
 
@@ -31,3 +32,8 @@ def test_obs_prob():
         assert test_node.obs_prob(log=False, observation=[obs]) == obs_table[0, obs, test_node.state]
         test_node.state = 1
         assert test_node.obs_prob(log=False, observation=[obs]) == obs_table[0, obs, test_node.state]
+
+if __name__ == "__main__":
+    test_report()
+    test_trans_prob()
+    test_obs_prob()
