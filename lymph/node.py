@@ -81,9 +81,7 @@ class Node(object):
 
         for edge in self.inc:
             res[1] += res[0] * edge.t * edge.start.state
-
             res[0] *= (1 - edge.t) ** edge.start.state
-            
         if log:
             return np.log(res)
         else:
