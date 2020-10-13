@@ -151,11 +151,11 @@ class System(object):
         theta = np.zeros(shape=(2*len(self.nodes) + (self.narity-1) * len(self.edges),), 
                          dtype=float)
         for i, node in enumerate(self.nodes):
-            theta[(self.narity-1)*i] = node.p
-            theta[(self.narity-1)*i+1] = node.ep
+            theta[self.narity*i] = node.p
+            theta[self.narity*i + 1] = node.ep
         for i, edge in enumerate(self.edges):
             for j in range(1, self.narity):
-                theta[(self.narity-1)*len(self.nodes) + i*(self.narity-1) + (j-1)] = edge.t[j]
+                theta[self.narity*len(self.nodes) + i*(self.narity-1) + (j-1)] = edge.t[j]
         return theta
 
 
@@ -178,12 +178,12 @@ class System(object):
                 (default: ``"HMM"``)
         """
         for i, node in enumerate(self.nodes):
-            node.p = theta[i]
-            node.ep = theta[i+1]
+            node.p = theta[self.narity*i]
+            node.ep = theta[self.narity*i + 1]
         for i, edge in enumerate(self.edges):
             edge.t[0] = 0.0
             for j in range(1, self.narity):
-                edge.t[j] = theta[len(self.nodes) + i + (j-1)]
+                edge.t[j] = theta[self.narity*len(self.nodes) + i*(self.narity-1) + (j-1)]
 
         # I'm not gonna use that narity stuff for a while...
         # for i, node in enumerate(self.nodes):

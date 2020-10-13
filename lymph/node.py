@@ -100,10 +100,10 @@ class Node(object):
         #         else:
         #             return np.array([0., 0., 1.])
 
-        # if log:
-        #     return np.log(res)
-        # else:
-        #     return res
+        if log:
+            return np.log(res)
+        else:
+            return res
 
 
 
