@@ -66,22 +66,31 @@ class System(object):
             given hidden states (like sensitivity :math:`s_N` and specificity 
             :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
     """
-    def __init__(self, graph={}, obs_table=np.array([[[1. , 0. ], 
-                                                      [0. , 1. ]], 
-                                                     [[0.8, 0.2], 
-                                                      [0.2, 0.8]]])):
-        self.narity = obs_table.shape[::-1][0]
+    def __init__(
+        self, graph={}, obs_table=np.array([[[1. , 0. ], 
+                                             [0. , 1. ]], 
+                                            [[0.8, 0.2], 
+                                             [0.2, 0.8]]])):
+
         self.n_obs = obs_table.shape[0]
-        self.nodes = []
-        self.edges = []
+        self.tumours = []   # list of nodes with type tumour
+        self.lnls = []      # list of all lymph node levels
+        self.nodes = []     # list of all nodes in the graph
+        self.edges = []     # list of all edges connecting nodes in the graph
+        
         for key in graph:
             self.nodes.append(Node(key, obs_table=obs_table))
+            
+        for node in self.nodes:
+            if node.typ == "tumour":
+                self.tumours.append(node)
+            else:
+                self.lnls.append(node)
 
         for key, values in graph.items():
             for value in values:
                 self.edges.append(Edge(self.find_node(key), 
-                                       self.find_node(value), 
-                                       narity=self.narity))
+                                       self.find_node(value))
 
         self.gen_state_list()
         self.gen_obs_list()
@@ -96,6 +105,8 @@ class System(object):
         for node in self.nodes:
             if node.name == name:
                 return node
+        
+        return None
 
 
 
@@ -108,6 +119,8 @@ class System(object):
                 for o in node.out:
                     if o.end.name == endname:
                         return o
+                        
+        return None
 
 
 
@@ -137,7 +150,8 @@ class System(object):
     def set_state(self, newstate):
         """Sets the state of the system to ``newstate``.
         """
-        for i, node in enumerate(self.nodes):
+        assert len(newstate) == len(self.lnls), "length of newstate must match # of LNLs"
+        for i, node in enumerate(self.lnls):  # only set lnl's states
             node.state = newstate[i]
 
 
@@ -148,16 +162,11 @@ class System(object):
         (will hence be set to zero). So it might return an array of unexpected 
         size.
         """
-        theta = np.zeros(shape=(2*len(self.nodes) + (self.narity-1) * len(self.edges),), 
-                         dtype=float)
-        for i, node in enumerate(self.nodes):
-            theta[(self.narity-1)*i] = node.p
-            theta[(self.narity-1)*i+1] = node.ep
+        theta = np.zeros(shape=(len(self.edges)))
         for i, edge in enumerate(self.edges):
-            for j in range(1, self.narity):
-                theta[(self.narity-1)*len(self.nodes) + i*(self.narity-1) + (j-1)] = edge.t[j]
-        return theta
+            theta[i] = edge.t
 
+        return theta
 
 
     def set_theta(self, theta, mode="HMM"):
@@ -177,22 +186,9 @@ class System(object):
                 skipped.
                 (default: ``"HMM"``)
         """
-        for i, node in enumerate(self.nodes):
-            node.p = theta[i]
-            node.ep = theta[i+1]
+        assert len(theta) == len(self.edges), "# of parameters must match # of edges"
         for i, edge in enumerate(self.edges):
-            edge.t[0] = 0.0
-            for j in range(1, self.narity):
-                edge.t[j] = theta[len(self.nodes) + i + (j-1)]
-
-        # I'm not gonna use that narity stuff for a while...
-        # for i, node in enumerate(self.nodes):
-        #     node.p = theta[(self.narity-1)*i]
-        #     node.ep = theta[(self.narity-1)*i+1]
-        # for i, edge in enumerate(self.edges):
-        #     edge.t[0] = 0.0
-        #     for j in range(1, self.narity):
-        #         edge.t[j] = theta[(self.narity-1)*len(self.nodes) + i*(self.narity-1) + (j-1)]
+            edge.t = theta[i]
 
         if mode=="HMM":
             self.gen_A()
@@ -204,7 +200,7 @@ class System(object):
         current state.
 
         Args:
-            newstate (list): List of new states for each node in the lymphatic 
+            newstate (list): List of new states for each LNL in the lymphatic 
                 system. The transition probability :math:`t` will be computed 
                 from the current states to these states.
 
@@ -217,14 +213,15 @@ class System(object):
 
         This method returns the transition probability :math:`t`.
         """
+        assert len(newstate) == len(self.lnls), "length of newstate must match # of LNLs"
         if not log:
             res = 1
-            for i, node in enumerate(self.nodes):
-                res *= node.trans_prob(log=log)[newstate[i]]
+            for i, lnl in enumerate(self.lnls):
+                res *= lnl.trans_prob(log=log)[newstate[i]]
         else:
             res = 0
-            for i, node in enumerate(self.nodes):
-                res += node.trans_prob(log=log)[newstate[i]]
+            for i, lnl in enumerate(self.lnls):
+                res += lnl.trans_prob(log=log)[newstate[i]]
 
         if acquire:
             self.set_state(newstate)
@@ -248,14 +245,15 @@ class System(object):
 
         This method returns the probability to see the given observation.
         """
+        assert len(observation) == len(self.lnls), "length of observation must match # of LNLs"
         if not log:
             res = 1
-            for i, node in enumerate(self.nodes):
-                res *= node.obs_prob(log=log, observation=observation[i])
+            for i, lnl in enumerate(self.lnls):
+                res *= lnl.obs_prob(log=log, observation=observation[i])
         else:
             res = 0
-            for i, node in enumerate(self.nodes):
-                res += node.obs_prob(log=log, observation=observation[i])
+            for i, lnl in enumerate(self.lnls):
+                res += lnl.obs_prob(log=log, observation=observation[i])
 
         return res
 
@@ -263,12 +261,15 @@ class System(object):
 
     def gen_state_list(self):
         """Generates the list of (hidden) states.
-        """
-        self.state_list = np.zeros(shape=(self.narity**len(self.nodes), 
-                                          len(self.nodes)), dtype=int)
-        for i in range(self.narity**len(self.nodes)):
-            tmp = toStr(i, self.narity, rev=False, length=len(self.nodes))
-            for j in range(len(self.nodes)):
+        """                
+        # every LNL can be either healthu (state=0) or involved (state=1). Hence,
+        # the number of different possible states is 2 to the power of the # of
+        # lymph node levels.
+        self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)))
+        
+        for i in range(2**len(self.lnls)):
+            tmp = toStr(i, 2, rev=False, length=len(self.lnls))
+            for j in range(len(self.lnls)):
                 self.state_list[i,j] = int(tmp[j])
 
 
@@ -276,14 +277,16 @@ class System(object):
     def gen_obs_list(self):
         """Generates the list of possible observations.
         """
-        self.obs_list = np.zeros(shape=(2**(self.n_obs * len(self.nodes)), 
-                                        len(self.nodes), self.n_obs), dtype=int)
-        for i in range(2**(self.n_obs * len(self.nodes))):
-            tmp = toStr(i, 2, rev=False, length=self.n_obs * len(self.nodes))
-            for j in range(len(self.nodes)):
+        self.obs_list = np.zeros(shape=(2**(self.n_obs * len(self.lnls)), 
+                                        len(self.lnls), self.n_obs), dtype=int)
+        for i in range(2**(self.n_obs * len(self.lnls))):
+            tmp = toStr(i, 2, rev=False, length=self.n_obs * len(self.lnls))
+            for j in range(len(self.lnls)):
                 for k in range(self.n_obs):
-                    self.obs_list[i,j,k] = int(tmp[k*len(self.nodes)+j])
+                    self.obs_list[i,j,k] = int(tmp[k*len(self.lnls)+j])
 
+
+################################# STOPPED HERE #################################
 
 
     def gen_mask(self):
@@ -291,9 +294,9 @@ class System(object):
         the indices where :math:`\\mathbf{A}` is NOT zero.
         """
         self.idx_dict = {}
-        for i in range(self.narity**len(self.nodes)):
+        for i in range(len(self.lnls)):
             self.idx_dict[i] = []
-            for j in range(self.narity**len(self.nodes)):
+            for j in range(len(self.lnls)):
                 if not np.any(np.greater(self.state_list[i,:], 
                                          self.state_list[j,:])):
                     self.idx_dict[i].append(j)
@@ -305,8 +308,8 @@ class System(object):
         :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` is a 
         square matrix with size ``(# of states)``. The lower diagonal is zero.
         """
-        self.A = np.zeros(shape=(self.narity**len(self.nodes), self.narity**len(self.nodes)))
-        for i in range(self.narity**len(self.nodes)):
+        self.A = np.zeros(shape=(len(self.lnls), len(self.lnls)))
+        for i in range(len(self.lnls)):
             self.set_state(self.state_list[i,:])
             for j in self.idx_dict[i]:
                 self.A[i,j] = self.trans_prob(self.state_list[j,:])
@@ -318,10 +321,10 @@ class System(object):
         the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
         shape ``(# of states, # of possible observations)``.
         """
-        self.B = np.zeros(shape=(self.narity**len(self.nodes), 2**(self.n_obs * len(self.nodes))))
-        for i in range(self.narity**len(self.nodes)):
+        self.B = np.zeros(shape=(len(self.lnls), 2**(self.n_obs * len(self.lnls))))
+        for i in range(len(self.lnls)):
             self.set_state(self.state_list[i,:])
-            for j in range(2**(self.n_obs * len(self.nodes))):
+            for j in range(2**(self.n_obs * len(self.lnls))):
                 self.B[i,j] = self.obs_prob(self.obs_list[j])
 
 
@@ -347,7 +350,8 @@ class System(object):
         This method returns the log-likelihood of the epoch.
         """
         likely = self.likelihood(t_stage, time_dist_dict)
-        for i in np.random.permutation(self.narity**len(self.nodes) -1):
+        
+        for i in np.random.permutation(len(self.lnls) -1):
             # Generate Logit-Normal sample around current position
             x_old = self.A[i,self.idx_dict[i]]
             mu = [np.log(x_old[k]) - np.log(x_old[-1]) for k in range(len(x_old)-1)]
@@ -525,11 +529,10 @@ class System(object):
         elif mode == "BN":
             a = np.ones(shape=(len(self.state_list),), dtype=float)
 
-            if self.narity == 2:
-                for i, state in enumerate(self.state_list):
-                    self.set_state(state)
-                    for node in self.nodes:
-                        a[i] *= node.bn_prob()
+            for i, state in enumerate(self.state_list):
+                self.set_state(state)
+                for node in self.nodes:
+                    a[i] *= node.bn_prob()
 
             b = a @ self.B
             res = self.f @ np.log(b @ self.C)
@@ -612,13 +615,13 @@ class System(object):
         This method returns the risk for the involvement of interest, given an 
         observation.
         """
-        if len(inv) != len(self.nodes):
+        if len(inv) != len(self.lnls):
             raise Exception("The involvement array has the wrong length." + 
-                            "It should be {}".format(len(self.nodes)))
+                            "It should be {}".format(len(self.lnls)))
 
-        if len(obs) != len(self.nodes * (self.n_obs)):
+        if len(obs) != len(self.lnls * (self.n_obs)):
             raise Exception("The observation array has the wrong length." + 
-                            "It should be {}".format(len(self.nodes * self.n_obs)))
+                            "It should be {}".format(len(self.lnls * self.n_obs)))
 
         # P(Z), probability of observing a certain (observational) state
         pZ = np.zeros(shape=(len(self.obs_list),))

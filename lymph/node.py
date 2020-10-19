@@ -8,12 +8,12 @@ class Node(object):
     Args:
         name (str): Name of the node
 
-        state (int): Current state this LNL is in. Can be in {0, ..., narity-1}
+        state (int): Current state this LNL is in. Can be in {0, 1}
 
-        typ (str): Can be either `"lymph"`, `"tumour"` or `None`. If it is the 
+        typ (str): Can be either `"lnl"`, `"tumour"` or `None`. If it is the 
             latter, the type will be inferred from the name of the node. A node 
             starting with a `t` (case-insensitive), then it will be a tumour 
-            node and a lymph node otherwise.
+            node and a lymph node levle (lnl) otherwise.
             (default: `None`)
 
         obs_table (numpy array, 3D): A 2D arrray for each observational modality.
@@ -28,7 +28,7 @@ class Node(object):
             if self.name.lower()[0] == 't':
                 self.typ = "tumour"
             else:
-                self.typ = "lymph"
+                self.typ = "lnl"
         else:
             self.typ = typ
 
@@ -38,7 +38,6 @@ class Node(object):
         else:
             self.state = state
 
-        self.narity = obs_table.shape[::-1][0]
         self.n_obs = obs_table.shape[0]
         self.obs_table = obs_table
 
