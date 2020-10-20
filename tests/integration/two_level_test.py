@@ -98,6 +98,7 @@ def test_implementation(graph, obs_table, data, theta, A, time_prior, mode="HMM"
                                         pool=pool, moves=moves)
         sampler.run_mcmc(theta0, nstep, progress=False)
 
+    assert np.mean(sampler.acceptance_fraction) > 0.3, "acceptance fraction too low"
     samples = sampler.get_chain(flat=True, discard=burnin)
     mean = np.mean(samples, axis=0)
     stddev = np.sqrt(np.var(samples, axis=0))

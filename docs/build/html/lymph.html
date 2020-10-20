@@ -1,8 +1,7 @@
 
 
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html class="writer-html5" lang="en" >
 <head>
   <meta charset="utf-8">
   
@@ -12,12 +11,18 @@
   
 
   
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
   
   
   
 
   
-  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
@@ -30,10 +35,6 @@
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
     
-
-  
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="License" href="license.html" />
@@ -51,7 +52,7 @@
           
 
           
-            <a href="index.html" class="icon icon-home"> lymph
+            <a href="index.html" class="icon icon-home" alt="Documentation Home"> lymph
           
 
           
@@ -74,6 +75,7 @@
           
         </div>
 
+        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -96,6 +98,7 @@
             
           
         </div>
+        
       </div>
     </nav>
 
@@ -134,7 +137,7 @@
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="index.html">Docs</a> &raquo;</li>
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
         
       <li>Detailed API</li>
     
@@ -162,7 +165,7 @@
 <span id="lymph-system"></span><h2>Lymph system<a class="headerlink" href="#module-lymph.system" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="lymph.system.System">
-<em class="property">class </em><code class="sig-prename descclassname">lymph.system.</code><code class="sig-name descname">System</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">graph</span><span class="o">=</span><span class="default_value">{}</span></em>, <em class="sig-param"><span class="n">obs_table</span><span class="o">=</span><span class="default_value">array([[[1.0, 0.0], [0.0, 1.0]], [[0.8, 0.2], [0.2, 0.8]]])</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">lymph.system.</code><code class="sig-name descname">System</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">graph</span><span class="o">=</span><span class="default_value">{}</span></em>, <em class="sig-param"><span class="n">obs_table</span><span class="o">=</span><span class="default_value">array([[[1.0, 0.0], [0.0, 1.0]]])</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Class that describes a whole lymphatic system with its lymph node levels
 (LNLs) and the connections between them.</p>
@@ -406,7 +409,7 @@ current state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>newstate</strong> (<em>list</em>) – List of new states for each node in the lymphatic
+<li><p><strong>newstate</strong> (<em>list</em>) – List of new states for each LNL in the lymphatic
 system. The transition probability <span class="math notranslate nohighlight">\(t\)</span> will be computed
 from the current states to these states.</p></li>
 <li><p><strong>log</strong> (<em>bool</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probability is computed.
@@ -471,7 +474,7 @@ order.
 <p>Represents a lymphatic drainage pathway and therefore are spread probability.</p>
 <span class="target" id="module-lymph.edge"></span><dl class="py class">
 <dt id="lymph.edge.Edge">
-<em class="property">class </em><code class="sig-prename descclassname">lymph.edge.</code><code class="sig-name descname">Edge</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">start</span></em>, <em class="sig-param"><span class="n">end</span></em>, <em class="sig-param"><span class="n">t</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">narity</span><span class="o">=</span><span class="default_value">3</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.edge.Edge" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">lymph.edge.</code><code class="sig-name descname">Edge</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">start</span></em>, <em class="sig-param"><span class="n">end</span></em>, <em class="sig-param"><span class="n">t</span><span class="o">=</span><span class="default_value">0.0</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.edge.Edge" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Class for the connections between lymph node levels (LNLs) represented
 by the Node class.</p>
@@ -499,19 +502,19 @@ by the Node class.</p>
 <p>Represents a lymph node level (LNL) or rather a random variable associated with it. It encodes the microscopic involvement of the LNL and - if involved - might spread along outgoing edges.</p>
 <span class="target" id="module-lymph.node"></span><dl class="py class">
 <dt id="lymph.node.Node">
-<em class="property">class </em><code class="sig-prename descclassname">lymph.node.</code><code class="sig-name descname">Node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span></em>, <em class="sig-param"><span class="n">state</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">p</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">ep</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">obs_table</span><span class="o">=</span><span class="default_value">array([[[1, 0], [0, 1]]])</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">lymph.node.</code><code class="sig-name descname">Node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span></em>, <em class="sig-param"><span class="n">state</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">typ</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">obs_table</span><span class="o">=</span><span class="default_value">array([[[1, 0], [0, 1]]])</span></em><span class="sig-paren">)</span><a class="headerlink" href="#lymph.node.Node" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Class for lymph node levels (LNLs) in a lymphatic system.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<em>str</em>) – Name of the node</p></li>
-<li><p><strong>state</strong> (<em>int</em>) – Current state this LNL is in. Can be in {0, …, narity-1}</p></li>
-<li><p><strong>p</strong> (<em>float</em>) – Base probability <span class="math notranslate nohighlight">\(b\)</span>. Probability that this LNL gets
-infected from the primary tumour.</p></li>
-<li><p><strong>ep</strong> (<em>float</em>) – Evolution probability <span class="math notranslate nohighlight">\(e\)</span>. In case of narity = 3 this
-is the probability that the LNL spontaneously develops from state = 1
-into state = 2.</p></li>
+<li><p><strong>state</strong> (<em>int</em>) – Current state this LNL is in. Can be in {0, 1}</p></li>
+<li><p><strong>typ</strong> (<em>str</em>) – Can be either <cite>“lnl”</cite>, <cite>“tumour”</cite> or <cite>None</cite>. If it is the
+latter, the type will be inferred from the name of the node. A node
+starting with a <cite>t</cite> (case-insensitive), then it will be a tumour
+node and a lymph node levle (lnl) otherwise.
+(default: <cite>None</cite>)</p></li>
 <li><p><strong>obs_table</strong> (<em>numpy array</em><em>, </em><em>3D</em>) – A 2D arrray for each observational modality.
 These 2D arrays contain the conditional probabilities of observations
 given hidden states (like sensitivity <span class="math notranslate nohighlight">\(s_N\)</span> and specificity
@@ -597,11 +600,19 @@ all two (three) other states.</p>
 
   <div role="contentinfo">
     <p>
+        
         &copy; Copyright 2020, Roman Ludwig
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    
+    
+    
+    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -612,7 +623,6 @@ all two (three) other states.</p>
 
   </div>
   
-
 
   <script type="text/javascript">
       jQuery(function () {

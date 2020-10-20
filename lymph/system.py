@@ -136,7 +136,8 @@ class System(object):
 
 
     def list_edges(self):
-        """Lists all edges of the system with its corresponding start and end states
+        """Lists all edges of the system with its corresponding start and end 
+        states
         """
         res = []
         for edge in self.edges:
@@ -155,10 +156,11 @@ class System(object):
 
 
     def get_theta(self):
-        """Returns the parameters currently set. Note that this will include 
-        the evolution probability parameters that are currently not in use 
-        (will hence be set to zero). So it might return an array of unexpected 
-        size.
+        """Returns the parameters currently set. It will return the transition 
+        probabilities in the order they appear in the graph dictionary. This 
+        deviates somewhat from the notation in the paper, where base and transition 
+        probabilities are distinguished as probabilities along edges from primary 
+        tumour to LNL and from LNL to LNL respectively.
         """
         theta = np.zeros(shape=(len(self.edges)))
         for i, edge in enumerate(self.edges):
@@ -173,11 +175,11 @@ class System(object):
 
         Args:
             theta (numpy array): The new parameters that should be fed into the 
-                system. The first :math:`2N` numbers in the array contain the 
-                base probabilities :math:`b`, and evolution probabilities 
-                :math:`t` (if narity = 3), where :math:`N` is the number of 
-                nodes. The remaining entries contain either one or two 
-                parameters for each edge in the system (depending on the narity).
+                system. They all represent the transition probabilities along the
+                edges of the network and will be set in the order they appear in 
+                the graph dictionary. As mentioned in the ``get_theta()`` function, 
+                this includes the spread probabilities from the primary tumour to 
+                the LNLs, as well as the spread among the LNLs.
 
             mode (str): If one is in "BN" mode (Bayesian network), then it is 
                 not necessary to compute the transition matrix A again, so it is 
@@ -233,7 +235,7 @@ class System(object):
         system's current state.
 
         Args:
-            observation (numpy array, shape=(n_obs, len(self.nodes))): Contains 
+            observation (numpy array, shape=(n_obs, len(self.lnls))): Contains 
                 the observed state of the patient. if there are :math:`N` 
                 different diagnosing modalities and :math:`M` nodes this has the 
                 shape :math:`(N,M)` and contains zeros and ones.
@@ -260,7 +262,7 @@ class System(object):
     def gen_state_list(self):
         """Generates the list of (hidden) states.
         """                
-        # every LNL can be either healthu (state=0) or involved (state=1). Hence,
+        # every LNL can be either healthy (state=0) or involved (state=1). Hence,
         # the number of different possible states is 2 to the power of the # of
         # lymph node levels.
         self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)), dtype=int)
