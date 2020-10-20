@@ -280,10 +280,11 @@ the indices where <span class="math notranslate nohighlight">\(\mathbf{A}\)</spa
 <dl class="py method">
 <dt id="lymph.system.System.get_theta">
 <code class="sig-name descname">get_theta</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.get_theta" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns the parameters currently set. Note that this will include
-the evolution probability parameters that are currently not in use
-(will hence be set to zero). So it might return an array of unexpected
-size.</p>
+<dd><p>Returns the parameters currently set. It will return the transition
+probabilities in the order they appear in the graph dictionary. This
+deviates somewhat from the notation in the paper, where base and transition
+probabilities are distinguished as probabilities along edges from primary
+tumour to LNL and from LNL to LNL respectively.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -316,7 +317,8 @@ Bayesian network.
 <dl class="py method">
 <dt id="lymph.system.System.list_edges">
 <code class="sig-name descname">list_edges</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#lymph.system.System.list_edges" title="Permalink to this definition">¶</a></dt>
-<dd><p>Lists all edges of the system with its corresponding start and end states</p>
+<dd><p>Lists all edges of the system with its corresponding start and end
+states</p>
 </dd></dl>
 
 <dl class="py method">
@@ -333,7 +335,7 @@ system’s current state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>observation</strong> (<em>numpy array</em><em>, </em><em>shape=</em><em>(</em><em>n_obs</em><em>, </em><em>len</em><em>(</em><em>self.nodes</em><em>)</em><em>)</em>) – Contains
+<li><p><strong>observation</strong> (<em>numpy array</em><em>, </em><em>shape=</em><em>(</em><em>n_obs</em><em>, </em><em>len</em><em>(</em><em>self.lnls</em><em>)</em><em>)</em>) – Contains
 the observed state of the patient. if there are <span class="math notranslate nohighlight">\(N\)</span>
 different diagnosing modalities and <span class="math notranslate nohighlight">\(M\)</span> nodes this has the
 shape <span class="math notranslate nohighlight">\((N,M)\)</span> and contains zeros and ones.</p></li>
@@ -387,11 +389,11 @@ computes the transition matrix A again, if one is in mode “HMM”.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>theta</strong> (<em>numpy array</em>) – The new parameters that should be fed into the
-system. The first <span class="math notranslate nohighlight">\(2N\)</span> numbers in the array contain the
-base probabilities <span class="math notranslate nohighlight">\(b\)</span>, and evolution probabilities
-<span class="math notranslate nohighlight">\(t\)</span> (if narity = 3), where <span class="math notranslate nohighlight">\(N\)</span> is the number of
-nodes. The remaining entries contain either one or two
-parameters for each edge in the system (depending on the narity).</p></li>
+system. They all represent the transition probabilities along the
+edges of the network and will be set in the order they appear in
+the graph dictionary. As mentioned in the <code class="docutils literal notranslate"><span class="pre">get_theta()</span></code> function,
+this includes the spread probabilities from the primary tumour to
+the LNLs, as well as the spread among the LNLs.</p></li>
 <li><p><strong>mode</strong> (<em>str</em>) – If one is in “BN” mode (Bayesian network), then it is
 not necessary to compute the transition matrix A again, so it is
 skipped.
