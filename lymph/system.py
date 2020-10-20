@@ -68,9 +68,7 @@ class System(object):
     """
     def __init__(
         self, graph={}, obs_table=np.array([[[1. , 0. ], 
-                                             [0. , 1. ]], 
-                                            [[0.8, 0.2], 
-                                             [0.2, 0.8]]])):
+                                             [0. , 1. ]]])):
 
         self.n_obs = obs_table.shape[0]
         self.tumours = []   # list of nodes with type tumour
@@ -90,7 +88,7 @@ class System(object):
         for key, values in graph.items():
             for value in values:
                 self.edges.append(Edge(self.find_node(key), 
-                                       self.find_node(value))
+                                       self.find_node(value)))
 
         self.gen_state_list()
         self.gen_obs_list()
@@ -152,7 +150,7 @@ class System(object):
         """
         assert len(newstate) == len(self.lnls), "length of newstate must match # of LNLs"
         for i, node in enumerate(self.lnls):  # only set lnl's states
-            node.state = newstate[i]
+            node.state = int(newstate[i])
 
 
 
@@ -265,7 +263,7 @@ class System(object):
         # every LNL can be either healthu (state=0) or involved (state=1). Hence,
         # the number of different possible states is 2 to the power of the # of
         # lymph node levels.
-        self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)))
+        self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)), dtype=int)
         
         for i in range(2**len(self.lnls)):
             tmp = toStr(i, 2, rev=False, length=len(self.lnls))
@@ -286,17 +284,15 @@ class System(object):
                     self.obs_list[i,j,k] = int(tmp[k*len(self.lnls)+j])
 
 
-################################# STOPPED HERE #################################
-
 
     def gen_mask(self):
         """Generates a dictionary that contains for each row of :math:`\\mathbf{A}` 
         the indices where :math:`\\mathbf{A}` is NOT zero.
         """
         self.idx_dict = {}
-        for i in range(len(self.lnls)):
+        for i in range(len(self.state_list)):
             self.idx_dict[i] = []
-            for j in range(len(self.lnls)):
+            for j in range(len(self.state_list)):
                 if not np.any(np.greater(self.state_list[i,:], 
                                          self.state_list[j,:])):
                     self.idx_dict[i].append(j)
@@ -308,9 +304,9 @@ class System(object):
         :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` is a 
         square matrix with size ``(# of states)``. The lower diagonal is zero.
         """
-        self.A = np.zeros(shape=(len(self.lnls), len(self.lnls)))
-        for i in range(len(self.lnls)):
-            self.set_state(self.state_list[i,:])
+        self.A = np.zeros(shape=(len(self.state_list), len(self.state_list)))
+        for i,state in enumerate(self.state_list):
+            self.set_state(state)
             for j in self.idx_dict[i]:
                 self.A[i,j] = self.trans_prob(self.state_list[j,:])
 
@@ -321,11 +317,11 @@ class System(object):
         the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
         shape ``(# of states, # of possible observations)``.
         """
-        self.B = np.zeros(shape=(len(self.lnls), 2**(self.n_obs * len(self.lnls))))
-        for i in range(len(self.lnls)):
-            self.set_state(self.state_list[i,:])
-            for j in range(2**(self.n_obs * len(self.lnls))):
-                self.B[i,j] = self.obs_prob(self.obs_list[j])
+        self.B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
+        for i,state in enumerate(self.state_list):
+            self.set_state(state)
+            for j,obs in enumerate(self.obs_list):
+                self.B[i,j] = self.obs_prob(obs)
 
 
     # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
@@ -641,11 +637,10 @@ class System(object):
         elif mode == "BN":
             # P(X), probability of a certain (hidden) state
             pX = np.ones(shape=(len(self.state_list),))
-            if self.narity == 2:
-                for i, state in enumerate(self.state_list):
-                    self.set_state(state)
-                    for node in self.nodes:
-                        pX[i] *= node.bn_prob()
+            for i, state in enumerate(self.state_list):
+                self.set_state(state)
+                for node in self.lnls:
+                    pX[i] *= node.bn_prob()
 
         pZ = pX @ self.B
 

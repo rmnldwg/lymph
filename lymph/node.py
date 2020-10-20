@@ -70,21 +70,23 @@ class Node(object):
         This method returns the transition probabilities from current state to 
         all two (three) other states.
         """
-        if self.narity == 2:
-            res = np.array([1., 0.])
+        res = np.array([1., 0.])
 
-            if self.state == 0:
-                pass
+        if self.state == 1:
+            if log:
+                return np.array([-np.inf, 0.])
             else:
-                if log:
-                    return np.array([-np.inf, 0.])
-                else:
-                    return np.array([0., 1.])
+                return np.array([0., 1.])
 
-            for edge in self.inc:
-                res[1] += res[0] * edge.t[edge.start.state]
+        for edge in self.inc:
+            res[1] += res[0] * edge.t * edge.start.state
 
-                res[0] *= 1 - edge.t[edge.start.state]
+            res[0] *= (1 - edge.t) ** edge.start.state
+            
+        if log:
+            return np.log(res)
+        else:
+            return res
 
 
 
