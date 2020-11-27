@@ -8,30 +8,36 @@ class Node(object):
     Args:
         name (str): Name of the node
 
-        state (int): Current state this LNL is in. Can be in {0, ..., narity-1}
+        state (int): Current state this LNL is in. Can be in {0, 1}
 
-        p (float): Base probability :math:`b`. Probability that this LNL gets 
-            infected from the primary tumour.
-
-        ep (float): Evolution probability :math:`e`. In case of narity = 3 this 
-            is the probability that the LNL spontaneously develops from state = 1 
-            into state = 2.
+        typ (str): Can be either `"lnl"`, `"tumour"` or `None`. If it is the 
+            latter, the type will be inferred from the name of the node. A node 
+            starting with a `t` (case-insensitive), then it will be a tumour 
+            node and a lymph node levle (lnl) otherwise.
+            (default: `None`)
 
         obs_table (numpy array, 3D): A 2D arrray for each observational modality.
             These 2D arrays contain the conditional probabilities of observations 
             given hidden states (like sensitivity :math:`s_N` and specificity 
             :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
     """
-    def __init__(self, name, state=0, p=0.0, ep=0.0, 
+    def __init__(self, name, state=0, typ=None, 
                  obs_table=np.array([[[1, 0], [0, 1]]])):
         self.name = name
-        self.state = state
-        # base prob for transitions from primary tumour to the node
-        self.p = p
-        # evolution prob for transitions from microscopic state to macroscopic
-        self.ep = ep
+        if typ is None:
+            if self.name.lower()[0] == 't':
+                self.typ = "tumour"
+            else:
+                self.typ = "lnl"
+        else:
+            self.typ = typ
 
-        self.narity = obs_table.shape[::-1][0]
+        # Tumours are always involved, so their state is always 1
+        if self.typ == "tumour":
+            self.state = 1
+        else:
+            self.state = state
+
         self.n_obs = obs_table.shape[0]
         self.obs_table = obs_table
 
@@ -42,7 +48,7 @@ class Node(object):
 
     def report(self):
         """Just quickly prints infos about the node"""
-        print(f"name: {self.name}, state: {self.state}, p = {self.p}")
+        print(f"name: {self.name} ({self.typ}), state: {self.state}")
         print("incoming: ", end="")
         for i in self.inc:
             print(f"{i.start.name}, ", end="")
@@ -64,46 +70,23 @@ class Node(object):
         This method returns the transition probabilities from current state to 
         all two (three) other states.
         """
-        if self.narity == 2:
-            res = np.array([1-self.p, self.p])
+        res = np.array([1., 0.])
 
-            if self.state == 0:
-                pass
+        if self.state == 1:
+            if log:
+                return np.array([-np.inf, 0.])
             else:
-                if log:
-                    return np.array([-np.inf, 0.])
-                else:
-                    return np.array([0., 1.])
+                return np.array([0., 1.])
 
-            for edge in self.inc:
-                res[1] += res[0] * edge.t[edge.start.state]
+        for edge in self.inc:
+            res[1] += res[0] * edge.t * edge.start.state
 
-                res[0] *= 1 - edge.t[edge.start.state]
-
-        # new approach... not necessary yet
-        # if self.narity == 3:
-        #     res = np.array([1-self.p, self.p, 0.])
-
-        #     if self.state == 0:
-        #         for edge in self.inc:
-        #             res[1] += res[0] * edge.t[edge.start.state]
-
-        #             res[0] *= 1 - edge.t[edge.start.state]
-        #     elif self.state == 1:
-        #         if log:
-        #             return np.array([-np.inf, np.log(1-self.ep), np.log(self.ep)])
-        #         else:
-        #             return np.array([0., 1-self.ep, self.ep])
-        #     elif self.state == 2:
-        #         if log:
-        #             return np.array([-np.inf, -np.inf, 0.])
-        #         else:
-        #             return np.array([0., 0., 1.])
-
-        # if log:
-        #     return np.log(res)
-        # else:
-        #     return res
+            res[0] *= (1 - edge.t) ** edge.start.state
+            
+        if log:
+            return np.log(res)
+        else:
+            return res
 
 
 
@@ -146,7 +129,7 @@ class Node(object):
         for edge in self.inc:
             res *= (1 - edge.t[edge.start.state])**edge.start.state
 
-        res *= (1 - self.p)*(-1)**self.state
+        res *= (-1)**self.state
         res += self.state
 
         if log:

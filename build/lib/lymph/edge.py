@@ -16,7 +16,7 @@ class Edge(object):
         t (float): Transition probability in case start-Node has state 1 
             (microscopic involvement).
     """
-    def __init__(self, start, end, t=None, narity=3):
+    def __init__(self, start, end, t=0.):
         if type(start) is not Node:
             raise Exception("Start must be Node!")
         if type(end) is not Node:
@@ -26,15 +26,7 @@ class Edge(object):
         self.start.out.append(self)
         self.end = end 
         self.end.inc.append(self)
-
-        if t is None:
-            self.t = np.zeros(shape=(narity,))
-        else:
-            self.t = t
-            self.t[0] = 0
-        for i in range(1, len(self.t)):
-            if self.t[i] < self.t[i-1]:
-                raise Exception("t cannot decrease!")
+        self.t = t
 
 
 

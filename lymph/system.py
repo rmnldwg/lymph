@@ -434,6 +434,12 @@ class System(object):
                         if not found:
                             C = np.hstack([C, tmp])
                             f = np.append(f, 1)
+                            
+                # delete columns of the C matrix that contain only ones, meaning 
+                # that for that patient, no observation was made
+                idx = np.sum(C, axis=0) != len(self.obs_list)
+                C = C[:,idx]
+                f = f[idx]
                 
                 C_dict[stage] = C.copy()
                 f_dict[stage] = f.copy()
