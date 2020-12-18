@@ -479,6 +479,12 @@ class System(object):
                         self.C = np.hstack([self.C, tmp])
                         self.f = np.append(self.f, 1)
 
+                # delete columns of the C matrix that contain only ones, meaning 
+                # that for that patient, no observation was made
+                idx = np.sum(C, axis=0) != len(self.obs_list)
+                C = C[:,idx]
+                f = f[idx]
+
 
 
     def likelihood(self, theta, t_stage=[1,2,3,4], time_dist_dict={}, mode="HMM"):
