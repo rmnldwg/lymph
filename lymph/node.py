@@ -127,7 +127,7 @@ class Node(object):
         """
         res = 1.
         for edge in self.inc:
-            res *= (1 - edge.t[edge.start.state])**edge.start.state
+            res *= (1 - edge.t)**edge.start.state
 
         res *= (-1)**self.state
         res += self.state

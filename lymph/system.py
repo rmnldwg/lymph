@@ -575,7 +575,7 @@ class System(object):
 
 
 
-    def combined_likelihood(self, theta, t_stage=['sanguineti'], time_dist_dict={}, T_max=10):
+    def combined_likelihood(self, theta, t_stage=["early", "late"], time_dist_dict={}, T_max=10):
         """Likelihood for learning both the system's parameters and the center of
         a Binomially shaped time prior.
         """
@@ -583,15 +583,13 @@ class System(object):
         if np.any(np.greater(0., theta)) or np.any(np.greater(theta, 1.)):
             return -np.inf
 
-        theta, p = theta[:7], theta[7:]
+        theta, p = theta[:-1], theta[-1]
         t = np.asarray(range(1,T_max+1))
         pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
 
         time_dist_dict["early"] = pt(0.4)
-
-        for i, stage in enumerate(t_stage[1:]):
-            time_dist_dict[stage] = pt(p[i])
-
+        time_dist_dict["late"] = pt(p)
+        
         return self.likelihood(theta, t_stage, time_dist_dict, mode="HMM")
     # -------------------- SPECIAL END -------------------- #
 
