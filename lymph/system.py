@@ -481,9 +481,9 @@ class System(object):
 
                 # delete columns of the C matrix that contain only ones, meaning 
                 # that for that patient, no observation was made
-                idx = np.sum(C, axis=0) != len(self.obs_list)
-                C = C[:,idx]
-                f = f[idx]
+                idx = np.sum(self.C, axis=0) != len(self.obs_list)
+                self.C = self.C[:,idx]
+                self.f = self.f[idx]
 
 
 
@@ -541,7 +541,7 @@ class System(object):
 
             for i, state in enumerate(self.state_list):
                 self.set_state(state)
-                for node in self.nodes:
+                for node in self.lnls:
                     a[i] *= node.bn_prob()
 
             b = a @ self.B
