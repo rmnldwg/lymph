@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name = "lymph", # Replace with your own username
-    version = "0.1.1",
+    version = "0.1.2",
     author = "Roman Ludwig",
     author_email = "roman.ludwig@usz.ch",
     description = "Package for statistical modelling of lymphatic metastatic spread.",
