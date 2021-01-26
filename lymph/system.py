@@ -6,6 +6,8 @@ import warnings
 from .node import Node
 from .edge import Edge
 
+
+
 def toStr(n, base, rev=False, length=None):
     """Function that converts an integer into another base.
     
@@ -61,10 +63,11 @@ class System(object):
             values in the dictionary should then be the a list of names to which 
             :class:`edges` from the current key should be created.
 
-        obs_table (numpy array, 3D): A 2D arrray for each observational modality.
-            These 2D arrays contain the conditional probabilities of observations 
-            given hidden states (like sensitivity :math:`s_N` and specificity 
-            :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
+        obs_table (numpy array, 3D): An arrray of 2x2 matrices. Each of those 
+            matrices represents an observational modality. The (0,0) entry 
+            corresponds to the specificity :math:`s_P` and at (1,1) one finds 
+            the sensitivity :math:`s_N`. These matrices must be column-
+            stochastic.
     """
     def __init__(
         self, graph={}, obs_table=np.array([[[1. , 0. ], 
@@ -564,7 +567,8 @@ class System(object):
         return res
 
 
-    # -------------------- SPECIAL LIKELIHOODS -------------------- #
+
+    # -------------------------- SPECIAL LIKELIHOOD -------------------------- #
     def beta_likelihood(self, theta, beta, t_stage=[1, 2, 3, 4], time_dist_dict={}):
         if np.any(np.greater(0., theta)):
             return -np.inf, -np.inf
@@ -577,6 +581,7 @@ class System(object):
         res = beta * bn + (1-beta) * hmm
         diff_q = bn - hmm
         return res, diff_q
+
 
 
     def binom_llh(self, p, t_stage=["late"], T_max=10):
@@ -612,7 +617,8 @@ class System(object):
         time_dist_dict["late"] = pt(p)
         
         return self.likelihood(theta, t_stage, time_dist_dict, mode="HMM")
-    # -------------------- SPECIAL END -------------------- #
+    # ----------------------------- SPECIAL DONE ----------------------------- #
+
 
 
     def risk(self, inv, obs, time_dist=[], mode="HMM"):

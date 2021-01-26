@@ -29,6 +29,7 @@ class Edge(object):
         self.t = t
 
 
+
     def report(self):
         """Just quickly prints infos about the edge
         """
