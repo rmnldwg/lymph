@@ -16,10 +16,11 @@ class Node(object):
             node and a lymph node levle (lnl) otherwise.
             (default: `None`)
 
-        obs_table (numpy array, 3D): A 2D arrray for each observational modality.
-            These 2D arrays contain the conditional probabilities of observations 
-            given hidden states (like sensitivity :math:`s_N` and specificity 
-            :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
+        obs_table (numpy array, 3D): A 2D arrray for each observational 
+            modality. These 2D arrays contain the conditional probabilities of 
+            observations given hidden states (like sensitivity :math:`s_N` and 
+            specificity :math:`s_P`). Each of the 2D arrays must be 
+            "column-stochastic".
     """
     def __init__(self, name, state=0, typ=None, 
                  obs_table=np.array([[[1, 0], [0, 1]]])):

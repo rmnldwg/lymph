@@ -18,9 +18,9 @@ class Edge(object):
     """
     def __init__(self, start, end, t=0.):
         if type(start) is not Node:
-            raise Exception("Start must be Node!")
+            raise TypeError("Start must be instance of Node")
         if type(end) is not Node:
-            raise Exception("End must be Node!")
+            raise TypeError("End must be instance of Node!")
 
         self.start = start 
         self.start.out.append(self)
@@ -29,9 +29,9 @@ class Edge(object):
         self.t = t
 
 
-
     def report(self):
-        """Just quickly prints infos about the edge"""
+        """Just quickly prints infos about the edge
+        """
         print("start: {}".format(self.start.name))
         print("end: {}".format(self.end.name))
         print("t = {}".format(self.t))
