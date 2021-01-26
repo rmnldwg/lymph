@@ -21,8 +21,9 @@ project = 'lymph'
 copyright = '2020, Roman Ludwig'
 author = 'Roman Ludwig'
 
+version = '0.1.2'
 # The full version, including alpha/beta/rc tags
-release = '2020'
+release = '0.1.2'
 
 
 # -- General configuration ---------------------------------------------------
@@ -34,6 +35,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
+    'sphinx_autodoc_typehints'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
