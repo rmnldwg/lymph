@@ -20,6 +20,7 @@ class Edge(object):
                  start: Node, 
                  end: Node, 
                  t:float = 0.):
+        
         if type(start) is not Node:
             raise TypeError("Start must be instance of Node")
         if type(end) is not Node:
