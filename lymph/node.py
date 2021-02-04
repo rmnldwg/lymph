@@ -1,39 +1,44 @@
 import numpy as np
 import scipy as sp 
 import scipy.stats
+from typing import List
 
 class Node(object):
     """Class for lymph node levels (LNLs) in a lymphatic system.
 
     Args:
-        name (str): Name of the node
+        name: Name of the node
 
-        state (int): Current state this LNL is in. Can be in {0, 1}
+        state: Current state this LNL is in. Can be in {0, 1}
 
-        typ (str): Can be either `"lnl"`, `"tumour"` or `None`. If it is the 
-            latter, the type will be inferred from the name of the node. A node 
-            starting with a `t` (case-insensitive), then it will be a tumour 
-            node and a lymph node levle (lnl) otherwise.
-            (default: `None`)
+        typ: Can be either `"lnl"`, `"tumor"` or `None`. If it is the latter, 
+            the type will be inferred from the name of the node. A node 
+            starting with a `t` (case-insensitive), then it will be a tumor 
+            node and a lymph node levle (lnl) otherwise. (default: `None`)
 
-        obs_table (numpy array, 3D): A 2D arrray for each observational modality.
-            These 2D arrays contain the conditional probabilities of observations 
-            given hidden states (like sensitivity :math:`s_N` and specificity 
-            :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
+        obs_table: An arrray of 2x2 matrices. Each of those matrices represents 
+            an observational modality. The (0,0) entry corresponds to the 
+            specificity :math:`s_P` and at (1,1) one finds the sensitivity 
+            :math:`s_N`. These matrices must be column-stochastic.
     """
-    def __init__(self, name, state=0, typ=None, 
-                 obs_table=np.array([[[1, 0], [0, 1]]])):
+    def __init__(self, 
+                 name: str, 
+                 state: int = 0, 
+                 typ: str = None, 
+                 obs_table: np.ndarray = np.array([[[1, 0], 
+                                                    [0, 1]]])):
+        
         self.name = name
         if typ is None:
             if self.name.lower()[0] == 't':
-                self.typ = "tumour"
+                self.typ = "tumor"
             else:
                 self.typ = "lnl"
         else:
             self.typ = typ
 
-        # Tumours are always involved, so their state is always 1
-        if self.typ == "tumour":
+        # Tumors are always involved, so their state is always 1
+        if self.typ == "tumor":
             self.state = 1
         else:
             self.state = state
@@ -47,28 +52,34 @@ class Node(object):
 
 
     def report(self):
-        """Just quickly prints infos about the node"""
+        """Just quickly print infos about the node.
+        """
         print(f"name: {self.name} ({self.typ}), state: {self.state}")
         print("incoming: ", end="")
+        
         for i in self.inc:
             print(f"{i.start.name}, ", end="")
+
         print("\noutgoing: ", end="")
+        
         for o in self.out:
             print(f"{o.end.name}, ", end="")
+        
         print("\n", end="")
 
 
 
-    def trans_prob(self, log=False):
+    def trans_prob(self, log: bool = False) -> float:
         """Computes the transition probabilities from the current state to all
         other possible states.
         
         Args:
-            log (bool): If ``True`` method returns the log-probability.
+            log: If ``True`` method returns the log-probability. 
                 (default: ``False``)
         
-        This method returns the transition probabilities from current state to 
-        all two (three) other states.
+        Returns:
+            The transition probabilities from current state to all two other 
+                states.
         """
         res = np.array([1., 0.])
 
@@ -90,18 +101,20 @@ class Node(object):
 
 
 
-    def obs_prob(self, log=False, observation=None):
-        """Computes the probability of observing a certain modality, given the 
+    def obs_prob(self, 
+                 log: bool = False, 
+                 observation: List[int] = None) -> float:
+        """Compute the probability of observing a certain modality, given its 
         current state.
 
         Args:
-            log (bool): If ``True``, method returns the log-prob.
+            log: If ``True``, method returns the log-prob.
 
-            observation (array): Contains an observation for 
-                each modality. ``shape=(n_obs,)``
-                (default: ``False``)
+            observation: Contains an observation for each modality. 
+                ``shape=(n_obs,)`` (default: ``False``)
 
-        This method returns the observation probability.
+        Returns:
+            The observation probability.
         """
         res = 1
         if observation is not None:
@@ -115,15 +128,16 @@ class Node(object):
 
 
 
-    def bn_prob(self, log=False):
+    def bn_prob(self, log: bool = False) -> float:
         """Computes the conditional probability of a node being in the state it 
         is in, given its parents are in the states they are in.
 
         Args:
-            log (bool): If ``True``, returns the log-probability.
+            log: If ``True``, returns the log-probability.
                 (default: ``False``)
 
-        This method returns the conditional (log-)probability.
+        Returns:
+            The conditional (log-)probability.
         """
         res = 1.
         for edge in self.inc:

@@ -1,31 +1,38 @@
 import numpy as np
 import scipy as sp 
 import scipy.stats
+import pandas as pd
 import warnings
+from typing import Union, Optional, List
 
 from .node import Node
 from .edge import Edge
 
-def toStr(n, base, rev=False, length=None):
+
+
+def toStr(n: int, 
+          base: int, 
+          rev: bool = False, 
+          length: Optional[int] = None) -> str:
     """Function that converts an integer into another base.
     
     Args:
-        n (int): Number to convert
+        n: Number to convert
 
-        base (int): Base of the resulting converted number
+        base: Base of the resulting converted number
 
-        rev (bool): If true, the converted number will be printed in reverse 
-            order.
-            (default: ``False``)
+        rev: If true, the converted number will be printed in reverse 
+            order. (default: ``False``)
 
-        length (int or None): Length of the returned string.
+        length: Length of the returned string.
             (default: ``None``)
 
-    This function returns the (padded) string of the converted number.
+    Returns:
+        The (padded) string of the converted number.
     """
     
     if base > 16:
-        raise Exception("Base must be 16 or smaller!")
+        raise ValueError("Base must be 16 or smaller!")
         
     convertString = "0123456789ABCDEF"
     result = ''
@@ -56,22 +63,22 @@ class System(object):
     (LNLs) and the connections between them.
 
     Args:
-        graph (dict): For every key in the dictionary, the :class:`system` will 
+        graph: For every key in the dictionary, the :class:`system` will 
             create a :class:`node` that represents a binary random variable. The 
             values in the dictionary should then be the a list of names to which 
             :class:`edges` from the current key should be created.
 
-        obs_table (numpy array, 3D): A 2D arrray for each observational modality.
-            These 2D arrays contain the conditional probabilities of observations 
-            given hidden states (like sensitivity :math:`s_N` and specificity 
-            :math:`s_P`). Each of the 2D arrays must be "column-stochastic".
+        obs_table: An arrray of 2x2 matrices. Each of those matrices represents 
+            an observational modality. The (0,0) entry corresponds to the 
+            specificity :math:`s_P` and at (1,1) one finds the sensitivity 
+            :math:`s_N`. These matrices must be column-stochastic.
     """
-    def __init__(
-        self, graph={}, obs_table=np.array([[[1. , 0. ], 
-                                             [0. , 1. ]]])):
+    def __init__(self, graph: dict = {}, 
+                 obs_table: np.ndarray = np.array([[[1. , 0. ], 
+                                                    [0. , 1. ]]])):
 
         self.n_obs = obs_table.shape[0]
-        self.tumours = []   # list of nodes with type tumour
+        self.tumors = []   # list of nodes with type tumour
         self.lnls = []      # list of all lymph node levels
         self.nodes = []     # list of all nodes in the graph
         self.edges = []     # list of all edges connecting nodes in the graph
@@ -80,8 +87,8 @@ class System(object):
             self.nodes.append(Node(key, obs_table=obs_table))
             
         for node in self.nodes:
-            if node.typ == "tumour":
-                self.tumours.append(node)
+            if node.typ == "tumor":
+                self.tumors.append(node)
             else:
                 self.lnls.append(node)
 
@@ -97,7 +104,7 @@ class System(object):
 
 
 
-    def find_node(self, name):
+    def find_node(self, name: str) -> Union[Node, None]:
         """Finds and returns a node with name ``name``.
         """
         for node in self.nodes:
@@ -108,7 +115,7 @@ class System(object):
 
 
 
-    def find_edge(self, startname, endname):
+    def find_edge(self, startname: str, endname: str) -> Union[Edge, None]:
         """Finds and returns the edge instance which has a parent node named 
         ``startname`` and ends with node ``endname``.
         """
@@ -122,7 +129,7 @@ class System(object):
 
 
 
-    def list_graph(self):
+    def get_graph(self) -> dict:
         """Lists the graph as it was provided when the system was created
         """
         res = []
@@ -131,36 +138,66 @@ class System(object):
             for o in node.out:
                 out.append(o.end.name)
             res.append((node.name, out))
+            
         return dict(res)
 
 
 
-    def list_edges(self):
+    def print_graph(self):
+        """Print info about the structure and parameters of the graph.
+        """
+
+        print("Tumor(s):")
+        for tumor in self.tumors:
+            if tumor.typ != "tumor":
+                raise RuntimeError("Tumor node is not of type tumor")
+            
+            prefix = tumor.name + " ---"
+            for o in tumor.out:
+                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
+                prefix = "".join([" "] * (len(tumor.name) + 1)) + "+--"
+
+        print("\nLNL(s):")
+        for lnl in self.lnls:
+            if lnl.typ != "lnl":
+                raise RuntimeError("LNL node is not of type LNL")
+
+            prefix = lnl.name + " ---"
+            for o in lnl.out:
+                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
+                prefix = "".join([" "] * (len(lnl.name) + 1)) + "+--"
+
+
+
+    def list_edges(self) -> List[Edge]:
         """Lists all edges of the system with its corresponding start and end 
         states
         """
         res = []
         for edge in self.edges:
             res.append((edge.start.name, edge.end.name, edge.t))
+            
         return res
 
 
 
-    def set_state(self, newstate):
+    def set_state(self, newstate: List[int]):
         """Sets the state of the system to ``newstate``.
         """
-        assert len(newstate) == len(self.lnls), "length of newstate must match # of LNLs"
+        if len(newstate) != len(self.lnls):
+            raise ValueError("length of newstate must match # of LNLs")
+        
         for i, node in enumerate(self.lnls):  # only set lnl's states
             node.state = int(newstate[i])
 
 
 
-    def get_theta(self):
+    def get_theta(self) -> List[float]:
         """Returns the parameters currently set. It will return the transition 
         probabilities in the order they appear in the graph dictionary. This 
-        deviates somewhat from the notation in the paper, where base and transition 
-        probabilities are distinguished as probabilities along edges from primary 
-        tumour to LNL and from LNL to LNL respectively.
+        deviates somewhat from the notation in the paper, where base and 
+        transition probabilities are distinguished as probabilities along edges 
+        from primary tumour to LNL and from LNL to LNL respectively.
         """
         theta = np.zeros(shape=(len(self.edges)))
         for i, edge in enumerate(self.edges):
@@ -169,24 +206,27 @@ class System(object):
         return theta
 
 
-    def set_theta(self, theta, mode="HMM"):
+    def set_theta(self, 
+                  theta: np.ndarray, 
+                  mode: str = "HMM"):
         """Fills the system with new base and transition probabilities and also 
         computes the transition matrix A again, if one is in mode "HMM".
 
         Args:
-            theta (numpy array): The new parameters that should be fed into the 
-                system. They all represent the transition probabilities along the
-                edges of the network and will be set in the order they appear in 
-                the graph dictionary. As mentioned in the ``get_theta()`` function, 
-                this includes the spread probabilities from the primary tumour to 
-                the LNLs, as well as the spread among the LNLs.
+            theta: The new parameters that should be fed into the system. They 
+                all represent the transition probabilities along the edges of 
+                the network and will be set in the order they appear in the 
+                graph dictionary. As mentioned in the ``get_theta()`` function, 
+                this includes the spread probabilities from the primary tumour 
+                to the LNLs, as well as the spread among the LNLs.
 
-            mode (str): If one is in "BN" mode (Bayesian network), then it is 
-                not necessary to compute the transition matrix A again, so it is 
-                skipped.
-                (default: ``"HMM"``)
+            mode: If one is in "BN" mode (Bayesian network), then it is not 
+                necessary to compute the transition matrix A again, so it is 
+                skipped. (default: ``"HMM"``)
         """
-        assert len(theta) == len(self.edges), "# of parameters must match # of edges"
+        if len(theta) != len(self.edges):
+            raise ValueError("# of parameters must match # of edges")
+        
         for i, edge in enumerate(self.edges):
             edge.t = theta[i]
 
@@ -195,31 +235,37 @@ class System(object):
 
 
 
-    def trans_prob(self, newstate, log=False, acquire=False):
+    def trans_prob(self, 
+                   newstate: List[int], 
+                   log: bool = False, 
+                   acquire: bool = False) -> float:
         """Computes the probability to transition to newstate, given its 
         current state.
 
         Args:
-            newstate (list): List of new states for each LNL in the lymphatic 
+            newstate: List of new states for each LNL in the lymphatic 
                 system. The transition probability :math:`t` will be computed 
                 from the current states to these states.
 
-            log (bool): if ``True``, the log-probability is computed.
+            log: if ``True``, the log-probability is computed. 
                 (default: ``False``)
 
-            acquire (bool): if ``True``, after computing and returning the 
-                probability, the system updates its own state to be ``newstate``.
+            acquire: if ``True``, after computing and returning the probability, 
+                the system updates its own state to be ``newstate``. 
                 (default: ``False``)
 
-        This method returns the transition probability :math:`t`.
+        Returns:
+            Transition probability :math:`t`.
         """
-        assert len(newstate) == len(self.lnls), "length of newstate must match # of LNLs"
+        if len(newstate) != len(self.lnls):
+            raise ValueError("length of newstate must match # of LNLs")
+        
         if not log:
-            res = 1
+            res = 1.
             for i, lnl in enumerate(self.lnls):
                 res *= lnl.trans_prob(log=log)[newstate[i]]
         else:
-            res = 0
+            res = 0.
             for i, lnl in enumerate(self.lnls):
                 res += lnl.trans_prob(log=log)[newstate[i]]
 
@@ -230,28 +276,33 @@ class System(object):
 
 
 
-    def obs_prob(self, observation, log=False):
+    def obs_prob(self, 
+                 observation: np.ndarray, 
+                 log: bool = False) -> float:
         """Computes the probability to see a certain observation, given the 
         system's current state.
 
         Args:
-            observation (numpy array, shape=(n_obs, len(self.lnls))): Contains 
-                the observed state of the patient. if there are :math:`N` 
-                different diagnosing modalities and :math:`M` nodes this has the 
-                shape :math:`(N,M)` and contains zeros and ones.
+            observation: Contains the observed state of the patient. if there 
+                are :math:`N` different diagnosing modalities and :math:`M` 
+                nodes this has the shape :math:`(N,M)` and contains zeros and 
+                ones.
 
-            log (bool): If True, this returns the log probability.
+            log: If ``True``, the log probability is computed. 
                 (default: ``False``)
 
-        This method returns the probability to see the given observation.
+        Returns:
+            The probability to see the given observation.
         """
-        assert len(observation) == len(self.lnls), "length of observation must match # of LNLs"
+        if len(observation) != len(self.lnls):
+            raise ValueError("length of observation must match # of LNLs")
+        
         if not log:
-            res = 1
+            res = 1.
             for i, lnl in enumerate(self.lnls):
                 res *= lnl.obs_prob(log=log, observation=observation[i])
         else:
-            res = 0
+            res = 0.
             for i, lnl in enumerate(self.lnls):
                 res += lnl.obs_prob(log=log, observation=observation[i])
 
@@ -262,10 +313,11 @@ class System(object):
     def gen_state_list(self):
         """Generates the list of (hidden) states.
         """                
-        # every LNL can be either healthy (state=0) or involved (state=1). Hence,
-        # the number of different possible states is 2 to the power of the # of
-        # lymph node levels.
-        self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)), dtype=int)
+        # every LNL can be either healthy (state=0) or involved (state=1). 
+        # Hence, the number of different possible states is 2 to the power of 
+        # the # of lymph node levels.
+        self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)), 
+                                   dtype=int)
         
         for i in range(2**len(self.lnls)):
             tmp = toStr(i, 2, rev=False, length=len(self.lnls))
@@ -288,8 +340,8 @@ class System(object):
 
 
     def gen_mask(self):
-        """Generates a dictionary that contains for each row of :math:`\\mathbf{A}` 
-        the indices where :math:`\\mathbf{A}` is NOT zero.
+        """Generates a dictionary that contains for each row of 
+        :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
         """
         self.idx_dict = {}
         for i in range(len(self.state_list)):
@@ -302,9 +354,10 @@ class System(object):
 
 
     def gen_A(self):
-        """Generates the transition matrix :math:`\\mathbf{A}`, which contains the 
-        :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` is a 
-        square matrix with size ``(# of states)``. The lower diagonal is zero.
+        """Generates the transition matrix :math:`\\mathbf{A}`, which contains 
+        the :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` 
+        is a square matrix with size ``(# of states)``. The lower diagonal is 
+        zero.
         """
         self.A = np.zeros(shape=(len(self.state_list), len(self.state_list)))
         for i,state in enumerate(self.state_list):
@@ -327,27 +380,30 @@ class System(object):
 
 
     # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
-    def unparametrized_epoch(self, t_stage=[1,2,3,4], time_dist_dict={}, T=1, 
-                             scale=1e-2):
+    def unparametrized_epoch(self, 
+                             t_stage: List[int] = [1,2,3,4], 
+                             time_prior_dict: dict = {}, 
+                             T: float = 1., 
+                             scale: float = 1e-2) -> float:
         """An attempt at unparametrized sampling, where the algorithm samples
         A from the full solution space of row-stochastic matrices with zeros
         where transitions are forbidden.
 
         Args:
-            t_stage (list): List of T-stages that should be included in the 
-                learning process.
-                (default: ``[1,2,3,4]``)
+            t_stage: List of T-stages that should be included in the learning 
+                process. (default: ``[1,2,3,4]``)
 
-            time_dist_dict (dict): Dictionary with keys of T-stages in t_stage 
-                and values of time priors for each of those T-stages.
+            time_prior_dict: Dictionary with keys of T-stages in t_stage and 
+                values of time priors for each of those T-stages.
 
-            T (float): Temperature of the epoch. Can be reduced from a starting 
-                value down to almost zero for an annealing approach to sampling.
-                (default: ``1``)
+            T: Temperature of the epoch. Can be reduced from a starting value 
+                down to almost zero for an annealing approach to sampling.
+                (default: ``1.``)
 
-        This method returns the log-likelihood of the epoch.
+        Returns:
+            The log-likelihood of the epoch.
         """
-        likely = self.likelihood(t_stage, time_dist_dict)
+        likely = self.likelihood(t_stage, time_prior_dict)
         
         for i in np.random.permutation(len(self.lnls) -1):
             # Generate Logit-Normal sample around current position
@@ -360,7 +416,7 @@ class System(object):
             x_new /= numerator
 
             self.A[i,self.idx_dict[i]] = x_new
-            prop_likely = self.likelihood(t_stage, time_dist_dict)
+            prop_likely = self.likelihood(t_stage, time_prior_dict)
 
             if np.exp(- (likely - prop_likely) / T) >= np.random.uniform():
                 likely = prop_likely
@@ -372,8 +428,11 @@ class System(object):
 
 
 
-    def gen_C(self, data, t_stage=[1,2,3,4], observations=['pCT', 'path'], 
-              mode="HMM"):
+    def gen_C(self, 
+              data: pd.DataFrame, 
+              t_stage: List[int] = [1,2,3,4], 
+              observations: List[str] = ['pCT', 'path'], 
+              mode: str = "HMM"):
         """Generates the matrix C that marginalizes over multiple states for 
         data with incomplete observation, as well as how often these obser-
         vations occur in the dataset. In the end the computation 
@@ -384,19 +443,18 @@ class System(object):
         where :math:`a` is an array containing the probability for each state.
 
         Args:
-            data (pandas dataframe): Contains rows of patient data. The columns 
-                must include the T-stage and at least one diagnostic modality.
+            data: Contains rows of patient data. The columns must include the 
+                T-stage and at least one diagnostic modality.
 
-            t_stage (list): List of T-stages that should be included in the 
-                learning process.
-                (default: ``[1,2,3,4]``)
+            t_stage: List of T-stages that should be included in the learning 
+                process. (default: ``[1,2,3,4]``)
 
-            observations (list of str): List of observational modalities from 
-                the pandas dataframe that should be included.
+            observations: List of observational modalities from the pandas 
+                :class:`DataFrame` that should be included. 
                 (default: ``['pCT', 'path']``)
 
-            mode (str): ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian network.
-                (default: ``"HMM"``)
+            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
+                network. (default: ``"HMM"``)
         """
 
         # For the Hidden Markov Model
@@ -409,14 +467,16 @@ class System(object):
                 f = np.array([], dtype=int)
 
                 # returns array of pateint data that have the same T-stage
-                for patient in data.loc[data['Info', 'T-stage'] == stage, observations].values:
+                for patient in data.loc[data['Info', 'T-stage'] == stage, 
+                                        observations].values:
                     tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
                     for i, obs in enumerate(self.obs_list):
                         # returns true if all not missing observations match
                         if np.all(np.equal(obs.flatten(order='F'), 
                                            patient, 
                                            where=~np.isnan(patient), 
-                                           out=np.ones_like(patient, dtype=bool))):
+                                           out=np.ones_like(patient, 
+                                                            dtype=bool))):
                             tmp[i] = 1
 
                     # build up the matrix C without any duplicates and count 
@@ -456,7 +516,7 @@ class System(object):
             for patient in data[observations].values:
                 tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
                 for i, obs in enumerate(self.obs_list):
-                    # returns true if all observations that are not missing match
+                    # returns true if all observations that aren't missing match
                     if np.all(np.equal(obs.flatten(order='F'), 
                                        patient, 
                                        where=~np.isnan(patient), 
@@ -487,29 +547,30 @@ class System(object):
 
 
 
-    def likelihood(self, theta, t_stage=[1,2,3,4], time_dist_dict={}, mode="HMM"):
+    def likelihood(self, 
+                   theta: np.ndarray, 
+                   t_stage: List[int] = [1,2,3,4], 
+                   time_prior_dict: dict = {}, 
+                   mode: str = "HMM") -> float:
         """Computes the likelihood of a set of parameters, given the already 
         stored data(set).
 
         Args:
-            theta (numpy array): Set of parameters, consisting of the base 
-                probabilities :math:`b` (as many as the system has nodes), the 
-                transition probabilities :math:`t` (as many as the system has 
-                edges) and - not yet implemented - the evolution probabilities 
-                :math:`e` (as many as the system has nodes).
+            theta: Set of parameters, consisting of the base probabilities 
+                :math:`b` (as many as the system has nodes) and the transition 
+                probabilities :math:`t` (as many as the system has edges).
 
-            t_stage (list): List of T-stages that should be included in the 
-                learning process.
-                (default: ``[1,2,3,4]``)
+            t_stage: List of T-stages that should be included in the learning 
+                process. (default: ``[1,2,3,4]``)
 
-            time_dist_dict (dict): Dictionary with keys of T-stages in ``t_stage`` 
-                and values of time priors for each of those T-stages.
+            time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
+                values of time priors for each of those T-stages.
 
-            mode (str): ``"HMM"`` for hidden Markov model and ``"BN"`` for 
-                Bayesian network.
-                (default: ``"HMM"``)
+            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
+                network. (default: ``"HMM"``)
 
-        This method returns the log-likelihood of a parameter sample.
+        Returns:
+            The log-likelihood of a parameter sample.
         """
         # check if all parameters are within their limits
         if np.any(np.greater(0., theta)):
@@ -528,7 +589,7 @@ class System(object):
                 start[0] = 1.
                 tmp = np.zeros(shape=(len(self.state_list),))
 
-                for pt in time_dist_dict[stage]:
+                for pt in time_prior_dict[stage]:
                     tmp += pt * start
                     start = start @ self.A
 
@@ -550,19 +611,21 @@ class System(object):
         return res
 
 
-    # -------------------- SPECIAL LIKELIHOODS -------------------- #
-    def beta_likelihood(self, theta, beta, t_stage=[1, 2, 3, 4], time_dist_dict={}):
+
+    # -------------------------- SPECIAL LIKELIHOOD -------------------------- #
+    def beta_likelihood(self, theta, beta, t_stage=[1, 2, 3, 4], time_prior_dict={}):
         if np.any(np.greater(0., theta)):
             return -np.inf, -np.inf
         if np.any(np.greater(theta, 1.)):
             return -np.inf, -np.inf
 
         bn = self.likelihood(theta, mode="BN")
-        hmm = self.likelihood(theta, t_stage, time_dist_dict, mode="HMM")
+        hmm = self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
 
         res = beta * bn + (1-beta) * hmm
         diff_q = bn - hmm
         return res, diff_q
+
 
 
     def binom_llh(self, p, t_stage=["late"], T_max=10):
@@ -572,18 +635,42 @@ class System(object):
 
         t = np.asarray(range(1,T_max+1))
         pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
-        time_dist_dict = {}
+        time_prior_dict = {}
 
         for i, stage in enumerate(t_stage):
-            time_dist_dict[stage] = pt(p[i])
+            time_prior_dict[stage] = pt(p[i])
 
-        return self.likelihood(self.get_theta(), t_stage, time_dist_dict, mode="HMM")
+        return self.likelihood(self.get_theta(), t_stage, time_prior_dict, mode="HMM")
 
 
 
-    def combined_likelihood(self, theta, t_stage=["early", "late"], time_dist_dict={}, T_max=10):
-        """Likelihood for learning both the system's parameters and the center of
-        a Binomially shaped time prior.
+    def combined_likelihood(self, 
+                            theta: np.ndarray, 
+                            t_stage: List[str] = ["early", "late"], 
+                            time_prior_dict: dict = {}, 
+                            T_max: int = 10) -> float:
+        """Likelihood for learning both the system's parameters and the center 
+        of a Binomially shaped time prior.
+        
+        Args:
+            theta: Set of parameters, consisting of the base probabilities 
+                :math:`b` (as many as the system has nodes), the transition 
+                probabilities :math:`t` (as many as the system has edges) and - 
+                in this particular case - the binomial parameters for all but 
+                the first T-stage's time prior.
+                
+            t_stage: keywords of T-stages that are present in the dictionary of 
+                C matrices. (default: ``["early", "late"]``)
+                
+            time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
+                values of time priors for each of those T-stages.
+                
+            T_max: maximum number of time steps. TODO: make this more consistent
+            
+        Returns:
+            The combined likelihood of observing patients with different 
+            T-stages, given the spread probabilities as well as the parameters 
+            for the later (except the first) T-stage's binomial time prior.
         """
 
         if np.any(np.greater(0., theta)) or np.any(np.greater(theta, 1.)):
@@ -593,43 +680,43 @@ class System(object):
         t = np.asarray(range(1,T_max+1))
         pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
 
-        time_dist_dict["early"] = pt(0.4)
-        time_dist_dict["late"] = pt(p)
+        time_prior_dict["early"] = pt(0.4)
+        time_prior_dict["late"] = pt(p)
         
-        return self.likelihood(theta, t_stage, time_dist_dict, mode="HMM")
-    # -------------------- SPECIAL END -------------------- #
+        return self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
+    # ----------------------------- SPECIAL DONE ----------------------------- #
 
 
-    def risk(self, inv, obs, time_dist=[], mode="HMM"):
+
+    def risk(self, 
+             inv: np.ndarray, 
+             obs: np.ndarray, 
+             time_dist: List[float] = [], 
+             mode: str = "HMM") -> float:
         """Computes the risk for involvement (or no involvement), given some 
         observations and a time distribution for the Markov model (and the 
         Bayesian network).
 
         Args:
-            inv (numpy array): Contains None 
-                for node levels that one is not interested in or one of the 
-                possible states for the respective involvement.
-                ``shape=(len(self.state_list))``
+            inv: Contains ``None`` for node levels that one is not interested 
+                in or one of the possible states for the respective involvement.
 
-            obs (numpy array): Contains ``None`` for 
-                node levels where no observation is available and 0 or 1 for the 
-                respective observation.
-                ``shape=(len(self.obs_list))``
+            obs: Contains ``None`` for node levels where no observation is 
+                available and 0 or 1 for the respective observation.
 
-            mode (str): ``"HMM"`` for hidden Markov model and ``"BN"`` for 
-                Bayesian network.
-                (default: ``"HMM"``)
+            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
+                network. (default: ``"HMM"``)
 
-        This method returns the risk for the involvement of interest, given an 
-        observation.
+        Returns:
+            The risk for the involvement of interest, given an observation.
         """
         if len(inv) != len(self.lnls):
-            raise Exception("The involvement array has the wrong length." + 
-                            "It should be {}".format(len(self.lnls)))
+            raise ValueError("The involvement array has the wrong length. "
+                             f"It should be {len(self.lnls)}")
 
         if len(obs) != len(self.lnls * (self.n_obs)):
-            raise Exception("The observation array has the wrong length." + 
-                            "It should be {}".format(len(self.lnls * self.n_obs)))
+            raise ValueError("The observation array has the wrong length. "
+                             f"It should be {len(self.lnls * self.n_obs)}")
 
         # P(Z), probability of observing a certain (observational) state
         pZ = np.zeros(shape=(len(self.obs_list),))

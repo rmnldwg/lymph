@@ -18,11 +18,12 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'lymph'
-copyright = '2020, Roman Ludwig'
+copyright = '2021, Roman Ludwig'
 author = 'Roman Ludwig'
 
+version = '0.1.3'
 # The full version, including alpha/beta/rc tags
-release = '2020'
+release = '0.1.3'
 
 
 # -- General configuration ---------------------------------------------------
@@ -34,6 +35,8 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
+    'sphinx_autodoc_typehints',
+    'nbsphinx'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -42,7 +45,7 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ['_data']
 
 
 # -- Options for HTML output -------------------------------------------------

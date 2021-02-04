@@ -1,37 +1,43 @@
 import numpy as np
-import scipy as sp 
+import scipy as sp
 import scipy.stats
 
 from .node import Node
+
 
 class Edge(object):
     """Class for the connections between lymph node levels (LNLs) represented
     by the Node class.
 
     Args:
-        start (Node instance): Parent node
+        start: Parent node
 
-        end (Node instance): Child node
+        end: Child node
 
-        t (float): Transition probability in case start-Node has state 1 
-            (microscopic involvement).
+        t: Transition probability in case start-Node has state 1 (microscopic 
+            involvement).
     """
-    def __init__(self, start, end, t=0.):
-        if type(start) is not Node:
-            raise Exception("Start must be Node!")
-        if type(end) is not Node:
-            raise Exception("End must be Node!")
+    def __init__(self,
+                 start: Node,
+                 end: Node,
+                 t: float = 0.):
 
-        self.start = start 
+        if type(start) is not Node:
+            raise TypeError("Start must be instance of Node")
+        if type(end) is not Node:
+            raise TypeError("End must be instance of Node!")
+
+        self.start = start
         self.start.out.append(self)
-        self.end = end 
+        self.end = end
         self.end.inc.append(self)
         self.t = t
 
 
 
     def report(self):
-        """Just quickly prints infos about the edge"""
-        print("start: {}".format(self.start.name))
-        print("end: {}".format(self.end.name))
-        print("t = {}".format(self.t))
+        """Just quickly prints infos about the edge
+        """
+        print(f"start: {self.start.name}")
+        print(f"end: {self.end.name}")
+        print(f"t = {self.t}")
