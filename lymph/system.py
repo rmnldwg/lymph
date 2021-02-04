@@ -151,17 +151,21 @@ class System(object):
         for tumor in self.tumors:
             if tumor.typ != "tumor":
                 raise RuntimeError("Tumor node is not of type tumor")
-
+            
+            prefix = tumor.name + " ---"
             for o in tumor.out:
-                print(f"{tumor.name} -- {o.t * 100: >4.1f} % --> {o.end.name}")
+                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
+                prefix = "".join([" "] * (len(tumor.name) + 1)) + "+--"
 
         print("\nLNL(s):")
         for lnl in self.lnls:
             if lnl.typ != "lnl":
                 raise RuntimeError("LNL node is not of type LNL")
 
+            prefix = lnl.name + " ---"
             for o in lnl.out:
-                print(f"{lnl.name} -- {o.t * 100: >4.1f} % --> {o.end.name}")
+                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
+                prefix = "".join([" "] * (len(lnl.name) + 1)) + "+--"
 
 
 
@@ -378,7 +382,7 @@ class System(object):
     # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
     def unparametrized_epoch(self, 
                              t_stage: List[int] = [1,2,3,4], 
-                             time_dist_dict: dict = {}, 
+                             time_prior_dict: dict = {}, 
                              T: float = 1., 
                              scale: float = 1e-2) -> float:
         """An attempt at unparametrized sampling, where the algorithm samples
@@ -389,7 +393,7 @@ class System(object):
             t_stage: List of T-stages that should be included in the learning 
                 process. (default: ``[1,2,3,4]``)
 
-            time_dist_dict: Dictionary with keys of T-stages in t_stage and 
+            time_prior_dict: Dictionary with keys of T-stages in t_stage and 
                 values of time priors for each of those T-stages.
 
             T: Temperature of the epoch. Can be reduced from a starting value 
@@ -399,7 +403,7 @@ class System(object):
         Returns:
             The log-likelihood of the epoch.
         """
-        likely = self.likelihood(t_stage, time_dist_dict)
+        likely = self.likelihood(t_stage, time_prior_dict)
         
         for i in np.random.permutation(len(self.lnls) -1):
             # Generate Logit-Normal sample around current position
@@ -412,7 +416,7 @@ class System(object):
             x_new /= numerator
 
             self.A[i,self.idx_dict[i]] = x_new
-            prop_likely = self.likelihood(t_stage, time_dist_dict)
+            prop_likely = self.likelihood(t_stage, time_prior_dict)
 
             if np.exp(- (likely - prop_likely) / T) >= np.random.uniform():
                 likely = prop_likely
@@ -546,7 +550,7 @@ class System(object):
     def likelihood(self, 
                    theta: np.ndarray, 
                    t_stage: List[int] = [1,2,3,4], 
-                   time_dist_dict: dict = {}, 
+                   time_prior_dict: dict = {}, 
                    mode: str = "HMM") -> float:
         """Computes the likelihood of a set of parameters, given the already 
         stored data(set).
@@ -559,7 +563,7 @@ class System(object):
             t_stage: List of T-stages that should be included in the learning 
                 process. (default: ``[1,2,3,4]``)
 
-            time_dist_dict: Dictionary with keys of T-stages in ``t_stage`` and 
+            time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
                 values of time priors for each of those T-stages.
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
@@ -585,7 +589,7 @@ class System(object):
                 start[0] = 1.
                 tmp = np.zeros(shape=(len(self.state_list),))
 
-                for pt in time_dist_dict[stage]:
+                for pt in time_prior_dict[stage]:
                     tmp += pt * start
                     start = start @ self.A
 
@@ -609,14 +613,14 @@ class System(object):
 
 
     # -------------------------- SPECIAL LIKELIHOOD -------------------------- #
-    def beta_likelihood(self, theta, beta, t_stage=[1, 2, 3, 4], time_dist_dict={}):
+    def beta_likelihood(self, theta, beta, t_stage=[1, 2, 3, 4], time_prior_dict={}):
         if np.any(np.greater(0., theta)):
             return -np.inf, -np.inf
         if np.any(np.greater(theta, 1.)):
             return -np.inf, -np.inf
 
         bn = self.likelihood(theta, mode="BN")
-        hmm = self.likelihood(theta, t_stage, time_dist_dict, mode="HMM")
+        hmm = self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
 
         res = beta * bn + (1-beta) * hmm
         diff_q = bn - hmm
@@ -631,19 +635,19 @@ class System(object):
 
         t = np.asarray(range(1,T_max+1))
         pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
-        time_dist_dict = {}
+        time_prior_dict = {}
 
         for i, stage in enumerate(t_stage):
-            time_dist_dict[stage] = pt(p[i])
+            time_prior_dict[stage] = pt(p[i])
 
-        return self.likelihood(self.get_theta(), t_stage, time_dist_dict, mode="HMM")
+        return self.likelihood(self.get_theta(), t_stage, time_prior_dict, mode="HMM")
 
 
 
     def combined_likelihood(self, 
                             theta: np.ndarray, 
                             t_stage: List[str] = ["early", "late"], 
-                            time_dist_dict: dict = {}, 
+                            time_prior_dict: dict = {}, 
                             T_max: int = 10) -> float:
         """Likelihood for learning both the system's parameters and the center 
         of a Binomially shaped time prior.
@@ -658,7 +662,7 @@ class System(object):
             t_stage: keywords of T-stages that are present in the dictionary of 
                 C matrices. (default: ``["early", "late"]``)
                 
-            time_dist_dict: Dictionary with keys of T-stages in ``t_stage`` and 
+            time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
                 values of time priors for each of those T-stages.
                 
             T_max: maximum number of time steps. TODO: make this more consistent
@@ -676,10 +680,10 @@ class System(object):
         t = np.asarray(range(1,T_max+1))
         pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
 
-        time_dist_dict["early"] = pt(0.4)
-        time_dist_dict["late"] = pt(p)
+        time_prior_dict["early"] = pt(0.4)
+        time_prior_dict["late"] = pt(p)
         
-        return self.likelihood(theta, t_stage, time_dist_dict, mode="HMM")
+        return self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
     # ----------------------------- SPECIAL DONE ----------------------------- #
 
 
