@@ -18,12 +18,12 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'lymph'
-copyright = '2020, Roman Ludwig'
+copyright = '2021, Roman Ludwig'
 author = 'Roman Ludwig'
 
-version = '0.1.2'
+version = '0.1.3'
 # The full version, including alpha/beta/rc tags
-release = '0.1.2'
+release = '0.1.3'
 
 
 # -- General configuration ---------------------------------------------------
