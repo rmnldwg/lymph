@@ -78,7 +78,7 @@ class System(object):
                                                     [0. , 1. ]]])):
 
         self.n_obs = obs_table.shape[0]
-        self.tumours = []   # list of nodes with type tumour
+        self.tumors = []   # list of nodes with type tumour
         self.lnls = []      # list of all lymph node levels
         self.nodes = []     # list of all nodes in the graph
         self.edges = []     # list of all edges connecting nodes in the graph
@@ -87,8 +87,8 @@ class System(object):
             self.nodes.append(Node(key, obs_table=obs_table))
             
         for node in self.nodes:
-            if node.typ == "tumour":
-                self.tumours.append(node)
+            if node.typ == "tumor":
+                self.tumors.append(node)
             else:
                 self.lnls.append(node)
 
@@ -129,7 +129,7 @@ class System(object):
 
 
 
-    def list_graph(self) -> dict:
+    def get_graph(self) -> dict:
         """Lists the graph as it was provided when the system was created
         """
         res = []
@@ -140,6 +140,28 @@ class System(object):
             res.append((node.name, out))
             
         return dict(res)
+
+
+
+    def print_graph(self):
+        """Print info about the structure and parameters of the graph.
+        """
+
+        print("Tumor(s):")
+        for tumor in self.tumors:
+            if tumor.typ != "tumor":
+                raise RuntimeError("Tumor node is not of type tumor")
+
+            for o in tumor.out:
+                print(f"{tumor.name} -- {o.t * 100: >4.1f} % --> {o.end.name}")
+
+        print("\nLNL(s):")
+        for lnl in self.lnls:
+            if lnl.typ != "lnl":
+                raise RuntimeError("LNL node is not of type LNL")
+
+            for o in lnl.out:
+                print(f"{lnl.name} -- {o.t * 100: >4.1f} % --> {o.end.name}")
 
 
 

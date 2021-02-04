@@ -19,7 +19,7 @@ class Edge(object):
     def __init__(self, 
                  start: Node, 
                  end: Node, 
-                 t:float = 0.):
+                 t: float = 0.):
         
         if type(start) is not Node:
             raise TypeError("Start must be instance of Node")
@@ -37,6 +37,6 @@ class Edge(object):
     def report(self):
         """Just quickly prints infos about the edge
         """
-        print("start: {}".format(self.start.name))
-        print("end: {}".format(self.end.name))
-        print("t = {}".format(self.t))
+        print(f"start: {self.start.name}")
+        print(f"end: {self.end.name}")
+        print(f"t = {self.t}")

@@ -11,9 +11,9 @@ class Node(object):
 
         state: Current state this LNL is in. Can be in {0, 1}
 
-        typ: Can be either `"lnl"`, `"tumour"` or `None`. If it is the latter, 
+        typ: Can be either `"lnl"`, `"tumor"` or `None`. If it is the latter, 
             the type will be inferred from the name of the node. A node 
-            starting with a `t` (case-insensitive), then it will be a tumour 
+            starting with a `t` (case-insensitive), then it will be a tumor 
             node and a lymph node levle (lnl) otherwise. (default: `None`)
 
         obs_table: An arrray of 2x2 matrices. Each of those matrices represents 
@@ -31,14 +31,14 @@ class Node(object):
         self.name = name
         if typ is None:
             if self.name.lower()[0] == 't':
-                self.typ = "tumour"
+                self.typ = "tumor"
             else:
                 self.typ = "lnl"
         else:
             self.typ = typ
 
-        # Tumours are always involved, so their state is always 1
-        if self.typ == "tumour":
+        # Tumors are always involved, so their state is always 1
+        if self.typ == "tumor":
             self.state = 1
         else:
             self.state = state
@@ -59,10 +59,12 @@ class Node(object):
         
         for i in self.inc:
             print(f"{i.start.name}, ", end="")
+
         print("\noutgoing: ", end="")
         
         for o in self.out:
             print(f"{o.end.name}, ", end="")
+        
         print("\n", end="")
 
 
