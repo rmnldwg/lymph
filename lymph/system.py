@@ -691,7 +691,7 @@ class System(object):
     def risk(self, 
              inv: np.ndarray, 
              obs: np.ndarray, 
-             time_dist: List[float] = [], 
+             time_prior: List[float] = [], 
              mode: str = "HMM") -> float:
         """Computes the risk for involvement (or no involvement), given some 
         observations and a time distribution for the Markov model (and the 
@@ -703,6 +703,9 @@ class System(object):
 
             obs: Contains ``None`` for node levels where no observation is 
                 available and 0 or 1 for the respective observation.
+
+            time_prior: Discrete distribution over the time steps. Must hence 
+                sum to 1.
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
                 network. (default: ``"HMM"``)
@@ -728,7 +731,7 @@ class System(object):
         if mode == "HMM":
             # P(X), probability of arriving at a certain (hidden) state
             pX = np.zeros(shape=(len(self.state_list),))
-            for pt in time_dist:
+            for pt in time_prior:
                 pX += pt * start
                 start = start  @ self.A
 
