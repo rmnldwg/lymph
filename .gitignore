@@ -39,7 +39,7 @@ coverage.xml
 .hypothesis/
 
 # Visual Studio Code # 
-.vscode/* 
+.vscode
 .history
 
 # Jupyter Notebook
