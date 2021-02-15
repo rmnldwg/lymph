@@ -365,6 +365,23 @@ class System(object):
 
 
 
+    def set_modalities(self, 
+                       spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}):
+        """Given some 2x2 matrices for each diagnostic modality based on their 
+        specificity and sensitivity, compute observation matrix 
+        :math:`\mathbf{B}` and store the details of the diagnostic modalities.
+        """
+        self._modality_dict = {}
+        for modality, spsn in spsn_dict.items():
+            sp, sn = spsn
+            self._modality_dict[modality] = np.array([[sp     , 1. - sn],
+                                                      [1. - sp, sn     ]])
+            
+        self._gen_obs_list()
+        self._gen_B()
+
+
+
     def _gen_B(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains 
         the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
@@ -460,13 +477,7 @@ class System(object):
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
                 network. (default: ``"HMM"``)
         """
-        self._modality_dict = {}
-        for modality, spsn in spsn_dict.items():
-            sp, sn = spsn
-            self._modality_dict[modality] = np.array([[sp     , 1. - sn], 
-                                                     [1. - sp, sn     ]])
-        self._gen_obs_list()
-        self._gen_B()
+        self.set_modalities(spsn_dict=spsn_dict)
         
         # For the Hidden Markov Model
         if mode=="HMM":
@@ -732,11 +743,7 @@ class System(object):
         if len(inv) != len(self.lnls):
             raise ValueError("The involvement array has the wrong length. "
                              f"It should be {len(self.lnls)}")
-
-        n_obs = len(self._modality_dict)
-        if len(obs) != len(self.lnls * n_obs):
-            raise ValueError("The observation array has the wrong length. "
-                             f"It should be {len(self.obs_list)}")
+            
 
         # P(Z), probability of observing a certain (observational) state
         pZ = np.zeros(shape=(len(self.obs_list),))
@@ -763,22 +770,31 @@ class System(object):
 
         pZ = pX @ self.B
 
+        # figuring out which states I should sum over, given some node levels
         idxX = np.array([], dtype=int)
         idxZ = np.array([], dtype=int)
 
-        # figuring out which states I should sum over, given some node levels
         for i, x in enumerate(self.state_list):
             if np.all(np.equal(x,inv, 
-                               where=inv!=None, 
+                               where=(inv!=None), 
                                out=np.ones_like(inv, dtype=bool))):
                 idxX = np.append(idxX, i)
-         
+        
+        n_obs = len(self._modality_dict)
+        # I loop over all possible complete observations...
         for i, z in enumerate(self.obs_list):
-            if np.all(np.equal(z.flatten(order='F'), 
-                               obs, 
-                               where=obs!=None, 
-                               out=np.ones_like(obs, dtype=bool))):
-                idxZ = np.append(idxZ, i)
+            # ...and compare the respective part (modality) of that complete 
+            # observation with the provided diagnose of the respective modality.
+            for i, modality in enumerate(self._modality_dict):
+                sub_z = z[i * n_obs : (i+1) * n_obs]
+                sub_o = obs[modality]
+                # and if they all agree everywhere where the provided diagnosis 
+                # is not None, then I mark that complete observation so that it 
+                # can be marginalized over.
+                if np.all(np.equal(sub_z, sub_o, 
+                                   where=(sub_o!=None), 
+                                   out=np.ones_like(sub_o, dtype=bool))):
+                    idxZ = np.append(idxZ, i)
 
         num = 0.
         denom = 0.
