@@ -717,7 +717,7 @@ class System(object):
 
     def risk(self, 
              inv: np.ndarray, 
-             obs: np.ndarray, 
+             obs: Dict[np.ndarray], 
              time_prior: List[float] = [], 
              mode: str = "HMM") -> float:
         """Computes the risk for involvement (or no involvement), given some 
@@ -725,11 +725,13 @@ class System(object):
         Bayesian network).
 
         Args:
-            inv: Contains ``None`` for node levels that one is not interested 
-                in or one of the possible states for the respective involvement.
+            inv: Pattern of involvement that we want to compute the risk for. 
+                Values can take on the values ``0`` (*negative*), ``1`` 
+                (*positive*) and ``None`` of we don't care if this is involved 
+                or not.
 
-            obs: Contains ``None`` for node levels where no observation is 
-                available and 0 or 1 for the respective observation.
+            obs: Holds a diagnose of similar kind as ``inv`` for each diagnostic 
+                modality. An incomplete diagnose can be filled with ``None``.
 
             time_prior: Discrete distribution over the time steps. Must hence 
                 sum to 1.
@@ -744,6 +746,19 @@ class System(object):
             raise ValueError("The involvement array has the wrong length. "
                              f"It should be {len(self.lnls)}")
             
+        # construct a diagnose in a single numpy array (in the way it is stored 
+        # in the obs_list) from the dictionary of diagnoses.
+        n_obs = len(self._modality_dict)
+        full_obs = np.array([None] * len(self.lnls) * n_obs)
+        emptyobs = True
+        for i, modality in enumerate(self._modality_dict):
+            if modality in obs:
+                emptyobs = False
+                full_obs[i * n_obs : (i+1) * n_obs] = obs[modality]
+
+        if emptyobs:
+            raise ValueError("Provided diagnose does not contain any specified "
+                             "diagnostic modalities.")
 
         # P(Z), probability of observing a certain (observational) state
         pZ = np.zeros(shape=(len(self.obs_list),))
@@ -780,21 +795,13 @@ class System(object):
                                out=np.ones_like(inv, dtype=bool))):
                 idxX = np.append(idxX, i)
         
-        n_obs = len(self._modality_dict)
-        # I loop over all possible complete observations...
+        # loop over all possible complete observations...
         for i, z in enumerate(self.obs_list):
-            # ...and compare the respective part (modality) of that complete 
-            # observation with the provided diagnose of the respective modality.
-            for i, modality in enumerate(self._modality_dict):
-                sub_z = z[i * n_obs : (i+1) * n_obs]
-                sub_o = obs[modality]
-                # and if they all agree everywhere where the provided diagnosis 
-                # is not None, then I mark that complete observation so that it 
-                # can be marginalized over.
-                if np.all(np.equal(sub_z, sub_o, 
-                                   where=(sub_o!=None), 
-                                   out=np.ones_like(sub_o, dtype=bool))):
-                    idxZ = np.append(idxZ, i)
+            # ...and check whether they could match the given diagnose
+            if np.all(np.equal(z, full_obs, 
+                               where=(full_obs!=None), 
+                               out=np.ones_like(full_obs, dtype=bool))):
+                idxZ = np.append(idxZ, i)
 
         num = 0.
         denom = 0.
