@@ -3,7 +3,7 @@ import scipy as sp
 import scipy.stats
 import pandas as pd
 import warnings
-from typing import Union, Optional, List
+from typing import Union, Optional, List, Dict
 
 from .node import Node
 from .edge import Edge
@@ -67,24 +67,17 @@ class System(object):
             create a :class:`node` that represents a binary random variable. The 
             values in the dictionary should then be the a list of names to which 
             :class:`edges` from the current key should be created.
-
-        obs_table: An arrray of 2x2 matrices. Each of those matrices represents 
-            an observational modality. The (0,0) entry corresponds to the 
-            specificity :math:`s_P` and at (1,1) one finds the sensitivity 
-            :math:`s_N`. These matrices must be column-stochastic.
     """
-    def __init__(self, graph: dict = {}, 
-                 obs_table: np.ndarray = np.array([[[1. , 0. ], 
-                                                    [0. , 1. ]]])):
+    def __init__(self, 
+                 graph: dict = {}):
 
-        self.n_obs = obs_table.shape[0]
-        self.tumors = []   # list of nodes with type tumour
+        self.tumors = []    # list of nodes with type tumour
         self.lnls = []      # list of all lymph node levels
         self.nodes = []     # list of all nodes in the graph
         self.edges = []     # list of all edges connecting nodes in the graph
         
         for key in graph:
-            self.nodes.append(Node(key, obs_table=obs_table))
+            self.nodes.append(Node(key))
             
         for node in self.nodes:
             if node.typ == "tumor":
@@ -97,10 +90,8 @@ class System(object):
                 self.edges.append(Edge(self.find_node(key), 
                                        self.find_node(value)))
 
-        self.gen_state_list()
-        self.gen_obs_list()
-        self.gen_mask()
-        self.gen_B()
+        self._gen_state_list()
+        self._gen_mask()
 
 
 
@@ -231,7 +222,7 @@ class System(object):
             edge.t = theta[i]
 
         if mode=="HMM":
-            self.gen_A()
+            self._gen_A()
 
 
 
@@ -277,40 +268,45 @@ class System(object):
 
 
     def obs_prob(self, 
-                 observation: np.ndarray, 
+                 diagnoses_dict: Dict[str, List[int]], 
                  log: bool = False) -> float:
-        """Computes the probability to see a certain observation, given the 
+        """Computes the probability to see certain diagnoses, given the 
         system's current state.
 
         Args:
-            observation: Contains the observed state of the patient. if there 
-                are :math:`N` different diagnosing modalities and :math:`M` 
-                nodes this has the shape :math:`(N,M)` and contains zeros and 
-                ones.
+            diagnoses_dict: Dictionary of diagnoses (one for each diagnostic 
+                modality). A diagnose must be an array of integers that is as 
+                long as the the system has LNLs.
 
             log: If ``True``, the log probability is computed. 
                 (default: ``False``)
 
         Returns:
-            The probability to see the given observation.
-        """
-        if len(observation) != len(self.lnls):
-            raise ValueError("length of observation must match # of LNLs")
-        
+            The probability to see the given diagnoses.
+        """  
         if not log:
             res = 1.
-            for i, lnl in enumerate(self.lnls):
-                res *= lnl.obs_prob(log=log, observation=observation[i])
         else:
             res = 0.
-            for i, lnl in enumerate(self.lnls):
-                res += lnl.obs_prob(log=log, observation=observation[i])
+            
+        for modality, diagnoses in diagnoses_dict.items():
+            if len(diagnoses) != len(self.lnls):
+                raise ValueError("length of observations must match @ of LNLs")
 
+            for i, lnl in enumerate(self.lnls):
+                if not log:
+                    res *= lnl.obs_prob(obs=diagnoses[i], 
+                                        obstable=self._modality_dict[modality], 
+                                        log=log)
+                else:
+                    res += lnl.obs_prob(obs=diagnoses[i],
+                                        obstable=self._modality_dict[modality],
+                                        log=log)
         return res
 
 
 
-    def gen_state_list(self):
+    def _gen_state_list(self):
         """Generates the list of (hidden) states.
         """                
         # every LNL can be either healthy (state=0) or involved (state=1). 
@@ -326,34 +322,36 @@ class System(object):
 
 
 
-    def gen_obs_list(self):
+    def _gen_obs_list(self):
         """Generates the list of possible observations.
         """
-        self.obs_list = np.zeros(shape=(2**(self.n_obs * len(self.lnls)), 
-                                        len(self.lnls), self.n_obs), dtype=int)
-        for i in range(2**(self.n_obs * len(self.lnls))):
-            tmp = toStr(i, 2, rev=False, length=self.n_obs * len(self.lnls))
+        n_obs = len(self._modality_dict)
+        
+        self.obs_list = np.zeros(shape=(2**(n_obs * len(self.lnls)), 
+                                        len(self.lnls), n_obs), dtype=int)
+        for i in range(2**(n_obs * len(self.lnls))):
+            tmp = toStr(i, 2, rev=False, length=n_obs * len(self.lnls))
             for j in range(len(self.lnls)):
-                for k in range(self.n_obs):
+                for k in range(n_obs):
                     self.obs_list[i,j,k] = int(tmp[k*len(self.lnls)+j])
 
 
 
-    def gen_mask(self):
+    def _gen_mask(self):
         """Generates a dictionary that contains for each row of 
         :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
         """
-        self.idx_dict = {}
+        self._idx_dict = {}
         for i in range(len(self.state_list)):
-            self.idx_dict[i] = []
+            self._idx_dict[i] = []
             for j in range(len(self.state_list)):
                 if not np.any(np.greater(self.state_list[i,:], 
                                          self.state_list[j,:])):
-                    self.idx_dict[i].append(j)
+                    self._idx_dict[i].append(j)
 
 
 
-    def gen_A(self):
+    def _gen_A(self):
         """Generates the transition matrix :math:`\\mathbf{A}`, which contains 
         the :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` 
         is a square matrix with size ``(# of states)``. The lower diagonal is 
@@ -362,21 +360,27 @@ class System(object):
         self.A = np.zeros(shape=(len(self.state_list), len(self.state_list)))
         for i,state in enumerate(self.state_list):
             self.set_state(state)
-            for j in self.idx_dict[i]:
+            for j in self._idx_dict[i]:
                 self.A[i,j] = self.trans_prob(self.state_list[j,:])
 
 
 
-    def gen_B(self):
+    def _gen_B(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains 
         the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
         shape ``(# of states, # of possible observations)``.
         """
+        n_obs = len(self._modality_dict)
         self.B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
+        
         for i,state in enumerate(self.state_list):
             self.set_state(state)
             for j,obs in enumerate(self.obs_list):
-                self.B[i,j] = self.obs_prob(obs)
+                diagnoses_dict = {}
+                for k,modality in enumerate(self._modality_dict):
+                    diagnoses_dict[modality] = obs[n_obs*k:n_obs*(k+1)]
+                self.B[i,j] = self.obs_prob(diagnoses_dict, log=False)
+                    
 
 
     # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
@@ -407,7 +411,7 @@ class System(object):
         
         for i in np.random.permutation(len(self.lnls) -1):
             # Generate Logit-Normal sample around current position
-            x_old = self.A[i,self.idx_dict[i]]
+            x_old = self.A[i,self._idx_dict[i]]
             mu = [np.log(x_old[k]) - np.log(x_old[-1]) for k in range(len(x_old)-1)]
             sample = np.random.multivariate_normal(mu, scale*np.eye(len(mu)))
             numerator = 1 + np.sum(np.exp(sample))
@@ -415,24 +419,24 @@ class System(object):
             x_new[:len(x_old)-1] = np.exp(sample)
             x_new /= numerator
 
-            self.A[i,self.idx_dict[i]] = x_new
+            self.A[i,self._idx_dict[i]] = x_new
             prop_likely = self.likelihood(t_stage, time_prior_dict)
 
             if np.exp(- (likely - prop_likely) / T) >= np.random.uniform():
                 likely = prop_likely
             else:
-                self.A[i,self.idx_dict[i]] = x_old
+                self.A[i,self._idx_dict[i]] = x_old
 
         return likely
     # -------------------- UNPARAMETRIZED END -------------------- #
 
 
 
-    def gen_C(self, 
-              data: pd.DataFrame, 
-              t_stage: List[int] = [1,2,3,4], 
-              observations: List[str] = ['pCT', 'path'], 
-              mode: str = "HMM"):
+    def load_data(self,
+                  data: pd.DataFrame, 
+                  t_stage: List[int] = [1,2,3,4], 
+                  modality_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
+                  mode: str = "HMM"):
         """Generates the matrix C that marginalizes over multiple states for 
         data with incomplete observation, as well as how often these obser-
         vations occur in the dataset. In the end the computation 
@@ -449,14 +453,21 @@ class System(object):
             t_stage: List of T-stages that should be included in the learning 
                 process. (default: ``[1,2,3,4]``)
 
-            observations: List of observational modalities from the pandas 
-                :class:`DataFrame` that should be included. 
-                (default: ``['pCT', 'path']``)
+            modality_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
+                (in that order) for each observational/diagnostic modality. 
+                (default: ``{"path": [1., 1.]}``)
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
                 network. (default: ``"HMM"``)
         """
-
+        self._modality_dict = {}
+        for modality, spsn in modality_dict.items():
+            sp, sn = spsn
+            self._modality_dict[modality] = np.array([[sp     , 1. - sn], 
+                                                     [1. - sp, sn     ]])
+        self._gen_obs_list()
+        self._gen_B()
+        
         # For the Hidden Markov Model
         if mode=="HMM":
             C_dict = {}
@@ -466,9 +477,11 @@ class System(object):
                 C = np.array([], dtype=int)
                 f = np.array([], dtype=int)
 
-                # returns array of pateint data that have the same T-stage
+                # returns array of patient data that have the same T-stage and 
+                # contain diagnoses from those diagnostic modalities that were 
+                # specified in the modality_dict argument
                 for patient in data.loc[data['Info', 'T-stage'] == stage, 
-                                        observations].values:
+                                        self._modality_dict.keys()].values:
                     tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
                     for i, obs in enumerate(self.obs_list):
                         # returns true if all not missing observations match
@@ -507,13 +520,15 @@ class System(object):
             self.C_dict = C_dict
             self.f_dict = f_dict
 
+
+
         # For the Bayesian Network
         elif mode=="BN":
             self.C = np.array([], dtype=int)
             self.f = np.array([], dtype=int)
 
             # returns array of pateint data that have the same T-stage
-            for patient in data[observations].values:
+            for patient in data[self._modality_dict.keys()].values:
                 tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
                 for i, obs in enumerate(self.obs_list):
                     # returns true if all observations that aren't missing match
@@ -595,6 +610,7 @@ class System(object):
 
                 p = tmp @ self.B @ self.C_dict[stage]
                 res += self.f_dict[stage] @ np.log(p)
+
 
         # likelihood for the Bayesian network
         elif mode == "BN":
@@ -717,9 +733,10 @@ class System(object):
             raise ValueError("The involvement array has the wrong length. "
                              f"It should be {len(self.lnls)}")
 
-        if len(obs) != len(self.lnls * (self.n_obs)):
+        n_obs = len(self._modality_dict)
+        if len(obs) != len(self.lnls * n_obs):
             raise ValueError("The observation array has the wrong length. "
-                             f"It should be {len(self.lnls * self.n_obs)}")
+                             f"It should be {len(self.obs_list)}")
 
         # P(Z), probability of observing a certain (observational) state
         pZ = np.zeros(shape=(len(self.obs_list),))
@@ -733,7 +750,7 @@ class System(object):
             pX = np.zeros(shape=(len(self.state_list),))
             for pt in time_prior:
                 pX += pt * start
-                start = start  @ self.A
+                start = start @ self.A
 
         # here BN
         elif mode == "BN":
