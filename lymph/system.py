@@ -328,12 +328,12 @@ class System(object):
         n_obs = len(self._modality_dict)
         
         self.obs_list = np.zeros(shape=(2**(n_obs * len(self.lnls)), 
-                                        len(self.lnls), n_obs), dtype=int)
+                                        n_obs * len(self.lnls)), dtype=int)
         for i in range(2**(n_obs * len(self.lnls))):
             tmp = toStr(i, 2, rev=False, length=n_obs * len(self.lnls))
             for j in range(len(self.lnls)):
                 for k in range(n_obs):
-                    self.obs_list[i,j,k] = int(tmp[k*len(self.lnls)+j])
+                    self.obs_list[i,(j*n_obs)+k] = int(tmp[k*len(self.lnls)+j])
 
 
 
@@ -717,7 +717,7 @@ class System(object):
 
     def risk(self, 
              inv: np.ndarray, 
-             obs: Dict[np.ndarray], 
+             obs: Dict[str, np.ndarray], 
              time_prior: List[float] = [], 
              mode: str = "HMM") -> float:
         """Computes the risk for involvement (or no involvement), given some 
@@ -748,13 +748,12 @@ class System(object):
             
         # construct a diagnose in a single numpy array (in the way it is stored 
         # in the obs_list) from the dictionary of diagnoses.
-        n_obs = len(self._modality_dict)
-        full_obs = np.array([None] * len(self.lnls) * n_obs)
+        full_obs = np.array([None] * len(self.lnls) * len(self._modality_dict))
         emptyobs = True
         for i, modality in enumerate(self._modality_dict):
             if modality in obs:
                 emptyobs = False
-                full_obs[i * n_obs : (i+1) * n_obs] = obs[modality]
+                full_obs[i*len(self.lnls):(i+1)*len(self.lnls)] = obs[modality]
 
         if emptyobs:
             raise ValueError("Provided diagnose does not contain any specified "
