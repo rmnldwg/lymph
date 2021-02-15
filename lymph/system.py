@@ -435,7 +435,7 @@ class System(object):
     def load_data(self,
                   data: pd.DataFrame, 
                   t_stage: List[int] = [1,2,3,4], 
-                  modality_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
+                  spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
                   mode: str = "HMM"):
         """Generates the matrix C that marginalizes over multiple states for 
         data with incomplete observation, as well as how often these obser-
@@ -453,7 +453,7 @@ class System(object):
             t_stage: List of T-stages that should be included in the learning 
                 process. (default: ``[1,2,3,4]``)
 
-            modality_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
+            spsn_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
                 (in that order) for each observational/diagnostic modality. 
                 (default: ``{"path": [1., 1.]}``)
 
@@ -461,7 +461,7 @@ class System(object):
                 network. (default: ``"HMM"``)
         """
         self._modality_dict = {}
-        for modality, spsn in modality_dict.items():
+        for modality, spsn in spsn_dict.items():
             sp, sn = spsn
             self._modality_dict[modality] = np.array([[sp     , 1. - sn], 
                                                      [1. - sp, sn     ]])
