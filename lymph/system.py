@@ -369,7 +369,7 @@ class System(object):
                        spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}):
         """Given some 2x2 matrices for each diagnostic modality based on their 
         specificity and sensitivity, compute observation matrix 
-        :math:`\mathbf{B}` and store the details of the diagnostic modalities.
+        :math:`\\mathbf{B}` and store the details of the diagnostic modalities.
         """
         self._modality_dict = {}
         for modality, spsn in spsn_dict.items():
