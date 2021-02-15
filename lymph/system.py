@@ -370,7 +370,7 @@ class System(object):
         the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
         shape ``(# of states, # of possible observations)``.
         """
-        n_obs = len(self._modality_dict)
+        n_lnl = len(self.lnls)
         self.B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
         
         for i,state in enumerate(self.state_list):
@@ -378,7 +378,7 @@ class System(object):
             for j,obs in enumerate(self.obs_list):
                 diagnoses_dict = {}
                 for k,modality in enumerate(self._modality_dict):
-                    diagnoses_dict[modality] = obs[n_obs*k:n_obs*(k+1)]
+                    diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
                 self.B[i,j] = self.obs_prob(diagnoses_dict, log=False)
                     
 
