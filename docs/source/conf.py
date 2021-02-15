@@ -21,9 +21,9 @@ project = 'lymph'
 copyright = '2021, Roman Ludwig'
 author = 'Roman Ludwig'
 
-version = '0.1.3'
+version = '1.0.0'
 # The full version, including alpha/beta/rc tags
-release = '0.1.3'
+release = '1.0.0'
 
 
 # -- General configuration ---------------------------------------------------

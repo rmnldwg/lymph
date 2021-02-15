@@ -5,7 +5,7 @@ with open("/mnt/c/Users/roman/OneDrive - USZ/lymph/README.md", "r") as fh:
 
 setuptools.setup(
     name = "lymph", # Replace with your own username
-    version = "0.1.3",
+    version = "1.0.0",
     author = "Roman Ludwig",
     author_email = "roman.ludwig@usz.ch",
     description = "Package for statistical modelling of lymphatic metastatic spread.",
