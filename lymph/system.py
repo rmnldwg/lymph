@@ -87,8 +87,13 @@ class System(object):
 
         for key, values in graph.items():
             for value in values:
-                self.edges.append(Edge(self.find_node(key), 
-                                       self.find_node(value)))
+                try:
+                    self.edges.append(Edge(self.find_node(key), 
+                                           self.find_node(value)))
+                except TypeError:
+                    raise ValueError("Every entry in the list of child nodes "
+                                     "must exist as a key in the dictionary "
+                                     "as well!")
 
         self._gen_state_list()
         self._gen_mask()
@@ -198,7 +203,7 @@ class System(object):
 
 
     def set_theta(self, 
-                  theta: np.ndarray, 
+                  theta: List[float], 
                   mode: str = "HMM"):
         """Fills the system with new base and transition probabilities and also 
         computes the transition matrix A again, if one is in mode "HMM".
