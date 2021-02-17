@@ -220,11 +220,13 @@ class System(object):
                 necessary to compute the transition matrix A again, so it is 
                 skipped. (default: ``"HMM"``)
         """
-        if len(theta) != len(self.edges):
-            raise ValueError("# of parameters must match # of edges")
-        
-        for i, edge in enumerate(self.edges):
-            edge.t = theta[i]
+        try:
+            for i, edge in enumerate(self.edges):
+                edge.t = theta[i]
+                
+        except IndexError:
+            raise ValueError("number of provided parameters must match the "
+                             "number of edges in the graph!")
 
         if mode=="HMM":
             self._gen_A()
@@ -253,17 +255,18 @@ class System(object):
         Returns:
             Transition probability :math:`t`.
         """
-        if len(newstate) != len(self.lnls):
-            raise ValueError("length of newstate must match # of LNLs")
-        
-        if not log:
-            res = 1.
-            for i, lnl in enumerate(self.lnls):
-                res *= lnl.trans_prob(log=log)[newstate[i]]
-        else:
-            res = 0.
-            for i, lnl in enumerate(self.lnls):
-                res += lnl.trans_prob(log=log)[newstate[i]]
+        try:
+            if not log:
+                res = 1.
+                for i, lnl in enumerate(self.lnls):
+                    res *= lnl.trans_prob(log=log)[newstate[i]]
+            else:
+                res = 0.
+                for i, lnl in enumerate(self.lnls):
+                    res += lnl.trans_prob(log=log)[newstate[i]]
+        except IndexError:
+            raise ValueError("newstate argument must have same length as the "
+                             "system has LNLs.")
 
         if acquire:
             self.set_state(newstate)
@@ -295,18 +298,23 @@ class System(object):
             res = 0.
             
         for modality, diagnoses in diagnoses_dict.items():
-            if len(diagnoses) != len(self.lnls):
-                raise ValueError("length of observations must match @ of LNLs")
-
-            for i, lnl in enumerate(self.lnls):
-                if not log:
-                    res *= lnl.obs_prob(obs=diagnoses[i], 
-                                        obstable=self._modality_dict[modality], 
-                                        log=log)
-                else:
-                    res += lnl.obs_prob(obs=diagnoses[i],
-                                        obstable=self._modality_dict[modality],
-                                        log=log)
+            try:
+                for i, lnl in enumerate(self.lnls):
+                    if not log:
+                        res *= lnl.obs_prob(obs=diagnoses[i], 
+                                            obstable=self._modality_dict[modality], 
+                                            log=log)
+                    else:
+                        res += lnl.obs_prob(obs=diagnoses[i],
+                                            obstable=self._modality_dict[modality],
+                                            log=log)
+            except IndexError:
+                raise ValueError("length of the diagnose array must match the "
+                                 "numbers of LNLs in the system.")
+            except KeyError:
+                raise ValueError(f"Provided diagnostic modality \"{modality}\" "
+                                 "does not have specificity/sensitivity "
+                                 "assigned to it.")
         return res
 
 
@@ -748,8 +756,11 @@ class System(object):
             The risk for the involvement of interest, given an observation.
         """
         if len(inv) != len(self.lnls):
-            raise ValueError("The involvement array has the wrong length. "
-                             f"It should be {len(self.lnls)}")
+            raise ValueError("Array of queried involvement does not match "
+                             "number of LNLs in the system.")
+        if np.sum(time_prior) != 1.:
+            raise ValueError("The time-prior is a probability distribution "
+                             "and it must sum to 1!")
             
         # construct a diagnose in a single numpy array (in the way it is stored 
         # in the obs_list) from the dictionary of diagnoses.
