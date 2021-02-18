@@ -758,7 +758,7 @@ class System(object):
         if len(inv) != len(self.lnls):
             raise ValueError("Array of queried involvement does not match "
                              "number of LNLs in the system.")
-        if np.sum(time_prior) != 1.:
+        if not np.isclose(np.sum(time_prior), 1.):
             raise ValueError("The time-prior is a probability distribution "
                              "and it must sum to 1!")
             
