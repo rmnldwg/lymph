@@ -6,27 +6,21 @@ The human lymph system (or rather parts of it) are modelled as directed graphs h
 Lymph system
 ------------
 
-.. automodule:: lymph.system
+.. autoclass:: lymph.System
    :members:
-   :undoc-members:
-   :show-inheritance:
 
 Edge
 ----
 
 Represents a lymphatic drainage pathway and therefore are spread probability.
 
-.. automodule:: lymph.edge
+.. autoclass:: lymph.Edge
    :members:
-   :undoc-members:
-   :show-inheritance:
 
 Node
 ----
 
 Represents a lymph node level (LNL) or rather a random variable associated with it. It encodes the microscopic involvement of the LNL and - if involved - might spread along outgoing edges.
 
-.. automodule:: lymph.node
+.. autoclass:: lymph.Node
    :members:
-   :undoc-members:
-   :show-inheritance:

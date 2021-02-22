@@ -640,7 +640,14 @@ class System(object):
 
 
     # -------------------------- SPECIAL LIKELIHOOD -------------------------- #
-    def beta_likelihood(self, theta, beta, t_stage=[1, 2, 3, 4], time_prior_dict={}):
+    def beta_likelihood(self, 
+                        theta, 
+                        beta, 
+                        t_stage=[1, 2, 3, 4], 
+                        time_prior_dict={}):
+        """
+        :meta private:
+        """
         if np.any(np.greater(0., theta)):
             return -np.inf, -np.inf
         if np.any(np.greater(theta, 1.)):
@@ -656,7 +663,9 @@ class System(object):
 
 
     def binom_llh(self, p, t_stage=["late"], T_max=10):
-
+        """
+        :meta-private:
+        """
         if np.any(np.greater(0., p)) or np.any(np.greater(p, 1.)):
             return -np.inf
 
@@ -692,7 +701,7 @@ class System(object):
             time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
                 values of time priors for each of those T-stages.
                 
-            T_max: maximum number of time steps. TODO: make this more consistent
+            T_max: maximum number of time steps.
             
         Returns:
             The combined likelihood of observing patients with different 
