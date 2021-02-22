@@ -1,4 +1,4 @@
 scipy
 pytest
 sphinx-autodoc-typehints
-nbconvert
+nbsphinx
