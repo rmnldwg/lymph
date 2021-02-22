@@ -1,5 +1,7 @@
 .. module: lymph
 
+.. _lymph:
+
 Detailed API
 ============
 
