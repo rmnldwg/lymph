@@ -664,7 +664,7 @@ class System(object):
 
     def binom_llh(self, p, t_stage=["late"], T_max=10):
         """
-        :meta-private:
+        :meta private:
         """
         if np.any(np.greater(0., p)) or np.any(np.greater(p, 1.)):
             return -np.inf
