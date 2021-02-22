@@ -1,7 +1,9 @@
+.. module: lymph
+
 Detailed API
 ============
 
-The human lymph system (or rather parts of it) are modelled as directed graphs here. Hence, a :class:`system` consists of multiple :class:`node` and :class:`edge` instances, which are represented by a python class each.
+The human lymph system (or rather parts of it) are modelled as directed graphs here. Hence, a :class:`System` consists of multiple :class:`Node` and :class:`Edge` instances, which are represented by a python class each.
 
 Lymph system
 ------------
