@@ -1,6 +1,7 @@
 import setuptools
+from pathlib import Path
 
-with open("/mnt/c/Users/roman/OneDrive - USZ/lymph/README.md", "r") as fh:
+with open(Path("./README.md").resolve(), "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
