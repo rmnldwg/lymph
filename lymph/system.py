@@ -645,7 +645,9 @@ class System(object):
                         beta, 
                         t_stage=[1, 2, 3, 4], 
                         time_prior_dict={}):
-        """
+        """Likelihood function for thermodynamic integration from the BN to the
+        HMM via the mixing parameter :math:`\\beta \\in [0,1]`.
+        
         :meta private:
         """
         if np.any(np.greater(0., theta)):
