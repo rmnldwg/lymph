@@ -713,8 +713,8 @@ class System(object):
             return -np.inf
 
         theta, p = theta[:-1], theta[-1]
-        t = np.asarray(range(1,T_max+1))
-        pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
+        t = np.arange(T_max+1)
+        pt = lambda p : sp.stats.binom.pmf(t,T_max,p)
 
         time_prior_dict["early"] = pt(0.4)
         time_prior_dict["late"] = pt(p)
