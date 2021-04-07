@@ -147,13 +147,18 @@ class System(object):
             for o in tumor.out:
                 print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
                 prefix = "".join([" "] * (len(tumor.name) + 1)) + "+--"
+                
+        longest = 0
+        for lnl in self.lnls:
+            if len(lnl.name) > longest:
+                longest = len(lnl.name)
 
         print("\nLNL(s):")
         for lnl in self.lnls:
             if lnl.typ != "lnl":
                 raise RuntimeError("LNL node is not of type LNL")
 
-            prefix = lnl.name + " ---"
+            prefix = lnl.name + " " + ("-" * (3 + longest - len(lnl.name)))
             for o in lnl.out:
                 print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
                 prefix = "".join([" "] * (len(lnl.name) + 1)) + "+--"
