@@ -7,10 +7,18 @@ Detailed API
 
 The human lymph system (or rather parts of it) are modelled as directed graphs here. Hence, a :class:`System` consists of multiple :class:`Node` and :class:`Edge` instances, which are represented by a python class each.
 
+Recently, we added the convenience class :class:`BilateralSystem` that automatically creates a symmetric graph for the ipsilateral and contralateral network. It also allows to fix sperad parameters to be set symmetrically.
+
 Lymph system
 ------------
 
 .. autoclass:: lymph.System
+   :members:
+
+Bilateral lymph system
+----------------------
+
+.. autoclass:: lymph.BilateralSystem
    :members:
 
 Edge
