@@ -63,10 +63,11 @@ class System(object):
     (LNLs) and the connections between them.
 
     Args:
-        graph: For every key in the dictionary, the :class:`system` will 
-            create a :class:`node` that represents a binary random variable. The 
-            values in the dictionary should then be the a list of names to which 
-            :class:`edges` from the current key should be created.
+        graph: For every key in the dictionary, the :class:`System` will 
+            create a :class:`Node` that represents a binary random variable. The 
+            values in the dictionary should then be the a list of names of 
+            :class:`Node` instances to which :class:`Edges` from the current 
+            key should be created.
     """
     def __init__(self, 
                  graph: dict = {}):
@@ -121,7 +122,7 @@ class System(object):
 
 
     def get_graph(self) -> dict:
-        """Lists the graph as it was provided when the system was created
+        """Lists the graph as it was provided when the system was created.
         """
         res = []
         for node in self.nodes:
@@ -146,7 +147,7 @@ class System(object):
             prefix = tumor.name + " ---"
             for o in tumor.out:
                 print(f"\t{prefix} {o.t * 100: >5.1f} % --> {o.end.name}")
-                prefix = "".join([" "] * (len(tumor.name) + 1)) + "+--"
+                prefix = "".join([" "] * (len(tumor.name) + 1)) + "`--"
                 
         longest = 0
         for lnl in self.lnls:
@@ -158,10 +159,10 @@ class System(object):
             if lnl.typ != "lnl":
                 raise RuntimeError("LNL node is not of type LNL")
 
-            prefix = lnl.name + " " + ("-" * (2 + longest - len(lnl.name)))
+            prefix = lnl.name + " --" + ("-" * (longest - len(lnl.name)))
             for o in lnl.out:
                 print(f"\t{prefix} {o.t * 100: >5.1f} % --> {o.end.name}")
-                prefix = "".join([" "] * (len(lnl.name) + 1)) + "+--"
+                prefix = " " * (len(lnl.name) + 1) + "`-" + ("-" * (longest - len(lnl.name)))
 
 
 
@@ -212,9 +213,9 @@ class System(object):
             theta: The new parameters that should be fed into the system. They 
                 all represent the transition probabilities along the edges of 
                 the network and will be set in the order they appear in the 
-                graph dictionary. As mentioned in the ``get_theta()`` function, 
-                this includes the spread probabilities from the primary tumour 
-                to the LNLs, as well as the spread among the LNLs.
+                graph dictionary. This includes the spread probabilities from 
+                the primary tumour to the LNLs, as well as the spread among the 
+                LNLs.
 
             mode: If one is in "BN" mode (Bayesian network), then it is not 
                 necessary to compute the transition matrix A again, so it is 
@@ -832,3 +833,132 @@ class System(object):
 
         risk = num / denom
         return risk
+
+
+
+class BilateralSystem(System):
+    """Class that describes a bilateral lymphatic system with its lymph node 
+    levels (LNLs) and the connections between them. It inherits most attributes 
+    and methods from the normal :class:`System`, but automatically creates the 
+    :class:`Node` and :class:`Edge` instances for the contralateral side and 
+    also manages the symmetric or asymmetric assignment of probabilities to the 
+    directed arcs.
+
+    Args:
+        graph: For every key in the dictionary, the :class:`BilateralSystem` 
+            will create two :class:`Node` instances that represent binary 
+            random variables each. One for the ipsilateral (which gets the 
+            suffix `_i`) and one for the contralateral side (suffic `_c`) of 
+            the patient. The values in the dictionary should then be the a list 
+            of :class:`Node` names to which :class:`Edge` instances from the 
+            current :class:`Node` should be created. The tumor will of course 
+            not be mirrored.
+    """
+    def __init__(self, 
+                 graph: dict = {}):
+        
+        # creating a graph that copies the ipsilateral entries for the 
+        # contralateral side as well
+        bilateral_graph = {}
+        for key, value in graph.items():
+            if key[0].lower() == "t":
+                bilateral_graph[key] = [f"{lnl}_i" for lnl in value]
+                bilateral_graph[key] += [f"{lnl}_c" for lnl in value]
+            else:
+                bilateral_graph[f"{key}_i"] = [f"{lnl}_i" for lnl in value]
+                bilateral_graph[f"{key}_c"] = [f"{lnl}_c" for lnl in value]
+                
+        # call parent's initialization with extended graph
+        super().__init__(graph=bilateral_graph)
+        
+        if len(self.lnls) % 2 != 0:
+            raise RuntimeError("Number of LNLs should be divisible by 2, but "
+                               "isn't.")
+            
+        
+        self.ipsi_base = []
+        self.ipsi_trans = []
+        self.contra_base = []
+        self.contra_trans = []
+        for edge in self.edges:
+            if "_i" in edge.end.name:
+                if edge.start.typ == "tumor":
+                    self.ipsi_base.append(edge)
+                elif edge.start.typ == "lnl":
+                    self.ipsi_trans.append(edge)
+                else:
+                    raise RuntimeError(f"Node {edge.start.name} has no typ "
+                                       "assigned")
+            elif "_c" in edge.end.name:
+                if edge.start.typ == "tumor":
+                    self.contra_base.append(edge)
+                elif edge.start.typ == "lnl":
+                    self.contra_trans.append(edge)
+                else:
+                    raise RuntimeError(f"Node {edge.start.name} has no typ "
+                                       "assigned")
+            else:
+                raise RuntimeError(f"LNL {edge.end.name} is not assigned to "
+                                   "ipsi- or contralateral side")
+        
+        
+        
+    def set_theta(self, 
+                  theta: np.ndarray, 
+                  base_symmetric: bool = False,
+                  trans_symmetric: bool = True,
+                  mode: str = "HMM"):
+        """Fills the system with new base and transition probabilities and also 
+        computes the transition matrix A again, if one is in mode "HMM". 
+        Parameters for ipsilateral and contralateral side can be chosen to be 
+        symmetric or independent.
+
+        Args:
+            theta: The new parameters that should be fed into the system. They 
+                all represent the transition probabilities along the edges of 
+                the network and will be set in the following order: First the 
+                connections between tumor & LNLs ipsilaterally, then 
+                contralaterally, followed by the connections among the LNLs 
+                (again first ipsilaterally and then contraleterally).
+                If ``base_symmetric`` and/or ``trans_symmetric`` are set to 
+                ``True``, the respective block of parameters will be set to both 
+                ipsi- & contralateral connections. The lentgh of ``theta`` 
+                should then be shorter accordingly.
+                
+            base_symmetric: If ``True``, base probabilities will be the same for 
+                ipsi- & contralateral.
+                
+            trans_symmetric: If ``True``, transition probability among LNLs will 
+                be the same for ipsi- & contralateral.
+
+            mode: If one is in "BN" mode (Bayesian network), then it is not 
+                necessary to compute the transition matrix A again, so it is 
+                skipped. (default: ``"HMM"``)
+        """
+        
+        cursor = 0
+        if base_symmetric:
+            for i in range(len(self.ipsi_base)):
+                self.ipsi_base[i].t = theta[cursor]
+                self.contra_base[i].t = theta[cursor]
+                cursor += 1
+        else:
+            for edge in self.ipsi_base:
+                edge.t = theta[cursor]
+                cursor += 1
+            for edge in self.contra_base:
+                edge.t = theta[cursor]
+                cursor += 1
+                
+        if trans_symmetric:
+            for i in range(len(self.ipsi_trans)):
+                self.ipsi_trans[i].t = theta[cursor]
+                self.contra_trans[i].t = theta[cursor]
+                cursor += 1
+        else:
+            for edge in self.ipsi_trans:
+                edge.t = theta[cursor]
+                cursor += 1
+            for edge in self.contra_trans:
+                edge.t = theta[cursor]
+                cursor += 1
