@@ -78,7 +78,7 @@ class System(object):
         self.edges = []     # list of all edges connecting nodes in the graph
         
         for key in graph:
-            self.nodes.append(Node(key))
+            self.nodes.append(Node(name=key[1], typ=key[0]))
             
         for node in self.nodes:
             if node.typ == "tumor":
@@ -88,7 +88,7 @@ class System(object):
 
         for key, values in graph.items():
             for value in values:
-                self.edges.append(Edge(self.find_node(key), 
+                self.edges.append(Edge(self.find_node(key[1]), 
                                        self.find_node(value)))
 
         self._gen_state_list()
@@ -146,7 +146,7 @@ class System(object):
             
             prefix = tumor.name + " ---"
             for o in tumor.out:
-                print(f"\t{prefix} {o.t * 100: >5.1f} % --> {o.end.name}")
+                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
                 prefix = "".join([" "] * (len(tumor.name) + 1)) + "`--"
                 
         longest = 0
@@ -159,10 +159,10 @@ class System(object):
             if lnl.typ != "lnl":
                 raise RuntimeError("LNL node is not of type LNL")
 
-            prefix = lnl.name + " --" + ("-" * (longest - len(lnl.name)))
+            prefix = lnl.name + " ---" + ("-" * (longest - len(lnl.name)))
             for o in lnl.out:
-                print(f"\t{prefix} {o.t * 100: >5.1f} % --> {o.end.name}")
-                prefix = " " * (len(lnl.name) + 1) + "`-" + ("-" * (longest - len(lnl.name)))
+                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
+                prefix = " " * (len(lnl.name) + 1) + "`--" + ("-" * (longest - len(lnl.name)))
 
 
 
@@ -848,7 +848,7 @@ class BilateralSystem(System):
         graph: For every key in the dictionary, the :class:`BilateralSystem` 
             will create two :class:`Node` instances that represent binary 
             random variables each. One for the ipsilateral (which gets the 
-            suffix `_i`) and one for the contralateral side (suffic `_c`) of 
+            suffix ``_i``) and one for the contralateral side (suffix ``_c``) of 
             the patient. The values in the dictionary should then be the a list 
             of :class:`Node` names to which :class:`Edge` instances from the 
             current :class:`Node` should be created. The tumor will of course 
