@@ -47,3 +47,6 @@ coverage.xml
 
 # sphinx
 docs/build
+
+# other
+*.bak
