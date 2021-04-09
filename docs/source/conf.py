@@ -12,6 +12,7 @@
 #
 import os
 import sys
+from lymph import __version__
 sys.path.insert(0, os.path.abspath('../..'))
 
 
@@ -21,9 +22,9 @@ project = 'lymph'
 copyright = '2021, Roman Ludwig'
 author = 'Roman Ludwig'
 
-version = '1.0.3'
+version = __version__
 # The full version, including alpha/beta/rc tags
-release = '1.0.3'
+release = __version__
 
 
 # -- General configuration ---------------------------------------------------
