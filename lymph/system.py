@@ -902,6 +902,56 @@ class BilateralSystem(System):
                                    "ipsi- or contralateral side")
         
         
+    def get_theta(self,
+                  output: str = "dict") -> Union[dict, list]:
+        """Return the transition probabilities of all edges in the graph.
+        
+        Args:
+            output: Can be ``"dict"`` or ``"list"``. If the former, they keys 
+                will be of the descriptive format ``{start}->{end}`` and contain 
+                the respective value. If it's the latter, they will be put in 
+                an array in the following order: First the transition 
+                probabilities from tumor to LNLs (and within that, first ipsi- 
+                then contralateral) then the probabilities for spread among the 
+                LNLs (again first ipsi, then contra). A list or array of that 
+                format is expected by the method :method:`set_theta(new_theta)`.
+        """
+        
+        if output == "dict":
+            theta_dict = {}
+            # loop in the correct order through the blocks of probabilities & 
+            # add the values to semantic/descriptive keys
+            for edge in self.ipsi_base:
+                start, end = edge.start.name, edge.end.name
+                theta_dict[f"{start}->{end}"] = edge.t
+            for edge in self.contra_base:
+                start, end = edge.start.name, edge.end.name
+                theta_dict[f"{start}->{end}"] = edge.t
+            for edge in self.ipsi_trans:
+                start, end = edge.start.name, edge.end.name
+                theta_dict[f"{start}->{end}"] = edge.t
+            for edge in self.contra_trans:
+                start, end = edge.start.name, edge.end.name
+                theta_dict[f"{start}->{end}"] = edge.t
+                
+            return theta_dict
+        
+        else:
+            theta_list = []
+            # loop in the correct order through the blocks of probabilities & 
+            # append them to the list
+            for edge in self.ipsi_base:
+                theta_list.append(edge.t)
+            for edge in self.contra_base:
+                theta_list.append(edge.t)
+            for edge in self.ipsi_trans:
+                theta_list.append(edge.t)
+            for edge in self.contra_trans:
+                theta_list.append(edge.t)
+                
+            return theta_list
+        
+        
         
     def set_theta(self, 
                   theta: np.ndarray, 
@@ -962,3 +1012,6 @@ class BilateralSystem(System):
             for edge in self.contra_trans:
                 edge.t = theta[cursor]
                 cursor += 1
+                
+        if mode == "HMM":
+            self._gen_A()
