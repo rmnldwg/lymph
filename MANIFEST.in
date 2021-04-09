@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include requirements.txt
+graft lymph
+recursive-exclude * *.py[co]
+include versioneer.py
+include lymph/_version.py

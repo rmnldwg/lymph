@@ -1,12 +1,13 @@
 import setuptools
-from pathlib import Path
+import versioneer
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name = "lymph", # Replace with your own username
-    version = "1.0.3",
+    version = versioneer.get_version(),
+    cmdclass = versioneer.get_cmdclass(),
     author = "Roman Ludwig",
     author_email = "roman.ludwig@usz.ch",
     description = "Package for statistical modelling of lymphatic metastatic spread.",
