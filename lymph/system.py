@@ -879,11 +879,17 @@ class BilateralSystem(System):
             raise RuntimeError("Number of LNLs should be divisible by 2, but "
                                "isn't.")
             
-        
-        self.ipsi_base = []
-        self.ipsi_trans = []
-        self.contra_base = []
-        self.contra_trans = []
+        # a priori, assume no cross connections between the two sides. So far, 
+        # this should not be the case, as it would require quite some changes 
+        # here and there, but it's probably good to have it set up.
+        no_cross = True
+            
+        # sort edges into four sets, based on where they start and on which 
+        # side they are:
+        self.ipsi_base = []      # connections from tumor to ipsilateral LNLs
+        self.ipsi_trans = []     # connections among ipsilateral LNLs
+        self.contra_base = []    # connections from tumor to contralateral LNLs
+        self.contra_trans = []   # connections among contralateral LNLs
         for edge in self.edges:
             if "_i" in edge.end.name:
                 if edge.start.typ == "tumor":
@@ -893,6 +899,11 @@ class BilateralSystem(System):
                 else:
                     raise RuntimeError(f"Node {edge.start.name} has no typ "
                                        "assigned")
+                    
+                # check if there are cross-connections from contra to ipsi
+                if "_c" in edge.start.name:
+                    no_cross = False
+                    
             elif "_c" in edge.end.name:
                 if edge.start.typ == "tumor":
                     self.contra_base.append(edge)
@@ -901,13 +912,25 @@ class BilateralSystem(System):
                 else:
                     raise RuntimeError(f"Node {edge.start.name} has no typ "
                                        "assigned")
+                    
+                # check if there are cross-connections from ipsi to contra
+                if "_i" in edge.start.name:
+                    no_cross = False
+                    
             else:
                 raise RuntimeError(f"LNL {edge.end.name} is not assigned to "
                                    "ipsi- or contralateral side")
-        
+                
+        # if therea re no cross-connections, it makes sense to save the 
+        # original graph
+        if no_cross:
+            self.unilateral_system = System(graph=graph)
+                
+
         
     def get_theta(self,
-                  output: str = "dict") -> Union[dict, list]:
+                  output: str = "dict",
+                  order: str = "by_type") -> Union[dict, list]:
         """Return the transition probabilities of all edges in the graph.
         
         Args:
@@ -919,6 +942,14 @@ class BilateralSystem(System):
                 then contralateral) then the probabilities for spread among the 
                 LNLs (again first ipsi, then contra). A list or array of that 
                 format is expected by the method :method:`set_theta(new_theta)`.
+                
+            order: Option how to order the blocks of transition probabilities. 
+                The default ``"by_type"`` will first return all base 
+                probabilities (from tumor to LNL) for both sides and then all 
+                transition probabilities (among LNLs). ``"by_side"`` will first 
+                return both types of probabilities ipsilaterally and then 
+                contralaterally. If output is ``"dict"``, this option has no 
+                effect.
         """
         
         if output == "dict":
@@ -946,14 +977,25 @@ class BilateralSystem(System):
             # append them to the list
             for edge in self.ipsi_base:
                 theta_list.append(edge.t)
-            for edge in self.contra_base:
-                theta_list.append(edge.t)
-            for edge in self.ipsi_trans:
-                theta_list.append(edge.t)
+            
+            if order == "by_side":
+                for edge in self.ipsi_trans:
+                    theta_list.append(edge.t)
+                for edge in self.contra_base:
+                    theta_list.append(edge.t)
+            elif order == "by_type":
+                for edge in self.contra_base:
+                    theta_list.append(edge.t)
+                for edge in self.ipsi_trans:
+                    theta_list.append(edge.t)
+            else:
+                raise ValueError("Order option must be \'by_type\' or "
+                                 "\'by_side\'.")
+                
             for edge in self.contra_trans:
                 theta_list.append(edge.t)
                 
-            return theta_list
+            return np.array(theta_list)
         
         
         
@@ -1019,3 +1061,22 @@ class BilateralSystem(System):
                 
         if mode == "HMM":
             self._gen_A()
+            
+            
+    
+    def _gen_A(self):
+        """Generates the transition matrix of the bilateral lymph system. If 
+        ipsi- & contralateral side have no cross connections, this amounts to 
+        computing two transition matrices, one for each side. Otherwise, this 
+        function will call its parent's method.
+        """
+        
+        # this class should only have a unilateral_graph attribute, if there 
+        # are not cross-connections
+        if hasattr(self, "unilateral_system"):
+            bilateral_theta = self.get_theta(output="list", order="by_side")
+            ipsi_theta = bilateral_theta[:len(self.edges)]
+            contra_theta = bilateral_theta[len(self.edges):]
+            # TODO: compute the two different A matrices
+        else:
+            super()._gen_A()
