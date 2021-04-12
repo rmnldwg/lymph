@@ -363,7 +363,9 @@ class System(object):
         is a square matrix with size ``(# of states)``. The lower diagonal is 
         zero.
         """
-        self.A = np.zeros(shape=(len(self.state_list), len(self.state_list)))
+        if not hasattr(self, "A"):
+            self.A = np.zeros(shape=(len(self.state_list), len(self.state_list)))
+        
         for i,state in enumerate(self.state_list):
             self.set_state(state)
             for j in self._idx_dict[i]:
@@ -861,12 +863,14 @@ class BilateralSystem(System):
         # contralateral side as well
         bilateral_graph = {}
         for key, value in graph.items():
-            if key[0].lower() == "t":
+            if key[0] == "tumor":
                 bilateral_graph[key] = [f"{lnl}_i" for lnl in value]
                 bilateral_graph[key] += [f"{lnl}_c" for lnl in value]
             else:
-                bilateral_graph[f"{key}_i"] = [f"{lnl}_i" for lnl in value]
-                bilateral_graph[f"{key}_c"] = [f"{lnl}_c" for lnl in value]
+                ipsi_key = ('lnl', f"{key[1]}_i")
+                bilateral_graph[ipsi_key] = [f"{lnl}_i" for lnl in value]
+                contra_key = ('lnl', f"{key[1]}_c")
+                bilateral_graph[contra_key] = [f"{lnl}_c" for lnl in value]
                 
         # call parent's initialization with extended graph
         super().__init__(graph=bilateral_graph)
