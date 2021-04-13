@@ -462,7 +462,7 @@ class System(object):
                   t_stage: List[int] = [1,2,3,4], 
                   spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
                   mode: str = "HMM"):
-        """Generates the matrix C that marginalizes over multiple states for 
+        """Generate the matrix C that marginalizes over multiple states for 
         data with incomplete observation, as well as how often these obser-
         vations occur in the dataset. In the end the computation 
         :math:`\\mathbf{p} = \\boldsymbol{\\pi} \\cdot \\mathbf{A}^t \\cdot \\mathbf{B} \\cdot \\mathbf{C}` 
@@ -472,18 +472,21 @@ class System(object):
         where :math:`a` is an array containing the probability for each state.
 
         Args:
-            data: Contains rows of patient data. The columns must include the 
-                T-stage and at least one diagnostic modality.
+            data: Table with rows of patients. Must have a two-level 
+                :class:`MultiIndex` where the top-level has categories 'Info' 
+                and the name of the available diagnostic modalities. Under 
+                'Info', the second level is only 'T-stage', while under the 
+                modality, the names of the diagnosed lymph node levels are 
+                given as the columns.
 
             t_stage: List of T-stages that should be included in the learning 
-                process. (default: ``[1,2,3,4]``)
+                process.
 
             spsn_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
-                (in that order) for each observational/diagnostic modality. 
-                (default: ``{"path": [1., 1.]}``)
+                (in that order) for each observational/diagnostic modality.
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
-                network. (default: ``"HMM"``)
+                network.
         """
         self.set_modalities(spsn_dict=spsn_dict)
         
@@ -546,7 +549,6 @@ class System(object):
             self.C = np.array([], dtype=int)
             self.f = np.array([], dtype=int)
 
-            # returns array of pateint data that have the same T-stage
             for patient in data[self._modality_dict.keys()].values:
                 tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
                 for i, obs in enumerate(self.obs_list):
@@ -1071,12 +1073,197 @@ class BilateralSystem(System):
         function will call its parent's method.
         """
         
-        # this class should only have a unilateral_graph attribute, if there 
-        # are not cross-connections
+        # this class should only have a unilateral_system as an attribute, if 
+        # there are not cross-connections
         if hasattr(self, "unilateral_system"):
             bilateral_theta = self.get_theta(output="list", order="by_side")
             ipsi_theta = bilateral_theta[:len(self.edges)]
             contra_theta = bilateral_theta[len(self.edges):]
-            # TODO: compute the two different A matrices
+            
+            self.unilateral_system.set_theta(ipsi_theta)
+            self.A_i = self.unilateral_system.A.copy()
+            
+            self.unilateral_system.set_theta(contra_theta)
+            self.A_c = self.unilateral_system.A.copy()
         else:
             super()._gen_A()
+            
+            
+    def _gen_B(self):
+        """Generate the observation matrix for one side of the neck. The other 
+        side will use the same (if there are no cross-connections)."""
+        
+        # if no cross-connections, use the one-sided observation matrix for 
+        # both sides...
+        if hasattr(self, 'unilateral_system'):
+            self.unilateral_system._gen_B()
+            self.B = self.unilateral_system.B
+            
+        # ...otherwise use parent class's method to compute the "full" 
+        # observation matrix
+        else:
+            super()._gen_B()
+            
+            
+    def load_data(self,
+                  data: pd.DataFrame,
+                  t_stage: List[int] = [1,2,3,4],
+                  spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]},
+                  mode: str = "HMM"):
+        """Convert table of patient diagnoses into two sets of arrays and 
+        matrices (ipsi- & contralateral) for fast marginalization.
+        
+        The likelihood computation produces a square matrix :math:`\\mathbf{M}` 
+        of all combinations of possible diagnoses ipsi- & contralaterally. The 
+        elements of this matrix are 
+        :math:`M_{ij} = P ( \\zeta_i^{\\text{i}}, \\zeta_j^{\\text{c}} )`. This 
+        matrix is data independent and we can utilize it by multiplying 
+        matrices :math:`\\mathbf{C}^{\\text{i}}` and 
+        :math:`\\mathbf{C}^{\\text{c}}` from both sides. This function 
+        constructs these matrices that may also allow to marginalize over 
+        incomplete diagnoses.
+        
+        Args:
+            data: Table with rows of patients. Must have a two-level 
+                :class:`MultiIndex` where the top-level has categories 'Info' 
+                and the name of the available diagnostic modalities. Under 
+                'Info', the second level is only 'T-stage', while under the 
+                modality, the names of the diagnosed lymph node levels are 
+                given as the columns.
+                
+            t_stage: List of T-stages that should be included in the learning 
+                process.
+
+            spsn_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
+                (in that order) for each observational/diagnostic modality.
+
+            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
+                network.
+        """
+        if hasattr(self, 'unilateral_system'):
+            self.set_modalities(spsn_dict=spsn_dict)
+            
+            if mode == "HMM":
+                C_dict = {}
+                
+                for stage in t_stage:                
+                    # get subset of patients for specific T-stage
+                    subset = data.loc[data['Info', 'T-stage']==stage,
+                                      self._modality_dict.keys()].values
+                    
+                    # create a data matrix for each side
+                    ipsi_C = np.zeros(shape=(len(subset), len(self.obs_list)), 
+                                    dtype=int)
+                    contra_C = np.zeros(shape=(len(subset), len(self.obs_list)), 
+                                        dtype=int)
+                    
+                    # find out where to look for ipsi- and where to look for 
+                    # contralateral involvement
+                    lnlname_list = data.columns.get_loc_level(
+                        self._modality_dict, level=1)[1].to_list()
+                    ipsi_idx = np.array([], dtype=int)
+                    contra_idx = np.array([], dtype=int)
+                    for i,lnlname in enumerate(lnlname_list):
+                        if "_i" in lnlname:
+                            ipsi_idx = np.append(ipsi_idx, i)
+                        elif "_c" in lnlname:
+                            contra_idx = np.append(contra_idx, i)
+                    
+                    # loop through the diagnoses in the table
+                    for p,patient in enumerate(subset):
+                        # split diagnoses into ipsilateral and contralateral
+                        ipsi_diag = patient[ipsi_idx]
+                        contra_diag = patient[contra_idx]
+                        
+                        ipsi_tmp = np.zeros_like(self.obs_list[0], dtype=int)
+                        contra_tmp = np.zeros_like(self.obs_list[0], dtype=int)
+                        for i,obs in enumerate(self.obs_list):
+                            # true if non-missing observations match 
+                            # (ipsilateral)
+                            if np.all(np.equal(obs, ipsi_diag, 
+                                            where=~np.isnan(patient), 
+                                            out=np.ones_like(patient, 
+                                                                dtype=bool))):
+                                ipsi_tmp[i] = 1                                                        
+                                
+                            # true if non-missing observations match 
+                            # (contralateral)
+                            if np.all(np.equal(obs, contra_diag, 
+                                            where=~np.isnan(patient), 
+                                            out=np.ones_like(patient, 
+                                                                dtype=bool))):
+                                contra_tmp[i] = 1
+                                
+                        # append each patient's marginalization Vector for both 
+                        # sides to the matrix. This yields two matrices with 
+                        # shapes (number of patients, possible diagnoses)
+                        ipsi_C[p] = ipsi_tmp.copy()
+                        contra_C[p] = contra_tmp.copy()
+                        
+                    # collect the two matrices in a dictionary and put that 
+                    # under the respective T-stage
+                    C_dict[stage] = {"ipsi": ipsi_C.copy(),
+                                    "contra": contra_C.copy()}
+                    
+            elif mode == "BN":
+                subset = data[self._modality_dict.keys()].values
+                
+                # create a data matrix for each side
+                ipsi_C = np.zeros(shape=(len(subset), len(self.obs_list)), 
+                                    dtype=int)
+                contra_C = np.zeros(shape=(len(subset), len(self.obs_list)), 
+                                    dtype=int)
+                
+                # find out where to look for ipsi- and where to look for contra-
+                # lateral involvement
+                lnlname_list = data.columns.get_loc_level(
+                    self._modality_dict, level=1)[1].to_list()
+                ipsi_idx = np.array([], dtype=int)
+                contra_idx = np.array([], dtype=int)
+                for i,lnlname in enumerate(lnlname_list):
+                    if "_i" in lnlname:
+                        ipsi_idx = np.append(ipsi_idx, i)
+                    elif "_c" in lnlname:
+                        contra_idx = np.append(contra_idx, i)
+                
+                # loop through the diagnoses in the table
+                for p,patient in enumerate(subset):
+                    # split diagnoses into ipsilateral and contralateral
+                    ipsi_diag = patient[ipsi_idx]
+                    contra_diag = patient[contra_idx]
+                    
+                    ipsi_tmp = np.zeros_like(self.obs_list[0], dtype=int)
+                    contra_tmp = np.zeros_like(self.obs_list[0], dtype=int)
+                    for i,obs in enumerate(self.obs_list):
+                        # true if non-missing observations match (ipsilateral)
+                        if np.all(np.equal(obs, ipsi_diag, 
+                                            where=~np.isnan(patient), 
+                                            out=np.ones_like(patient, 
+                                                            dtype=bool))):
+                            ipsi_tmp[i] = 1                                                        
+                            
+                        # true if non-missing observations match (contralateral)
+                        if np.all(np.equal(obs, contra_diag, 
+                                            where=~np.isnan(patient), 
+                                            out=np.ones_like(patient, 
+                                                            dtype=bool))):
+                            contra_tmp[i] = 1
+                            
+                    # append each patient's marginalization Vector for both 
+                    # sides to the matrix. This yields two matrices with shapes 
+                    # (number of patients, possible diagnoses)
+                    ipsi_C[p] = ipsi_tmp.copy()
+                    contra_C[p] = contra_tmp.copy()
+                    
+                self.ipsi_C = ipsi_C.copy()
+                self.contra_C = contra_C.copy()
+              
+        # if the system has cross-connections, revert to the old method, which 
+        # is way slower, but it works.  
+        else:
+            super().load_data(data=data,
+                              t_stage=t_stage,
+                              spsn_dict=spsn_dict,
+                              mode=mode)
+            
+    # TODO: write new likelihood function
