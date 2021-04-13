@@ -17,7 +17,8 @@ import scipy.stats
 
 from .node import *
 from .edge import *
-from .system import *
+from .unilateral import *
+from .bilateral import *
 
 __all__ = [
     "Node",
