@@ -222,7 +222,8 @@ class System(object):
                 skipped. (default: ``"HMM"``)
         """
         if len(theta) != len(self.edges):
-            raise ValueError("# of parameters must match # of edges")
+            raise ValueError(f"# of parameters ({len(theta)}) must match # of "
+                             f"edges ({len(self.edges)})")
         
         for i, edge in enumerate(self.edges):
             edge.t = theta[i]
@@ -375,9 +376,9 @@ class System(object):
 
     def set_modalities(self, 
                        spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}):
-        """Given some 2x2 matrices for each diagnostic modality based on their 
-        specificity and sensitivity, compute observation matrix 
-        :math:`\\mathbf{B}` and store the details of the diagnostic modalities.
+        """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
+        diagnostic modalities, compute the system's observation matrix 
+        :math:`\\mathbf{B}`.
         """
         self._modality_dict = {}
         for modality, spsn in spsn_dict.items():
