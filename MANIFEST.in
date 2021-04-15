@@ -2,6 +2,7 @@ include README.md
 include LICENSE
 include requirements.txt
 graft lymph
+graft tests
 recursive-exclude * *.py[co]
 include versioneer.py
 include lymph/_version.py

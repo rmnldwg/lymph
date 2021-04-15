@@ -59,15 +59,15 @@ def toStr(n: int,
         
 
 class System(object):
-    """Class that describes a whole lymphatic system with its lymph node levels 
-    (LNLs) and the connections between them.
+    """Class that models metastatic progression in a lymphatic system by 
+    representing it as a directed graph. The progression itself can be modelled 
+    via hidden Markov models (HMM) or Bayesian networks (BN). 
 
     Args:
-        graph: For every key in the dictionary, the :class:`System` will 
-            create a :class:`Node` that represents a binary random variable. The 
-            values in the dictionary should then be the a list of names of 
-            :class:`Node` instances to which :class:`Edges` from the current 
-            key should be created.
+        graph: Every key in this dictionary is a 2-tuple containing the type of 
+            the :class:`Node` ("tumor" or "lnl") and its name (arbitrary 
+            string). The corresponding value is a list of names this node should 
+            be connected to via an :class:`Edge`
     """
     def __init__(self, 
                  graph: dict = {}):
@@ -178,7 +178,7 @@ class System(object):
 
 
 
-    def set_state(self, newstate: List[int]):
+    def set_state(self, newstate: np.ndarray):
         """Sets the state of the system to ``newstate``.
         """
         if len(newstate) != len(self.lnls):
@@ -189,12 +189,9 @@ class System(object):
 
 
 
-    def get_theta(self) -> List[float]:
-        """Returns the parameters currently set. It will return the transition 
-        probabilities in the order they appear in the graph dictionary. This 
-        deviates somewhat from the notation in the paper, where base and 
-        transition probabilities are distinguished as probabilities along edges 
-        from primary tumour to LNL and from LNL to LNL respectively.
+    def get_theta(self) -> np.ndarray:
+        """Return the spread probabilities of the :class:`Edge` instances in 
+        the network in the order they appear in the graph.
         """
         theta = np.zeros(shape=(len(self.edges)))
         for i, edge in enumerate(self.edges):
@@ -206,8 +203,8 @@ class System(object):
     def set_theta(self, 
                   theta: np.ndarray, 
                   mode: str = "HMM"):
-        """Fills the system with new base and transition probabilities and also 
-        computes the transition matrix A again, if one is in mode "HMM".
+        """Set the spread probabilities of the :class:`Edge` instances in the 
+        the network int he order they were created from the graph.
 
         Args:
             theta: The new parameters that should be fed into the system. They 
@@ -217,9 +214,8 @@ class System(object):
                 the primary tumour to the LNLs, as well as the spread among the 
                 LNLs.
 
-            mode: If one is in "BN" mode (Bayesian network), then it is not 
-                necessary to compute the transition matrix A again, so it is 
-                skipped. (default: ``"HMM"``)
+            mode: For mode "BN" the transition matrix :math:`\\mathbf{A}` is 
+                not needed and its computation is skipped.
         """
         if len(theta) != len(self.edges):
             raise ValueError(f"# of parameters ({len(theta)}) must match # of "
@@ -406,55 +402,52 @@ class System(object):
                 for k,modality in enumerate(self._modality_dict):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
                 self.B[i,j] = self.obs_prob(diagnoses_dict, log=False)
-                    
 
 
-    # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
-    def unparametrized_epoch(self, 
-                             t_stage: List[int] = [1,2,3,4], 
-                             time_prior_dict: dict = {}, 
-                             T: float = 1., 
-                             scale: float = 1e-2) -> float:
-        """An attempt at unparametrized sampling, where the algorithm samples
-        A from the full solution space of row-stochastic matrices with zeros
-        where transitions are forbidden.
 
-        Args:
-            t_stage: List of T-stages that should be included in the learning 
-                process. (default: ``[1,2,3,4]``)
-
-            time_prior_dict: Dictionary with keys of T-stages in t_stage and 
-                values of time priors for each of those T-stages.
-
-            T: Temperature of the epoch. Can be reduced from a starting value 
-                down to almost zero for an annealing approach to sampling.
-                (default: ``1.``)
-
-        Returns:
-            The log-likelihood of the epoch.
-        """
-        likely = self.likelihood(t_stage, time_prior_dict)
+    def _gen_C(self,
+               table: np.ndarray,
+               delete_ones: bool = True,
+               aggregate_duplicates: bool = True) -> np.ndarray:
+        """Generate matrix :math:`\\mathbf{C}` that marginalizes over complete 
+        observations when a patient's diagnose is incomplete.
         
-        for i in np.random.permutation(len(self.lnls) -1):
-            # Generate Logit-Normal sample around current position
-            x_old = self.A[i,self._idx_dict[i]]
-            mu = [np.log(x_old[k]) - np.log(x_old[-1]) for k in range(len(x_old)-1)]
-            sample = np.random.multivariate_normal(mu, scale*np.eye(len(mu)))
-            numerator = 1 + np.sum(np.exp(sample))
-            x_new = np.ones_like(x_old)
-            x_new[:len(x_old)-1] = np.exp(sample)
-            x_new /= numerator
-
-            self.A[i,self._idx_dict[i]] = x_new
-            prop_likely = self.likelihood(t_stage, time_prior_dict)
-
-            if np.exp(- (likely - prop_likely) / T) >= np.random.uniform():
-                likely = prop_likely
-            else:
-                self.A[i,self._idx_dict[i]] = x_old
-
-        return likely
-    # -------------------- UNPARAMETRIZED END -------------------- #
+        Args:
+            table: 2D array where rows represent patients (of the same T-stage) 
+                and columns are LNL involvements.
+            
+            delete_ones: If ``True``, columns in the :math:`\\mathbf{C}` matrix 
+                that contain only ones (meaning the respective diagnose is 
+                completely unknown) are removed, since they only add zeros to 
+                the log-likelihood.
+                
+            aggregate_duplicates: If ``True``, the number of occurences of 
+                diagnoses in the :math:`\\mathbf{C}` matrix is counted and 
+                collected in a vector :math:`\\mathbf{f}`. The duplicate 
+                columns are then deleted.
+        
+        Returns:
+            Matrix of ones and zeros that can be used to marginalize over 
+            possible diagnoses.  
+            
+        :meta public:     
+        """
+        C = np.zeros(shape=(len(self.obs_list), len(table)), dtype=bool)
+        for i,row in enumerate(table):
+            for j,obs in enumerate(self.obs_list):
+                # save whether all not missing observations match or not
+                C[j,i] = np.all(np.equal(obs, row, where=~np.isnan(row)))
+                
+        if delete_ones:
+            sum_over_C = np.sum(C, axis=0)
+            keep_idx = np.argwhere(sum_over_C != len(self.obs_list)).flatten()
+            C = C[:,keep_idx]
+            
+        if aggregate_duplicates:
+            C, f = np.unique(C, axis=1, return_counts=True)
+            return C, f
+            
+        return C, np.ones(shape=(len(table)), dtype=int)
 
 
 
@@ -462,15 +455,12 @@ class System(object):
                   data: pd.DataFrame, 
                   t_stage: List[int] = [1,2,3,4], 
                   spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
-                  mode: str = "HMM"):
-        """Generate the matrix C that marginalizes over multiple states for 
-        data with incomplete observation, as well as how often these obser-
-        vations occur in the dataset. In the end the computation 
-        :math:`\\mathbf{p} = \\boldsymbol{\\pi} \\cdot \\mathbf{A}^t \\cdot \\mathbf{B} \\cdot \\mathbf{C}` 
-        results in an array of probabilities that can - together with the 
-        frequencies :math:`f` - be used to compute the likelihood. This also 
-        works for the Bayesian network case: :math:`\\mathbf{p} = \\mathbf{a} \\cdot \\mathbf{C}` 
-        where :math:`a` is an array containing the probability for each state.
+                  mode: str = "HMM",
+                  gen_C_kwargs: dict = {'delete_ones': True, 
+                                        'aggregate_duplicates': True}):
+        """Transform tabular patient data (:class:`pd.DataFrame`) into internal 
+        representation, consisting of one or several matrices 
+        :math:`\\mathbf{C}_{T}` that can marginalize over possible diagnoses.
 
         Args:
             data: Table with rows of patients. Must have a two-level 
@@ -488,6 +478,11 @@ class System(object):
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
                 network.
+                
+            gen_C_kwargs: Keyword arguments for the :meth:`_gen_C`. For 
+                efficiency, both ``delete_ones`` and ``aggregate_duplicates``
+                should be set to one, resulting in a smaller :math:`\\mathbf{C}` 
+                matrix and an additional count vector :math:`\\mathbf{f}`.
         """
         self.set_modalities(spsn_dict=spsn_dict)
         
@@ -497,90 +492,27 @@ class System(object):
             f_dict = {}
 
             for stage in t_stage:
-                C = np.array([], dtype=int)
-                f = np.array([], dtype=int)
 
-                # returns array of patient data that have the same T-stage and 
-                # contain diagnoses from those diagnostic modalities that were 
-                # specified in the modality_dict argument
-                for patient in data.loc[data['Info', 'T-stage'] == stage, 
-                                        self._modality_dict.keys()].values:
-                    tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
-                    for i, obs in enumerate(self.obs_list):
-                        # returns true if all not missing observations match
-                        if np.all(np.equal(obs.flatten(order='F'), 
-                                           patient, 
-                                           where=~np.isnan(patient), 
-                                           out=np.ones_like(patient, 
-                                                            dtype=bool))):
-                            tmp[i] = 1
-
-                    # build up the matrix C without any duplicates and count 
-                    # the occurence of patients with the same pattern in f
-                    if len(f) == 0:
-                        C = tmp.copy()
-                        f = np.append(f, 1)
-                    else:
-                        found = False
-                        for i, col in enumerate(C.T):
-                            if np.all(np.equal(col.flatten(), tmp.flatten())):
-                                f[i] += 1
-                                found = True
-
-                        if not found:
-                            C = np.hstack([C, tmp])
-                            f = np.append(f, 1)
-                            
-                # delete columns of the C matrix that contain only ones, meaning 
-                # that for that patient, no observation was made
-                idx = np.sum(C, axis=0) != len(self.obs_list)
-                C = C[:,idx]
-                f = f[idx]
-                
+                table = data.loc[data[('Info', 'T-stage')] == stage,
+                                 self._modality_dict.keys()].values
+                C, f = self._gen_C(table, **gen_C_kwargs)
+                    
                 C_dict[stage] = C.copy()
                 f_dict[stage] = f.copy()
 
             self.C_dict = C_dict
             self.f_dict = f_dict
 
-
-
         # For the Bayesian Network
         elif mode=="BN":
             self.C = np.array([], dtype=int)
             self.f = np.array([], dtype=int)
 
-            for patient in data[self._modality_dict.keys()].values:
-                tmp = np.zeros(shape=(len(self.obs_list),1), dtype=int)
-                for i, obs in enumerate(self.obs_list):
-                    # returns true if all observations that aren't missing match
-                    if np.all(np.equal(obs.flatten(order='F'), 
-                                       patient, 
-                                       where=~np.isnan(patient), 
-                                       out=np.ones_like(patient, dtype=bool))):
-                        tmp[i] = 1
-
-                # build up the matrix C without any duplicates and count the 
-                # occurence of patients with the same pattern in f
-                if len(self.f) == 0:
-                    self.C = tmp.copy()
-                    self.f = np.append(self.f, 1)
-                else:
-                    found = False
-                    for i, col in enumerate(self.C.T):
-                        if np.all(np.equal(col.flatten(), tmp.flatten())):
-                            self.f[i] += 1
-                            found = True
-
-                    if not found:
-                        self.C = np.hstack([self.C, tmp])
-                        self.f = np.append(self.f, 1)
-
-                # delete columns of the C matrix that contain only ones, meaning 
-                # that for that patient, no observation was made
-                idx = np.sum(self.C, axis=0) != len(self.obs_list)
-                self.C = self.C[:,idx]
-                self.f = self.f[idx]
+            table = data[self._modality_dict.keys()].values
+            C, f = self._gen_C(table, **gen_C_kwargs)
+            
+            self.C = C.copy()
+            self.f = f.copy()
 
 
 
@@ -695,24 +627,23 @@ class System(object):
 
     def combined_likelihood(self, 
                             theta: np.ndarray, 
-                            t_stage: List[str] = ["early", "late"], 
-                            time_prior_dict: dict = {}, 
+                            t_stage: List[str] = ["early", "late"],
+                            first_p: float = 0.3,
                             T_max: int = 10) -> float:
-        """Likelihood for learning both the system's parameters and the center 
-        of a Binomially shaped time prior.
+        """Compute likelihood when the parameters of all T-stage's time-priors 
+        (binomial distributions) except the first one are unknown.
         
         Args:
-            theta: Set of parameters, consisting of the base probabilities 
-                :math:`b` (as many as the system has nodes), the transition 
-                probabilities :math:`t` (as many as the system has edges) and - 
-                in this particular case - the binomial parameters for all but 
-                the first T-stage's time prior.
+            theta: Set of parameters, consisting of the spread probabilities 
+                (as many as the system has :class:`Edge` instances) and the 
+                distributions's parameters (one less than the number of 
+                T-stages).
                 
             t_stage: keywords of T-stages that are present in the dictionary of 
-                C matrices. (default: ``["early", "late"]``)
+                C matrices and the previously loaded dataset.
                 
-            time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
-                values of time priors for each of those T-stages.
+            first_p: Parameter passed to the Binomial distribution that forms 
+                the time-prior of the first T-stage.
                 
             T_max: maximum number of time steps.
             
@@ -721,20 +652,74 @@ class System(object):
             T-stages, given the spread probabilities as well as the parameters 
             for the later (except the first) T-stage's binomial time prior.
         """
-
+        if first_p < 0. or first_p > 1.:
+            raise ValueError("first time-prior's parameter must be between "
+                             "0 and 1")
         if np.any(np.greater(0., theta)) or np.any(np.greater(theta, 1.)):
             return -np.inf
 
-        theta, p = theta[:-1], theta[-1]
+        add_params = len(t_stage) - 1
+        theta, ps = theta[:-add_params], theta[-add_params:]
         t = np.arange(T_max+1)
         pt = lambda p : sp.stats.binom.pmf(t,T_max,p)
 
-        time_prior_dict["early"] = pt(0.4)
-        time_prior_dict["late"] = pt(p)
+        time_prior_dict = {}
+        time_prior_dict[t_stage[0]] = pt(first_p)
+        for i,p in enumerate(ps):
+            time_prior_dict[t_stage[1+i]] = pt(p)
         
         return self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
     # ----------------------------- SPECIAL DONE ----------------------------- #
+    
+    
+    # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
+    def unparametrized_epoch(self, 
+                             t_stage: List[int] = [1,2,3,4], 
+                             time_prior_dict: dict = {}, 
+                             T: float = 1., 
+                             scale: float = 1e-2) -> float:
+        """An attempt at unparametrized sampling, where the algorithm samples
+        A from the full solution space of row-stochastic matrices with zeros
+        where transitions are forbidden.
 
+        Args:
+            t_stage: List of T-stages that should be included in the learning 
+                process. (default: ``[1,2,3,4]``)
+
+            time_prior_dict: Dictionary with keys of T-stages in t_stage and 
+                values of time priors for each of those T-stages.
+
+            T: Temperature of the epoch. Can be reduced from a starting value 
+                down to almost zero for an annealing approach to sampling.
+                (default: ``1.``)
+
+        Returns:
+            The log-likelihood of the epoch.
+        
+        :meta private:
+        """
+        likely = self.likelihood(t_stage, time_prior_dict)
+        
+        for i in np.random.permutation(len(self.lnls) -1):
+            # Generate Logit-Normal sample around current position
+            x_old = self.A[i,self._idx_dict[i]]
+            mu = [np.log(x_old[k]) - np.log(x_old[-1]) for k in range(len(x_old)-1)]
+            sample = np.random.multivariate_normal(mu, scale*np.eye(len(mu)))
+            numerator = 1 + np.sum(np.exp(sample))
+            x_new = np.ones_like(x_old)
+            x_new[:len(x_old)-1] = np.exp(sample)
+            x_new /= numerator
+
+            self.A[i,self._idx_dict[i]] = x_new
+            prop_likely = self.likelihood(t_stage, time_prior_dict)
+
+            if np.exp(- (likely - prop_likely) / T) >= np.random.uniform():
+                likely = prop_likely
+            else:
+                self.A[i,self._idx_dict[i]] = x_old
+
+        return likely
+    # -------------------- UNPARAMETRIZED END -------------------- #
 
 
     def risk(self, 
