@@ -4,6 +4,8 @@ This package contains code to model the spread of microscopic metastases through
 
 We also wrote a paper on the topic that will cover the mathematics and not too many details about the implementation.
 
+The documentation can be found [here](https://lymph-model.readthedocs.io/en/latest/).
+
 Writing tests is in progress.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat "License")](https://github.com/rmnldwg/lymph/blob/master/LICENSE)
