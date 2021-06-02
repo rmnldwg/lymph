@@ -14,8 +14,6 @@ detail in our paper.
    :target: https://github.com/rmnldwg/lymph/blob/master/LICENSE
 .. image:: https://img.shields.io/badge/GitHub-rmnldwg%2Flymph-blue.svg?style=flat
    :target: https://github.com/rmnldwg
-.. image:: https://img.shields.io/badge/arXiv-notYet-orange.svg?style=flat
-   :target: https://arxiv.org/
 .. image:: https://travis-ci.com/rmnldwg/lymph.svg?token=68QyiiwPNnPjeProTgCG&branch=master&status=failed
    :target: https://travis-ci.com/rmnldwg/lymph
 
