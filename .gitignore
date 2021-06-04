@@ -49,7 +49,7 @@ coverage.xml
 docs/build
 
 # VS code
-.vscode
+.vscode/
 
 # other
 *.bak
