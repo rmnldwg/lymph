@@ -5,6 +5,10 @@ import lymph
 
 
 @pytest.fixture
+def t_stage():
+    return [1,9]
+
+@pytest.fixture
 def spsn_dict():
     return {'test-o-meter': [0.99, 0.88]}
 
@@ -49,8 +53,8 @@ def bisys():
     return lymph.BilateralSystem(graph=graph)
 
 @pytest.fixture
-def loaded_bisys(bisys, bidata, spsn_dict):
-    bisys.load_data(bidata, t_stage=[1,9], spsn_dict=spsn_dict)
+def loaded_bisys(bisys, bidata, t_stage, spsn_dict):
+    bisys.load_data(bidata, t_stage=t_stage, spsn_dict=spsn_dict)
     return bisys
     
 
@@ -103,8 +107,8 @@ def test_B_matrices(bisys, spsn_dict):
     assert np.all(np.equal(bisys.iS.B, bisys.cS.B))
     
     
-def test_load_data(bisys, bidata, spsn_dict, expected_C_dict, expected_f_dict, 
-                   t_stage=[1,9]):
+def test_load_data(bisys, bidata, t_stage, spsn_dict, 
+                   expected_C_dict, expected_f_dict):
     bisys.load_data(bidata, t_stage=t_stage, spsn_dict=spsn_dict)
     
     assert hasattr(bisys.iS, 'C_dict')
@@ -121,8 +125,8 @@ def test_load_data(bisys, bidata, spsn_dict, expected_C_dict, expected_f_dict,
                           (True, False), 
                           (False, True), 
                           (False, False)])
-def test_likelihood(loaded_bisys, base_symmetric, trans_symmetric, 
-                    t_stage=[1,9]):
+def test_likelihood(loaded_bisys, t_stage, 
+                    base_symmetric, trans_symmetric):
     loaded_bisys.base_symmetric=base_symmetric
     loaded_bisys.trans_symmetric=trans_symmetric
     
@@ -137,3 +141,22 @@ def test_likelihood(loaded_bisys, base_symmetric, trans_symmetric,
                                   time_prior_dict={1: np.ones(shape=(5)) / 5.,
                                                    9: np.ones(shape=(9)) / 9.})
     assert np.isinf(llh)
+    
+
+@pytest.mark.parametrize("base_symmetric, trans_symmetric", 
+                         [(True, True), 
+                          (True, False), 
+                          (False, True), 
+                          (False, False)])
+def test_combined_likelihood(loaded_bisys, t_stage,
+                             base_symmetric, trans_symmetric):
+    loaded_bisys.base_symmetric=base_symmetric
+    loaded_bisys.trans_symmetric=trans_symmetric
+    
+    theta = np.random.uniform(size=(len(loaded_bisys.get_theta())+1))
+    c_llh = loaded_bisys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
+    assert c_llh < 0.
+    
+    theta = np.random.uniform(size=(len(loaded_bisys.get_theta())+1)) + 1.
+    c_llh = loaded_bisys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
+    assert np.isinf(c_llh)

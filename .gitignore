@@ -48,5 +48,8 @@ coverage.xml
 # sphinx
 docs/build
 
+# VS code
+.vscode
+
 # other
 *.bak

@@ -3,6 +3,11 @@ import numpy as np
 import pandas as pd
 import lymph
 
+
+@pytest.fixture
+def t_stage():
+    return [1,9]
+
 @pytest.fixture
 def spsn_dict():
     return {'test-o-meter': [0.99, 0.88]}
@@ -44,8 +49,8 @@ def sys():
     return lymph.System(graph=graph)
 
 @pytest.fixture
-def loaded_sys(sys, data, spsn_dict):
-    sys.load_data(data, t_stage=[1,9], spsn_dict=spsn_dict)
+def loaded_sys(sys, data, t_stage, spsn_dict):
+    sys.load_data(data, t_stage=t_stage, spsn_dict=spsn_dict)
     return sys
 
 
@@ -68,8 +73,8 @@ def test_B_matrix(sys, spsn_dict):
     assert np.all(np.isclose(row_sums, 1.))
     
     
-def test_load_data(sys, data, spsn_dict, expected_C_dict, expected_f_dict,
-                   t_stage=[1,9]):
+def test_load_data(sys, data, t_stage, spsn_dict, 
+                   expected_C_dict, expected_f_dict):
     sys.load_data(data, t_stage=t_stage, spsn_dict=spsn_dict, mode="HMM")
     
     for t in t_stage:
@@ -77,7 +82,7 @@ def test_load_data(sys, data, spsn_dict, expected_C_dict, expected_f_dict,
         assert np.all(np.equal(sys.f_dict[t], expected_f_dict[t]))
         
 
-def test_likelihood(loaded_sys, t_stage=[1,9]):
+def test_likelihood(loaded_sys, t_stage):
     theta = np.random.uniform(size=(len(loaded_sys.edges)))
     llh = loaded_sys.likelihood(theta, t_stage=t_stage, 
                                 time_prior_dict={1: np.ones(shape=(5)) / 5.,
@@ -91,7 +96,7 @@ def test_likelihood(loaded_sys, t_stage=[1,9]):
     assert np.isinf(llh)
     
 
-def test_combined_likelihood(loaded_sys, t_stage=[1,9]):
+def test_combined_likelihood(loaded_sys, t_stage):
     theta = np.random.uniform(size=(len(loaded_sys.edges)+1))
     c_llh = loaded_sys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
     assert c_llh < 0.
@@ -99,3 +104,40 @@ def test_combined_likelihood(loaded_sys, t_stage=[1,9]):
     theta = np.random.uniform(size=(len(loaded_sys.edges)+1)) + 1.
     c_llh = loaded_sys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
     assert np.isinf(c_llh)
+    
+    
+@pytest.mark.parametrize("inv, diagnoses, mode", [
+    (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , "HMM"),
+    (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , "HMM"),
+    (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, "HMM"),
+    (None                , {'test-o-meter': np.array([0,0,0])}   , "HMM"),
+    (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , "BN"),
+    (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , "BN"),
+    (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, "BN"),
+    (None                , {'test-o-meter': np.array([0,0,0])}   , "BN"),
+])
+def test_new_risk(loaded_sys, inv, diagnoses, mode):
+    theta = np.random.uniform(size=loaded_sys.get_theta().shape)
+    time_prior = np.ones(shape=(10)) / 10.
+    
+    # new risk with no involvement specified
+    new_risk = loaded_sys.risk(theta, inv=inv, diagnoses=diagnoses, 
+                                   time_prior=time_prior, mode=mode)
+    if inv is None:
+        assert len(new_risk) == len(loaded_sys.state_list)
+        assert np.all(np.greater_equal(new_risk, 0.))
+        assert np.all(np.less_equal(new_risk, 1.))
+        assert np.isclose(np.sum(new_risk), 1.)
+        
+        old_risk = np.zeros_like(new_risk)
+        for i,state in enumerate(loaded_sys.state_list):
+            old_risk[i] = loaded_sys._risk(state, diagnoses, 
+                                        time_prior, mode=mode)
+            
+        assert np.all(np.isclose(new_risk, old_risk))
+    else:
+        assert type(new_risk) == np.float64
+        assert new_risk >= 0. and new_risk <= 1.
+        
+        old_risk = loaded_sys._risk(inv, diagnoses, time_prior, mode=mode)
+        assert new_risk == old_risk

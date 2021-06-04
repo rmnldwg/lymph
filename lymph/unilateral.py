@@ -436,7 +436,9 @@ class System(object):
         for i,row in enumerate(table):
             for j,obs in enumerate(self.obs_list):
                 # save whether all not missing observations match or not
-                C[j,i] = np.all(np.equal(obs, row, where=~np.isnan(row)))
+                C[j,i] = np.all(np.equal(obs, row, 
+                                         where=~np.isnan(row),
+                                         out=np.ones_like(row, dtype=bool)))
                 
         if delete_ones:
             sum_over_C = np.sum(C, axis=0)
@@ -722,20 +724,20 @@ class System(object):
     # -------------------- UNPARAMETRIZED END -------------------- #
 
 
-    def risk(self, 
-             inv: np.ndarray, 
-             obs: Dict[str, np.ndarray], 
-             time_prior: List[float] = [], 
-             mode: str = "HMM") -> float:
-        """Computes the risk for involvement (or no involvement), given some 
+    def _risk(self,
+              inv: np.ndarray,
+              obs: Dict[str, np.ndarray],
+              time_prior: np.ndarray,
+              mode: str = "HMM") -> float:
+        """Compute the risk for involvement (or no involvement), given some 
         observations and a time distribution for the Markov model (and the 
         Bayesian network).
 
         Args:
             inv: Pattern of involvement that we want to compute the risk for. 
                 Values can take on the values ``0`` (*negative*), ``1`` 
-                (*positive*) and ``None`` of we don't care if this is involved 
-                or not.
+                (*positive*) and ``None`` if one is not interested in the 
+                involvement of the respective node.
 
             obs: Holds a diagnose of similar kind as ``inv`` for each diagnostic 
                 modality. An incomplete diagnose can be filled with ``None``.
@@ -823,3 +825,106 @@ class System(object):
 
         risk = num / denom
         return risk
+    
+    
+    def risk(self,
+             theta: Optional[np.ndarray] = None,
+             inv: Optional[np.ndarray] = None,
+             diagnoses: Dict[str, np.ndarray] = {},
+             time_prior: Optional[np.ndarray] = None,
+             mode: str = "HMM") -> Union[float, np.ndarray]:
+        """Compute risk(s) of involvement given a specific (but potentially 
+        incomplete) diagnosis.
+        
+        Args:
+            theta: Set of new spread parameters. If not given (``None``), the 
+                currently set parameters will be used.
+                
+            inv: Specific hidden involvement one is interested in. If only parts 
+                of the state are of interest, the remainder can be masked with 
+                values ``None``. If specified, the functions returns a single 
+                risk.
+                
+            diagnoses: Dictionary that can hold a potentially incomplete (mask 
+                with ``None``) diagnose for every available modality. Leaving 
+                out available modalities will assume a completely missing 
+                diagnosis.
+                
+            time_prior: Prior distribution over time. Must sum to 1 and needs 
+                to be given for ``mode = "HMM"``.
+                
+            mode: Set to ``"HMM"`` for the hidden Markov model risk (requires 
+                the ``time_prior``) or to ``"BN"`` for the Bayesian network 
+                version.
+                
+        Returns:
+            A single probability value if ``inv`` is specified and an array 
+            with probabilities for all possible hidden states otherwise.
+        """
+        if theta is not None:
+            # assign theta to system
+            self.set_theta(theta, mode=mode)
+            
+        # create one large diagnose vector from the individual modalitie's 
+        # diagnoses
+        obs = []
+        for mod in self._modality_dict:
+            if mod in diagnoses:
+                obs = np.append(obs, diagnoses[mod])
+            else:
+                obs = np.append(obs, np.array([None] * len(self.lnls)))
+        
+        # vector of probabilities of arriving in state x, marginalized over time
+        # HMM version
+        if mode == "HMM":
+            if time_prior is None:
+                raise ValueError("If mode is 'HMM', a time-prior must be given")
+            elif ~np.isclose(np.sum(time_prior), 1.):
+                raise ValueError("time-prior must be a distribution that sums "
+                                 "to one.")
+            pX = np.zeros(shape=(len(self.state_list)), dtype=float)
+            start = np.zeros(shape=(len(self.state_list)), dtype=float)
+            start[0] = 1.
+            for pt in time_prior:
+                pX += pt * start
+                start = start @ self.A
+                
+        # BN version
+        elif mode == "BN":
+            pX = np.ones(shape=(len(self.state_list)), dtype=float)
+            for i, state in enumerate(self.state_list):
+                self.set_state(state)
+                for node in self.lnls:
+                    pX[i] *= node.bn_prob()
+        
+        # compute the probability of observing a diagnose z and being in a 
+        # state x which is P(z,x) = P(z|x)P(x). Do that for all combinations of 
+        # x and z and put it in a matrix
+        pZX = self.B.T * pX
+        
+        # vector of probabilities for seeing a diagnose z
+        pZ = pX @ self.B
+        
+        # build vector to marginalize over diagnoses
+        cZ = np.zeros(shape=(len(pZ)), dtype=bool)
+        for i,complete_obs in enumerate(self.obs_list):
+            cZ[i] = np.all(np.equal(obs, complete_obs, 
+                                    where=(obs!=None),
+                                    out=np.ones_like(obs, dtype=bool)))
+        
+        # compute vector of probabilities for all possible involvements given 
+        # the specified diagnosis
+        res =  cZ @ pZX / (cZ @ pZ)
+        
+        if inv is None:
+            return res
+        else:
+            # if a specific involvement of interest is provided, marginalize the 
+            # resulting vector of hidden states to match that involvement of 
+            # interest
+            cX = np.zeros(shape=res.shape, dtype=bool)
+            for i,state in enumerate(self.state_list):
+                cX[i] = np.all(np.equal(inv, state, 
+                                        where=(inv!=None),
+                                        out=np.ones_like(state, dtype=bool)))
+            return cX @ res

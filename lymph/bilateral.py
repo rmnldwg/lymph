@@ -285,4 +285,87 @@ class BilateralSystem(object):
                 res += np.sum(log_array)
                 
             return res
+    
+    
+    def combined_likelihood(self, 
+                            theta: np.ndarray, 
+                            t_stage: List[str] = ["early", "late"],
+                            first_p: float = 0.3,
+                            T_max: int = 10) -> float:
+        """Compute likelihood when the parameters of all T-stage's time-priors 
+        (binomial distributions) except the first one are unknown.
+        
+        Args:
+            theta: Set of parameters, consisting of the spread probabilities 
+                (as many as the system has :class:`Edge` instances) and the 
+                distributions's parameters (one less than the number of 
+                T-stages).
                 
+            t_stage: keywords of T-stages that are present in the dictionary of 
+                C matrices and the previously loaded dataset.
+                
+            first_p: Parameter passed to the Binomial distribution that forms 
+                the time-prior of the first T-stage.
+                
+            T_max: maximum number of time steps.
+            
+        Returns:
+            The combined likelihood of observing patients with different 
+            T-stages, given the spread probabilities as well as the parameters 
+            for the later (except the first) T-stage's binomial time prior.
+        """
+        if first_p < 0. or first_p > 1.:
+            raise ValueError("first time-prior's parameter must be between "
+                             "0 and 1")
+        if np.any(np.greater(0., theta)) or np.any(np.greater(theta, 1.)):
+            return -np.inf
+
+        add_params = len(t_stage) - 1
+        theta, ps = theta[:-add_params], theta[-add_params:]
+        t = np.arange(T_max+1)
+        pt = lambda p : sp.stats.binom.pmf(t,T_max,p)
+
+        time_prior_dict = {}
+        time_prior_dict[t_stage[0]] = pt(first_p)
+        for i,p in enumerate(ps):
+            time_prior_dict[t_stage[1+i]] = pt(p)
+        
+        return self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
+    
+    
+    def risk(self,
+             theta: Optional[np.ndarray] = None,
+             inv: Optional[np.ndarray] = None,
+             diagnoses: Dict[str, np.ndarray] = {},
+             time_prior: Optional[np.ndarray] = None,
+             mode: str = "HMM") -> Union[float, np.ndarray]:
+        """Compute risk(s) of involvement given a specific (but potentially 
+        incomplete) diagnosis.
+        
+        Args:
+            theta: Set of new spread parameters. If not given (``None``), the 
+                currently set parameters will be used.
+                
+            inv: Specific hidden involvement one is interested in. If only parts 
+                of the state are of interest, the remainder can be masked with 
+                values ``None``. If specified, the functions returns a single 
+                risk.
+                
+            diagnoses: Dictionary that can hold a potentially incomplete (mask 
+                with ``None``) diagnose for every available modality. Leaving 
+                out available modalities will assume a completely missing 
+                diagnosis.
+                
+            time_prior: Prior distribution over time. Must sum to 1 and needs 
+                to be given for ``mode = "HMM"``.
+                
+            mode: Set to ``"HMM"`` for the hidden Markov model risk (requires 
+                the ``time_prior``) or to ``"BN"`` for the Bayesian network 
+                version.
+                
+        Returns:
+            A single probability value if ``inv`` is specified and an array 
+            with probabilities for all possible hidden states otherwise.
+        """
+        # TODO: Implement risk computation
+        pass
