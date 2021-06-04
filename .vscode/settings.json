@@ -1,6 +1,6 @@
 {
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
-    "python.pythonPath": "/home/rmnldwg/miniconda3/envs/phd/bin/python",
+    "python.pythonPath": "/home/rmnldwg/opt/miniconda3/envs/phd/bin/python",
     "restructuredtext.confPath": "${workspaceFolder}/docs/source"
 }
