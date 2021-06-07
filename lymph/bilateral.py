@@ -259,28 +259,29 @@ class BilateralSystem(object):
             res = 0
             obs_num = len(self.iS.obs_list)
             
-            for stage in t_stage:
-                time_steps = len(time_prior_dict[stage])
-                ipsi_tmp = np.zeros(shape=(obs_num), dtype=float)
-                ipsi_tmp[0] = 1.
-                contra_tmp = np.zeros(shape=(obs_num), dtype=float)
-                contra_tmp[0] = 1.
-                PT = np.diag(time_prior_dict[stage])
-                
-                # K matrices hold rows of involvement probability for a certain 
-                # time-step
-                ipsi_K = np.empty(shape=(time_steps, obs_num))
-                contra_K = np.empty(shape=(time_steps, obs_num))
-                
-                for i in range(time_steps-1):
-                    ipsi_K[i] = ipsi_tmp
-                    contra_K[i] = contra_tmp
+            time_steps = len(time_prior_dict[t_stage[0]])
+            ipsi_tmp = np.zeros(shape=(obs_num), dtype=float)
+            ipsi_tmp[0] = 1.
+            contra_tmp = np.zeros(shape=(obs_num), dtype=float)
+            contra_tmp[0] = 1.
+            
+            # K matrices hold rows of involvement probability for a certain
+            # time-step
+            ipsi_K = np.empty(shape=(time_steps, obs_num))
+            contra_K = np.empty(shape=(time_steps, obs_num))
 
-                    ipsi_tmp = ipsi_tmp @ self.iS.A
-                    contra_tmp = contra_tmp @ self.cS.A
-                    
-                ipsi_K[-1] = ipsi_tmp
-                contra_K[-1] = contra_tmp
+            for i in range(time_steps-1):
+                ipsi_K[i] = ipsi_tmp
+                contra_K[i] = contra_tmp
+
+                ipsi_tmp = ipsi_tmp @ self.iS.A
+                contra_tmp = contra_tmp @ self.cS.A
+
+            ipsi_K[-1] = ipsi_tmp
+            contra_K[-1] = contra_tmp
+            
+            for stage in t_stage:
+                PT = np.diag(time_prior_dict[stage])
                 
                 # M is made up of the joint probabilities for all combinations 
                 # of ipsi- & contralateral diagnoses. Rows specify ipsi, columns 

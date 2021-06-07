@@ -518,6 +518,40 @@ class System(object):
 
 
 
+    def _evolve(self, 
+                time_prior: Optional[np.ndarray] = None, 
+                marginalize: bool = True) -> np.ndarray:
+        """Evolve hidden Markov model based system over time steps. Compute 
+        either p(X) marginalized over t or p(X|t) in matrix form.
+        
+        Args:
+            time_prior: Probability distribution p(t) of a patient getting 
+                diagnosed after t time steps.
+            marginalize: If ``True``, computes only p(X) marginalized over time. 
+                Otherwise, 2D matrix with entries of p(X|t) is returned.
+                
+        :meta public:
+        """        
+        start = np.zeros(shape=len(self.state_list), dtype=float)
+        start[0] = 1.
+        
+        time_steps = len(time_prior)
+        inv_prob = np.zeros(shape=(time_steps, len(self.state_list)), 
+                            dtype=float)
+        
+        for i in range(time_steps):
+            inv_prob[i] = start
+            start = start @ self.A
+            
+        if not marginalize:
+            return inv_prob
+        elif time_prior is None or ~np.isclose(np.sum(time_prior), 1.):
+            raise ValueError("A time normalized time-prior must be provided!")
+        
+        return time_prior @ inv_prob
+
+
+
     def likelihood(self, 
                    theta: np.ndarray, 
                    t_stage: List[int] = [1,2,3,4], 
@@ -556,15 +590,10 @@ class System(object):
             res = 0
             for stage in t_stage:
 
-                start = np.zeros(shape=(len(self.state_list),))
-                start[0] = 1.
-                tmp = np.zeros(shape=(len(self.state_list),))
+                marg_inv_prob = self._evolve(time_prior_dict[stage], 
+                                             marginalize=True)
 
-                for pt in time_prior_dict[stage]:
-                    tmp += pt * start
-                    start = start @ self.A
-
-                p = tmp @ self.B @ self.C_dict[stage]
+                p = marg_inv_prob @ self.B @ self.C_dict[stage]
                 res += self.f_dict[stage] @ np.log(p)
 
 
@@ -774,17 +803,7 @@ class System(object):
         # vector of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            if time_prior is None:
-                raise ValueError("If mode is 'HMM', a time-prior must be given")
-            elif ~np.isclose(np.sum(time_prior), 1.):
-                raise ValueError("time-prior must be a distribution that sums "
-                                 "to one.")
-            pX = np.zeros(shape=(len(self.state_list)), dtype=float)
-            start = np.zeros(shape=(len(self.state_list)), dtype=float)
-            start[0] = 1.
-            for pt in time_prior:
-                pX += pt * start
-                start = start @ self.A
+            pX = self._evolve(time_prior=time_prior, marginalize=True)
                 
         # BN version
         elif mode == "BN":

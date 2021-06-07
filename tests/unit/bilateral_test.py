@@ -133,13 +133,13 @@ def test_likelihood(loaded_bisys, t_stage,
     theta = np.random.uniform(size=loaded_bisys.get_theta().shape)
     llh = loaded_bisys.likelihood(theta, t_stage=t_stage, 
                                   time_prior_dict={1: np.ones(shape=(5)) / 5.,
-                                                   9: np.ones(shape=(9)) / 9.})
+                                                   9: np.ones(shape=(5)) / 5.})
     assert llh < 0.
     
     theta = np.random.uniform(size=loaded_bisys.get_theta().shape) + 1.
     llh = loaded_bisys.likelihood(theta, t_stage=t_stage, 
                                   time_prior_dict={1: np.ones(shape=(5)) / 5.,
-                                                   9: np.ones(shape=(9)) / 9.})
+                                                   9: np.ones(shape=(5)) / 5.})
     assert np.isinf(llh)
     
 
