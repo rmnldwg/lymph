@@ -116,28 +116,18 @@ def test_combined_likelihood(loaded_sys, t_stage):
     (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, "BN"),
     (None                , {'test-o-meter': np.array([0,0,0])}   , "BN"),
 ])
-def test_new_risk(loaded_sys, inv, diagnoses, mode):
+def test_risk(loaded_sys, inv, diagnoses, mode):
     theta = np.random.uniform(size=loaded_sys.get_theta().shape)
     time_prior = np.ones(shape=(10)) / 10.
     
     # new risk with no involvement specified
-    new_risk = loaded_sys.risk(theta, inv=inv, diagnoses=diagnoses, 
-                                   time_prior=time_prior, mode=mode)
+    risk = loaded_sys.risk(theta, inv=inv, diagnoses=diagnoses, 
+                           time_prior=time_prior, mode=mode)
     if inv is None:
-        assert len(new_risk) == len(loaded_sys.state_list)
-        assert np.all(np.greater_equal(new_risk, 0.))
-        assert np.all(np.less_equal(new_risk, 1.))
-        assert np.isclose(np.sum(new_risk), 1.)
-        
-        old_risk = np.zeros_like(new_risk)
-        for i,state in enumerate(loaded_sys.state_list):
-            old_risk[i] = loaded_sys._risk(state, diagnoses, 
-                                        time_prior, mode=mode)
-            
-        assert np.all(np.isclose(new_risk, old_risk))
+        assert len(risk) == len(loaded_sys.state_list)
+        assert np.all(np.greater_equal(risk, 0.))
+        assert np.all(np.less_equal(risk, 1.))
+        assert np.isclose(np.sum(risk), 1.)
     else:
-        assert type(new_risk) == np.float64
-        assert new_risk >= 0. and new_risk <= 1.
-        
-        old_risk = loaded_sys._risk(inv, diagnoses, time_prior, mode=mode)
-        assert new_risk == old_risk
+        assert type(risk) == np.float64
+        assert risk >= 0. and risk <= 1.

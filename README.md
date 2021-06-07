@@ -8,5 +8,5 @@ Writing tests is in progress.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat "License")](https://github.com/rmnldwg/lymph/blob/master/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-rmnldwg%2Flymph-blue.svg?style=flat "GitHub")](https://github.com/rmnldwg)
-[![ArXiv](https://img.shields.io/badge/arXiv-notYet-orange.svg?style=flat "ArXiv")](https://arxiv.org/)
-[![Build](https://travis-ci.com/rmnldwg/lymph.svg?token=68QyiiwPNnPjeProTgCG&branch=master&status=failed)](https://travis-ci.com/rmnldwg/lymph)
+[![ArXiv](https://img.shields.io/badge/paper-accepted-orange.svg?style=flat "Paper")](https://www.nature.com/articles/s41598-021-91544-1)
+[![Build](https://github.com/rmnldwg/lymph/actions/workflows/tests/badge.svg?style=flat)](https://github.com/rmnldwg/lymph/actions)

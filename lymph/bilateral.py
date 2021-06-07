@@ -185,7 +185,7 @@ class BilateralSystem(object):
         Args:
             data: Table with rows of patients. Columns must have three levels. 
                 The first column is ('Info', 'tumor', 'T-stage'). The rest of 
-                the columns are separated bu modality names on the top level, 
+                the columns are separated by modality names on the top level, 
                 then subdivided into 'ipsi' & 'contra' by the second level and
                 finally, in the third level, the names of the lymph node level 
                 are given.
@@ -267,21 +267,37 @@ class BilateralSystem(object):
                 contra_tmp[0] = 1.
                 PT = np.diag(time_prior_dict[stage])
                 
+                # K matrices hold rows of involvement probability for a certain 
+                # time-step
                 ipsi_K = np.empty(shape=(time_steps, obs_num))
                 contra_K = np.empty(shape=(time_steps, obs_num))
                 
-                for i in range(time_steps):
+                for i in range(time_steps-1):
                     ipsi_K[i] = ipsi_tmp
                     contra_K[i] = contra_tmp
+
+                    ipsi_tmp = ipsi_tmp @ self.iS.A
+                    contra_tmp = contra_tmp @ self.cS.A
                     
-                    if i != (time_steps-1):
-                        ipsi_tmp = ipsi_tmp @ self.iS.A
-                        contra_tmp = contra_tmp @ self.cS.A
-                        
+                ipsi_K[-1] = ipsi_tmp
+                contra_K[-1] = contra_tmp
+                
+                # M is made up of the joint probabilities for all combinations 
+                # of ipsi- & contralateral diagnoses. Rows specify ipsi, columns 
+                # contralateral 
                 M = self.iS.B @ ipsi_K.T @ PT @ contra_K @ self.cS.B
-                log_array = np.log(np.sum(self.iS.C_dict[stage] 
-                                          * (M @ self.cS.C_dict[stage]),
-                                          axis=0))
+                log_array = np.log(
+                    # this sum, as well as the dot product inside, do the 
+                    # marginalization over incomplete diagnoses. It's actually 
+                    # an algebra trick and the same as diag(C_i @ M @ C_c). We 
+                    # need to take the diagonal to compare the same patients 
+                    # on both sides
+                    np.sum(
+                        self.iS.C_dict[stage] * (M @ self.cS.C_dict[stage]),
+                        axis=0
+                    )
+                )
+                # sum up all patients
                 res += np.sum(log_array)
                 
             return res
@@ -367,5 +383,8 @@ class BilateralSystem(object):
             A single probability value if ``inv`` is specified and an array 
             with probabilities for all possible hidden states otherwise.
         """
-        # TODO: Implement risk computation
-        pass
+        if theta is not None:
+            self.set_theta(theta)
+        
+        
+        
