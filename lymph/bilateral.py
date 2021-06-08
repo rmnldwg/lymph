@@ -36,8 +36,9 @@ class BilateralSystem(object):
                  graph: dict = {},
                  base_symmetric: bool = False,
                  trans_symmetric: bool = True):
-        self.iS = System(graph=graph)   # ipsilateral and...
-        self.cS = System(graph=graph)   # ...contralateral part of the network
+        self.system = {}
+        self.system["ipsi"] = System(graph=graph)   # ipsilateral and...
+        self.system["contra"] = System(graph=graph)   # ...contralateral part of the network
         
         # sort all the edges into the two sides (ipsi & contra, first index) 
         # and into base (from tumor to LNL) & trans (from LNL to LNL) along the 
@@ -46,7 +47,7 @@ class BilateralSystem(object):
         
         # ipsi
         ipsi_base, ipsi_trans = [], []
-        for e in self.iS.edges:
+        for e in self.system["ipsi"].edges:
             if e.start.typ == 'tumor':
                 ipsi_base.append(e)
             elif e.start.typ == 'lnl':
@@ -58,7 +59,7 @@ class BilateralSystem(object):
         
         # contra
         contra_base, contra_trans = [], []
-        for e in self.cS.edges:
+        for e in self.system["contra"].edges:
             if e.start.typ == 'tumor':
                 contra_base.append(e)
             elif e.start.typ == 'lnl':
@@ -80,8 +81,12 @@ class BilateralSystem(object):
             newstate: Concatenated array consisting of the newstate for the 
                 ipsilateral part and the contralateral part of the network.
         """
-        self.iS.set_state(newstate=newstate[:len(self.iS.lnls)])
-        self.cS.set_state(newstate=newstate[len(self.iS.lnls):])
+        self.system["ipsi"].set_state(
+            newstate=newstate[:len(self.system["ipsi"].lnls)]
+        )
+        self.system["contra"].set_state(
+            newstate=newstate[len(self.system["ipsi"].lnls):]
+        )
         
         
         
@@ -153,8 +158,8 @@ class BilateralSystem(object):
         self.trans_symmetric = trans_symmetric
         
         if mode == "HMM":
-            self.iS._gen_A()
-            self.cS._gen_A()
+            self.system["ipsi"]._gen_A()
+            self.system["contra"]._gen_A()
             
             
             
@@ -171,8 +176,8 @@ class BilateralSystem(object):
         See Also:
             :meth:`System.set_modalities`: Setting modalities in unilateral System.
         """
-        self.iS.set_modalities(spsn_dict=spsn_dict)
-        self.cS.set_modalities(spsn_dict=spsn_dict)
+        self.system["ipsi"].set_modalities(spsn_dict=spsn_dict)
+        self.system["contra"].set_modalities(spsn_dict=spsn_dict)
         
         
         
@@ -209,12 +214,12 @@ class BilateralSystem(object):
         
         # generate both side's C matrix with duplicates and ones
         gen_C_kwargs = {'delete_ones': False, 'aggregate_duplicates': False}
-        self.iS.load_data(ipsi_data, 
+        self.system["ipsi"].load_data(ipsi_data, 
                           t_stage=t_stage, 
                           spsn_dict=spsn_dict, 
                           mode=mode,
                           gen_C_kwargs=gen_C_kwargs)
-        self.cS.load_data(contra_data, 
+        self.system["contra"].load_data(contra_data, 
                           t_stage=t_stage, 
                           spsn_dict=spsn_dict, 
                           mode=mode,
@@ -257,7 +262,7 @@ class BilateralSystem(object):
         
         if mode == "HMM":
             res = 0
-            obs_num = len(self.iS.obs_list)
+            obs_num = len(self.system["ipsi"].obs_list)
             
             time_steps = len(time_prior_dict[t_stage[0]])
             ipsi_tmp = np.zeros(shape=(obs_num), dtype=float)
@@ -265,36 +270,36 @@ class BilateralSystem(object):
             contra_tmp = np.zeros(shape=(obs_num), dtype=float)
             contra_tmp[0] = 1.
             
-            # K matrices hold rows of involvement probability for a certain
-            # time-step
-            ipsi_K = np.empty(shape=(time_steps, obs_num))
-            contra_K = np.empty(shape=(time_steps, obs_num))
-
-            for i in range(time_steps-1):
-                ipsi_K[i] = ipsi_tmp
-                contra_K[i] = contra_tmp
-
-                ipsi_tmp = ipsi_tmp @ self.iS.A
-                contra_tmp = contra_tmp @ self.cS.A
-
-            ipsi_K[-1] = ipsi_tmp
-            contra_K[-1] = contra_tmp
+            # matrices that hold rows of involvement probability for columns of 
+            # time-steps
+            pXt = {}
+            pXt["ipsi"] = self.system["ipsi"]._evolve(time_steps=time_steps)
+            pXt["contra"] = self.system["contra"]._evolve(time_steps=time_steps)
             
             for stage in t_stage:
                 PT = np.diag(time_prior_dict[stage])
                 
-                # M is made up of the joint probabilities for all combinations 
-                # of ipsi- & contralateral diagnoses. Rows specify ipsi, columns 
-                # contralateral 
-                M = self.iS.B @ ipsi_K.T @ PT @ contra_K @ self.cS.B
+                # This matrix made up of the joint probabilities for all 
+                # combinations of ipsi- & contralateral complete diagnoses. Rows 
+                # specify ipsi-, columns contralateral 
+                pZZ = (
+                    self.system["ipsi"].B 
+                    @ pXt["ipsi"].T 
+                    @ PT 
+                    @ pXt["contra"] 
+                    @ self.system["contra"].B
+                )
+                
                 log_array = np.log(
                     # this sum, as well as the dot product inside, do the 
                     # marginalization over incomplete diagnoses. It's actually 
-                    # an algebra trick and the same as diag(C_i @ M @ C_c). We 
-                    # need to take the diagonal to compare the same patients 
+                    # an algebra trick and the same as tr(C_i @ pZZ @ C_c). We 
+                    # need to take the trace to compare the same patients 
                     # on both sides
                     np.sum(
-                        self.iS.C_dict[stage] * (M @ self.cS.C_dict[stage]),
+                        self.system["ipsi"].C_dict[stage] 
+                        * (pZZ 
+                           @ self.system["contra"].C_dict[stage]),
                         axis=0
                     )
                 )
@@ -352,26 +357,33 @@ class BilateralSystem(object):
     
     def risk(self,
              theta: Optional[np.ndarray] = None,
-             inv: Optional[np.ndarray] = None,
-             diagnoses: Dict[str, np.ndarray] = {},
+             inv_dict: Dict[str, Optional[np.ndarray]] = {"ipsi": None,
+                                                          "contra": None},
+             diag_dict: Dict[str, Dict[str, np.ndarray]] = {"ipsi": {}, 
+                                                            "contra": {}},
              time_prior: Optional[np.ndarray] = None,
-             mode: str = "HMM") -> Union[float, np.ndarray]:
-        """Compute risk(s) of involvement given a specific (but potentially 
-        incomplete) diagnosis.
+             mode: str = "HMM") -> float:
+        """Compute risk of ipsi- & contralateral involvement given specific (but 
+        potentially incomplete) diagnoses for each side of the neck.
         
         Args:
             theta: Set of new spread parameters. If not given (``None``), the 
                 currently set parameters will be used.
                 
-            inv: Specific hidden involvement one is interested in. If only parts 
-                of the state are of interest, the remainder can be masked with 
-                values ``None``. If specified, the functions returns a single 
-                risk.
+            inv_dict: Dictionary that can have the keys ``"ipsi"`` and ``"contra"`` 
+                with the respective values being the involvements of interest. 
+                If (for one side or both) no involvement of interest is given, 
+                it'll be marginalized.
+                The array themselves may contain ``True``, ``False`` or ``None`` 
+                for each LNL corresponding to the risk for involvement, no 
+                involvement and "not interested".
                 
-            diagnoses: Dictionary that can hold a potentially incomplete (mask 
-                with ``None``) diagnose for every available modality. Leaving 
-                out available modalities will assume a completely missing 
-                diagnosis.
+            diag_dict: Dictionary that itself may contain two dictionaries. One 
+                with key "ipsi" and one with key "contra". The respective value 
+                is then a dictionary that can hold a potentially incomplete 
+                (mask with ``None``) diagnose for every available modality. 
+                Leaving out available modalities will assume a completely 
+                missing diagnosis.
                 
             time_prior: Prior distribution over time. Must sum to 1 and needs 
                 to be given for ``mode = "HMM"``.
@@ -379,13 +391,76 @@ class BilateralSystem(object):
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires 
                 the ``time_prior``) or to ``"BN"`` for the Bayesian network 
                 version.
-                
-        Returns:
-            A single probability value if ``inv`` is specified and an array 
-            with probabilities for all possible hidden states otherwise.
         """
+        # assign theta to system or use the currently set one
         if theta is not None:
             self.set_theta(theta)
+            
+        cX = {}   # marginalize over matching complete involvements.
+        cZ = {}   # marginalize over Z for incomplete diagnoses.
+        pXt = {}  # probability p(X|t) of state X at time t as 2D matrices
+        pD = {}   # probability p(D|X) of a (potentially incomplete) diagnose, 
+                  # given an involvement. Should be a 1D vector
+                  
+        for side in ["ipsi", "contra"]:            
+            inv = np.array(inv_dict[side])
+            # build vector to marginalize over involvements
+            cX[side] = np.zeros(shape=(len(self.system[side].state_list)),
+                                dtype=bool)
+            for i,state in enumerate(self.system[side].state_list):
+                cX[side][i] = np.all(
+                    np.equal(
+                        inv, state,
+                        where=(inv!=None),
+                        out=np.ones_like(inv, dtype=bool)
+                    )
+                )
+                
+            # create one large diagnose vector from the individual modalitie's
+            # diagnoses
+            obs = np.array([])
+            for mod in self.system[side]._modality_dict:
+                if mod in diag_dict[side]:
+                    obs = np.append(obs, diag_dict[side][mod])
+                else:
+                    obs = np.append(obs, np.array([None] * len(self.lnls)))
+            
+            # build vector to marginalize over diagnoses
+            cZ[side] = np.zeros(shape=(len(self.system[side].obs_list)), 
+                                dtype=bool)
+            for i,complete_obs in enumerate(self.system[side].obs_list):
+                cZ[side][i] = np.all(
+                    np.equal(
+                        obs, complete_obs,
+                        where=(obs!=None), 
+                        out=np.ones_like(obs, dtype=bool)
+                    )
+                )
+            
+            # compute some (conditional) probability matrices
+            pXt[side] = self.system[side]._evolve(time_steps=len(time_prior))
+            pD[side] = self.system[side].B @ cZ[side]
         
+        # time-prior in diagnoal matrix form
+        PT = np.diag(time_prior)
+
+        # joint probability of Xi & Xc, marginalized over time. Acts as prior 
+        # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix
+        pXX = pXt["ipsi"].T @ PT @ pXt["contra"]
         
+        # joint probability of all hidden states and the requested diagnosis
+        pDDXX = np.einsum("i,ij,j->ij", pD["ipsi"], pXX, pD["contra"])
+        # joint probability of the requested involvement and diagnosis
+        pDDII = cX["ipsi"].T @ pDDXX @ cX["contra"]
         
+        # denominator p(Di, Dc). Joint probability for ipsi- & contralateral 
+        # diagnoses. Marginalized over all hidden involvements and over all 
+        # matching complete observations that give rise to the specific 
+        # diagnose. The result should be just a number
+        pDD = (cZ["ipsi"].T
+               @ self.system["ipsi"].B.T
+               @ pXX
+               @ self.system["contra"].B
+               @ cZ["contra"])
+        
+        return pDDII / pDD

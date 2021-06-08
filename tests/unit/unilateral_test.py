@@ -80,7 +80,7 @@ def test_load_data(sys, data, t_stage, spsn_dict,
     for t in t_stage:
         assert np.all(np.equal(sys.C_dict[t], expected_C_dict[t]))
         assert np.all(np.equal(sys.f_dict[t], expected_f_dict[t]))
-        
+
 
 def test_likelihood(loaded_sys, t_stage):
     theta = np.random.uniform(size=(len(loaded_sys.edges)))

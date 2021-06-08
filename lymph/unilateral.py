@@ -519,36 +519,46 @@ class System(object):
 
 
     def _evolve(self, 
-                time_prior: Optional[np.ndarray] = None, 
-                marginalize: bool = True) -> np.ndarray:
+                time_steps: int = 10,
+                time_prior: Optional[np.ndarray] = None) -> np.ndarray:
         """Evolve hidden Markov model based system over time steps. Compute 
         either p(X) marginalized over t or p(X|t) in matrix form.
         
         Args:
+            time_steps: Number of time-steps. Can be ignored if a time-prior is 
+                specified, in which case it has no effect.
             time_prior: Probability distribution p(t) of a patient getting 
                 diagnosed after t time steps.
-            marginalize: If ``True``, computes only p(X) marginalized over time. 
-                Otherwise, 2D matrix with entries of p(X|t) is returned.
-                
+        
+        Returns:
+            If a time-prior p(t) is given, the involvement probability is 
+            marginalized to return p(X). If noen is provided, a matrix with the 
+            values p(X|t) is returned.
+        
         :meta public:
         """        
         start = np.zeros(shape=len(self.state_list), dtype=float)
         start[0] = 1.
         
-        time_steps = len(time_prior)
+        if time_prior is not None:
+            if ~np.isclose(np.sum(time_prior), 1.):
+                raise ValueError("Normalized time prior must be provided.")
+            
+            time_steps = len(time_prior)
+        
         inv_prob = np.zeros(shape=(time_steps, len(self.state_list)), 
                             dtype=float)
         
-        for i in range(time_steps):
+        for i in range(time_steps-1):
             inv_prob[i] = start
             start = start @ self.A
-            
-        if not marginalize:
-            return inv_prob
-        elif time_prior is None or ~np.isclose(np.sum(time_prior), 1.):
-            raise ValueError("A time normalized time-prior must be provided!")
         
-        return time_prior @ inv_prob
+        inv_prob[-1] = start
+        
+        if time_prior is None:
+            return inv_prob
+        else:
+            return time_prior @ inv_prob
 
 
 
@@ -590,8 +600,7 @@ class System(object):
             res = 0
             for stage in t_stage:
 
-                marg_inv_prob = self._evolve(time_prior_dict[stage], 
-                                             marginalize=True)
+                marg_inv_prob = self._evolve(time_prior=time_prior_dict[stage])
 
                 p = marg_inv_prob @ self.B @ self.C_dict[stage]
                 res += self.f_dict[stage] @ np.log(p)
@@ -787,13 +796,13 @@ class System(object):
             A single probability value if ``inv`` is specified and an array 
             with probabilities for all possible hidden states otherwise.
         """
+        # assign theta to system or use the currently set one
         if theta is not None:
-            # assign theta to system
             self.set_theta(theta, mode=mode)
             
         # create one large diagnose vector from the individual modalitie's 
         # diagnoses
-        obs = []
+        obs = np.array([])
         for mod in self._modality_dict:
             if mod in diagnoses:
                 obs = np.append(obs, diagnoses[mod])
@@ -803,7 +812,7 @@ class System(object):
         # vector of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            pX = self._evolve(time_prior=time_prior, marginalize=True)
+            pX = self._evolve(time_prior=time_prior)
                 
         # BN version
         elif mode == "BN":
@@ -838,6 +847,7 @@ class System(object):
             # if a specific involvement of interest is provided, marginalize the 
             # resulting vector of hidden states to match that involvement of 
             # interest
+            inv = np.array(inv)
             cX = np.zeros(shape=res.shape, dtype=bool)
             for i,state in enumerate(self.state_list):
                 cX[i] = np.all(np.equal(inv, state, 
