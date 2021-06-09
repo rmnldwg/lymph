@@ -47,6 +47,8 @@ coverage.xml
 
 # sphinx
 docs/build
+docs/source/_
+docs/source/_build
 
 # VS code
 .vscode/

@@ -236,3 +236,29 @@ def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
 
     assert np.isclose(birisk_ignore_contra, ipsi_risk)
     assert np.isclose(birisk_ignore_ipsi, contra_risk)
+    
+    # Finally, let's make sure that the ipsilateral risk increases when we 
+    # observe more severe contralateral involvement
+    inv_dict = {"ipsi": [True, True, True], "contra": [None, None, None]}
+    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+                 "contra": {"test-o-meter": [False, False, False]}}
+    low_risk = loaded_bisys.risk(
+        theta=theta,
+        inv_dict=inv_dict,
+        diag_dict=diag_dict,
+        time_prior=time_prior,
+        mode="HMM"
+    )
+    
+    inv_dict = {"ipsi": [True, True, True], "contra": [None, None, None]}
+    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+                 "contra": {"test-o-meter": [True, True, True]}}
+    high_risk = loaded_bisys.risk(
+        theta=theta,
+        inv_dict=inv_dict,
+        diag_dict=diag_dict,
+        time_prior=time_prior,
+        mode="HMM"
+    )
+
+    assert low_risk < high_risk
