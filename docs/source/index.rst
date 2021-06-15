@@ -15,7 +15,7 @@ much detail in our `paper <www.nature.com/articles/s41598-021-91544-1>`_.
 .. image:: https://img.shields.io/badge/license-MIT-blue.svg?style=flat
    :target: https://github.com/rmnldwg/lymph/blob/master/LICENSE
 .. image:: https://img.shields.io/badge/paper-published-success.svg?style=flat
-   :target: https://arxiv.org/
+   :target: https://www.nature.com/articles/s41598-021-91544-1
 .. image:: https://github.com/rmnldwg/lymph/actions/workflows/ci.yml/badge.svg
    :target: https://github.com/rmnldwg/lymph/actions/
 .. image:: https://readthedocs.org/projects/lymph-model/badge/?version=latest
