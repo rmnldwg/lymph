@@ -437,7 +437,7 @@ class System(object):
             for j,obs in enumerate(self.obs_list):
                 # save whether all not missing observations match or not
                 C[j,i] = np.all(np.equal(obs, row, 
-                                         where=~np.isnan(row),
+                                         where=~np.isnan(row.astype(float)),
                                          out=np.ones_like(row, dtype=bool)))
                 
         if delete_ones:

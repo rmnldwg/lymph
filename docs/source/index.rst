@@ -18,7 +18,7 @@ much detail in our `paper <www.nature.com/articles/s41598-021-91544-1>`_.
    :target: https://arxiv.org/
 .. image:: https://github.com/rmnldwg/lymph/actions/workflows/ci.yml/badge.svg
    :target: https://github.com/rmnldwg/lymph/actions/
-.. image:: image:: https://readthedocs.org/projects/lymph-model/badge/?version=latest
+.. image:: https://readthedocs.org/projects/lymph-model/badge/?version=latest
    :target: https://lymph-model.readthedocs.io/en/latest/?badge=latest
 
 

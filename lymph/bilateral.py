@@ -209,21 +209,25 @@ class BilateralSystem(object):
         contra_data = data.drop(columns=["ipsi"], axis=1, level=1, 
                                 inplace=False)
         contra_data = pd.DataFrame(contra_data.values,
-                                 index=contra_data.index,
-                                 columns=contra_data.columns.droplevel(1))
+                                   index=contra_data.index,
+                                   columns=contra_data.columns.droplevel(1))
         
         # generate both side's C matrix with duplicates and ones
         gen_C_kwargs = {'delete_ones': False, 'aggregate_duplicates': False}
-        self.system["ipsi"].load_data(ipsi_data, 
-                          t_stage=t_stage, 
-                          spsn_dict=spsn_dict, 
-                          mode=mode,
-                          gen_C_kwargs=gen_C_kwargs)
-        self.system["contra"].load_data(contra_data, 
-                          t_stage=t_stage, 
-                          spsn_dict=spsn_dict, 
-                          mode=mode,
-                          gen_C_kwargs=gen_C_kwargs)
+        self.system["ipsi"].load_data(
+            ipsi_data, 
+            t_stage=t_stage,
+            spsn_dict=spsn_dict,
+            mode=mode,
+            gen_C_kwargs=gen_C_kwargs
+        )
+        self.system["contra"].load_data(
+            contra_data, 
+            t_stage=t_stage, 
+            spsn_dict=spsn_dict,
+            mode=mode,
+            gen_C_kwargs=gen_C_kwargs
+        )
 
     
     
