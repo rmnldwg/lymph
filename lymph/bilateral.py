@@ -287,7 +287,7 @@ class BilateralSystem(object):
                 # combinations of ipsi- & contralateral complete diagnoses. Rows 
                 # specify ipsi-, columns contralateral 
                 pZZ = (
-                    self.system["ipsi"].B 
+                    self.system["ipsi"].B.T 
                     @ pXt["ipsi"].T 
                     @ PT 
                     @ pXt["contra"] 
