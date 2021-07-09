@@ -74,6 +74,15 @@ class BilateralSystem(object):
         
         
         
+    def __str__(self):
+        string = "### IPSILATERAL ###\n"
+        string += self.system["ipsi"].__str__()
+        string += "\n### CONTRALATERAL ###\n"
+        string += self.system["contra"].__str__()
+        return string
+        
+        
+        
     def set_state(self, newstate: np.ndarray):
         """Sets the state of the system to ``newstate``.
         
