@@ -96,6 +96,38 @@ class System(object):
 
 
 
+    def __str__(self):
+        """Print info about the structure and parameters of the graph.
+        """
+        string = "Tumor(s):\n"
+        for tumor in self.tumors:
+            if tumor.typ != "tumor":
+                raise RuntimeError("Tumor node is not of type tumor")
+            
+            prefix = tumor.name + " ---"
+            for o in tumor.out:
+                string += f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}\n"
+                prefix = "".join([" "] * (len(tumor.name) + 1)) + "`--"
+                
+        longest = 0
+        for lnl in self.lnls:
+            if len(lnl.name) > longest:
+                longest = len(lnl.name)
+
+        string += "\nLNL(s):\n"
+        for lnl in self.lnls:
+            if lnl.typ != "lnl":
+                raise RuntimeError("LNL node is not of type LNL")
+
+            prefix = lnl.name + " ---" + ("-" * (longest - len(lnl.name)))
+            for o in lnl.out:
+                string += f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}\n"
+                prefix = " " * (len(lnl.name) + 1) + "`--" + ("-" * (longest - len(lnl.name)))
+                
+        return string
+
+
+
     def find_node(self, name: str) -> Union[Node, None]:
         """Finds and returns a node with name ``name``.
         """
@@ -132,37 +164,6 @@ class System(object):
             res.append((node.name, out))
             
         return dict(res)
-
-
-
-    def print_graph(self):
-        """Print info about the structure and parameters of the graph.
-        """
-
-        print("Tumor(s):")
-        for tumor in self.tumors:
-            if tumor.typ != "tumor":
-                raise RuntimeError("Tumor node is not of type tumor")
-            
-            prefix = tumor.name + " ---"
-            for o in tumor.out:
-                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
-                prefix = "".join([" "] * (len(tumor.name) + 1)) + "`--"
-                
-        longest = 0
-        for lnl in self.lnls:
-            if len(lnl.name) > longest:
-                longest = len(lnl.name)
-
-        print("\nLNL(s):")
-        for lnl in self.lnls:
-            if lnl.typ != "lnl":
-                raise RuntimeError("LNL node is not of type LNL")
-
-            prefix = lnl.name + " ---" + ("-" * (longest - len(lnl.name)))
-            for o in lnl.out:
-                print(f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}")
-                prefix = " " * (len(lnl.name) + 1) + "`--" + ("-" * (longest - len(lnl.name)))
 
 
 
