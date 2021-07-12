@@ -169,7 +169,7 @@ class System(object):
 
     def list_edges(self) -> List[Edge]:
         """Lists all edges of the system with its corresponding start and end 
-        states
+        nodes.
         """
         res = []
         for edge in self.edges:
@@ -226,7 +226,13 @@ class System(object):
             edge.t = theta[i]
 
         if mode=="HMM":
-            self._gen_A()
+            try:
+                self._gen_A()
+            except AttributeError:
+                self.A = np.zeros(shape=(len(self.state_list), 
+                                         len(self.state_list)))
+                self._gen_A()
+            
 
 
 
@@ -360,14 +366,11 @@ class System(object):
         the :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` 
         is a square matrix with size ``(# of states)``. The lower diagonal is 
         zero.
-        """
-        if not hasattr(self, "A"):
-            self.A = np.zeros(shape=(len(self.state_list), len(self.state_list)))
-        
+        """        
         for i,state in enumerate(self.state_list):
             self.set_state(state)
             for j in self._idx_dict[i]:
-                self.A[i,j] = self.trans_prob(self.state_list[j,:])
+                self.A[i,j] = self.trans_prob(self.state_list[j])
 
 
 
