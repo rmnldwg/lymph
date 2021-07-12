@@ -167,8 +167,14 @@ class BilateralSystem(object):
         self.trans_symmetric = trans_symmetric
         
         if mode == "HMM":
-            self.system["ipsi"]._gen_A()
-            self.system["contra"]._gen_A()
+            for side in ["ipsi", "contra"]:
+                try:
+                    self.system[side]._gen_A()
+                except AttributeError:
+                    n = len(self.system[side].state_list)
+                    self.system[side].A = np.zeros(shape=(n,n))
+                    self.system[side]._gen_A()
+
             
             
             
