@@ -3,7 +3,7 @@ import scipy as sp
 import scipy.stats
 import pandas as pd
 import warnings
-from typing import Union, Optional, List, Dict
+from typing import Union, Optional, List, Dict, Any
 
 from .node import Node
 from .edge import Edge
@@ -522,79 +522,75 @@ class System(object):
 
 
 
-    def _evolve(self, 
-                time_steps: int = 10,
-                time_prior: Optional[np.ndarray] = None) -> np.ndarray:
+    def _evolve(self, num_time_steps: int = 10) -> np.ndarray:
         """Evolve hidden Markov model based system over time steps. Compute 
-        either p(X) marginalized over t or p(X|t) in matrix form.
+        p(X|t) in matrix form.
         
         Args:
-            time_steps: Number of time-steps. Can be ignored if a time-prior is 
-                specified, in which case it has no effect.
-            time_prior: Probability distribution p(t) of a patient getting 
-                diagnosed after t time steps.
+            num_time_steps: Number of time-steps. 
         
         Returns:
-            If a time-prior p(t) is given, the involvement probability is 
-            marginalized to return p(X). If noen is provided, a matrix with the 
-            values p(X|t) is returned.
+            A matrix with the values p(X|t) for each time-step.
         
         :meta public:
-        """        
+        """
+        # All healthy state at beginning
         start = np.zeros(shape=len(self.state_list), dtype=float)
         start[0] = 1.
         
-        if time_prior is not None:
-            if ~np.isclose(np.sum(time_prior), 1.):
-                raise ValueError("Normalized time prior must be provided.")
-            
-            time_steps = len(time_prior)
-        
-        inv_prob = np.zeros(shape=(time_steps, len(self.state_list)), 
+        inv_prob = np.zeros(shape=(num_time_steps, len(self.state_list)), 
                             dtype=float)
         
-        for i in range(time_steps-1):
+        # loop through time-steps
+        for i in range(num_time_steps-1):
             inv_prob[i] = start
             start = start @ self.A
         
         inv_prob[-1] = start
         
-        if time_prior is None:
-            return inv_prob
-        else:
-            return time_prior @ inv_prob
+        return inv_prob
+    
+    
+    def _spread_probs_are_valid(self, theta: np.ndarray) -> bool:
+        """Check that the spread probability (rates) are all within limits.
+        """
+        if np.any(np.greater(0., theta)):
+            return False
+        if np.any(np.greater(theta, 1.)):
+            return False
+        
+        return True
 
 
-
-    def likelihood(self, 
-                   theta: np.ndarray, 
-                   t_stage: List[int] = [1,2,3,4], 
-                   time_prior_dict: dict = {}, 
-                   mode: str = "HMM") -> float:
-        """Computes the likelihood of a set of parameters, given the already 
-        stored data(set).
+    def marg_likelihood(
+        self, 
+        theta: np.ndarray, 
+        t_stages: List[int] = ["early", "late"], 
+        time_dists: Dict[Any, np.ndarray] = {}, 
+        mode: str = "HMM"
+    ) -> float:
+        """
+        Compute the likelihood of the (already stored) data, given the spread 
+        parameters, marginalized over time of diagnosis via time distributions.
 
         Args:
             theta: Set of parameters, consisting of the base probabilities 
                 :math:`b` (as many as the system has nodes) and the transition 
                 probabilities :math:`t` (as many as the system has edges).
 
-            t_stage: List of T-stages that should be included in the learning 
-                process. (default: ``[1,2,3,4]``)
+            t_stages: List of T-stages that should be included in the learning 
+                process.
 
-            time_prior_dict: Dictionary with keys of T-stages in ``t_stage`` and 
-                values of time priors for each of those T-stages.
+            time_dists: Distribution over the probability of diagnosis at 
+                different times :math:`t` given T-stage.
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
-                network. (default: ``"HMM"``)
+                network.
 
         Returns:
-            The log-likelihood of a parameter sample.
+            The log-likelihood of the data, given te spread parameters.
         """
-        # check if all parameters are within their limits
-        if np.any(np.greater(0., theta)):
-            return -np.inf
-        if np.any(np.greater(theta, 1.)):
+        if not self._spread_probs_are_valid(theta):
             return -np.inf
 
         self.set_theta(theta, mode=mode)
@@ -602,13 +598,13 @@ class System(object):
         # likelihood for the hidden Markov model
         if mode == "HMM":
             res = 0
-            for stage in t_stage:
-
-                marg_inv_prob = self._evolve(time_prior=time_prior_dict[stage])
-
-                p = marg_inv_prob @ self.B @ self.C_dict[stage]
-                res += self.f_dict[stage] @ np.log(p)
-
+            num_time_steps = len(time_dists[0])
+            state_probs = self._evolve(num_time_steps)
+            
+            for t in t_stages:
+                # marginalization using `time_dists`
+                p = time_dists[t] @ state_probs @ self.B @ self.C_dict[t]
+                res += self.f_dict[t] @ np.log(p)
 
         # likelihood for the Bayesian network
         elif mode == "BN":
@@ -625,95 +621,55 @@ class System(object):
         return res
 
 
-
-    # -------------------------- SPECIAL LIKELIHOOD -------------------------- #
-    def beta_likelihood(self, 
-                        theta, 
-                        beta, 
-                        t_stage=[1, 2, 3, 4], 
-                        time_prior_dict={}):
-        """Likelihood function for thermodynamic integration from the BN to the
-        HMM via the mixing parameter :math:`\\beta \\in [0,1]`.
-        
-        :meta private:
+    def time_likelihood(
+        self, 
+        theta: np.ndarray, 
+        t_stages: List[str] = ["early", "late"],
+        num_time_steps: int = 10
+    ) -> float:
         """
-        if np.any(np.greater(0., theta)):
-            return -np.inf, -np.inf
-        if np.any(np.greater(theta, 1.)):
-            return -np.inf, -np.inf
-
-        bn = self.likelihood(theta, mode="BN")
-        hmm = self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
-
-        res = beta * bn + (1-beta) * hmm
-        diff_q = bn - hmm
-        return res, diff_q
-
-
-
-    def binom_llh(self, p, t_stage=["late"], T_max=10):
-        """
-        :meta private:
-        """
-        if np.any(np.greater(0., p)) or np.any(np.greater(p, 1.)):
-            return -np.inf
-
-        t = np.asarray(range(1,T_max+1))
-        pt = lambda p : sp.stats.binom.pmf(t-1,T_max,p)
-        time_prior_dict = {}
-
-        for i, stage in enumerate(t_stage):
-            time_prior_dict[stage] = pt(p[i])
-
-        return self.likelihood(self.get_theta(), t_stage, time_prior_dict, mode="HMM")
-
-
-
-    def combined_likelihood(self, 
-                            theta: np.ndarray, 
-                            t_stage: List[str] = ["early", "late"],
-                            first_p: float = 0.3,
-                            T_max: int = 10) -> float:
-        """Compute likelihood when the parameters of all T-stage's time-priors 
-        (binomial distributions) except the first one are unknown.
+        Compute likelihood given the spread parameters and the time of diagnosis 
+        for each T-stage.
         
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
                 (as many as the system has :class:`Edge` instances) and the 
-                distributions's parameters (one less than the number of 
-                T-stages).
+                time of diagnosis for all T-stages.
                 
-            t_stage: keywords of T-stages that are present in the dictionary of 
+            t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
-                
-            first_p: Parameter passed to the Binomial distribution that forms 
-                the time-prior of the first T-stage.
-                
-            T_max: maximum number of time steps.
             
         Returns:
-            The combined likelihood of observing patients with different 
-            T-stages, given the spread probabilities as well as the parameters 
-            for the later (except the first) T-stage's binomial time prior.
+            The likelihood of the data, given the spread parameters as well as 
+            the diagnose time for each T-stage.
         """
-        if first_p < 0. or first_p > 1.:
-            raise ValueError("first time-prior's parameter must be between "
-                             "0 and 1")
-        if np.any(np.greater(0., theta)) or np.any(np.greater(theta, 1.)):
-            return -np.inf
-
-        add_params = len(t_stage) - 1
-        theta, ps = theta[:-add_params], theta[-add_params:]
-        t = np.arange(T_max+1)
-        pt = lambda p : sp.stats.binom.pmf(t,T_max,p)
-
-        time_prior_dict = {}
-        time_prior_dict[t_stage[0]] = pt(first_p)
-        for i,p in enumerate(ps):
-            time_prior_dict[t_stage[1+i]] = pt(p)
+        len_spread_params = len(theta) - len(t_stages)
+        if len_spread_params != len(self.get_theta()):
+            msg = ("Length of provided theta is wrong.")
+            raise ValueError(msg)
         
-        return self.likelihood(theta, t_stage, time_prior_dict, mode="HMM")
-    # ----------------------------- SPECIAL DONE ----------------------------- #
+        # splitting theta into spread parameters and...
+        spread_params = theta[:len_spread_params]
+        if not self._spread_probs_are_valid(spread_params):
+            return -np.inf
+        
+        self.set_theta(spread_params)
+        
+        # ...diagnose times for each T-stage
+        times = np.around(theta[len_spread_params:]).astype(int)
+        if np.any(np.greater(0, times)):
+            return -np.inf
+        if np.any(np.less(num_time_steps, times)):
+            return -np.inf
+        
+        res = 0.
+        state_probs = self._evolve(num_time_steps)
+
+        for i,t in enumerate(t_stages):
+            p = state_probs[times[i]] @ self.B @ self.C_dict[t]
+            res += self.f_dict[t] @ np.log(p)
+        
+        return res
     
     
     # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
