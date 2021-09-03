@@ -1,12 +1,26 @@
 import pytest
 import numpy as np
+import scipy as sp
+import scipy.stats
 import pandas as pd
 import lymph
 
 
 @pytest.fixture
-def t_stage():
-    return [1,9]
+def t_stages():
+    return ["early", "late"]
+
+@pytest.fixture(scope="session", params=[10])
+def early_time_dist(request):
+    num_time_steps = request.param
+    t = np.arange(num_time_steps + 1)
+    return sp.stats.binom.pmf(t, num_time_steps, 0.3)
+
+@pytest.fixture(scope="session", params=[10])
+def late_time_dist(request):
+    num_time_steps = request.param
+    t = np.arange(num_time_steps + 1)
+    return sp.stats.binom.pmf(t, num_time_steps, 0.7)
 
 @pytest.fixture
 def spsn_dict():
@@ -14,27 +28,27 @@ def spsn_dict():
 
 @pytest.fixture
 def expected_C_dict():
-    return {1: np.array([[0, 0, 0, 1, 1],
-                         [0, 0, 0, 0, 1],
-                         [0, 0, 0, 0, 0],
-                         [0, 0, 1, 0, 0],
-                         [0, 0, 0, 0, 0],
-                         [0, 1, 0, 0, 0],
-                         [0, 0, 0, 0, 0],
-                         [1, 0, 1, 0, 0]]),
-            9: np.array([[0, 0, 1],
-                         [0, 0, 0],
-                         [0, 1, 1],
-                         [0, 0, 0],
-                         [0, 0, 0],
-                         [0, 0, 0],
-                         [1, 0, 0],
-                         [1, 0, 0]])}
+    return {"early": np.array([[0, 0, 0, 1, 1],
+                               [0, 0, 0, 0, 1],
+                               [0, 0, 0, 0, 0],
+                               [0, 0, 1, 0, 0],
+                               [0, 0, 0, 0, 0],
+                               [0, 1, 0, 0, 0],
+                               [0, 0, 0, 0, 0],
+                               [1, 0, 1, 0, 0]]),
+            "late" : np.array([[0, 0, 1],
+                               [0, 0, 0],
+                               [0, 1, 1],
+                               [0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0],
+                               [1, 0, 0],
+                               [1, 0, 0]])}
     
 @pytest.fixture
 def expected_f_dict():
-    return {1: np.array([1, 1, 1, 1, 1]),
-            9: np.array([1, 1, 2])}
+    return {"early": np.array([1, 1, 1, 1, 1]),
+            "late" : np.array([1, 1, 2])}
     
 @pytest.fixture
 def data():
@@ -49,8 +63,8 @@ def sys():
     return lymph.System(graph=graph)
 
 @pytest.fixture
-def loaded_sys(sys, data, t_stage, spsn_dict):
-    sys.load_data(data, t_stage=t_stage, spsn_dict=spsn_dict)
+def loaded_sys(sys, data, t_stages, spsn_dict):
+    sys.load_data(data, t_stages=t_stages, spsn_dict=spsn_dict)
     return sys
 
 
@@ -73,37 +87,73 @@ def test_B_matrix(sys, spsn_dict):
     assert np.all(np.isclose(row_sums, 1.))
     
     
-def test_load_data(sys, data, t_stage, spsn_dict, 
+def test_load_data(sys, data, t_stages, spsn_dict, 
                    expected_C_dict, expected_f_dict):
-    sys.load_data(data, t_stage=t_stage, spsn_dict=spsn_dict, mode="HMM")
+    sys.load_data(data, t_stages=t_stages, spsn_dict=spsn_dict, mode="HMM")
     
-    for t in t_stage:
+    for t in t_stages:
         assert np.all(np.equal(sys.C_dict[t], expected_C_dict[t]))
         assert np.all(np.equal(sys.f_dict[t], expected_f_dict[t]))
 
 
-def test_likelihood(loaded_sys, t_stage):
-    theta = np.random.uniform(size=(len(loaded_sys.edges)))
-    llh = loaded_sys.likelihood(theta, t_stage=t_stage, 
-                                time_prior_dict={1: np.ones(shape=(5)) / 5.,
-                                                 9: np.ones(shape=(9)) / 9.})
+def test_marg_likelihood(
+    loaded_sys, 
+    t_stages,
+    early_time_dist,
+    late_time_dist
+):
+    theta = np.random.uniform(size=loaded_sys.get_theta().shape)
+    llh = loaded_sys.marg_likelihood(
+        theta, t_stages=t_stages, time_dists={"early": early_time_dist,
+                                              "late" : late_time_dist}
+    )
     assert llh < 0.
     
     theta = np.random.uniform(size=(len(loaded_sys.edges))) + 1.
-    llh = loaded_sys.likelihood(theta, t_stage=t_stage, 
-                                time_prior_dict={1: np.ones(shape=(5)) / 5.,
-                                                 9: np.ones(shape=(9)) / 9.})
+    llh = loaded_sys.marg_likelihood(
+        theta, t_stages=t_stages, time_dists={"early": early_time_dist,
+                                              "late" : late_time_dist}
+    )
     assert np.isinf(llh)
     
-
-def test_combined_likelihood(loaded_sys, t_stage):
-    theta = np.random.uniform(size=(len(loaded_sys.edges)+1))
-    c_llh = loaded_sys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
-    assert c_llh < 0.
+    theta = np.random.uniform(size=len(loaded_sys.get_theta()) + 3)
+    with pytest.raises(ValueError):
+        llh = loaded_sys.marg_likelihood(
+            theta, t_stages=t_stages, time_dists={"early": early_time_dist,
+                                                  "late" : late_time_dist}
+        )
     
-    theta = np.random.uniform(size=(len(loaded_sys.edges)+1)) + 1.
-    c_llh = loaded_sys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
-    assert np.isinf(c_llh)
+    
+
+def test_time_likelihood(loaded_sys, t_stages):
+    spread_params = np.random.uniform(size=loaded_sys.get_theta().shape)
+    times = np.array([0.7, 3.8])
+    theta = np.concatenate([spread_params, times])
+    llh_1 = loaded_sys.time_likelihood(
+        theta, t_stages=t_stages, num_time_steps=10
+    )
+    assert llh_1 < 0.
+    
+    times = np.array([0.8, 3.85])
+    theta = np.concatenate([spread_params, times])
+    llh_2 = loaded_sys.time_likelihood(
+        theta, t_stages=t_stages, num_time_steps=10
+    )
+    assert np.isclose(llh_1, llh_2)
+    
+    times = np.array([0.8, 3.4])
+    theta = np.concatenate([spread_params, times])
+    llh_3 = loaded_sys.time_likelihood(
+        theta, t_stages=t_stages, num_time_steps=10
+    )
+    assert ~np.isclose(llh_1, llh_3)
+    
+    times = np.array([0.8, 10.6])
+    theta = np.concatenate([spread_params, times])
+    llh_4 = loaded_sys.time_likelihood(
+        theta, t_stages=t_stages, num_time_steps=10
+    )
+    assert np.isinf(llh_4)
     
     
 @pytest.mark.parametrize("inv, diagnoses, mode", [

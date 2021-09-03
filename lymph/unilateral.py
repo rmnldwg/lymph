@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.linalg import matrix_power as mat_pow
 import scipy as sp 
 import scipy.stats
 import pandas as pd
@@ -56,7 +57,6 @@ def toStr(n: int,
         return pad + result[::-1]
 
 
-        
 
 class System(object):
     """Class that models metastatic progression in a lymphatic system by 
@@ -95,7 +95,6 @@ class System(object):
         self._gen_mask()
 
 
-
     def __str__(self):
         """Print info about the structure and parameters of the graph.
         """
@@ -127,7 +126,6 @@ class System(object):
         return string
 
 
-
     def find_node(self, name: str) -> Union[Node, None]:
         """Finds and returns a node with name ``name``.
         """
@@ -136,7 +134,6 @@ class System(object):
                 return node
         
         return None
-
 
 
     def find_edge(self, startname: str, endname: str) -> Union[Edge, None]:
@@ -152,7 +149,6 @@ class System(object):
         return None
 
 
-
     def get_graph(self) -> dict:
         """Lists the graph as it was provided when the system was created.
         """
@@ -166,7 +162,6 @@ class System(object):
         return dict(res)
 
 
-
     def list_edges(self) -> List[Edge]:
         """Lists all edges of the system with its corresponding start and end 
         nodes.
@@ -178,7 +173,6 @@ class System(object):
         return res
 
 
-
     def set_state(self, newstate: np.ndarray):
         """Sets the state of the system to ``newstate``.
         """
@@ -187,7 +181,6 @@ class System(object):
         
         for i, node in enumerate(self.lnls):  # only set lnl's states
             node.state = int(newstate[i])
-
 
 
     def get_theta(self) -> np.ndarray:
@@ -234,8 +227,6 @@ class System(object):
                 self._gen_A()
             
 
-
-
     def trans_prob(self, 
                    newstate: List[int], 
                    log: bool = False, 
@@ -276,7 +267,6 @@ class System(object):
         return res
 
 
-
     def obs_prob(self, 
                  diagnoses_dict: Dict[str, List[int]], 
                  log: bool = False) -> float:
@@ -315,7 +305,6 @@ class System(object):
         return res
 
 
-
     def _gen_state_list(self):
         """Generates the list of (hidden) states.
         """                
@@ -329,7 +318,6 @@ class System(object):
             tmp = toStr(i, 2, rev=False, length=len(self.lnls))
             for j in range(len(self.lnls)):
                 self.state_list[i,j] = int(tmp[j])
-
 
 
     def _gen_obs_list(self):
@@ -346,7 +334,6 @@ class System(object):
                     self.obs_list[i,(j*n_obs)+k] = int(tmp[k*len(self.lnls)+j])
 
 
-
     def _gen_mask(self):
         """Generates a dictionary that contains for each row of 
         :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
@@ -360,7 +347,6 @@ class System(object):
                     self._idx_dict[i].append(j)
 
 
-
     def _gen_A(self):
         """Generates the transition matrix :math:`\\mathbf{A}`, which contains 
         the :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` 
@@ -371,7 +357,6 @@ class System(object):
             self.set_state(state)
             for j in self._idx_dict[i]:
                 self.A[i,j] = self.trans_prob(self.state_list[j])
-
 
 
     def set_modalities(self, 
@@ -390,7 +375,6 @@ class System(object):
         self._gen_B()
 
 
-
     def _gen_B(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains 
         the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
@@ -406,7 +390,6 @@ class System(object):
                 for k,modality in enumerate(self._modality_dict):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
                 self.B[i,j] = self.obs_prob(diagnoses_dict, log=False)
-
 
 
     def _gen_C(self,
@@ -456,15 +439,17 @@ class System(object):
         return C, np.ones(shape=(len(table)), dtype=int)
 
 
-
-    def load_data(self,
-                  data: pd.DataFrame, 
-                  t_stage: List[int] = [1,2,3,4], 
-                  spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
-                  mode: str = "HMM",
-                  gen_C_kwargs: dict = {'delete_ones': True, 
-                                        'aggregate_duplicates': True}):
-        """Transform tabular patient data (:class:`pd.DataFrame`) into internal 
+    def load_data(
+        self,
+        data: pd.DataFrame, 
+        t_stages: List[int] = [1,2,3,4], 
+        spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
+        mode: str = "HMM",
+        gen_C_kwargs: dict = {'delete_ones': True, 
+                              'aggregate_duplicates': True}
+    ):
+        """
+        Transform tabular patient data (:class:`pd.DataFrame`) into internal 
         representation, consisting of one or several matrices 
         :math:`\\mathbf{C}_{T}` that can marginalize over possible diagnoses.
 
@@ -476,7 +461,7 @@ class System(object):
                 modality, the names of the diagnosed lymph node levels are 
                 given as the columns.
 
-            t_stage: List of T-stages that should be included in the learning 
+            t_stages: List of T-stages that should be included in the learning 
                 process.
 
             spsn_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
@@ -497,7 +482,7 @@ class System(object):
             C_dict = {}
             f_dict = {}
 
-            for stage in t_stage:
+            for stage in t_stages:
 
                 table = data.loc[data[('Info', 'T-stage')] == stage,
                                  self._modality_dict.keys()].values
@@ -519,7 +504,6 @@ class System(object):
             
             self.C = C.copy()
             self.f = f.copy()
-
 
 
     def _evolve(self, num_time_steps: int = 10) -> np.ndarray:
@@ -549,11 +533,14 @@ class System(object):
         inv_prob[-1] = start
         
         return inv_prob
-    
-    
+
+
     def _spread_probs_are_valid(self, theta: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
+        if theta.shape != self.get_theta().shape:
+            msg = ("Shape of provided spread parameters does not match network")
+            raise ValueError(msg)
         if np.any(np.greater(0., theta)):
             return False
         if np.any(np.greater(theta, 1.)):
@@ -598,7 +585,7 @@ class System(object):
         # likelihood for the hidden Markov model
         if mode == "HMM":
             res = 0
-            num_time_steps = len(time_dists[0])
+            num_time_steps = len(time_dists[t_stages[0]])
             state_probs = self._evolve(num_time_steps)
             
             for t in t_stages:
@@ -643,17 +630,11 @@ class System(object):
             The likelihood of the data, given the spread parameters as well as 
             the diagnose time for each T-stage.
         """
-        len_spread_params = len(theta) - len(t_stages)
-        if len_spread_params != len(self.get_theta()):
-            msg = ("Length of provided theta is wrong.")
-            raise ValueError(msg)
-        
         # splitting theta into spread parameters and...
+        len_spread_params = len(theta) - len(t_stages)
         spread_params = theta[:len_spread_params]
         if not self._spread_probs_are_valid(spread_params):
             return -np.inf
-        
-        self.set_theta(spread_params)
         
         # ...diagnose times for each T-stage
         times = np.around(theta[len_spread_params:]).astype(int)
@@ -662,73 +643,30 @@ class System(object):
         if np.any(np.less(num_time_steps, times)):
             return -np.inf
         
+        self.set_theta(spread_params)
+        
         res = 0.
-        state_probs = self._evolve(num_time_steps)
+        # All healthy state at beginning
+        start = np.zeros(shape=len(self.state_list), dtype=float)
+        start[0] = 1.
 
         for i,t in enumerate(t_stages):
-            p = state_probs[times[i]] @ self.B @ self.C_dict[t]
+            p = start @ mat_pow(self.A, times[i]) @ self.B @ self.C_dict[t]
             res += self.f_dict[t] @ np.log(p)
         
         return res
+
     
-    
-    # -------------------- UNPARAMETRIZED SAMPLING -------------------- #
-    def unparametrized_epoch(self, 
-                             t_stage: List[int] = [1,2,3,4], 
-                             time_prior_dict: dict = {}, 
-                             T: float = 1., 
-                             scale: float = 1e-2) -> float:
-        """An attempt at unparametrized sampling, where the algorithm samples
-        A from the full solution space of row-stochastic matrices with zeros
-        where transitions are forbidden.
-
-        Args:
-            t_stage: List of T-stages that should be included in the learning 
-                process. (default: ``[1,2,3,4]``)
-
-            time_prior_dict: Dictionary with keys of T-stages in t_stage and 
-                values of time priors for each of those T-stages.
-
-            T: Temperature of the epoch. Can be reduced from a starting value 
-                down to almost zero for an annealing approach to sampling.
-                (default: ``1.``)
-
-        Returns:
-            The log-likelihood of the epoch.
-        
-        :meta private:
+    def risk(
+        self,
+        theta: Optional[np.ndarray] = None,
+        inv: Optional[np.ndarray] = None,
+        diagnoses: Dict[str, np.ndarray] = {},
+        time_dist: Optional[np.ndarray] = None,
+        mode: str = "HMM"
+    ) -> Union[float, np.ndarray]:
         """
-        likely = self.likelihood(t_stage, time_prior_dict)
-        
-        for i in np.random.permutation(len(self.lnls) -1):
-            # Generate Logit-Normal sample around current position
-            x_old = self.A[i,self._idx_dict[i]]
-            mu = [np.log(x_old[k]) - np.log(x_old[-1]) for k in range(len(x_old)-1)]
-            sample = np.random.multivariate_normal(mu, scale*np.eye(len(mu)))
-            numerator = 1 + np.sum(np.exp(sample))
-            x_new = np.ones_like(x_old)
-            x_new[:len(x_old)-1] = np.exp(sample)
-            x_new /= numerator
-
-            self.A[i,self._idx_dict[i]] = x_new
-            prop_likely = self.likelihood(t_stage, time_prior_dict)
-
-            if np.exp(- (likely - prop_likely) / T) >= np.random.uniform():
-                likely = prop_likely
-            else:
-                self.A[i,self._idx_dict[i]] = x_old
-
-        return likely
-    # -------------------- UNPARAMETRIZED END -------------------- #
-    
-    
-    def risk(self,
-             theta: Optional[np.ndarray] = None,
-             inv: Optional[np.ndarray] = None,
-             diagnoses: Dict[str, np.ndarray] = {},
-             time_prior: Optional[np.ndarray] = None,
-             mode: str = "HMM") -> Union[float, np.ndarray]:
-        """Compute risk(s) of involvement given a specific (but potentially 
+        Compute risk(s) of involvement given a specific (but potentially 
         incomplete) diagnosis.
         
         Args:
@@ -745,11 +683,11 @@ class System(object):
                 out available modalities will assume a completely missing 
                 diagnosis.
                 
-            time_prior: Prior distribution over time. Must sum to 1 and needs 
+            time_dist: Prior distribution over time. Must sum to 1 and needs 
                 to be given for ``mode = "HMM"``.
                 
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires 
-                the ``time_prior``) or to ``"BN"`` for the Bayesian network 
+                the ``time_dist``) or to ``"BN"`` for the Bayesian network 
                 version.
                 
         Returns:
@@ -772,7 +710,8 @@ class System(object):
         # vector of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            pX = self._evolve(time_prior=time_prior)
+            state_probs = self._evolve(len(time_dist))
+            pX = time_dist @ state_probs
                 
         # BN version
         elif mode == "BN":

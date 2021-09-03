@@ -317,8 +317,7 @@ class BilateralSystem(object):
                     # on both sides
                     np.sum(
                         self.system["ipsi"].C_dict[stage] 
-                        * (pZZ 
-                           @ self.system["contra"].C_dict[stage]),
+                        * (pZZ @ self.system["contra"].C_dict[stage]),
                         axis=0
                     )
                 )
