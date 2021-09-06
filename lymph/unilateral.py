@@ -92,7 +92,6 @@ class System(object):
                                        self.find_node(value)))
 
         self._gen_state_list()
-        self._gen_mask()
 
 
     def __str__(self):
@@ -171,10 +170,19 @@ class System(object):
             res.append((edge.start.name, edge.end.name, edge.t))
             
         return res
+    
+    
+    @property
+    def state(self):
+        """
+        Return the currently set state of the system.
+        """
+        return np.array([lnl.state for lnl in self.lnls], dtype=bool)
 
-
-    def set_state(self, newstate: np.ndarray):
-        """Sets the state of the system to ``newstate``.
+    @state.setter
+    def state(self, newstate: np.ndarray):
+        """
+        Sets the state of the system to ``newstate``.
         """
         if len(newstate) != len(self.lnls):
             raise ValueError("length of newstate must match # of LNLs")
@@ -183,48 +191,34 @@ class System(object):
             node.state = int(newstate[i])
 
 
-    def get_theta(self) -> np.ndarray:
-        """Return the spread probabilities of the :class:`Edge` instances in 
+    @property
+    def spread_probs(self) -> np.ndarray:
+        """
+        Return the spread probabilities of the :class:`Edge` instances in 
         the network in the order they appear in the graph.
         """
-        theta = np.zeros(shape=(len(self.edges)))
-        for i, edge in enumerate(self.edges):
-            theta[i] = edge.t
+        return np.array([edge.t for edge in self.edges], dtype=float)
 
-        return theta
-
-
-    def set_theta(self, 
-                  theta: np.ndarray, 
-                  mode: str = "HMM"):
-        """Set the spread probabilities of the :class:`Edge` instances in the 
-        the network int he order they were created from the graph.
-
-        Args:
-            theta: The new parameters that should be fed into the system. They 
-                all represent the transition probabilities along the edges of 
-                the network and will be set in the order they appear in the 
-                graph dictionary. This includes the spread probabilities from 
-                the primary tumour to the LNLs, as well as the spread among the 
-                LNLs.
-
-            mode: For mode "BN" the transition matrix :math:`\\mathbf{A}` is 
-                not needed and its computation is skipped.
+    @spread_probs.setter
+    def spread_probs(self, new_spread_probs: np.ndarray):
         """
-        if len(theta) != len(self.edges):
-            raise ValueError(f"# of parameters ({len(theta)}) must match # of "
-                             f"edges ({len(self.edges)})")
+        Set the spread probabilities of the :class:`Edge` instances in the 
+        the network in the order they were created from the graph.
+        """
+        if len(new_spread_probs) != len(self.edges):
+            msg = (f"# of parameters ({len(new_spread_probs)}) must "
+                   f"match # of edges ({len(self.edges)})")
+            raise ValueError(msg)
         
         for i, edge in enumerate(self.edges):
-            edge.t = theta[i]
+            edge.t = new_spread_probs[i]
 
-        if mode=="HMM":
-            try:
-                self._gen_A()
-            except AttributeError:
-                self.A = np.zeros(shape=(len(self.state_list), 
-                                         len(self.state_list)))
-                self._gen_A()
+        try:
+            self._gen_A()
+        except AttributeError:
+            self.A = np.zeros(shape=(len(self.state_list), 
+                                     len(self.state_list)))
+            self._gen_A()
             
 
     def trans_prob(self, 
@@ -262,7 +256,7 @@ class System(object):
                 res += lnl.trans_prob(log=log)[newstate[i]]
 
         if acquire:
-            self.set_state(newstate)
+            self.state = newstate
 
         return res
 
@@ -291,22 +285,23 @@ class System(object):
             
         for modality, diagnoses in diagnoses_dict.items():
             if len(diagnoses) != len(self.lnls):
-                raise ValueError("length of observations must match @ of LNLs")
+                raise ValueError("length of observations must match # of LNLs")
 
             for i, lnl in enumerate(self.lnls):
                 if not log:
                     res *= lnl.obs_prob(obs=diagnoses[i], 
-                                        obstable=self._modality_dict[modality], 
+                                        obstable=self._modality_tables[modality], 
                                         log=log)
                 else:
                     res += lnl.obs_prob(obs=diagnoses[i],
-                                        obstable=self._modality_dict[modality],
+                                        obstable=self._modality_tables[modality],
                                         log=log)
         return res
 
 
     def _gen_state_list(self):
-        """Generates the list of (hidden) states.
+        """
+        Generates the list of (hidden) states.
         """                
         # every LNL can be either healthy (state=0) or involved (state=1). 
         # Hence, the number of different possible states is 2 to the power of 
@@ -321,9 +316,10 @@ class System(object):
 
 
     def _gen_obs_list(self):
-        """Generates the list of possible observations.
         """
-        n_obs = len(self._modality_dict)
+        Generates the list of possible observations.
+        """
+        n_obs = len(self._modality_tables)
         
         self.obs_list = np.zeros(shape=(2**(n_obs * len(self.lnls)), 
                                         n_obs * len(self.lnls)), dtype=int)
@@ -335,7 +331,8 @@ class System(object):
 
 
     def _gen_mask(self):
-        """Generates a dictionary that contains for each row of 
+        """
+        Generates a dictionary that contains for each row of 
         :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
         """
         self._idx_dict = {}
@@ -348,28 +345,63 @@ class System(object):
 
 
     def _gen_A(self):
-        """Generates the transition matrix :math:`\\mathbf{A}`, which contains 
+        """
+        Generates the transition matrix :math:`\\mathbf{A}`, which contains 
         the :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` 
         is a square matrix with size ``(# of states)``. The lower diagonal is 
         zero.
-        """        
+        """
+        if not hasattr(self, "_idx_dict"):
+            self._gen_mask()
+        
         for i,state in enumerate(self.state_list):
-            self.set_state(state)
+            self.state = state
             for j in self._idx_dict[i]:
                 self.A[i,j] = self.trans_prob(self.state_list[j])
 
+    
+    @property
+    def modalities(self):
+        """
+        Return specificity & sensitivity stored in this :class:`System`.
+        """
+        try:
+            modality_spsn = {}
+            for mod, table in self._modality_tables.items():
+                modality_spsn[mod] = [table[0,0], table[1,1]]
+            return modality_spsn
+        
+        except AttributeError:
+            msg = ("No modality defined yet with specificity & sensitivity.")
+            warnings.warn(msg)
+            return {}
 
-    def set_modalities(self, 
-                       spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}):
-        """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
+    
+    @modalities.setter
+    def modalities(self, modality_spsn: Dict[Any, List[float]]):
+        """
+        Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
         diagnostic modalities, compute the system's observation matrix 
         :math:`\\mathbf{B}`.
         """
-        self._modality_dict = {}
-        for modality, spsn in spsn_dict.items():
+        self._modality_tables = {}
+        for mod, spsn in modality_spsn.items():
+            if not isinstance(mod, str):
+                msg = ("Modality names must be strings.")
+                raise TypeError(msg)
+            
+            has_len_2 = len(spsn) == 2
+            is_above_lb = np.all(np.greater(spsn, 0.5))
+            is_below_ub = np.all(np.less(spsn, 1.))
+            if not has_len_2 or not is_above_lb or not is_below_ub:
+                msg = ("For each modality provide a list of two decimals "
+                       "between 0.5 and 1.0 as specificity & sensitivity "
+                       "respectively.")
+                raise ValueError(msg)
+            
             sp, sn = spsn
-            self._modality_dict[modality] = np.array([[sp     , 1. - sn],
-                                                      [1. - sp, sn     ]])
+            self._modality_tables[mod] = np.array([[sp     , 1. - sn],
+                                                   [1. - sp, sn     ]])
             
         self._gen_obs_list()
         self._gen_B()
@@ -384,10 +416,10 @@ class System(object):
         self.B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
         
         for i,state in enumerate(self.state_list):
-            self.set_state(state)
+            self.state = state
             for j,obs in enumerate(self.obs_list):
                 diagnoses_dict = {}
-                for k,modality in enumerate(self._modality_dict):
+                for k,modality in enumerate(self._modality_tables):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
                 self.B[i,j] = self.obs_prob(diagnoses_dict, log=False)
 
@@ -443,7 +475,7 @@ class System(object):
         self,
         data: pd.DataFrame, 
         t_stages: List[int] = [1,2,3,4], 
-        spsn_dict: Dict[str, List[float]] = {"path": [1., 1.]}, 
+        modality_spsn: Dict[str, List[float]] = {"path": [1., 1.]}, 
         mode: str = "HMM",
         gen_C_kwargs: dict = {'delete_ones': True, 
                               'aggregate_duplicates': True}
@@ -464,7 +496,7 @@ class System(object):
             t_stages: List of T-stages that should be included in the learning 
                 process.
 
-            spsn_dict: Dictionary of specificity :math:`s_P` and :math:`s_N` 
+            modality_spsn: Dictionary of specificity :math:`s_P` and :math:`s_N` 
                 (in that order) for each observational/diagnostic modality.
 
             mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
@@ -475,7 +507,7 @@ class System(object):
                 should be set to one, resulting in a smaller :math:`\\mathbf{C}` 
                 matrix and an additional count vector :math:`\\mathbf{f}`.
         """
-        self.set_modalities(spsn_dict=spsn_dict)
+        self.modalities = modality_spsn
         
         # For the Hidden Markov Model
         if mode=="HMM":
@@ -485,7 +517,7 @@ class System(object):
             for stage in t_stages:
 
                 table = data.loc[data[('Info', 'T-stage')] == stage,
-                                 self._modality_dict.keys()].values
+                                 self._modality_tables.keys()].values
                 C, f = self._gen_C(table, **gen_C_kwargs)
                     
                 C_dict[stage] = C.copy()
@@ -499,51 +531,73 @@ class System(object):
             self.C = np.array([], dtype=int)
             self.f = np.array([], dtype=int)
 
-            table = data[self._modality_dict.keys()].values
+            table = data[self._modality_tables.keys()].values
             C, f = self._gen_C(table, **gen_C_kwargs)
             
             self.C = C.copy()
             self.f = f.copy()
 
 
-    def _evolve(self, num_time_steps: int = 10) -> np.ndarray:
+    def _evolve(
+        self, t_first: int = 0, t_last: Optional[int] = None
+    ) -> np.ndarray:
         """Evolve hidden Markov model based system over time steps. Compute 
-        p(X|t) in matrix form.
+        :math:`p(S \mid t)` where :math:`S` is a distinct state and :math:`t` 
+        is the time.
         
         Args:
-            num_time_steps: Number of time-steps. 
+            t_first: First time-step that should be in the list of returned 
+                involvement probabilities.
+            
+            t_last: Last time step to consider. This function computes 
+                involvement probabilities for all :math:`t` in between `t_frist` 
+                and `t_last`. If `t_first == t_last`, "math:`p(S \mid t)` is 
+                computed only at that time.
         
         Returns:
-            A matrix with the values p(X|t) for each time-step.
+            A matrix with the values :math:`p(S \mid t)` for each time-step.
         
         :meta public:
         """
         # All healthy state at beginning
-        start = np.zeros(shape=len(self.state_list), dtype=float)
-        start[0] = 1.
+        start_state = np.zeros(shape=len(self.state_list), dtype=float)
+        start_state[0] = 1.
         
-        inv_prob = np.zeros(shape=(num_time_steps, len(self.state_list)), 
-                            dtype=float)
+        # compute involvement at first time-step
+        state = start_state @ mat_pow(self.A, t_first)
         
-        # loop through time-steps
-        for i in range(num_time_steps-1):
-            inv_prob[i] = start
-            start = start @ self.A
+        if t_last is None:
+            return state
         
-        inv_prob[-1] = start
+        len_time_range = t_last - t_first
+        if len_time_range < 0:
+            msg = ("Starting time must be smaller than ending time.")
+            raise ValueError(msg)
         
-        return inv_prob
+        state_probs = np.zeros(
+            shape=(len_time_range + 1, len(self.state_list)), 
+            dtype=float
+        )
+        
+        # compute subsequent time-steps, effectively incrementing time until end
+        for i in range(len_time_range):
+            state_probs[i] = state
+            state = state @ self.A
+        
+        state_probs[-1] = state
+        
+        return state_probs
 
 
-    def _spread_probs_are_valid(self, theta: np.ndarray) -> bool:
+    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
-        if theta.shape != self.get_theta().shape:
+        if new_spread_probs.shape != self.spread_probs.shape:
             msg = ("Shape of provided spread parameters does not match network")
             raise ValueError(msg)
-        if np.any(np.greater(0., theta)):
+        if np.any(np.greater(0., new_spread_probs)):
             return False
-        if np.any(np.greater(theta, 1.)):
+        if np.any(np.greater(new_spread_probs, 1.)):
             return False
         
         return True
@@ -552,7 +606,7 @@ class System(object):
     def marg_likelihood(
         self, 
         theta: np.ndarray, 
-        t_stages: List[int] = ["early", "late"], 
+        t_stages: List[Any] = ["early", "late"], 
         time_dists: Dict[Any, np.ndarray] = {}, 
         mode: str = "HMM"
     ) -> float:
@@ -580,13 +634,13 @@ class System(object):
         if not self._spread_probs_are_valid(theta):
             return -np.inf
 
-        self.set_theta(theta, mode=mode)
+        self.spread_probs = theta
 
         # likelihood for the hidden Markov model
         if mode == "HMM":
             res = 0
-            num_time_steps = len(time_dists[t_stages[0]])
-            state_probs = self._evolve(num_time_steps)
+            num_time_points = len(time_dists[t_stages[0]])
+            state_probs = self._evolve(t_last=num_time_points-1)
             
             for t in t_stages:
                 # marginalization using `time_dists`
@@ -598,7 +652,7 @@ class System(object):
             a = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.set_state(state)
+                self.state = state
                 for node in self.lnls:
                     a[i] *= node.bn_prob()
 
@@ -612,7 +666,7 @@ class System(object):
         self, 
         theta: np.ndarray, 
         t_stages: List[str] = ["early", "late"],
-        num_time_steps: int = 10
+        max_t: int = 10
     ) -> float:
         """
         Compute likelihood given the spread parameters and the time of diagnosis 
@@ -626,24 +680,26 @@ class System(object):
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
             
+            max_t: Largest accepted time-point.
+            
         Returns:
             The likelihood of the data, given the spread parameters as well as 
             the diagnose time for each T-stage.
         """
         # splitting theta into spread parameters and...
-        len_spread_params = len(theta) - len(t_stages)
-        spread_params = theta[:len_spread_params]
-        if not self._spread_probs_are_valid(spread_params):
+        len_spread_probs = len(theta) - len(t_stages)
+        spread_probs = theta[:len_spread_probs]
+        if not self._spread_probs_are_valid(spread_probs):
             return -np.inf
         
         # ...diagnose times for each T-stage
-        times = np.around(theta[len_spread_params:]).astype(int)
+        times = np.around(theta[len_spread_probs:]).astype(int)
         if np.any(np.greater(0, times)):
             return -np.inf
-        if np.any(np.less(num_time_steps, times)):
+        if np.any(np.less(max_t, times)):
             return -np.inf
         
-        self.set_theta(spread_params)
+        self.spread_probs = spread_probs
         
         res = 0.
         # All healthy state at beginning
@@ -651,7 +707,8 @@ class System(object):
         start[0] = 1.
 
         for i,t in enumerate(t_stages):
-            p = start @ mat_pow(self.A, times[i]) @ self.B @ self.C_dict[t]
+            state_probs = self._evolve(t_first=times[i])
+            p = state_probs @ self.B @ self.C_dict[t]
             res += self.f_dict[t] @ np.log(p)
         
         return res
@@ -659,7 +716,7 @@ class System(object):
     
     def risk(
         self,
-        theta: Optional[np.ndarray] = None,
+        spread_probs: Optional[np.ndarray] = None,
         inv: Optional[np.ndarray] = None,
         diagnoses: Dict[str, np.ndarray] = {},
         time_dist: Optional[np.ndarray] = None,
@@ -670,8 +727,8 @@ class System(object):
         incomplete) diagnosis.
         
         Args:
-            theta: Set of new spread parameters. If not given (``None``), the 
-                currently set parameters will be used.
+            spread_probs: Set of new spread parameters. If not given (``None``),
+                the currently set parameters will be used.
                 
             inv: Specific hidden involvement one is interested in. If only parts 
                 of the state are of interest, the remainder can be masked with 
@@ -694,14 +751,14 @@ class System(object):
             A single probability value if ``inv`` is specified and an array 
             with probabilities for all possible hidden states otherwise.
         """
-        # assign theta to system or use the currently set one
-        if theta is not None:
-            self.set_theta(theta, mode=mode)
+        # assign spread_probs to system or use the currently set one
+        if spread_probs is not None:
+            self.spread_probs = spread_probs
             
         # create one large diagnose vector from the individual modalitie's 
         # diagnoses
         obs = np.array([])
-        for mod in self._modality_dict:
+        for mod in self._modality_tables:
             if mod in diagnoses:
                 obs = np.append(obs, diagnoses[mod])
             else:
@@ -710,14 +767,15 @@ class System(object):
         # vector of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            state_probs = self._evolve(len(time_dist))
+            num_time_points = len(time_dist)
+            state_probs = self._evolve(t_last=num_time_points-1)
             pX = time_dist @ state_probs
                 
         # BN version
         elif mode == "BN":
             pX = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
-                self.set_state(state)
+                self.state = state
                 for node in self.lnls:
                     pX[i] *= node.bn_prob()
         

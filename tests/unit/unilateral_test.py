@@ -23,7 +23,7 @@ def late_time_dist(request):
     return sp.stats.binom.pmf(t, num_time_steps, 0.7)
 
 @pytest.fixture
-def spsn_dict():
+def modality_spsn():
     return {'test-o-meter': [0.99, 0.88]}
 
 @pytest.fixture
@@ -63,15 +63,26 @@ def sys():
     return lymph.System(graph=graph)
 
 @pytest.fixture
-def loaded_sys(sys, data, t_stages, spsn_dict):
-    sys.load_data(data, t_stages=t_stages, spsn_dict=spsn_dict)
+def loaded_sys(sys, data, t_stages, modality_spsn):
+    sys.load_data(data, t_stages=t_stages, modality_spsn=modality_spsn)
     return sys
 
 
+def test_set_and_get_spread_probs(sys):
+    new_spread_probs = np.random.uniform(low=0., high=1., size=len(sys.edges))
+    sys.spread_probs = new_spread_probs
+    assert np.all(np.equal(sys.spread_probs, new_spread_probs))
+
+
+def test_set_and_get_state(sys):
+    newstate = np.random.randint(low=0, high=1, size=len(sys.lnls))
+    sys.state = newstate
+    assert np.all(np.equal(sys.state, newstate))
+
 
 def test_A_matrix(sys):
-    theta = np.random.uniform(size=(len(sys.edges)))
-    sys.set_theta(theta)
+    spread_probs = np.random.uniform(size=(len(sys.edges)))
+    sys.spread_probs = spread_probs
     assert hasattr(sys, 'A')
     
     for t in range(10):
@@ -79,17 +90,20 @@ def test_A_matrix(sys):
         assert np.all(np.isclose(row_sums, 1.))
     
     
-def test_B_matrix(sys, spsn_dict):
-    sys.set_modalities(spsn_dict=spsn_dict)
+def test_B_matrix(sys, modality_spsn):
+    sys.modalities = modality_spsn
     assert hasattr(sys, 'B')
     
     row_sums = np.sum(sys.B, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
     
     
-def test_load_data(sys, data, t_stages, spsn_dict, 
-                   expected_C_dict, expected_f_dict):
-    sys.load_data(data, t_stages=t_stages, spsn_dict=spsn_dict, mode="HMM")
+def test_load_data(
+    sys, data, t_stages, modality_spsn, expected_C_dict, expected_f_dict
+):
+    sys.load_data(
+        data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
+    )
     
     for t in t_stages:
         assert np.all(np.equal(sys.C_dict[t], expected_C_dict[t]))
@@ -102,7 +116,7 @@ def test_marg_likelihood(
     early_time_dist,
     late_time_dist
 ):
-    theta = np.random.uniform(size=loaded_sys.get_theta().shape)
+    theta = np.random.uniform(size=loaded_sys.spread_probs.shape)
     llh = loaded_sys.marg_likelihood(
         theta, t_stages=t_stages, time_dists={"early": early_time_dist,
                                               "late" : late_time_dist}
@@ -116,7 +130,7 @@ def test_marg_likelihood(
     )
     assert np.isinf(llh)
     
-    theta = np.random.uniform(size=len(loaded_sys.get_theta()) + 3)
+    theta = np.random.uniform(size=len(loaded_sys.spread_probs) + 3)
     with pytest.raises(ValueError):
         llh = loaded_sys.marg_likelihood(
             theta, t_stages=t_stages, time_dists={"early": early_time_dist,
@@ -126,32 +140,32 @@ def test_marg_likelihood(
     
 
 def test_time_likelihood(loaded_sys, t_stages):
-    spread_params = np.random.uniform(size=loaded_sys.get_theta().shape)
+    spread_probs = np.random.uniform(size=loaded_sys.spread_probs.shape)
     times = np.array([0.7, 3.8])
-    theta = np.concatenate([spread_params, times])
+    theta = np.concatenate([spread_probs, times])
     llh_1 = loaded_sys.time_likelihood(
-        theta, t_stages=t_stages, num_time_steps=10
+        theta, t_stages=t_stages, max_t=10
     )
     assert llh_1 < 0.
     
     times = np.array([0.8, 3.85])
-    theta = np.concatenate([spread_params, times])
+    theta = np.concatenate([spread_probs, times])
     llh_2 = loaded_sys.time_likelihood(
-        theta, t_stages=t_stages, num_time_steps=10
+        theta, t_stages=t_stages, max_t=10
     )
     assert np.isclose(llh_1, llh_2)
     
     times = np.array([0.8, 3.4])
-    theta = np.concatenate([spread_params, times])
+    theta = np.concatenate([spread_probs, times])
     llh_3 = loaded_sys.time_likelihood(
-        theta, t_stages=t_stages, num_time_steps=10
+        theta, t_stages=t_stages, max_t=10
     )
     assert ~np.isclose(llh_1, llh_3)
     
     times = np.array([0.8, 10.6])
-    theta = np.concatenate([spread_params, times])
+    theta = np.concatenate([spread_probs, times])
     llh_4 = loaded_sys.time_likelihood(
-        theta, t_stages=t_stages, num_time_steps=10
+        theta, t_stages=t_stages, max_t=10
     )
     assert np.isinf(llh_4)
     
@@ -167,12 +181,12 @@ def test_time_likelihood(loaded_sys, t_stages):
     (None                , {'test-o-meter': np.array([0,0,0])}   , "BN"),
 ])
 def test_risk(loaded_sys, inv, diagnoses, mode):
-    theta = np.random.uniform(size=loaded_sys.get_theta().shape)
-    time_prior = np.ones(shape=(10)) / 10.
+    spread_probs = np.random.uniform(size=loaded_sys.spread_probs.shape)
+    time_dist = np.ones(shape=(10)) / 10.
     
     # new risk with no involvement specified
-    risk = loaded_sys.risk(theta, inv=inv, diagnoses=diagnoses, 
-                           time_prior=time_prior, mode=mode)
+    risk = loaded_sys.risk(spread_probs, inv=inv, diagnoses=diagnoses, 
+                           time_dist=time_dist, mode=mode)
     if inv is None:
         assert len(risk) == len(loaded_sys.state_list)
         assert np.all(np.greater_equal(risk, 0.))
