@@ -317,7 +317,8 @@ class BilateralSystem(object):
                 raise ValueError(msg)
             
             for stage in t_stages:
-                if diag_time := int(diag_times[stage]) > max_t:
+                diag_time = np.around(diag_times[stage]).astype(int)
+                if diag_time > max_t:
                     return -np.inf
                 
                 # probabilities for any hidden state (ipsi- & contralaterally)
@@ -383,7 +384,7 @@ class BilateralSystem(object):
             raise ValueError(msg)
             
 
-    def marg_likelihood(
+    def marginal_log_likelihood(
         self, 
         theta: np.ndarray, 
         t_stages: List[int] = ["early", "late"], 
@@ -411,56 +412,47 @@ class BilateralSystem(object):
         Returns:
             The log-likelihood of a parameter sample.
         """
-        if not self._spread_probs_are_valid(theta):
-            return -np.inf
+        return self.log_likelihood(
+            theta, t_stages,
+            diag_times=None, time_dists=time_dists
+        )
+    
+    
+    def time_log_likelihood(
+        self, 
+        theta: np.ndarray, 
+        t_stages: List[str] = ["early", "late"],
+        max_t: int = 10
+    ) -> float:
+        """
+        Compute likelihood given the spread parameters and the time of diagnosis 
+        for each T-stage.
         
-        self.spread_probs = theta
-        
-        # likelihood for hidden Markov model
-        if mode == "HMM":
-            res = 0
-            num_time_points = len(time_dists[t_stages[0]])
+        Args:
+            theta: Set of parameters, consisting of the spread probabilities 
+                (as many as the system has :class:`Edge` instances) and the 
+                time of diagnosis for all T-stages.
+                
+            t_stages: keywords of T-stages that are present in the dictionary of 
+                C matrices and the previously loaded dataset.
             
-            # matrices that hold rows of involvement probability for columns of 
-            # time-steps
-            pXt = {}
-            pXt["ipsi"] = self.system["ipsi"]._evolve(t_last=num_time_points-1)
-            pXt["contra"] = self.system["contra"]._evolve(t_last=num_time_points-1)
+            max_t: Largest accepted time-point.
             
-            for stage in t_stages:
-                PT = np.diag(time_dists[stage])
-                
-                # This matrix made up of the joint probabilities for all 
-                # combinations of ipsi- & contralateral complete diagnoses. Rows 
-                # specify ipsi-, columns contralateral 
-                pZZ = (
-                    self.system["ipsi"].B.T 
-                    @ pXt["ipsi"].T 
-                    @ PT 
-                    @ pXt["contra"] 
-                    @ self.system["contra"].B
-                )
-                
-                log_array = np.log(
-                    # this sum, as well as the dot product inside, do the 
-                    # marginalization over incomplete diagnoses. It's actually 
-                    # an algebra trick and the same as tr(C_i @ pZZ @ C_c). We 
-                    # need to take the trace to compare the same patients 
-                    # on both sides
-                    np.sum(
-                        self.system["ipsi"].C_dict[stage] 
-                        * (pZZ @ self.system["contra"].C_dict[stage]),
-                        axis=0
-                    )
-                )
-                # sum up all patients
-                res += np.sum(log_array)
-                
-            return res
+        Returns:
+            The likelihood of the data, given the spread parameters as well as 
+            the diagnose time for each T-stage.
+        """
+        # splitting theta into spread parameters and...
+        len_spread_probs = len(theta) - len(t_stages)
+        spread_probs = theta[:len_spread_probs]
+        # ...diagnose times for each T-stage
+        tmp = theta[len_spread_probs:]
+        diag_times = {t_stages[t]: tmp[t] for t in range(len(t_stages))}
         
-        elif mode == "BN":
-            msg = ("Bayesian network likelihood not yet imlemented.")
-            raise ValueError(msg)
+        return self.log_likelihood(
+            spread_probs, t_stages,
+            diag_times=diag_times, max_t=max_t, time_dists=None
+        )
     
     
     def combined_likelihood(self, 
@@ -506,7 +498,9 @@ class BilateralSystem(object):
         for i,p in enumerate(ps):
             time_dist_dict[t_stages[1+i]] = pt(p)
         
-        return self.marg_likelihood(theta, t_stages, time_dist_dict, mode="HMM")
+        return self.marginal_log_likelihood(
+            theta, t_stages, time_dist_dict, mode="HMM"
+        )
     
     
     def risk(self,

@@ -667,7 +667,8 @@ class System(object):
                 raise ValueError(msg)
             
             for stage in t_stages:
-                if diag_time := int(diag_times[stage]) > max_t:
+                diag_time = np.around(diag_times[stage]).astype(int)
+                if diag_time > max_t:
                     return -np.inf
                 state_probs[stage] = self._evolve(diag_time)
             
@@ -696,7 +697,7 @@ class System(object):
         return llh
 
 
-    def marg_likelihood(
+    def marginal_log_likelihood(
         self, 
         theta: np.ndarray, 
         t_stages: List[Any] = ["early", "late"], 
@@ -724,38 +725,14 @@ class System(object):
         Returns:
             The log-likelihood of the data, given te spread parameters.
         """
-        if not self._spread_probs_are_valid(theta):
-            return -np.inf
-
-        self.spread_probs = theta
-
-        # likelihood for the hidden Markov model
-        if mode == "HMM":
-            res = 0
-            num_time_points = len(time_dists[t_stages[0]])
-            state_probs = self._evolve(t_last=num_time_points-1)
-            
-            for t in t_stages:
-                # marginalization using `time_dists`
-                p = time_dists[t] @ state_probs @ self.B @ self.C_dict[t]
-                res += self.f_dict[t] @ np.log(p)
-
-        # likelihood for the Bayesian network
-        elif mode == "BN":
-            a = np.ones(shape=(len(self.state_list),), dtype=float)
-
-            for i, state in enumerate(self.state_list):
-                self.state = state
-                for node in self.lnls:
-                    a[i] *= node.bn_prob()
-
-            b = a @ self.B
-            res = self.f @ np.log(b @ self.C)
-
-        return res
+        return self.log_likelihood(
+            theta, t_stages,
+            diag_times=None, time_dists=time_dists,
+            mode=mode
+        )
 
 
-    def time_likelihood(
+    def time_log_likelihood(
         self, 
         theta: np.ndarray, 
         t_stages: List[str] = ["early", "late"],
@@ -782,29 +759,15 @@ class System(object):
         # splitting theta into spread parameters and...
         len_spread_probs = len(theta) - len(t_stages)
         spread_probs = theta[:len_spread_probs]
-        if not self._spread_probs_are_valid(spread_probs):
-            return -np.inf
-        
         # ...diagnose times for each T-stage
-        times = np.around(theta[len_spread_probs:]).astype(int)
-        if np.any(np.greater(0, times)):
-            return -np.inf
-        if np.any(np.less(max_t, times)):
-            return -np.inf
+        tmp = theta[len_spread_probs:]
+        diag_times = {t_stages[t]: tmp[t] for t in range(len(t_stages))}
         
-        self.spread_probs = spread_probs
-        
-        res = 0.
-        # All healthy state at beginning
-        start = np.zeros(shape=len(self.state_list), dtype=float)
-        start[0] = 1.
-
-        for i,t in enumerate(t_stages):
-            state_probs = self._evolve(t_first=times[i])
-            p = state_probs @ self.B @ self.C_dict[t]
-            res += self.f_dict[t] @ np.log(p)
-        
-        return res
+        return self.log_likelihood(
+            spread_probs, t_stages,
+            diag_times=diag_times, max_t=max_t, time_dists=None,
+            mode="HMM"
+        )
 
     
     def risk(

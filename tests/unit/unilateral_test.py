@@ -193,21 +193,21 @@ def test_log_likelihood(
         assert np.isclose(llh, shifted_llh)
 
 
-def test_marg_likelihood(
+def test_marginal_log_likelihood(
     loaded_sys, 
     t_stages,
     early_time_dist,
     late_time_dist
 ):
     theta = np.random.uniform(size=loaded_sys.spread_probs.shape)
-    llh = loaded_sys.marg_likelihood(
+    llh = loaded_sys.marginal_log_likelihood(
         theta, t_stages=t_stages, time_dists={"early": early_time_dist,
                                               "late" : late_time_dist}
     )
     assert llh < 0.
     
     theta = np.random.uniform(size=(len(loaded_sys.edges))) + 1.
-    llh = loaded_sys.marg_likelihood(
+    llh = loaded_sys.marginal_log_likelihood(
         theta, t_stages=t_stages, time_dists={"early": early_time_dist,
                                               "late" : late_time_dist}
     )
@@ -215,39 +215,39 @@ def test_marg_likelihood(
     
     theta = np.random.uniform(size=len(loaded_sys.spread_probs) + 3)
     with pytest.raises(ValueError):
-        llh = loaded_sys.marg_likelihood(
+        llh = loaded_sys.marginal_log_likelihood(
             theta, t_stages=t_stages, time_dists={"early": early_time_dist,
                                                   "late" : late_time_dist}
         )
     
     
 
-def test_time_likelihood(loaded_sys, t_stages):
+def test_time_log_likelihood(loaded_sys, t_stages):
     spread_probs = np.random.uniform(size=loaded_sys.spread_probs.shape)
     times = np.array([0.7, 3.8])
     theta = np.concatenate([spread_probs, times])
-    llh_1 = loaded_sys.time_likelihood(
+    llh_1 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert llh_1 < 0.
     
     times = np.array([0.8, 3.85])
     theta = np.concatenate([spread_probs, times])
-    llh_2 = loaded_sys.time_likelihood(
+    llh_2 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert np.isclose(llh_1, llh_2)
     
     times = np.array([0.8, 3.4])
     theta = np.concatenate([spread_probs, times])
-    llh_3 = loaded_sys.time_likelihood(
+    llh_3 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert ~np.isclose(llh_1, llh_3)
     
     times = np.array([0.8, 10.6])
     theta = np.concatenate([spread_probs, times])
-    llh_4 = loaded_sys.time_likelihood(
+    llh_4 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert np.isinf(llh_4)

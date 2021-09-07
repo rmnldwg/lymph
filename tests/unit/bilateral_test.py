@@ -222,7 +222,7 @@ def test_log_likelihood(
     "base_symmetric, trans_symmetric", 
     [(True, True), (True, False), (False, True), (False, False)]
 )
-def test_likelihood(
+def test_marginal_log_likelihood(
     loaded_bisys, 
     t_stages, early_time_dist, late_time_dist,
     base_symmetric, trans_symmetric
@@ -235,7 +235,7 @@ def test_likelihood(
     
     # check sensible log-likelihood
     spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
-    llh = loaded_bisys.marg_likelihood(
+    llh = loaded_bisys.marginal_log_likelihood(
         spread_probs, t_stages=t_stages, 
         time_dists={"early": early_time_dist, 
                     "late" : late_time_dist}
@@ -244,11 +244,42 @@ def test_likelihood(
     
     # check that out of bounds spread probabilities yield -inf likelihood
     spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape) + 1.
-    llh = loaded_bisys.marg_likelihood(
+    llh = loaded_bisys.marginal_log_likelihood(
         spread_probs, t_stages=t_stages, 
         time_dists={"early": early_time_dist, 
                     "late" : late_time_dist})
     assert np.isinf(llh)
+
+
+def test_time_log_likelihood(loaded_bisys, t_stages):
+    spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
+    times = np.array([0.7, 3.8])
+    theta = np.concatenate([spread_probs, times])
+    llh_1 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert llh_1 < 0.
+    
+    times = np.array([0.8, 3.85])
+    theta = np.concatenate([spread_probs, times])
+    llh_2 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert np.isclose(llh_1, llh_2)
+    
+    times = np.array([0.8, 3.4])
+    theta = np.concatenate([spread_probs, times])
+    llh_3 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert ~np.isclose(llh_1, llh_3)
+    
+    times = np.array([0.8, 10.6])
+    theta = np.concatenate([spread_probs, times])
+    llh_4 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert np.isinf(llh_4)
     
 
 @pytest.mark.parametrize(
