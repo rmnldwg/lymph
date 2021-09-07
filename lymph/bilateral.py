@@ -503,22 +503,22 @@ class BilateralSystem(object):
         )
     
     
-    def risk(self,
-             spread_probs: Optional[np.ndarray] = None,
-             inv_dict: Dict[str, Optional[np.ndarray]] = {"ipsi": None,
-                                                          "contra": None},
-             diag_dict: Dict[str, Dict[str, np.ndarray]] = {"ipsi": {}, 
-                                                            "contra": {}},
-             time_dist: Optional[np.ndarray] = None,
-             mode: str = "HMM") -> float:
+    def risk(
+        self,
+        spread_probs: Optional[np.ndarray] = None,
+        inv: Dict[str, Optional[np.ndarray]] = {"ipsi": None, "contra": None},
+        diagnoses: Dict[str, Dict] = {"ipsi": {}, "contra": {}},
+        time_dist: Optional[np.ndarray] = None,
+        mode: str = "HMM"
+    ) -> float:
         """Compute risk of ipsi- & contralateral involvement given specific (but 
         potentially incomplete) diagnoses for each side of the neck.
         
         Args:
-            spread_probs: Set of new spread parameters. If not given (``None``), the 
-                currently set parameters will be used.
+            spread_probs: Set of new spread parameters. If not given (``None``), 
+                the currently set parameters will be used.
                 
-            inv_dict: Dictionary that can have the keys ``"ipsi"`` and ``"contra"`` 
+            inv: Dictionary that can have the keys ``"ipsi"`` and ``"contra"`` 
                 with the respective values being the involvements of interest. 
                 If (for one side or both) no involvement of interest is given, 
                 it'll be marginalized.
@@ -526,7 +526,7 @@ class BilateralSystem(object):
                 for each LNL corresponding to the risk for involvement, no 
                 involvement and "not interested".
                 
-            diag_dict: Dictionary that itself may contain two dictionaries. One 
+            diagnoses: Dictionary that itself may contain two dictionaries. One 
                 with key "ipsi" and one with key "contra". The respective value 
                 is then a dictionary that can hold a potentially incomplete 
                 (mask with ``None``) diagnose for every available modality. 
@@ -551,16 +551,16 @@ class BilateralSystem(object):
                   # given an involvement. Should be a 1D vector
                   
         for side in ["ipsi", "contra"]:            
-            inv = np.array(inv_dict[side])
+            involvement = np.array(inv[side])
             # build vector to marginalize over involvements
             cX[side] = np.zeros(shape=(len(self.system[side].state_list)),
                                 dtype=bool)
             for i,state in enumerate(self.system[side].state_list):
                 cX[side][i] = np.all(
                     np.equal(
-                        inv, state,
-                        where=(inv!=None),
-                        out=np.ones_like(inv, dtype=bool)
+                        involvement, state,
+                        where=(involvement!=None),
+                        out=np.ones_like(involvement, dtype=bool)
                     )
                 )
                 
@@ -568,8 +568,8 @@ class BilateralSystem(object):
             # diagnoses
             obs = np.array([])
             for mod in self.system[side]._modality_tables:
-                if mod in diag_dict[side]:
-                    obs = np.append(obs, diag_dict[side][mod])
+                if mod in diagnoses[side]:
+                    obs = np.append(obs, diagnoses[side][mod])
                 else:
                     obs = np.append(obs, np.array([None] * len(self.lnls)))
             

@@ -316,13 +316,13 @@ def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
     time_dist = np.ones(5) / 5.
     
     # put together requested involvement & diagnoses in the correct format
-    inv_dict = {"ipsi": inv_ipsi, "contra": inv_contra}
-    diag_dict = {"ipsi":   {"test-o-meter": diag_ipsi}, 
+    inv = {"ipsi": inv_ipsi, "contra": inv_contra}
+    diagnoses = {"ipsi":   {"test-o-meter": diag_ipsi}, 
                  "contra": {"test-o-meter": diag_contra}}
     risk = loaded_bisys.risk(
         spread_probs=spread_probs, 
-        inv_dict=inv_dict, 
-        diag_dict=diag_dict,
+        inv=inv, 
+        diagnoses=diagnoses,
         time_dist=time_dist,
         mode="HMM"
     )
@@ -333,24 +333,24 @@ def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
     # side in the bilateral case. This means that we provide only ``None`` for 
     # the involvement array of interest for the ignored side and also tell it 
     # that this side's diagnose is missing.
-    inv_dict = {"ipsi": inv_ipsi, "contra": [None, None, None]}
-    diag_dict = {"ipsi":   {"test-o-meter": diag_ipsi}, 
+    inv = {"ipsi": inv_ipsi, "contra": [None, None, None]}
+    diagnoses = {"ipsi":   {"test-o-meter": diag_ipsi}, 
                  "contra": {"test-o-meter": [None, None, None]}}
     birisk_ignore_contra = loaded_bisys.risk(
         spread_probs=spread_probs,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
+        inv=inv,
+        diagnoses=diagnoses,
         time_dist=time_dist,
         mode="HMM"
     )
     
-    inv_dict = {"ipsi": [None, None, None], "contra": inv_contra}
-    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+    inv = {"ipsi": [None, None, None], "contra": inv_contra}
+    diagnoses = {"ipsi":   {"test-o-meter": [None, None, None]},
                  "contra": {"test-o-meter": diag_contra}}
     birisk_ignore_ipsi = loaded_bisys.risk(
         spread_probs=spread_probs,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
+        inv=inv,
+        diagnoses=diagnoses,
         time_dist=time_dist,
         mode="HMM"
     )
@@ -374,24 +374,24 @@ def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
     
     # Finally, let's make sure that the ipsilateral risk increases when we 
     # observe more severe contralateral involvement
-    inv_dict = {"ipsi": [True, True, True], "contra": [None, None, None]}
-    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+    inv = {"ipsi": [True, True, True], "contra": [None, None, None]}
+    diagnoses = {"ipsi":   {"test-o-meter": [None, None, None]},
                  "contra": {"test-o-meter": [False, False, False]}}
     low_risk = loaded_bisys.risk(
         spread_probs=spread_probs,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
+        inv=inv,
+        diagnoses=diagnoses,
         time_dist=time_dist,
         mode="HMM"
     )
     
-    inv_dict = {"ipsi": [True, True, True], "contra": [None, None, None]}
-    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+    inv = {"ipsi": [True, True, True], "contra": [None, None, None]}
+    diagnoses = {"ipsi":   {"test-o-meter": [None, None, None]},
                  "contra": {"test-o-meter": [True, True, True]}}
     high_risk = loaded_bisys.risk(
         spread_probs=spread_probs,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
+        inv=inv,
+        diagnoses=diagnoses,
         time_dist=time_dist,
         mode="HMM"
     )
