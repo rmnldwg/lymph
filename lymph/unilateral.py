@@ -474,8 +474,8 @@ class System(object):
     def load_data(
         self,
         data: pd.DataFrame, 
-        t_stages: List[int] = [1,2,3,4], 
-        modality_spsn: Dict[str, List[float]] = {"path": [1., 1.]}, 
+        t_stages: Optional[List[int]] = None, 
+        modality_spsn: Optional[Dict[str, List[float]]] = None, 
         mode: str = "HMM",
         gen_C_kwargs: dict = {'delete_ones': True, 
                               'aggregate_duplicates': True}
@@ -494,37 +494,41 @@ class System(object):
                 given as the columns.
 
             t_stages: List of T-stages that should be included in the learning 
-                process.
+                process. If ommitted, the list of T-stages is extracted from 
+                the :class:`DataFrame`
 
             modality_spsn: Dictionary of specificity :math:`s_P` and :math:`s_N` 
-                (in that order) for each observational/diagnostic modality.
+                (in that order) for each observational/diagnostic modality. Can 
+                be ommitted if the modalities where already defined.
 
-            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
-                network.
+            mode: `"HMM"` for hidden Markov model and `"BN"` for Bayesian net.
                 
             gen_C_kwargs: Keyword arguments for the :meth:`_gen_C`. For 
                 efficiency, both ``delete_ones`` and ``aggregate_duplicates``
                 should be set to one, resulting in a smaller :math:`\\mathbf{C}` 
                 matrix and an additional count vector :math:`\\mathbf{f}`.
         """
-        self.modalities = modality_spsn
+        if modality_spsn is not None:
+            self.modalities = modality_spsn
+        elif self.modalities == {}:
+            msg = ("No diagnostic modalities have been defined yet!")
+            raise ValueError(msg)
         
         # For the Hidden Markov Model
         if mode=="HMM":
-            C_dict = {}
-            f_dict = {}
+            self.C_dict = {}
+            self.f_dict = {}
+            
+            if t_stages is None:
+                t_stages = list(set(data[("Info", "T-stage")]))
 
             for stage in t_stages:
-
                 table = data.loc[data[('Info', 'T-stage')] == stage,
                                  self._modality_tables.keys()].values
                 C, f = self._gen_C(table, **gen_C_kwargs)
                     
-                C_dict[stage] = C.copy()
-                f_dict[stage] = f.copy()
-
-            self.C_dict = C_dict
-            self.f_dict = f_dict
+                self.C_dict[stage] = C.copy()
+                self.f_dict[stage] = f.copy()
 
         # For the Bayesian Network
         elif mode=="BN":
@@ -542,7 +546,7 @@ class System(object):
         self, t_first: int = 0, t_last: Optional[int] = None
     ) -> np.ndarray:
         """Evolve hidden Markov model based system over time steps. Compute 
-        :math:`p(S \mid t)` where :math:`S` is a distinct state and :math:`t` 
+        :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t` 
         is the time.
         
         Args:
@@ -551,11 +555,11 @@ class System(object):
             
             t_last: Last time step to consider. This function computes 
                 involvement probabilities for all :math:`t` in between `t_frist` 
-                and `t_last`. If `t_first == t_last`, "math:`p(S \mid t)` is 
+                and `t_last`. If `t_first == t_last`, "math:`p(S \\mid t)` is 
                 computed only at that time.
         
         Returns:
-            A matrix with the values :math:`p(S \mid t)` for each time-step.
+            A matrix with the values :math:`p(S \\mid t)` for each time-step.
         
         :meta public:
         """
@@ -601,6 +605,95 @@ class System(object):
             return False
         
         return True
+    
+
+    def log_likelihood(
+        self,
+        spread_probs: np.ndarray,
+        t_stages: List[Any],
+        diag_times: Optional[Dict[Any, int]] = None,
+        max_t: Optional[int] = 10,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+        mode: str = "HMM"
+    ) -> float:
+        """
+        Compute log-likelihood of (already stored) data, given the spread 
+        probabilities and either a discrete diagnose time or a distribution to 
+        use for marginalization over diagnose times.
+        
+        Args:
+            spread_probs: Spread probabiltites from the tumor to the LNLs, as 
+                well as from (already involved) LNLs to downsream LNLs.
+            
+            t_stages: List of T-stages that are also used in the data to denote 
+                how advanced the primary tumor of the patient is. This does not 
+                need to correspond to the clinical T-stages 'T1', 'T2' and so 
+                on, but can also be more abstract like 'early', 'late' etc.
+            
+            diag_times: For each T-stage, one can specify with what time step 
+                the likelihood should be computed. If this is set to `None`, 
+                and a distribution over diagnose times `time_dists` is provided, 
+                the function marginalizes over diagnose times.
+            
+            max_t: Latest possible diagnose time. This is only used to return 
+                `-np.inf` in case one of the `diag_times` exceeds this value.
+            
+            time_dists: Distribution over diagnose times that can be used to 
+                compute the likelihood of the data, given the spread 
+                probabilities, but marginalized over the time of diagnosis. If 
+                set to `None`, a diagnose time must be explicitly set for each 
+                T-stage.
+            
+            mode: Compute the likelihood using the Bayesian network (`"BN"`) or 
+                the hidden Markv model (`"HMM"`). When using the Bayesian net, 
+                the inputs `t_stages`, `diag_times`, `max_t` and `time_dists` 
+                are ignored.
+        
+        Returns:
+            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D` 
+            is the data and :math:`\\theta` is the tuple of spread probabilities 
+            and diagnose times or distributions over diagnose times.
+        """
+        if not self._spread_probs_are_valid(spread_probs):
+            return -np.inf
+        
+        self.spread_probs = spread_probs
+        
+        state_probs = {}
+        
+        if diag_times is not None:
+            if len(diag_times) != len(t_stages):
+                msg = ("One diagnose time must be provided for each T-stage.")
+                raise ValueError(msg)
+            
+            for stage in t_stages:
+                if diag_time := int(diag_times[stage]) > max_t:
+                    return -np.inf
+                state_probs[stage] = self._evolve(diag_time)
+            
+        elif time_dists is not None:
+            if len(time_dists) != len(t_stages):
+                msg = ("One distribution over diagnose times must be provided "
+                       "for each T-stage.")
+                raise ValueError(msg)
+            
+            # subtract 1, to also consider healthy starting state (t = 0)
+            max_t = len(time_dists[t_stages[0]]) - 1
+            
+            for stage in t_stages:
+                state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
+            
+        else:
+            msg = ("Either provide a list of diagnose times for each T-stage "
+                   "or a distribution over diagnose times for each T-stage.")
+            raise ValueError(msg)
+        
+        llh = 0.
+        for stage in t_stages:
+            p = state_probs[stage] @ self.B @ self.C_dict[stage]
+            llh += self.f_dict[stage] @ np.log(p)
+        
+        return llh
 
 
     def marg_likelihood(

@@ -1,3 +1,5 @@
+from attr import s
+from numpy.lib.npyio import load
 import pytest
 import numpy as np
 import scipy as sp
@@ -6,9 +8,30 @@ import pandas as pd
 import lymph
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def t_stages():
     return ["early", "late"]
+
+@pytest.fixture(scope="session")
+def max_t():
+    return 10
+
+@pytest.fixture(scope="session")
+def diag_times(t_stages, max_t):
+    res = {}
+    for stage in t_stages:
+        res[stage] = np.random.randint(low=0, high=max_t)
+    return res
+
+@pytest.fixture(scope="session")
+def time_dists(t_stages, max_t):
+    res = {}
+    p = 0.5
+    t = np.arange(max_t + 1)
+    for stage in t_stages:
+        p = np.random.uniform(low=0., high=p)
+        res[stage] = sp.stats.binom.pmf(t, max_t, p)
+    return res
 
 @pytest.fixture(scope="session", params=[10])
 def early_time_dist(request):
@@ -67,6 +90,10 @@ def loaded_sys(sys, data, t_stages, modality_spsn):
     sys.load_data(data, t_stages=t_stages, modality_spsn=modality_spsn)
     return sys
 
+@pytest.fixture
+def spread_probs(sys):
+    return np.random.uniform(low=0., high=1., size=sys.spread_probs.shape)
+
 
 def test_set_and_get_spread_probs(sys):
     new_spread_probs = np.random.uniform(low=0., high=1., size=len(sys.edges))
@@ -105,9 +132,65 @@ def test_load_data(
         data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
     )
     
-    for t in t_stages:
-        assert np.all(np.equal(sys.C_dict[t], expected_C_dict[t]))
-        assert np.all(np.equal(sys.f_dict[t], expected_f_dict[t]))
+    for stage in t_stages:
+        assert np.all(np.equal(sys.C_dict[stage], expected_C_dict[stage]))
+        assert np.all(np.equal(sys.f_dict[stage], expected_f_dict[stage]))
+
+
+@pytest.mark.parametrize(
+    "marginalize, has_spread_probs_invalid", 
+    [(True, True), (False, True), (True, False), (False, False)]
+)
+def test_log_likelihood(
+    loaded_sys, spread_probs, t_stages, diag_times, time_dists, 
+    marginalize, has_spread_probs_invalid
+):
+    """Check the basic likelihood function."""
+    if has_spread_probs_invalid:
+        spread_probs += 1.
+    else:
+        with pytest.raises(ValueError):
+            assert loaded_sys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=None, time_dists=None,
+                mode="HMM"
+            )
+            assert loaded_sys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=[], time_dists=None,
+                mode="HMM"
+            )
+            assert loaded_sys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=None, time_dists=np.array([]),
+                mode="HMM"
+            )
+    
+    if marginalize:
+        diag_times = None
+    else:
+        time_dists = None
+        shifted_diag_times = {}
+        for stage in t_stages:
+            small_shift = np.random.uniform(-0.2, 0.2)
+            shifted_diag_times[stage] = diag_times[stage] + small_shift
+        
+    llh = loaded_sys.log_likelihood(
+        spread_probs, t_stages, 
+        diag_times=diag_times, time_dists=time_dists,
+        mode="HMM"
+    )
+    assert llh < 0.
+    if has_spread_probs_invalid:
+        assert np.isinf(llh)
+
+    if not marginalize:
+        shifted_llh = loaded_sys.log_likelihood(
+            spread_probs, t_stages, 
+            diag_times=shifted_diag_times, time_dists=time_dists,
+            mode="HMM"
+        )
+        assert np.isclose(llh, shifted_llh)
 
 
 def test_marg_likelihood(

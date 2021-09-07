@@ -182,11 +182,13 @@ class BilateralSystem(object):
         self.system["contra"].modalities = modality_spsn
     
     
-    def load_data(self,
-                  data: pd.DataFrame, 
-                  t_stages: List[int] = [1,2,3,4], 
-                  modality_spsn: Dict[str, List[float]] = {"path": [1., 1.]}, 
-                  mode: str = "HMM"):
+    def load_data(
+        self,
+        data: pd.DataFrame, 
+        t_stages: Optional[List[int]] = None, 
+        modality_spsn: Optional[Dict[str, List[float]]] = None, 
+        mode: str = "HMM"
+    ):
         """
         Args:
             data: Table with rows of patients. Columns must have three levels. 
@@ -207,14 +209,16 @@ class BilateralSystem(object):
         )
         ipsi_data = pd.DataFrame(
             ipsi_data.values,
-            index=ipsi_data.index, columns=ipsi_data.columns.droplevel(1)
+            index=ipsi_data.index, 
+            columns=ipsi_data.columns.droplevel(1)
         )
         contra_data = data.drop(
             columns=["ipsi"], axis=1, level=1, inplace=False
         )
         contra_data = pd.DataFrame(
             contra_data.values,
-            index=contra_data.index, columns=contra_data.columns.droplevel(1)
+            index=contra_data.index, 
+            columns=contra_data.columns.droplevel(1)
         )
         
         # generate both side's C matrix with duplicates and ones
@@ -247,8 +251,138 @@ class BilateralSystem(object):
             return False
         
         return True
-
     
+    
+    def log_likelihood(
+        self,
+        spread_probs: np.ndarray,
+        t_stages: List[Any],
+        diag_times: Optional[Dict[Any, int]] = None,
+        max_t: Optional[int] = 10,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+        model: str = "HMM"
+    ):
+        """
+        Compute log-likelihood of (already stored) data, given the spread 
+        probabilities and either a discrete diagnose time or a distribution to 
+        use for marginalization over diagnose times.
+        
+        Args:
+            spread_probs: Spread probabiltites from the tumor to the LNLs, as 
+                well as from (already involved) LNLs to downsream LNLs.
+            
+            t_stages: List of T-stages that are also used in the data to denote 
+                how advanced the primary tumor of the patient is. This does not 
+                need to correspond to the clinical T-stages 'T1', 'T2' and so 
+                on, but can also be more abstract like 'early', 'late' etc.
+            
+            diag_times: For each T-stage, one can specify with what time step 
+                the likelihood should be computed. If this is set to `None`, 
+                and a distribution over diagnose times `time_dists` is provided, 
+                the function marginalizes over diagnose times.
+            
+            max_t: Latest possible diagnose time. This is only used to return 
+                `-np.inf` in case one of the `diag_times` exceeds this value.
+            
+            time_dists: Distribution over diagnose times that can be used to 
+                compute the likelihood of the data, given the spread 
+                probabilities, but marginalized over the time of diagnosis. If 
+                set to `None`, a diagnose time must be explicitly set for each 
+                T-stage.
+            
+            mode: Compute the likelihood using the Bayesian network (`"BN"`) or 
+                the hidden Markv model (`"HMM"`). When using the Bayesian net, 
+                the inputs `t_stages`, `diag_times`, `max_t` and `time_dists` 
+                are ignored.
+        
+        Returns:
+            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D` 
+            is the data and :math:`\\theta` is the tuple of spread probabilities 
+            and diagnose times or distributions over diagnose times.
+        
+        See Also:
+            :meth:`System.log_likelihood`: The log-likelihood function of the 
+                unilateral system.
+        """
+        if not self._spread_probs_are_valid(spread_probs):
+            return -np.inf
+        
+        self.spread_probs = spread_probs
+        
+        llh = 0.
+        
+        if diag_times is not None:
+            if len(diag_times) != len(t_stages):
+                msg = ("One diagnose time must be provided for each T-stage.")
+                raise ValueError(msg)
+            
+            for stage in t_stages:
+                if diag_time := int(diag_times[stage]) > max_t:
+                    return -np.inf
+                
+                # probabilities for any hidden state (ipsi- & contralaterally)
+                state_probs = {}
+                state_probs["ipsi"] = self.system["ipsi"]._evolve(diag_time)
+                state_probs["contra"] = self.system["contra"]._evolve(diag_time)
+                
+                # matrix with joint probabilities for any combination of ipsi- 
+                # & conralateral diagnoses after given number of time-steps
+                joint_diagnose_prob = (
+                    self.system["ipsi"].B.T 
+                    @ np.outer(state_probs["ipsi"], state_probs["contra"])
+                    @ self.system["contra"].B
+                )
+                log_p = np.log(
+                    np.sum(
+                        self.system["ipsi"].C_dict[stage]
+                        * (joint_diagnose_prob 
+                           @ self.system["contra"].C_dict[stage]),
+                        axis=0
+                    )
+                )
+                llh += np.sum(log_p)
+            
+            return llh
+        
+        elif time_dists is not None:
+            if len(time_dists) != len(t_stages):
+                msg = ("One distribution over diagnose times must be provided "
+                       "for each T-stage.")
+                raise ValueError(msg)
+            
+            # subtract 1, to also consider healthy starting state (t = 0)
+            max_t = len(time_dists[t_stages[0]]) - 1
+            
+            state_probs = {}
+            state_probs["ipsi"] = self.system["ipsi"]._evolve(t_last=max_t)
+            state_probs["contra"] = self.system["contra"]._evolve(t_last=max_t)
+            
+            for stage in t_stages:
+                joint_diagnose_prob = (
+                    self.system["ipsi"].B.T
+                    @ state_probs["ipsi"].T
+                    @ np.diag(time_dists[stage])
+                    @ state_probs["contra"]
+                    @ self.system["contra"].B
+                )
+                log_p = np.log(
+                    np.sum(
+                        self.system["ipsi"].C_dict[stage]
+                        * (joint_diagnose_prob 
+                           @ self.system["contra"].C_dict[stage]),
+                        axis=0
+                    )
+                )
+                llh += np.sum(log_p)
+            
+            return llh
+        
+        else:
+            msg = ("Either provide a list of diagnose times for each T-stage "
+                   "or a distribution over diagnose times for each T-stage.")
+            raise ValueError(msg)
+            
+
     def marg_likelihood(
         self, 
         theta: np.ndarray, 
@@ -285,13 +419,7 @@ class BilateralSystem(object):
         # likelihood for hidden Markov model
         if mode == "HMM":
             res = 0
-            obs_num = len(self.system["ipsi"].obs_list)
-            
             num_time_points = len(time_dists[t_stages[0]])
-            ipsi_tmp = np.zeros(shape=(obs_num), dtype=float)
-            ipsi_tmp[0] = 1.
-            contra_tmp = np.zeros(shape=(obs_num), dtype=float)
-            contra_tmp[0] = 1.
             
             # matrices that hold rows of involvement probability for columns of 
             # time-steps

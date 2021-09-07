@@ -6,9 +6,30 @@ import pandas as pd
 import lymph
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def t_stages():
     return ["early", "late"]
+
+@pytest.fixture(scope="session")
+def max_t():
+    return 10
+
+@pytest.fixture(scope="session")
+def diag_times(t_stages, max_t):
+    res = {}
+    for stage in t_stages:
+        res[stage] = np.random.randint(low=0, high=max_t)
+    return res
+
+@pytest.fixture(scope="session")
+def time_dists(t_stages, max_t):
+    res = {}
+    p = 0.5
+    t = np.arange(max_t + 1)
+    for stage in t_stages:
+        p = np.random.uniform(low=0., high=p)
+        res[stage] = sp.stats.binom.pmf(t, max_t, p)
+    return res
 
 @pytest.fixture(scope="session", params=[10])
 def early_time_dist(request):
@@ -70,6 +91,10 @@ def bisys():
 def loaded_bisys(bisys, bidata, t_stages, modality_spsn):
     bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
     return bisys
+
+@pytest.fixture
+def spread_probs(bisys):
+    return np.random.uniform(low=0., high=1., size=bisys.spread_probs.shape)
     
 
 def test_initialization(bisys):
@@ -140,7 +165,58 @@ def test_load_data(bisys, bidata, t_stages, modality_spsn,
         bi_ipsi_C = bisys.system["ipsi"].C_dict[stage]
         bi_contra_C = bisys.system["contra"].C_dict[stage]
         assert bi_ipsi_C.shape == bi_contra_C.shape
+
+
+@pytest.mark.parametrize(
+    "marginalize, has_spread_probs_invalid", 
+    [(True, True), (False, True), (True, False), (False, False)]
+)
+def test_log_likelihood(
+    loaded_bisys, spread_probs, t_stages, diag_times, time_dists, 
+    marginalize, has_spread_probs_invalid
+):
+    """Check the basic likelihood function."""
+    if has_spread_probs_invalid:
+        spread_probs += 1.
+    else:
+        with pytest.raises(ValueError):
+            assert loaded_bisys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=None, time_dists=None
+            )
+            assert loaded_bisys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=[], time_dists=None
+            )
+            assert loaded_bisys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=None, time_dists=np.array([])
+            )
     
+    if marginalize:
+        diag_times = None
+    else:
+        time_dists = None
+        shifted_diag_times = {}
+        for stage in t_stages:
+            small_shift = np.random.uniform(-0.2, 0.2)
+            shifted_diag_times[stage] = diag_times[stage] + small_shift
+        
+    llh = loaded_bisys.log_likelihood(
+        spread_probs, t_stages, 
+        diag_times=diag_times, time_dists=time_dists
+    )
+    assert llh < 0.
+    if has_spread_probs_invalid:
+        assert np.isinf(llh)
+
+    if not marginalize:
+        shifted_llh = loaded_bisys.log_likelihood(
+            spread_probs, t_stages, 
+            diag_times=shifted_diag_times, time_dists=time_dists
+        )
+        assert np.isclose(llh, shifted_llh)
+
     
 @pytest.mark.parametrize(
     "base_symmetric, trans_symmetric", 
