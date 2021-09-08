@@ -391,8 +391,8 @@ class System(object):
                 raise TypeError(msg)
             
             has_len_2 = len(spsn) == 2
-            is_above_lb = np.all(np.greater(spsn, 0.5))
-            is_below_ub = np.all(np.less(spsn, 1.))
+            is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+            is_below_ub = np.all(np.less_equal(spsn, 1.))
             if not has_len_2 or not is_above_lb or not is_below_ub:
                 msg = ("For each modality provide a list of two decimals "
                        "between 0.5 and 1.0 as specificity & sensitivity "

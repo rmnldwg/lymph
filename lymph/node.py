@@ -16,7 +16,7 @@ class Node(object):
     """
     def __init__(self, name: str, state: int = 0, typ: str = None):
         """Constructor"""
-        self.name = name.lower()
+        self.name = name
         if typ is None:
             if self.name.lower()[0] == 't':
                 self.typ = "tumor"

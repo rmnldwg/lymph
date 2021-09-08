@@ -14,7 +14,7 @@ import lymph
 def test_node(name, state, typ):
     new_node = lymph.Node(name, state, typ)
     
-    assert new_node.name == name.lower()
+    assert new_node.name == name
     
     expected_state = 1 if typ == "tumor" else state
     assert new_node.state == expected_state
@@ -25,5 +25,5 @@ def test_node(name, state, typ):
         expected_typ = typ
     assert new_node.typ == expected_typ
     
-    expected_str = f"0 --> {name.lower()} ({expected_typ}) --> 0"
+    expected_str = f"0 --> {name} ({expected_typ}) --> 0"
     assert str(new_node) == expected_str
