@@ -610,7 +610,7 @@ class System(object):
     def log_likelihood(
         self,
         spread_probs: np.ndarray,
-        t_stages: List[Any],
+        t_stages: Optional[List[Any]] = None,
         diag_times: Optional[Dict[Any, int]] = None,
         max_t: Optional[int] = 10,
         time_dists: Optional[Dict[Any, np.ndarray]] = None,
@@ -628,7 +628,8 @@ class System(object):
             t_stages: List of T-stages that are also used in the data to denote 
                 how advanced the primary tumor of the patient is. This does not 
                 need to correspond to the clinical T-stages 'T1', 'T2' and so 
-                on, but can also be more abstract like 'early', 'late' etc.
+                on, but can also be more abstract like 'early', 'late' etc. If 
+                not given, this will be inferred from the loaded data.
             
             diag_times: For each T-stage, one can specify with what time step 
                 the likelihood should be computed. If this is set to `None`, 
@@ -656,6 +657,9 @@ class System(object):
         """
         if not self._spread_probs_are_valid(spread_probs):
             return -np.inf
+        
+        if t_stages is None:
+            t_stages = list(self.f_dict.keys())
         
         self.spread_probs = spread_probs
         
@@ -700,7 +704,7 @@ class System(object):
     def marginal_log_likelihood(
         self, 
         theta: np.ndarray, 
-        t_stages: List[Any] = ["early", "late"], 
+        t_stages: Optional[List[Any]] = None, 
         time_dists: Dict[Any, np.ndarray] = {}, 
         mode: str = "HMM"
     ) -> float:
@@ -735,7 +739,7 @@ class System(object):
     def time_log_likelihood(
         self, 
         theta: np.ndarray, 
-        t_stages: List[str] = ["early", "late"],
+        t_stages: List[Any],
         max_t: int = 10
     ) -> float:
         """
@@ -775,6 +779,7 @@ class System(object):
         spread_probs: Optional[np.ndarray] = None,
         inv: Optional[np.ndarray] = None,
         diagnoses: Dict[str, np.ndarray] = {},
+        diag_time: Optional[int] = None,
         time_dist: Optional[np.ndarray] = None,
         mode: str = "HMM"
     ) -> Union[float, np.ndarray]:
@@ -796,8 +801,11 @@ class System(object):
                 out available modalities will assume a completely missing 
                 diagnosis.
                 
-            time_dist: Prior distribution over time. Must sum to 1 and needs 
-                to be given for ``mode = "HMM"``.
+            diag_time: Time of diagnosis. Either this or the `time_dist` to 
+                marginalize over diagnose times must be given.
+                
+            time_dist: Distribution to marginalize over diagnose times. Either 
+                this, or the `diag_time` must be given.
                 
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires 
                 the ``time_dist``) or to ``"BN"`` for the Bayesian network 
@@ -823,9 +831,18 @@ class System(object):
         # vector of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            num_time_points = len(time_dist)
-            state_probs = self._evolve(t_last=num_time_points-1)
-            pX = time_dist @ state_probs
+            if diag_time is not None:
+                pX = self._evolve(diag_time)
+                
+            elif time_dist is not None:
+                max_t = len(time_dist)
+                state_probs = self._evolve(t_last=max_t-1)
+                pX = time_dist @ state_probs
+            
+            else:
+                msg = ("Either diagnose time or distribution to marginalize "
+                       "over it must be given.")
+                raise ValueError(msg)
                 
         # BN version
         elif mode == "BN":

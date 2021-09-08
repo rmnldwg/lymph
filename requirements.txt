@@ -1,5 +1,6 @@
 -e .
 pandas
+numpy
 scipy
 pytest
 coverage

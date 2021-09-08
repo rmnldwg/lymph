@@ -219,8 +219,7 @@ def test_marginal_log_likelihood(
             theta, t_stages=t_stages, time_dists={"early": early_time_dist,
                                                   "late" : late_time_dist}
         )
-    
-    
+
 
 def test_time_log_likelihood(loaded_sys, t_stages):
     spread_probs = np.random.uniform(size=loaded_sys.spread_probs.shape)
@@ -253,23 +252,27 @@ def test_time_log_likelihood(loaded_sys, t_stages):
     assert np.isinf(llh_4)
     
     
-@pytest.mark.parametrize("inv, diagnoses, mode", [
-    (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , "HMM"),
-    (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , "HMM"),
-    (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, "HMM"),
-    (None                , {'test-o-meter': np.array([0,0,0])}   , "HMM"),
-    (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , "BN"),
-    (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , "BN"),
-    (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, "BN"),
-    (None                , {'test-o-meter': np.array([0,0,0])}   , "BN"),
+@pytest.mark.parametrize("inv, diagnoses, diag_time, mode", [
+    (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , 3   , "HMM"),
+    (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , 3   , "HMM"),
+    (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, None, "HMM"),
+    (None                , {'test-o-meter': np.array([0,0,0])}   , None, "HMM"),
+    (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , 3   , "BN"),
+    (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , 3   , "BN"),
+    (np.array([0,1,1])   , {'test-o-meter': np.array([0,None,1])}, None, "BN"),
+    (None                , {'test-o-meter': np.array([0,0,0])}   , None, "BN"),
 ])
-def test_risk(loaded_sys, inv, diagnoses, mode):
+def test_risk(loaded_sys, inv, diagnoses, diag_time, mode):
     spread_probs = np.random.uniform(size=loaded_sys.spread_probs.shape)
     time_dist = np.ones(shape=(10)) / 10.
     
     # new risk with no involvement specified
-    risk = loaded_sys.risk(spread_probs, inv=inv, diagnoses=diagnoses, 
-                           time_dist=time_dist, mode=mode)
+    risk = loaded_sys.risk(
+        spread_probs, 
+        inv=inv, diagnoses=diagnoses, 
+        diag_time=diag_time, time_dist=time_dist, 
+        mode=mode
+    )
     if inv is None:
         assert len(risk) == len(loaded_sys.state_list)
         assert np.all(np.greater_equal(risk, 0.))

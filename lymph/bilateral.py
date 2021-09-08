@@ -1,6 +1,8 @@
+from tests.unit.unilateral_test import time_dists
 import numpy as np
 import scipy as sp 
 import scipy.stats
+from scipy.special import factorial as fact
 import pandas as pd
 import warnings
 from typing import Union, Optional, List, Dict, Any
@@ -8,6 +10,16 @@ from typing import Union, Optional, List, Dict, Any
 from .node import Node
 from .edge import Edge
 from .unilateral import System
+
+
+def fast_binomial_pmf(k, n, p):
+    """
+    Compute the probability mass function of the binomial distribution.
+    """
+    q = (1 - p)
+    binom_coeff = fact(n) / (fact(k) * fact(n - k))
+    return binom_coeff * p**k * q**(n - k)
+    
 
 
 # I chose not to make this one a child of System, since it is basically only a 
@@ -256,7 +268,7 @@ class BilateralSystem(object):
     def log_likelihood(
         self,
         spread_probs: np.ndarray,
-        t_stages: List[Any],
+        t_stages: Optional[List[Any]] = None,
         diag_times: Optional[Dict[Any, int]] = None,
         max_t: Optional[int] = 10,
         time_dists: Optional[Dict[Any, np.ndarray]] = None,
@@ -306,6 +318,9 @@ class BilateralSystem(object):
         """
         if not self._spread_probs_are_valid(spread_probs):
             return -np.inf
+        
+        if t_stages is None:
+            t_stages = list(self.system["ipsi"].f_dict.keys())
         
         self.spread_probs = spread_probs
         
@@ -387,13 +402,13 @@ class BilateralSystem(object):
     def marginal_log_likelihood(
         self, 
         theta: np.ndarray, 
-        t_stages: List[int] = ["early", "late"], 
-        time_dists: dict = {}, 
-        mode: str = "HMM"
+        t_stages: Optional[List[Any]] = None, 
+        time_dists: dict = {}
     ) -> float:
         """
         Compute the likelihood of the (already stored) data, given the spread 
-        parameters, marginalized over time of diagnosis via time distributions.
+        parameters, marginalized over time of diagnosis via time distributions. 
+        Wraps the :meth:`log_likelihood` method.
 
         Args:
             theta: Set of parameters, consisting of the base probabilities 
@@ -406,11 +421,12 @@ class BilateralSystem(object):
             time_dists: Distribution over the probability of diagnosis at 
                 different times :math:`t` given T-stage.
 
-            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
-                network (not yet implemented).
-
         Returns:
             The log-likelihood of a parameter sample.
+
+        See Also:
+            :meth:`log_likelihood`: Simply calls the actual likelihood function 
+                where it sets the `diag_times` to `None`.
         """
         return self.log_likelihood(
             theta, t_stages,
@@ -421,12 +437,12 @@ class BilateralSystem(object):
     def time_log_likelihood(
         self, 
         theta: np.ndarray, 
-        t_stages: List[str] = ["early", "late"],
+        t_stages: List[Any],
         max_t: int = 10
     ) -> float:
         """
         Compute likelihood given the spread parameters and the time of diagnosis 
-        for each T-stage.
+        for each T-stage. Wraps the :math:`log_likelihood` method.
         
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
@@ -436,11 +452,16 @@ class BilateralSystem(object):
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
             
-            max_t: Largest accepted time-point.
+            max_t: Latest accepted time-point.
             
         Returns:
             The likelihood of the data, given the spread parameters as well as 
             the diagnose time for each T-stage.
+        
+        See Also:
+            :math:`log_likelihood`: The `theta` argument of this function is 
+                split into `spread_probs` and `diag_times`, which are then 
+                passed to the actual likelihood function.
         """
         # splitting theta into spread parameters and...
         len_spread_probs = len(theta) - len(t_stages)
@@ -455,51 +476,48 @@ class BilateralSystem(object):
         )
     
     
-    def combined_likelihood(self, 
-                            theta: np.ndarray, 
-                            t_stages: List[str] = ["early", "late"],
-                            first_p: float = 0.3,
-                            T_max: int = 10) -> float:
-        """Compute likelihood when the parameters of all T-stage's time-priors 
-        (binomial distributions) except the first one are unknown.
+    def binom_marg_log_likelihood(
+        self, 
+        theta: np.ndarray, 
+        t_stages: List[Any],
+        max_t: int = 10
+    ) -> float:
+        """
+        Compute marginal log-likelihood using binomial distributions to sum 
+        over the diagnose times.
         
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
                 (as many as the system has :class:`Edge` instances) and the 
-                distributions's parameters (one less than the number of 
-                T-stages).
+                binomial distribution's :math:`p` parameters.
                 
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
                 
-            first_p: Parameter passed to the Binomial distribution that forms 
-                the time-prior of the first T-stage.
-                
-            T_max: maximum number of time steps.
+            T_max: Latest accepted time-point.
             
         Returns:
-            The combined likelihood of observing patients with different 
-            T-stages, given the spread probabilities as well as the parameters 
-            for the later (except the first) T-stage's binomial time prior.
+            The log-likelihood of the (already stored) data, given the spread 
+            prbabilities as well as the parameters for binomial distribtions 
+            used to marginalize over diagnose times.
         """
-        if first_p < 0. or first_p > 1.:
-            raise ValueError("first time-prior's parameter must be between "
-                             "0 and 1")
-        if np.any(np.greater(0., theta)) or np.any(np.greater(theta, 1.)):
+        # splitting theta into spread parameters and...
+        len_spread_probs = len(theta) - len(t_stages)
+        spread_probs = theta[:len_spread_probs]
+        # ...p-values for the binomial distribution
+        p = theta[len_spread_probs:]
+        
+        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
             return -np.inf
-
-        add_params = len(t_stages) - 1
-        theta, ps = theta[:-add_params], theta[-add_params:]
-        t = np.arange(T_max+1)
-        pt = lambda p : sp.stats.binom.pmf(t,T_max,p)
-
-        time_dist_dict = {}
-        time_dist_dict[t_stages[0]] = pt(first_p)
-        for i,p in enumerate(ps):
-            time_dist_dict[t_stages[1+i]] = pt(p)
+        
+        t = np.arange(max_t + 1)
+        time_dists = {}
+        for i,stage in enumerate(t_stages):
+            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
         
         return self.marginal_log_likelihood(
-            theta, t_stages, time_dist_dict, mode="HMM"
+            spread_probs, t_stages, 
+            time_dists=time_dists
         )
     
     
@@ -508,6 +526,7 @@ class BilateralSystem(object):
         spread_probs: Optional[np.ndarray] = None,
         inv: Dict[str, Optional[np.ndarray]] = {"ipsi": None, "contra": None},
         diagnoses: Dict[str, Dict] = {"ipsi": {}, "contra": {}},
+        diag_time: Optional[int] = None,
         time_dist: Optional[np.ndarray] = None,
         mode: str = "HMM"
     ) -> float:
@@ -533,14 +552,16 @@ class BilateralSystem(object):
                 Leaving out available modalities will assume a completely 
                 missing diagnosis.
                 
-            time_dist: Prior distribution over time. Must sum to 1 and needs 
-                to be given for ``mode = "HMM"``.
+            diag_time: Time of diagnosis. Either this or the `time_dist` to 
+                marginalize over diagnose times must be given.
+                
+            time_dist: Distribution to marginalize over diagnose times. Either 
+                this, or the `diag_time` must be given.
                 
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires 
                 the ``time_dist``) or to ``"BN"`` for the Bayesian network 
                 version.
         """
-        # assign spread_probs to system or use the currently set one
         if spread_probs is not None:
             self.spread_probs = spread_probs
             
@@ -585,17 +606,29 @@ class BilateralSystem(object):
                     )
                 )
             
-            # compute some (conditional) probability matrices
-            num_time_points = len(time_dist)
-            pXt[side] = self.system[side]._evolve(t_last=num_time_points-1)
+            if diag_time is not None:
+                pXt[side] = self.system[side]._evolve(diag_time)
+                
+            elif time_dist is not None:
+                max_t = len(time_dist)
+                pXt[side] = self.system[side]._evolve(t_last=max_t-1)
+            
+            else:
+                msg = ("Either diagnose time or distribution to marginalize "
+                       "over it must be given.")
+                raise ValueError(msg)
+            
             pD[side] = self.system[side].B @ cZ[side]
         
-        # time-prior in diagnoal matrix form
-        PT = np.diag(time_dist)
-
-        # joint probability of Xi & Xc, marginalized over time. Acts as prior 
+        # joint probability of Xi & Xc (marginalized over time). Acts as prior 
         # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix
-        pXX = pXt["ipsi"].T @ PT @ pXt["contra"]
+        if diag_time is not None:
+            pXX = np.outer(pXt["ipsi"], pXt["contra"])
+            
+        elif time_dist is not None:
+            # time-prior in diagnoal matrix form
+            PT = np.diag(time_dist)
+            pXX = pXt["ipsi"].T @ PT @ pXt["contra"]
         
         # joint probability of all hidden states and the requested diagnosis
         pDDXX = np.einsum("i,ij,j->ij", pD["ipsi"], pXX, pD["contra"])

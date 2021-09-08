@@ -175,7 +175,9 @@ def test_log_likelihood(
     loaded_bisys, spread_probs, t_stages, diag_times, time_dists, 
     marginalize, has_spread_probs_invalid
 ):
-    """Check the basic likelihood function."""
+    """
+    Check the normal log-likelihood function.
+    """
     if has_spread_probs_invalid:
         spread_probs += 1.
     else:
@@ -228,7 +230,8 @@ def test_marginal_log_likelihood(
     base_symmetric, trans_symmetric
 ):
     """
-    Test the normal likelihood.
+    Test the log-likelihood that marginalizes over diagnose times when provided 
+    with a distribution over these diagnose times.
     """
     loaded_bisys.base_symmetric=base_symmetric
     loaded_bisys.trans_symmetric=trans_symmetric
@@ -252,6 +255,9 @@ def test_marginal_log_likelihood(
 
 
 def test_time_log_likelihood(loaded_bisys, t_stages):
+    """
+    Check the log-likelihood that's an explicit function of the diagnose time.
+    """
     spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
     times = np.array([0.7, 3.8])
     theta = np.concatenate([spread_probs, times])
@@ -286,20 +292,43 @@ def test_time_log_likelihood(loaded_bisys, t_stages):
     "base_symmetric, trans_symmetric", 
     [(True, True), (True, False), (False, True), (False, False)]
 )
-def test_combined_likelihood(
-    loaded_bisys, 
-    t_stages, early_time_dist,
-    base_symmetric, trans_symmetric):
+def test_binom_marg_log_likelihood(
+    loaded_bisys, t_stages,
+    base_symmetric, trans_symmetric
+):
+    """
+    Check the loh-likelihood marginalizeing over diagnose times using 
+    binomial distributions.
+    """
     loaded_bisys.base_symmetric=base_symmetric
     loaded_bisys.trans_symmetric=trans_symmetric
     
-    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs)+1))
-    c_llh = loaded_bisys.combined_likelihood(spread_probs, t_stages=t_stages, T_max=10)
-    assert c_llh < 0.
+    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs)))
+    p = np.random.uniform(low=0., high=1., size=len(t_stages))
+    theta = np.concatenate([spread_probs, p])
+    llh = loaded_bisys.binom_marg_log_likelihood(
+        theta, t_stages,
+        max_t=10
+    )
+    assert llh < 0.
     
-    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs)+1)) + 1.
-    c_llh = loaded_bisys.combined_likelihood(spread_probs, t_stages=t_stages, T_max=10)
-    assert np.isinf(c_llh)
+    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs))) + 1.
+    p = np.random.uniform(low=0., high=1., size=len(t_stages))
+    theta = np.concatenate([spread_probs, p])
+    llh = loaded_bisys.binom_marg_log_likelihood(
+        theta, t_stages,
+        max_t=10
+    )
+    assert np.isinf(llh)
+
+    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs)))
+    p = np.random.uniform(low=0., high=1., size=len(t_stages)) + 1.
+    theta = np.concatenate([spread_probs, p])
+    llh = loaded_bisys.binom_marg_log_likelihood(
+        theta, t_stages,
+        max_t=10
+    )
+    assert np.isinf(llh)
     
     
 @pytest.mark.parametrize("inv_ipsi, inv_contra, diag_ipsi, diag_contra", [
@@ -308,12 +337,19 @@ def test_combined_likelihood(
     ([None,  True,  False], [True, True,  True],  [True,  False, False], [None,  True, None]),
     ([False, False, None],  [None, False, False], [False, False, False], [None,  False, None])
 ])
-def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
+def test_risk(
+    loaded_bisys, t_stages, time_dists,
+    inv_ipsi, inv_contra, 
+    diag_ipsi, diag_contra
+):
+    """
+    Test te risk computation.
+    """
     # select random spread_probs
     spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
     
     # use some time-prior
-    time_dist = np.ones(5) / 5.
+    time_dist = time_dists[t_stages[0]]
     
     # put together requested involvement & diagnoses in the correct format
     inv = {"ipsi": inv_ipsi, "contra": inv_contra}
