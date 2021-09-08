@@ -186,10 +186,14 @@ def test_log_likelihood(
                 spread_probs, t_stages,
                 diag_times=None, time_dists=None
             )
+        
+        with pytest.raises(ValueError):
             assert loaded_bisys.log_likelihood(
                 spread_probs, t_stages,
                 diag_times=[], time_dists=None
             )
+        
+        with pytest.raises(ValueError):
             assert loaded_bisys.log_likelihood(
                 spread_probs, t_stages,
                 diag_times=None, time_dists=np.array([])

@@ -155,11 +155,15 @@ def test_log_likelihood(
                 diag_times=None, time_dists=None,
                 mode="HMM"
             )
+        
+        with pytest.raises(ValueError):
             assert loaded_sys.log_likelihood(
                 spread_probs, t_stages,
                 diag_times=[], time_dists=None,
                 mode="HMM"
             )
+        
+        with pytest.raises(ValueError):
             assert loaded_sys.log_likelihood(
                 spread_probs, t_stages,
                 diag_times=None, time_dists=np.array([]),

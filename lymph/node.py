@@ -1,7 +1,5 @@
 import numpy as np
-import scipy as sp 
-import scipy.stats
-from typing import List, Dict
+
 
 class Node(object):
     """Class for lymph node levels (LNLs) in a lymphatic system.
@@ -16,12 +14,9 @@ class Node(object):
             starting with a `t` (case-insensitive), then it will be a tumor 
             node and a lymph node levle (lnl) otherwise. (default: `None`)
     """
-    def __init__(self, 
-                 name: str, 
-                 state: int = 0, 
-                 typ: str = None):
-        
-        self.name = name
+    def __init__(self, name: str, state: int = 0, typ: str = None):
+        """Constructor"""
+        self.name = name.lower()
         if typ is None:
             if self.name.lower()[0] == 't':
                 self.typ = "tumor"
@@ -38,30 +33,19 @@ class Node(object):
 
         self.inc = []
         self.out = []
-
-
-
-    def report(self):
-        """Just quickly print infos about the node.
-        """
-        print(f"name: {self.name} ({self.typ}), state: {self.state}")
-        print("incoming: ", end="")
-        
-        for i in self.inc:
-            print(f"{i.start.name}, ", end="")
-
-        print("\noutgoing: ", end="")
-        
-        for o in self.out:
-            print(f"{o.end.name}, ", end="")
-        
-        print("\n", end="")
-
+    
+    
+    def __str__(self):
+        """Print basic info"""
+        num_inc = len(self.inc)
+        num_out = len(self.out)
+        return f"{num_inc:d} --> {self.name} ({self.typ}) --> {num_out:d}"
 
 
     def trans_prob(self, log: bool = False) -> float:
-        """Computes the transition probabilities from the current state to all
-        other possible states.
+        """
+        Compute the transition probabilities from the current state to all
+        other possible states (which is only two).
         
         Args:
             log: If ``True`` method returns the log-probability. 
@@ -69,34 +53,25 @@ class Node(object):
         
         Returns:
             The transition probabilities from current state to all two other 
-                states.
+            states.
         """
         res = np.array([1., 0.])
 
-        if self.state == 1:
-            if log:
-                return np.array([-np.inf, 0.])
-            else:
-                return np.array([0., 1.])
+        if self.state:  # 1 is interpreted as `True`
+            return np.array([-np.inf, 0.]) if log else np.array([0., 1.])
 
         for edge in self.inc:
             res[1] += res[0] * edge.t * edge.start.state
-
             res[0] *= (1 - edge.t) ** edge.start.state
             
-        if log:
-            return np.log(res)
-        else:
-            return res
+        return np.log(res) if log else res
 
 
-
-    def obs_prob(self, 
-                 obs: int, 
-                 obstable: np.ndarray = np.array([[1., 0.], 
-                                                  [0., 1.]]),
-                 log: bool = False) -> float:
-        """Compute the probability of observing a certain diagnose, given its 
+    def obs_prob(
+        self, obs: int, obstable: np.ndarray = np.eye(2), log: bool = False
+    ) -> float:
+        """
+        Compute the probability of observing a certain diagnose, given its 
         current state.
 
         Args:
@@ -112,12 +87,7 @@ class Node(object):
             The probability of observing the given diagnose.
         """
         res = obstable[obs, self.state]
-
-        if log:
-            return np.log(res)
-        else:
-            return res
-
+        return np.log(res) if log else res
 
 
     def bn_prob(self, log: bool = False) -> float:
@@ -138,7 +108,4 @@ class Node(object):
         res *= (-1)**self.state
         res += self.state
 
-        if log:
-            return np.log(res)
-        else:
-            return res
+        return np.log(res) if log else res
