@@ -658,45 +658,59 @@ class System(object):
         if not self._spread_probs_are_valid(spread_probs):
             return -np.inf
         
-        if t_stages is None:
-            t_stages = list(self.f_dict.keys())
-        
         self.spread_probs = spread_probs
         
-        state_probs = {}
-        
-        if diag_times is not None:
-            if len(diag_times) != len(t_stages):
-                msg = ("One diagnose time must be provided for each T-stage.")
+        # hidden Markov model
+        if mode == "HMM":
+            if t_stages is None:
+                t_stages = list(self.f_dict.keys())
+                
+            state_probs = {}
+            
+            if diag_times is not None:
+                if len(diag_times) != len(t_stages):
+                    msg = ("One diagnose time must be provided for each T-stage.")
+                    raise ValueError(msg)
+                
+                for stage in t_stages:
+                    diag_time = np.around(diag_times[stage]).astype(int)
+                    if diag_time > max_t:
+                        return -np.inf
+                    state_probs[stage] = self._evolve(diag_time)
+                
+            elif time_dists is not None:
+                if len(time_dists) != len(t_stages):
+                    msg = ("One distribution over diagnose times must be provided "
+                        "for each T-stage.")
+                    raise ValueError(msg)
+                
+                # subtract 1, to also consider healthy starting state (t = 0)
+                max_t = len(time_dists[t_stages[0]]) - 1
+                
+                for stage in t_stages:
+                    state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
+                
+            else:
+                msg = ("Either provide a list of diagnose times for each T-stage "
+                    "or a distribution over diagnose times for each T-stage.")
                 raise ValueError(msg)
             
+            llh = 0.
             for stage in t_stages:
-                diag_time = np.around(diag_times[stage]).astype(int)
-                if diag_time > max_t:
-                    return -np.inf
-                state_probs[stage] = self._evolve(diag_time)
-            
-        elif time_dists is not None:
-            if len(time_dists) != len(t_stages):
-                msg = ("One distribution over diagnose times must be provided "
-                       "for each T-stage.")
-                raise ValueError(msg)
-            
-            # subtract 1, to also consider healthy starting state (t = 0)
-            max_t = len(time_dists[t_stages[0]]) - 1
-            
-            for stage in t_stages:
-                state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
-            
-        else:
-            msg = ("Either provide a list of diagnose times for each T-stage "
-                   "or a distribution over diagnose times for each T-stage.")
-            raise ValueError(msg)
+                p = state_probs[stage] @ self.B @ self.C_dict[stage]
+                llh += self.f_dict[stage] @ np.log(p)
         
-        llh = 0.
-        for stage in t_stages:
-            p = state_probs[stage] @ self.B @ self.C_dict[stage]
-            llh += self.f_dict[stage] @ np.log(p)
+        # likelihood for the Bayesian network
+        elif mode == "BN":
+            a = np.ones(shape=(len(self.state_list),), dtype=float)
+
+            for i, state in enumerate(self.state_list):
+                self.state = state
+                for node in self.lnls:
+                    a[i] *= node.bn_prob()
+
+            b = a @ self.B
+            llh = self.f @ np.log(b @ self.C)
         
         return llh
 
@@ -705,8 +719,7 @@ class System(object):
         self, 
         theta: np.ndarray, 
         t_stages: Optional[List[Any]] = None, 
-        time_dists: Dict[Any, np.ndarray] = {}, 
-        mode: str = "HMM"
+        time_dists: Dict[Any, np.ndarray] = {}
     ) -> float:
         """
         Compute the likelihood of the (already stored) data, given the spread 
@@ -723,16 +736,13 @@ class System(object):
             time_dists: Distribution over the probability of diagnosis at 
                 different times :math:`t` given T-stage.
 
-            mode: ``"HMM"`` for hidden Markov model and ``"BN"`` for Bayesian 
-                network.
-
         Returns:
             The log-likelihood of the data, given te spread parameters.
         """
         return self.log_likelihood(
             theta, t_stages,
             diag_times=None, time_dists=time_dists,
-            mode=mode
+            mode="HMM"
         )
 
 
