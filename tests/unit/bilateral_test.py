@@ -1,15 +1,50 @@
 import pytest
 import numpy as np
+import scipy as sp
+import scipy.stats
 import pandas as pd
 import lymph
 
 
-@pytest.fixture
-def t_stage():
-    return [1,9]
+@pytest.fixture(scope="session")
+def t_stages():
+    return ["early", "late"]
+
+@pytest.fixture(scope="session")
+def max_t():
+    return 10
+
+@pytest.fixture(scope="session")
+def diag_times(t_stages, max_t):
+    res = {}
+    for stage in t_stages:
+        res[stage] = np.random.randint(low=0, high=max_t)
+    return res
+
+@pytest.fixture(scope="session")
+def time_dists(t_stages, max_t):
+    res = {}
+    p = 0.5
+    t = np.arange(max_t + 1)
+    for stage in t_stages:
+        p = np.random.uniform(low=0., high=p)
+        res[stage] = sp.stats.binom.pmf(t, max_t, p)
+    return res
+
+@pytest.fixture(scope="session", params=[10])
+def early_time_dist(request):
+    num_time_steps = request.param
+    t = np.arange(num_time_steps + 1)
+    return sp.stats.binom.pmf(t, num_time_steps, 0.3)
+
+@pytest.fixture(scope="session", params=[10])
+def late_time_dist(request):
+    num_time_steps = request.param
+    t = np.arange(num_time_steps + 1)
+    return sp.stats.binom.pmf(t, num_time_steps, 0.7)
 
 @pytest.fixture
-def spsn_dict():
+def modality_spsn():
     return {'test-o-meter': [0.99, 0.88]}
 
 @pytest.fixture
@@ -22,27 +57,27 @@ def bidata():
 
 @pytest.fixture
 def expected_C_dict():
-    return {1: np.array([[0, 0, 0, 1, 1],
-                         [0, 0, 0, 0, 1],
-                         [0, 0, 0, 0, 0],
-                         [0, 0, 1, 0, 0],
-                         [0, 0, 0, 0, 0],
-                         [0, 1, 0, 0, 0],
-                         [0, 0, 0, 0, 0],
-                         [1, 0, 1, 0, 0]]),
-            9: np.array([[0, 0, 1],
-                         [0, 0, 0],
-                         [0, 1, 1],
-                         [0, 0, 0],
-                         [0, 0, 0],
-                         [0, 0, 0],
-                         [1, 0, 0],
-                         [1, 0, 0]])}
+    return {"early": np.array([[0, 0, 0, 1, 1],
+                               [0, 0, 0, 0, 1],
+                               [0, 0, 0, 0, 0],
+                               [0, 0, 1, 0, 0],
+                               [0, 0, 0, 0, 0],
+                               [0, 1, 0, 0, 0],
+                               [0, 0, 0, 0, 0],
+                               [1, 0, 1, 0, 0]]),
+            "late" : np.array([[0, 0, 1],
+                               [0, 0, 0],
+                               [0, 1, 1],
+                               [0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0],
+                               [1, 0, 0],
+                               [1, 0, 0]])}
     
 @pytest.fixture
 def expected_f_dict():
-    return {1: np.array([1, 1, 1, 1, 1]),
-            9: np.array([1, 1, 2])}
+    return {"early": np.array([1, 1, 1, 1, 1]),
+            "late" : np.array([1, 1, 2])}
 
 @pytest.fixture
 def bisys():
@@ -53,9 +88,13 @@ def bisys():
     return lymph.BilateralSystem(graph=graph)
 
 @pytest.fixture
-def loaded_bisys(bisys, bidata, t_stage, spsn_dict):
-    bisys.load_data(bidata, t_stage=t_stage, spsn_dict=spsn_dict)
+def loaded_bisys(bisys, bidata, t_stages, modality_spsn):
+    bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
     return bisys
+
+@pytest.fixture
+def spread_probs(bisys):
+    return np.random.uniform(low=0., high=1., size=bisys.spread_probs.shape)
     
 
 def test_initialization(bisys):
@@ -69,16 +108,17 @@ def test_initialization(bisys):
                           (True, False), 
                           (False, True), 
                           (False, False)])
-def test_theta_and_A_matrices(bisys, base_symmetric, trans_symmetric):
-    # size of theta depends on symmetries
-    theta = np.random.uniform(size=((2 - base_symmetric) * 2 
+def test_spread_probs_and_A_matrices(bisys, base_symmetric, trans_symmetric):
+    # size of spread_probs depends on symmetries
+    spread_probs = np.random.uniform(size=((2 - base_symmetric) * 2 
                                     + (2 - trans_symmetric) * 3))
-    bisys.set_theta(theta, 
-                    base_symmetric=base_symmetric, 
-                    trans_symmetric=trans_symmetric)
+    
+    bisys.base_symmetric = base_symmetric
+    bisys.trans_symmetric = trans_symmetric
+    bisys.spread_probs = spread_probs
     
     # input should match read-out
-    assert np.all(np.equal(theta, bisys.get_theta()))
+    assert np.all(np.equal(spread_probs, bisys.spread_probs))
     
     # check A matrices
     assert hasattr(bisys.system["ipsi"], 'A')
@@ -101,8 +141,8 @@ def test_theta_and_A_matrices(bisys, base_symmetric, trans_symmetric):
                                 bisys.system["contra"].A))
         
 
-def test_B_matrices(bisys, spsn_dict):
-    bisys.set_modalities(spsn_dict=spsn_dict)
+def test_B_matrices(bisys, modality_spsn):
+    bisys.modalities = modality_spsn
     assert hasattr(bisys.system["ipsi"], 'B')
     assert hasattr(bisys.system["contra"], 'B')
     
@@ -112,59 +152,187 @@ def test_B_matrices(bisys, spsn_dict):
     assert np.all(np.equal(bisys.system["ipsi"].B, bisys.system["contra"].B))
     
     
-def test_load_data(bisys, bidata, t_stage, spsn_dict, 
+def test_load_data(bisys, bidata, t_stages, modality_spsn, 
                    expected_C_dict, expected_f_dict):
-    bisys.load_data(bidata, t_stage=t_stage, spsn_dict=spsn_dict)
+    bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
     
     assert hasattr(bisys.system["ipsi"], 'C_dict')
     assert hasattr(bisys.system["ipsi"], 'f_dict')
     assert hasattr(bisys.system["contra"], 'C_dict')
     assert hasattr(bisys.system["contra"], 'f_dict')
     
-    for stage in t_stage:
-        assert bisys.system["ipsi"].C_dict[stage].shape == bisys.system["contra"].C_dict[stage].shape
+    for stage in t_stages:
+        bi_ipsi_C = bisys.system["ipsi"].C_dict[stage]
+        bi_contra_C = bisys.system["contra"].C_dict[stage]
+        assert bi_ipsi_C.shape == bi_contra_C.shape
+
+
+@pytest.mark.parametrize(
+    "marginalize, has_spread_probs_invalid", 
+    [(True, True), (False, True), (True, False), (False, False)]
+)
+def test_log_likelihood(
+    loaded_bisys, spread_probs, t_stages, diag_times, time_dists, 
+    marginalize, has_spread_probs_invalid
+):
+    """
+    Check the normal log-likelihood function.
+    """
+    if has_spread_probs_invalid:
+        spread_probs += 1.
+    else:
+        with pytest.raises(ValueError):
+            assert loaded_bisys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=None, time_dists=None
+            )
+        
+        with pytest.raises(ValueError):
+            assert loaded_bisys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=[], time_dists=None
+            )
+        
+        with pytest.raises(ValueError):
+            assert loaded_bisys.log_likelihood(
+                spread_probs, t_stages,
+                diag_times=None, time_dists=np.array([])
+            )
     
+    if marginalize:
+        diag_times = None
+    else:
+        time_dists = None
+        shifted_diag_times = {}
+        for stage in t_stages:
+            small_shift = np.random.uniform(-0.2, 0.2)
+            shifted_diag_times[stage] = diag_times[stage] + small_shift
+        
+    llh = loaded_bisys.log_likelihood(
+        spread_probs, t_stages, 
+        diag_times=diag_times, time_dists=time_dists
+    )
+    assert llh < 0.
+    if has_spread_probs_invalid:
+        assert np.isinf(llh)
+
+    if not marginalize:
+        shifted_llh = loaded_bisys.log_likelihood(
+            spread_probs, t_stages, 
+            diag_times=shifted_diag_times, time_dists=time_dists
+        )
+        assert np.isclose(llh, shifted_llh)
+
     
-@pytest.mark.parametrize("base_symmetric, trans_symmetric", 
-                         [(True, True), 
-                          (True, False), 
-                          (False, True), 
-                          (False, False)])
-def test_likelihood(loaded_bisys, t_stage, 
-                    base_symmetric, trans_symmetric):
+@pytest.mark.parametrize(
+    "base_symmetric, trans_symmetric", 
+    [(True, True), (True, False), (False, True), (False, False)]
+)
+def test_marginal_log_likelihood(
+    loaded_bisys, 
+    t_stages, early_time_dist, late_time_dist,
+    base_symmetric, trans_symmetric
+):
+    """
+    Test the log-likelihood that marginalizes over diagnose times when provided 
+    with a distribution over these diagnose times.
+    """
     loaded_bisys.base_symmetric=base_symmetric
     loaded_bisys.trans_symmetric=trans_symmetric
     
-    theta = np.random.uniform(size=loaded_bisys.get_theta().shape)
-    llh = loaded_bisys.likelihood(theta, t_stage=t_stage, 
-                                  time_prior_dict={1: np.ones(shape=(5)) / 5.,
-                                                   9: np.ones(shape=(5)) / 5.})
+    # check sensible log-likelihood
+    spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
+    llh = loaded_bisys.marginal_log_likelihood(
+        spread_probs, t_stages=t_stages, 
+        time_dists={"early": early_time_dist, 
+                    "late" : late_time_dist}
+    )
     assert llh < 0.
     
-    theta = np.random.uniform(size=loaded_bisys.get_theta().shape) + 1.
-    llh = loaded_bisys.likelihood(theta, t_stage=t_stage, 
-                                  time_prior_dict={1: np.ones(shape=(5)) / 5.,
-                                                   9: np.ones(shape=(5)) / 5.})
+    # check that out of bounds spread probabilities yield -inf likelihood
+    spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape) + 1.
+    llh = loaded_bisys.marginal_log_likelihood(
+        spread_probs, t_stages=t_stages, 
+        time_dists={"early": early_time_dist, 
+                    "late" : late_time_dist})
     assert np.isinf(llh)
+
+
+def test_time_log_likelihood(loaded_bisys, t_stages):
+    """
+    Check the log-likelihood that's an explicit function of the diagnose time.
+    """
+    spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
+    times = np.array([0.7, 3.8])
+    theta = np.concatenate([spread_probs, times])
+    llh_1 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert llh_1 < 0.
+    
+    times = np.array([0.8, 3.85])
+    theta = np.concatenate([spread_probs, times])
+    llh_2 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert np.isclose(llh_1, llh_2)
+    
+    times = np.array([0.8, 3.4])
+    theta = np.concatenate([spread_probs, times])
+    llh_3 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert ~np.isclose(llh_1, llh_3)
+    
+    times = np.array([0.8, 10.6])
+    theta = np.concatenate([spread_probs, times])
+    llh_4 = loaded_bisys.time_log_likelihood(
+        theta, t_stages=t_stages, max_t=10
+    )
+    assert np.isinf(llh_4)
     
 
-@pytest.mark.parametrize("base_symmetric, trans_symmetric", 
-                         [(True, True), 
-                          (True, False), 
-                          (False, True), 
-                          (False, False)])
-def test_combined_likelihood(loaded_bisys, t_stage,
-                             base_symmetric, trans_symmetric):
+@pytest.mark.parametrize(
+    "base_symmetric, trans_symmetric", 
+    [(True, True), (True, False), (False, True), (False, False)]
+)
+def test_binom_marg_log_likelihood(
+    loaded_bisys, t_stages,
+    base_symmetric, trans_symmetric
+):
+    """
+    Check the loh-likelihood marginalizeing over diagnose times using 
+    binomial distributions.
+    """
     loaded_bisys.base_symmetric=base_symmetric
     loaded_bisys.trans_symmetric=trans_symmetric
     
-    theta = np.random.uniform(size=(len(loaded_bisys.get_theta())+1))
-    c_llh = loaded_bisys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
-    assert c_llh < 0.
+    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs)))
+    p = np.random.uniform(low=0., high=1., size=len(t_stages))
+    theta = np.concatenate([spread_probs, p])
+    llh = loaded_bisys.binom_marg_log_likelihood(
+        theta, t_stages,
+        max_t=10
+    )
+    assert llh < 0.
     
-    theta = np.random.uniform(size=(len(loaded_bisys.get_theta())+1)) + 1.
-    c_llh = loaded_bisys.combined_likelihood(theta, t_stage=t_stage, T_max=10)
-    assert np.isinf(c_llh)
+    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs))) + 1.
+    p = np.random.uniform(low=0., high=1., size=len(t_stages))
+    theta = np.concatenate([spread_probs, p])
+    llh = loaded_bisys.binom_marg_log_likelihood(
+        theta, t_stages,
+        max_t=10
+    )
+    assert np.isinf(llh)
+
+    spread_probs = np.random.uniform(size=(len(loaded_bisys.spread_probs)))
+    p = np.random.uniform(low=0., high=1., size=len(t_stages)) + 1.
+    theta = np.concatenate([spread_probs, p])
+    llh = loaded_bisys.binom_marg_log_likelihood(
+        theta, t_stages,
+        max_t=10
+    )
+    assert np.isinf(llh)
     
     
 @pytest.mark.parametrize("inv_ipsi, inv_contra, diag_ipsi, diag_contra", [
@@ -173,22 +341,29 @@ def test_combined_likelihood(loaded_bisys, t_stage,
     ([None,  True,  False], [True, True,  True],  [True,  False, False], [None,  True, None]),
     ([False, False, None],  [None, False, False], [False, False, False], [None,  False, None])
 ])
-def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
-    # select random theta
-    theta = np.random.uniform(size=loaded_bisys.get_theta().shape)
+def test_risk(
+    loaded_bisys, t_stages, time_dists,
+    inv_ipsi, inv_contra, 
+    diag_ipsi, diag_contra
+):
+    """
+    Test te risk computation.
+    """
+    # select random spread_probs
+    spread_probs = np.random.uniform(size=loaded_bisys.spread_probs.shape)
     
     # use some time-prior
-    time_prior = np.ones(5) / 5.
+    time_dist = time_dists[t_stages[0]]
     
     # put together requested involvement & diagnoses in the correct format
-    inv_dict = {"ipsi": inv_ipsi, "contra": inv_contra}
-    diag_dict = {"ipsi":   {"test-o-meter": diag_ipsi}, 
+    inv = {"ipsi": inv_ipsi, "contra": inv_contra}
+    diagnoses = {"ipsi":   {"test-o-meter": diag_ipsi}, 
                  "contra": {"test-o-meter": diag_contra}}
     risk = loaded_bisys.risk(
-        theta=theta, 
-        inv_dict=inv_dict, 
-        diag_dict=diag_dict,
-        time_prior=time_prior,
+        spread_probs=spread_probs, 
+        inv=inv, 
+        diagnoses=diagnoses,
+        time_dist=time_dist,
         mode="HMM"
     )
     assert risk >= 0.
@@ -198,39 +373,39 @@ def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
     # side in the bilateral case. This means that we provide only ``None`` for 
     # the involvement array of interest for the ignored side and also tell it 
     # that this side's diagnose is missing.
-    inv_dict = {"ipsi": inv_ipsi, "contra": [None, None, None]}
-    diag_dict = {"ipsi":   {"test-o-meter": diag_ipsi}, 
+    inv = {"ipsi": inv_ipsi, "contra": [None, None, None]}
+    diagnoses = {"ipsi":   {"test-o-meter": diag_ipsi}, 
                  "contra": {"test-o-meter": [None, None, None]}}
     birisk_ignore_contra = loaded_bisys.risk(
-        theta=theta,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
-        time_prior=time_prior,
+        spread_probs=spread_probs,
+        inv=inv,
+        diagnoses=diagnoses,
+        time_dist=time_dist,
         mode="HMM"
     )
     
-    inv_dict = {"ipsi": [None, None, None], "contra": inv_contra}
-    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+    inv = {"ipsi": [None, None, None], "contra": inv_contra}
+    diagnoses = {"ipsi":   {"test-o-meter": [None, None, None]},
                  "contra": {"test-o-meter": diag_contra}}
     birisk_ignore_ipsi = loaded_bisys.risk(
-        theta=theta,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
-        time_prior=time_prior,
+        spread_probs=spread_probs,
+        inv=inv,
+        diagnoses=diagnoses,
+        time_dist=time_dist,
         mode="HMM"
     )
 
     ipsi_risk = loaded_bisys.system["ipsi"].risk(
         inv=inv_ipsi,
         diagnoses={"test-o-meter": diag_ipsi},
-        time_prior=time_prior,
+        time_dist=time_dist,
         mode="HMM"
     )
     
     contra_risk = loaded_bisys.system["contra"].risk(
         inv=inv_contra,
         diagnoses={"test-o-meter": diag_contra},
-        time_prior=time_prior,
+        time_dist=time_dist,
         mode="HMM"
     )
 
@@ -239,25 +414,25 @@ def test_risk(loaded_bisys, inv_ipsi, inv_contra, diag_ipsi, diag_contra):
     
     # Finally, let's make sure that the ipsilateral risk increases when we 
     # observe more severe contralateral involvement
-    inv_dict = {"ipsi": [True, True, True], "contra": [None, None, None]}
-    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+    inv = {"ipsi": [True, True, True], "contra": [None, None, None]}
+    diagnoses = {"ipsi":   {"test-o-meter": [None, None, None]},
                  "contra": {"test-o-meter": [False, False, False]}}
     low_risk = loaded_bisys.risk(
-        theta=theta,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
-        time_prior=time_prior,
+        spread_probs=spread_probs,
+        inv=inv,
+        diagnoses=diagnoses,
+        time_dist=time_dist,
         mode="HMM"
     )
     
-    inv_dict = {"ipsi": [True, True, True], "contra": [None, None, None]}
-    diag_dict = {"ipsi":   {"test-o-meter": [None, None, None]},
+    inv = {"ipsi": [True, True, True], "contra": [None, None, None]}
+    diagnoses = {"ipsi":   {"test-o-meter": [None, None, None]},
                  "contra": {"test-o-meter": [True, True, True]}}
     high_risk = loaded_bisys.risk(
-        theta=theta,
-        inv_dict=inv_dict,
-        diag_dict=diag_dict,
-        time_prior=time_prior,
+        spread_probs=spread_probs,
+        inv=inv,
+        diagnoses=diagnoses,
+        time_dist=time_dist,
         mode="HMM"
     )
 
