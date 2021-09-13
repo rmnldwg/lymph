@@ -493,7 +493,7 @@ class BilateralSystem(object):
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
                 
-            T_max: Latest accepted time-point.
+            max_t: Latest accepted time-point.
             
         Returns:
             The log-likelihood of the (already stored) data, given the spread 
