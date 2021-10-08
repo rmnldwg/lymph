@@ -591,7 +591,7 @@ class BilateralSystem(object):
                 if mod in diagnoses[side]:
                     obs = np.append(obs, diagnoses[side][mod])
                 else:
-                    obs = np.append(obs, np.array([None] * len(self.lnls)))
+                    obs = np.append(obs, np.array([None] * len(self.system[side].lnls)))
             
             # build vector to marginalize over diagnoses
             cZ[side] = np.zeros(shape=(len(self.system[side].obs_list)), 
