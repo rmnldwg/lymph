@@ -1,5 +1,5 @@
-scipy
-pandas
-pytest
+sphinx
+sphinx-rtd-theme
 sphinx-autodoc-typehints
 nbsphinx
+ipython
