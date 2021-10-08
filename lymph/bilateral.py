@@ -43,10 +43,12 @@ class BilateralSystem(object):
     See Also:
         :class:`System`: Two instances of this class are created as attributes.
     """
-    def __init__(self, 
-                 graph: dict = {},
-                 base_symmetric: bool = False,
-                 trans_symmetric: bool = True):
+    def __init__(
+        self, 
+        graph: dict,
+        base_symmetric: bool = False,
+        trans_symmetric: bool = True
+    ):
         self.system = {}
         self.system["ipsi"] = System(graph=graph)   # ipsilateral and...
         self.system["contra"] = System(graph=graph)   # ...contralateral part of the network
