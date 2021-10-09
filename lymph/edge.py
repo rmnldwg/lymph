@@ -1,12 +1,9 @@
-import numpy as np
-import scipy as sp
-import scipy.stats
-
 from .node import Node
 
 
 class Edge(object):
-    """Class for the connections between lymph node levels (LNLs) represented
+    """
+    Class for the connections between lymph node levels (LNLs) represented
     by the Node class.
 
     Args:
@@ -17,13 +14,10 @@ class Edge(object):
         t: Transition probability in case start-Node has state 1 (microscopic 
             involvement).
     """
-    def __init__(self,
-                 start: Node,
-                 end: Node,
-                 t: float = 0.):
-
+    def __init__(self, start: Node, end: Node, t: float = 0.):
+        """Constructor"""
         if type(start) is not Node:
-            raise TypeError("Start must be instance of Node")
+            raise TypeError("Start must be instance of Node!")
         if type(end) is not Node:
             raise TypeError("End must be instance of Node!")
 
@@ -32,12 +26,8 @@ class Edge(object):
         self.end = end
         self.end.inc.append(self)
         self.t = t
-
-
-
-    def report(self):
-        """Just quickly prints infos about the edge
-        """
-        print(f"start: {self.start.name}")
-        print(f"end: {self.end.name}")
-        print(f"t = {self.t}")
+    
+    
+    def __str__(self):
+        """Print basic info"""
+        return f"{self.start.name} -- {100 * self.t:.2f}% --> {self.end.name}"
