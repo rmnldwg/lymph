@@ -166,7 +166,31 @@ class System(ig.Graph):
     
     
     def _gen_transition_matrix(self):
-        """Generate transition matrix."""
+        """Generate transition matrix.
+        
+        The computation probably doesn't look very intuitive, so here's an 
+        attempt at explaining: 
+        
+        1. The adjacency matrix of the graph is element-wise multiplied with 
+        every possible hidden state, thereby only "activating" those LNLs that 
+        are actually cancerous.
+        2. The resulting (3D) array is recursively reduced from the top, using 
+        the function :func:``recursive_collider`` that computes to probability 
+        of a node becoming involved from one of its parent nodes.
+        3. We end up with an array of probabilities for every starting state 
+        that contains the probability for every LNL to become involved. A 
+        complementary matrix is computed that computes one minus that value to 
+        get the value for every LNL to remain healthy.
+        4. Finally, for every possible starting state access the probabilities 
+        for every LNL to remain healthy or become involved, depending on the 
+        respective end state. Overwrite this for thos LNLs that are already 
+        involved in the starting state (they stay in the sick state with 
+        probability 1).
+        
+        Steps 1 to 3 are computed once using lots of ``numpy`` matrix magic. 
+        Step 4 is then computed for every starting state and for every end 
+        state that has a non-zero probability (no self-healing).
+        """
         num_lnls = len(self.vs.select(type="lnl"))
         self._transition_matrix = np.zeros(
             shape=(2**num_lnls, 2**num_lnls), dtype=float
