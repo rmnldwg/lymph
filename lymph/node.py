@@ -61,8 +61,9 @@ class Node(object):
             return np.array([-np.inf, 0.]) if log else np.array([0., 1.])
 
         for edge in self.inc:
-            res[1] += res[0] * edge.t * edge.start.state
             res[0] *= (1 - edge.t) ** edge.start.state
+        
+        res[1] = 1 - res[0]
             
         return np.log(res) if log else res
 

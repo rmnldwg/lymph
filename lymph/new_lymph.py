@@ -52,16 +52,6 @@ def change_base(
         return pad + result[::-1]
 
 
-def recursive_collider(mat: np.ndarray):
-    """Compute colliding incoming probabilities recusively."""
-    top, rem = mat[0], mat[1:]
-    rem[0] = (1 - top) * rem[0] + top
-    if rem.shape[0] <= 1:
-        return rem[0]
-    else:
-        return recursive_collider(rem)
-
-
 class System(ig.Graph):
     """Class that models metastatic progression in a lymphatic system by 
     representing it as a directed graph. The progression itself can be modelled 
@@ -95,10 +85,12 @@ class System(ig.Graph):
     @property
     def spread_probs(self) -> List[float]:
         """Return the spread probabilities of the edges in the network in the 
-        order they appear in the graph."""
+        order they appear in the graph. If none have been set yet, warn and 
+        output random vector, so one can see the shape of the parameter array.
+        """
         try:
-            return self.es["weight"]
-        except:
+            return np.array(self.es["weight"])
+        except KeyError:
             warnings.warn(
                 "Spread probabilities not yet set, returning random values"
             )
@@ -107,8 +99,10 @@ class System(ig.Graph):
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: List[float]):
         """Set the spread probabilities of the edges in the the network in the 
-        order they were created from the graph."""
+        order they were created from the graph and recompute the transition 
+        matrix."""
         self.es["weight"] = new_spread_probs
+        self._gen_transition_matrix()
     
     
     def _gen_state_list(self):
@@ -130,10 +124,11 @@ class System(ig.Graph):
         """Return list of all possible hidden states. They are arranged in the 
         same order as the nodes in the network/graph. The first nodes 
         representing the tumor are alwaus ``True``."""
-        if not hasattr(self, "_state_list"):
+        try:
+            return self._state_list
+        except AttributeError:
             self._gen_state_list()
-        
-        return self._state_list
+            return self._state_list
     
     
     def _gen_mask(self):
@@ -159,10 +154,11 @@ class System(ig.Graph):
         ``[True, True, True]``, which has index 2. So, the key-value pair for 
         that particular hidden state would be ``1: [2]``.
         """
-        if not hasattr(self, "_mask"):
+        try:
+            return self._mask
+        except AttributeError:
             self._gen_mask()
-        
-        return self._mask
+            return self._mask
     
     
     def _gen_transition_matrix(self):
@@ -174,13 +170,13 @@ class System(ig.Graph):
         1. The adjacency matrix of the graph is element-wise multiplied with 
         every possible hidden state, thereby only "activating" those LNLs that 
         are actually cancerous.
-        2. The resulting (3D) array is recursively reduced from the top, using 
-        the function :func:``recursive_collider`` that computes to probability 
-        of a node becoming involved from one of its parent nodes.
+        2. The resulting (3D) array is user to compute the probability that a 
+        node level does not become involved, which is essentially the product 
+        of one minus every entry.
         3. We end up with an array of probabilities for every starting state 
-        that contains the probability for every LNL to become involved. A 
+        that contains the probability for every LNL remain healthy. A 
         complementary matrix is computed that computes one minus that value to 
-        get the value for every LNL to remain healthy.
+        get the value for every LNL to become involved.
         4. Finally, for every possible starting state access the probabilities 
         for every LNL to remain healthy or become involved, depending on the 
         respective end state. Overwrite this for thos LNLs that are already 
@@ -192,22 +188,22 @@ class System(ig.Graph):
         state that has a non-zero probability (no self-healing).
         """
         num_lnls = len(self.vs.select(type="lnl"))
+        node_indexer = range(len(self.vs))
         self._transition_matrix = np.zeros(
             shape=(2**num_lnls, 2**num_lnls), dtype=float
         )
         adj_mat = np.array(self.get_adjacency(attribute="weight").data)
-        activate_adj_arr = np.einsum("ij,jk->jik", self.state_list, adj_mat)
-        collided_probs = recursive_collider(activate_adj_arr)
-        total_collided_probs = np.stack(
-            [(1 - collided_probs), collided_probs], axis=-1
+        state_active_adj_arr = np.einsum("ij,jk->jik", self.state_list, adj_mat)
+        no_spread_probs = np.prod(1 - state_active_adj_arr, axis=0)
+        total_probs = np.stack(
+            [no_spread_probs, 1 - no_spread_probs], axis=-1
         )
         for i,start_state in enumerate(self.state_list):
             for j in self.mask[i]:
                 end_state = self.state_list[j]
-                lnl_probs = total_collided_probs[i,range(len(self.vs)),end_state]
-                lnl_probs[start_state == 1] = 1.
-                transition_prob = np.prod(lnl_probs)
-                self._transition_matrix[i,j] = transition_prob
+                lnl_probs = total_probs[i, node_indexer, end_state]
+                lnl_probs = np.maximum(lnl_probs, start_state)
+                self._transition_matrix[i,j] = np.prod(lnl_probs)                
     
     @property
     def transition_matrix(self):
@@ -217,8 +213,9 @@ class System(ig.Graph):
         :math:`\\mathbf{A}` is a square matrix with size ``(# of states)``. The 
         lower diagonal is zero, because self-healing is forbidden.
         """
-        if not hasattr(self, "_transition_matrix"):
+        try:
+            return self._transition_matrix
+        except AttributeError:
             self._gen_transition_matrix()
-            
-        return self._transition_matrix
+            return self._transition_matrix
         
