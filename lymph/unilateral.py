@@ -4,29 +4,29 @@ import scipy as sp
 import scipy.stats
 import pandas as pd
 import warnings
-from typing import Union, Optional, List, Dict, Any
+from functools import lru_cache
+from typing import Union, Optional, List, Dict, Any, Tuple
+
+from lymph.new_lymph import change_base
 
 from .node import Node
 from .edge import Edge
 
 
-
-def toStr(n: int, 
-          base: int, 
-          rev: bool = False, 
-          length: Optional[int] = None) -> str:
-    """Function that converts an integer into another base.
+def change_base(
+    number: int, 
+    base: int, 
+    reverse: bool = False, 
+    length: Optional[int] = None
+) -> str:
+    """Convert an integer into another base.
     
     Args:
-        n: Number to convert
-
+        number: Number to convert
         base: Base of the resulting converted number
-
-        rev: If true, the converted number will be printed in reverse 
-            order. (default: ``False``)
-
-        length: Length of the returned string.
-            (default: ``None``)
+        reverse: If true, the converted number will be printed in reverse order.
+        length: Length of the returned string. If longer than would be 
+            necessary, the output will be padded.
 
     Returns:
         The (padded) string of the converted number.
@@ -37,11 +37,11 @@ def toStr(n: int,
         
     convertString = "0123456789ABCDEF"
     result = ''
-    while n >= base:
-        result = result + convertString[n % base]
-        n = n//base
-    if n > 0:
-        result = result + convertString[n]
+    while number >= base:
+        result = result + convertString[number % base]
+        number = number//base
+    if number > 0:
+        result = result + convertString[number]
         
     if length is None:
         length = len(result)
@@ -51,7 +51,7 @@ def toStr(n: int,
         
     pad = '0' * (length - len(result))
         
-    if rev:
+    if reverse:
         return result + pad
     else:
         return pad + result[::-1]
@@ -90,8 +90,6 @@ class System(object):
             for value in values:
                 self.edges.append(Edge(self.find_node(key[1]), 
                                        self.find_node(value)))
-
-        self._gen_state_list()
 
 
     def __str__(self):
@@ -212,19 +210,13 @@ class System(object):
         
         for i, edge in enumerate(self.edges):
             edge.t = new_spread_probs[i]
-
-        try:
-            self._gen_A()
-        except AttributeError:
-            self.A = np.zeros(shape=(len(self.state_list), 
-                                     len(self.state_list)))
-            self._gen_A()
+        
+        # reset cache, because spread probs change... maybe this is unnecessary
+        self._node_trans_prob.cache_clear()
+        self._gen_A()
             
 
-    def trans_prob(self, 
-                   newstate: List[int], 
-                   log: bool = False, 
-                   acquire: bool = False) -> float:
+    def trans_prob(self, newstate: List[int], acquire: bool = False) -> float:
         """Computes the probability to transition to newstate, given its 
         current state.
 
@@ -232,10 +224,6 @@ class System(object):
             newstate: List of new states for each LNL in the lymphatic 
                 system. The transition probability :math:`t` will be computed 
                 from the current states to these states.
-
-            log: if ``True``, the log-probability is computed. 
-                (default: ``False``)
-
             acquire: if ``True``, after computing and returning the probability, 
                 the system updates its own state to be ``newstate``. 
                 (default: ``False``)
@@ -243,22 +231,36 @@ class System(object):
         Returns:
             Transition probability :math:`t`.
         """
-        if len(newstate) != len(self.lnls):
-            raise ValueError("length of newstate must match # of LNLs")
-        
-        if not log:
-            res = 1.
-            for i, lnl in enumerate(self.lnls):
-                res *= lnl.trans_prob(log=log)[newstate[i]]
-        else:
-            res = 0.
-            for i, lnl in enumerate(self.lnls):
-                res += lnl.trans_prob(log=log)[newstate[i]]
+        res = 1.
+        for i, lnl in enumerate(self.lnls):
+            if not lnl.state:
+                in_states = tuple(edge.start.state for edge in lnl.inc)
+                in_weights = tuple(edge.t for edge in lnl.inc)
+                res *= self._node_trans_prob(in_states, in_weights)[newstate[i]]
 
         if acquire:
             self.state = newstate
 
         return res
+
+    @lru_cache
+    def _node_trans_prob(self, in_states: Tuple[int], in_weights: Tuple[float]):
+        """Compute probability of a random variable to remain in its state or 
+        switch to be involved based on its parent's states and the weights of 
+        the connecting arcs. Cached for better performance.
+        
+        Args:
+            in_states: States of the parent nodes.
+            in_weights: Weights of the incoming arcs.
+        
+        Returns:
+            Probability to remein healthy and probability to become metastatic 
+            as a list of length 2.
+        """
+        stay_prob = 1.
+        for state, weight in zip(in_states, in_weights):
+            stay_prob *= (1. - weight) ** state
+        return [stay_prob, 1. - stay_prob]
 
 
     def obs_prob(self, 
@@ -300,34 +302,54 @@ class System(object):
 
 
     def _gen_state_list(self):
+        """Generates the list of (hidden) states.
         """
-        Generates the list of (hidden) states.
-        """                
-        # every LNL can be either healthy (state=0) or involved (state=1). 
-        # Hence, the number of different possible states is 2 to the power of 
-        # the # of lymph node levels.
-        self.state_list = np.zeros(shape=(2**len(self.lnls), len(self.lnls)), 
-                                   dtype=int)
-        
+        if not hasattr(self, "_state_list"):
+            self._state_list = np.zeros(
+                shape=(2**len(self.lnls), len(self.lnls)), dtype=int
+            )
         for i in range(2**len(self.lnls)):
-            tmp = toStr(i, 2, rev=False, length=len(self.lnls))
-            for j in range(len(self.lnls)):
-                self.state_list[i,j] = int(tmp[j])
+            self._state_list[i] = [
+                int(digit) for digit in change_base(i, 2, length=len(self.lnls))
+            ]
+    
+    @property
+    def state_list(self):
+        """Return list of all possible hidden states. They are arranged in the 
+        same order as the lymph node levels in the network/graph."""
+        try:
+            return self._state_list
+        except AttributeError:
+            self._gen_state_list()
+            return self._state_list
 
 
     def _gen_obs_list(self):
-        """
-        Generates the list of possible observations.
+        """Generates the list of possible observations.
         """
         n_obs = len(self._modality_tables)
         
-        self.obs_list = np.zeros(shape=(2**(n_obs * len(self.lnls)), 
-                                        n_obs * len(self.lnls)), dtype=int)
+        if not hasattr(self, "_obs_list"):
+            self._obs_list = np.zeros(
+                shape=(2**(n_obs * len(self.lnls)), n_obs * len(self.lnls)), 
+                dtype=int
+            )
+        
         for i in range(2**(n_obs * len(self.lnls))):
-            tmp = toStr(i, 2, rev=False, length=n_obs * len(self.lnls))
+            tmp = change_base(i, 2, reverse=False, length=n_obs * len(self.lnls))
             for j in range(len(self.lnls)):
                 for k in range(n_obs):
-                    self.obs_list[i,(j*n_obs)+k] = int(tmp[k*len(self.lnls)+j])
+                    self._obs_list[i,(j*n_obs)+k] = int(tmp[k*len(self.lnls)+j])
+    
+    @property
+    def obs_list(self):
+        """Return the list of all possible observations.
+        """
+        try:
+            return self._obs_list
+        except AttributeError:
+            self._gen_obs_list()
+            return self._obs_list
 
 
     def _gen_mask(self):
@@ -335,13 +357,33 @@ class System(object):
         Generates a dictionary that contains for each row of 
         :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
         """
-        self._idx_dict = {}
+        self._mask = {}
         for i in range(len(self.state_list)):
-            self._idx_dict[i] = []
+            self._mask[i] = []
             for j in range(len(self.state_list)):
                 if not np.any(np.greater(self.state_list[i,:], 
                                          self.state_list[j,:])):
-                    self._idx_dict[i].append(j)
+                    self._mask[i].append(j)
+    
+    @property
+    def mask(self):
+        """Return a dictionary with keys for each possible hidden state. The 
+        respective value is then a list of all hidden state indices that can be 
+        reached from that key's state. This allows the model to skip the 
+        expensive computation of entries in the transition matrix that are zero 
+        anyways, because self-healing is forbidden.
+        
+        For example: The hidden state ``[True, True, False]`` in a network 
+        with only one tumor and two LNLs (one involved, one healthy) corresponds 
+        to the index ``1`` and can only evolve into the state 
+        ``[True, True, True]``, which has index 2. So, the key-value pair for 
+        that particular hidden state would be ``1: [2]``.
+        """
+        try:
+            return self._mask
+        except AttributeError:
+            self._gen_mask()
+            return self._mask
 
 
     def _gen_A(self):
@@ -351,19 +393,32 @@ class System(object):
         is a square matrix with size ``(# of states)``. The lower diagonal is 
         zero.
         """
-        if not hasattr(self, "_idx_dict"):
-            self._gen_mask()
+        if not hasattr(self, "_A"):
+            self._A = np.zeros(shape=(2**len(self.lnls), 2**len(self.lnls)))
         
         for i,state in enumerate(self.state_list):
             self.state = state
-            for j in self._idx_dict[i]:
-                self.A[i,j] = self.trans_prob(self.state_list[j])
+            for j in self.mask[i]:
+                self._A[i,j] = self.trans_prob(self.state_list[j])
+    
+    @property
+    def A(self):
+        """Return the transition matrix :math:`\\mathbf{A}`, which contains the 
+        probability to transition from any state to any other state within one 
+        time-step :math:`P \\left( X_{t+1} \\mid X_t \\right)`. 
+        :math:`\\mathbf{A}` is a square matrix with size ``(# of states)``. The 
+        lower diagonal is zero, because self-healing is forbidden.
+        """
+        try:
+            return self._A
+        except AttributeError:
+            self._gen_A()
+            return self._A
 
     
     @property
     def modalities(self):
-        """
-        Return specificity & sensitivity stored in this :class:`System`.
+        """Return specificity & sensitivity stored in this :class:`System`.
         """
         try:
             modality_spsn = {}
@@ -379,8 +434,7 @@ class System(object):
     
     @modalities.setter
     def modalities(self, modality_spsn: Dict[Any, List[float]]):
-        """
-        Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
+        """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
         diagnostic modalities, compute the system's observation matrix 
         :math:`\\mathbf{B}`.
         """
@@ -402,9 +456,6 @@ class System(object):
             sp, sn = spsn
             self._modality_tables[mod] = np.array([[sp     , 1. - sn],
                                                    [1. - sp, sn     ]])
-            
-        self._gen_obs_list()
-        self._gen_B()
 
 
     def _gen_B(self):
@@ -413,7 +464,9 @@ class System(object):
         shape ``(# of states, # of possible observations)``.
         """
         n_lnl = len(self.lnls)
-        self.B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
+        
+        if not hasattr(self, "_B"):
+            self._B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
         
         for i,state in enumerate(self.state_list):
             self.state = state
@@ -421,7 +474,16 @@ class System(object):
                 diagnoses_dict = {}
                 for k,modality in enumerate(self._modality_tables):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self.B[i,j] = self.obs_prob(diagnoses_dict, log=False)
+                self._B[i,j] = self.obs_prob(diagnoses_dict, log=False)
+    
+    @property
+    def B(self):
+        """Return the observation matrix."""
+        try:
+            return self._B
+        except AttributeError:
+            self._gen_B()
+            return self._B 
 
 
     def _gen_C(self,

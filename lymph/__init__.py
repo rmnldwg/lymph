@@ -25,5 +25,5 @@ __all__ = [
     "Edge",
     "System",
     "BilateralSystem",
-    "toStr",
+    "change_base",
 ]

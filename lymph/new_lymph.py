@@ -4,6 +4,7 @@ import scipy as sp
 import scipy.stats
 import pandas as pd
 import warnings
+# from functools import cache
 from typing import Union, Optional, List, Dict, Any
 import igraph as ig
 
@@ -66,7 +67,6 @@ class System(ig.Graph):
         
         self.vs["name"]  = [key[1] for key in graph.keys()]
         self.vs["type"]  = [key[0] for key in graph.keys()]
-        self.vs["state"] = [False] * len(self.vs)
         for source, targets in graph.items():
             self.add_edges([(source[1], target) for target in targets])
 
@@ -103,6 +103,7 @@ class System(ig.Graph):
         matrix."""
         self.es["weight"] = new_spread_probs
         self._gen_transition_matrix()
+        self._node_transition_prob.cache_clear()
     
     
     def _gen_state_list(self):
@@ -159,7 +160,18 @@ class System(ig.Graph):
         except AttributeError:
             self._gen_mask()
             return self._mask
-    
+
+
+    def _node_transition_prob(in_weights: List[float], in_states: List[int]):
+        """Compute the probability for a node to remain healthy or become 
+        involved based solely on the weights of that node's incoming arcs and 
+        those arc's source node's state.
+        """
+        stay_prob = 1.
+        for weight, state in zip(in_weights, in_states):
+            stay_prob *= (1 - weight) ** state
+        
+        return [stay_prob, 1 - stay_prob]    
     
     def _gen_transition_matrix(self):
         """Generate transition matrix.
@@ -203,7 +215,26 @@ class System(ig.Graph):
                 end_state = self.state_list[j]
                 lnl_probs = total_probs[i, node_indexer, end_state]
                 lnl_probs = np.maximum(lnl_probs, start_state)
-                self._transition_matrix[i,j] = np.prod(lnl_probs)                
+                self._transition_matrix[i,j] = np.prod(lnl_probs)
+    
+    def _gen_transition_matrix_var(self):
+        """"""
+        num_lnl = len(self.vs.select(type="lnl"))
+        self._transition_matrix = np.zeros(
+            shape=(2**num_lnl, 2**num_lnl), dtype=float
+        )
+        for i,start_state in enumerate(self.state_list):
+            self.vs["state"] = start_state
+            idx = start_state == 0
+            for j in self.mask[i]:
+                end_state = self.state_list[j][idx]
+                healthy_nodes = self.vs[idx]
+                state_transition_prob = 1.
+                for k,node in enumerate(healthy_nodes):
+                    
+                    state_transition_prob *= self._node_transition_prob(
+                        node, start_state
+                    )
     
     @property
     def transition_matrix(self):
