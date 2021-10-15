@@ -18,11 +18,12 @@ DESCRIPTION = "Package for statistical modelling of lymphatic metastatic spread.
 URL = "https://github.com/rmnldwg/lymph"
 EMAIL = 'roman.ludwig@usz.ch'
 AUTHOR = 'Roman Ludwig'
-REQUIRES_PYTHON = '>=3.6.0'
+REQUIRES_PYTHON = '>=3.8.0'
 VERSION = versioneer.get_version()
 
 # What packages are required for this module to be executed?
 REQUIRED = [
+    "numpy",
     "scipy",
     "pandas",
 ]

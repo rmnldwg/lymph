@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Tuple
 
 
-@lru_cache
+@lru_cache()
 def node_trans_prob(in_states: Tuple[int], in_weights: Tuple[float]):
     """Compute probability of a random variable to remain in its state (0) or 
     switch to be involved (1) based on its parent's states and the weights of 

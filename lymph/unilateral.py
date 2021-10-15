@@ -4,8 +4,6 @@ import pandas as pd
 import warnings
 from typing import Union, Optional, List, Dict, Any
 
-from lymph.new_lymph import change_base
-
 from .node import Node, node_trans_prob
 from .edge import Edge
 
