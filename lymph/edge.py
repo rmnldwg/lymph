@@ -2,20 +2,18 @@ from .node import Node
 
 
 class Edge(object):
-    """
-    Class for the connections between lymph node levels (LNLs) represented
-    by the Node class.
-
-    Args:
-        start: Parent node
-
-        end: Child node
-
-        t: Transition probability in case start-Node has state 1 (microscopic 
-            involvement).
+    """Minimalistic class for the connections between lymph node levels (LNLs) 
+    represented by the :class:`Node` class. It only holds its start and end 
+    node, as well as the transition probability.
     """
     def __init__(self, start: Node, end: Node, t: float = 0.):
-        """Constructor"""
+        """
+        Args:
+            start: Parent node
+            end: Child node
+            t: Transition probability in case start-Node has state 1 (microscopic 
+                involvement).
+        """
         if type(start) is not Node:
             raise TypeError("Start must be instance of Node!")
         if type(end) is not Node:

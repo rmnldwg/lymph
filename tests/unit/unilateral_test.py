@@ -119,9 +119,10 @@ def test_A_matrix(sys):
     
 def test_B_matrix(sys, modality_spsn):
     sys.modalities = modality_spsn
-    assert hasattr(sys, 'B')
+    matrix_B = sys.B
+    assert hasattr(sys, "_B")
     
-    row_sums = np.sum(sys.B, axis=1)
+    row_sums = np.sum(matrix_B, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
     
     

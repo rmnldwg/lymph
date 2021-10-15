@@ -4,12 +4,11 @@ import scipy as sp
 import scipy.stats
 import pandas as pd
 import warnings
-from functools import lru_cache
 from typing import Union, Optional, List, Dict, Any, Tuple
 
 from lymph.new_lymph import change_base
 
-from .node import Node
+from .node import Node, node_trans_prob
 from .edge import Edge
 
 
@@ -62,16 +61,16 @@ class System(object):
     """Class that models metastatic progression in a lymphatic system by 
     representing it as a directed graph. The progression itself can be modelled 
     via hidden Markov models (HMM) or Bayesian networks (BN). 
-
-    Args:
-        graph: Every key in this dictionary is a 2-tuple containing the type of 
-            the :class:`Node` ("tumor" or "lnl") and its name (arbitrary 
-            string). The corresponding value is a list of names this node should 
-            be connected to via an :class:`Edge`
     """
-    def __init__(self, 
-                 graph: dict = {}):
-
+    def __init__(self, graph: dict = {}):
+        """Initialize the underlying graph:
+        
+        Args:
+            graph: Every key in this dictionary is a 2-tuple containing the type of 
+                the :class:`Node` ("tumor" or "lnl") and its name (arbitrary 
+                string). The corresponding value is a list of names this node should 
+                be connected to via an :class:`Edge`.
+        """
         self.tumors = []    # list of nodes with type tumour
         self.lnls = []      # list of all lymph node levels
         self.nodes = []     # list of all nodes in the graph
@@ -211,8 +210,6 @@ class System(object):
         for i, edge in enumerate(self.edges):
             edge.t = new_spread_probs[i]
         
-        # reset cache, because spread probs change... maybe this is unnecessary
-        self._node_trans_prob.cache_clear()
         self._gen_A()
             
 
@@ -236,36 +233,15 @@ class System(object):
             if not lnl.state:
                 in_states = tuple(edge.start.state for edge in lnl.inc)
                 in_weights = tuple(edge.t for edge in lnl.inc)
-                res *= self._node_trans_prob(in_states, in_weights)[newstate[i]]
+                res *= node_trans_prob(in_states, in_weights)[newstate[i]]
 
         if acquire:
             self.state = newstate
 
         return res
 
-    @lru_cache
-    def _node_trans_prob(self, in_states: Tuple[int], in_weights: Tuple[float]):
-        """Compute probability of a random variable to remain in its state or 
-        switch to be involved based on its parent's states and the weights of 
-        the connecting arcs. Cached for better performance.
-        
-        Args:
-            in_states: States of the parent nodes.
-            in_weights: Weights of the incoming arcs.
-        
-        Returns:
-            Probability to remein healthy and probability to become metastatic 
-            as a list of length 2.
-        """
-        stay_prob = 1.
-        for state, weight in zip(in_states, in_weights):
-            stay_prob *= (1. - weight) ** state
-        return [stay_prob, 1. - stay_prob]
 
-
-    def obs_prob(self, 
-                 diagnoses_dict: Dict[str, List[int]], 
-                 log: bool = False) -> float:
+    def obs_prob(self, diagnoses_dict: Dict[str, List[int]]) -> float:
         """Computes the probability to see certain diagnoses, given the 
         system's current state.
 
@@ -274,31 +250,19 @@ class System(object):
                 modality). A diagnose must be an array of integers that is as 
                 long as the the system has LNLs.
 
-            log: If ``True``, the log probability is computed. 
-                (default: ``False``)
-
         Returns:
             The probability to see the given diagnoses.
         """  
-        if not log:
-            res = 1.
-        else:
-            res = 0.
+        prob = 1.
             
         for modality, diagnoses in diagnoses_dict.items():
             if len(diagnoses) != len(self.lnls):
                 raise ValueError("length of observations must match # of LNLs")
 
             for i, lnl in enumerate(self.lnls):
-                if not log:
-                    res *= lnl.obs_prob(obs=diagnoses[i], 
-                                        obstable=self._modality_tables[modality], 
-                                        log=log)
-                else:
-                    res += lnl.obs_prob(obs=diagnoses[i],
-                                        obstable=self._modality_tables[modality],
-                                        log=log)
-        return res
+                prob *= lnl.obs_prob(obs=diagnoses[i], 
+                                     obstable=self._modality_tables[modality])
+        return prob
 
 
     def _gen_state_list(self):
@@ -418,7 +382,8 @@ class System(object):
     
     @property
     def modalities(self):
-        """Return specificity & sensitivity stored in this :class:`System`.
+        """Return specificity & sensitivity stored in this :class:`System` for 
+        every diagnostic modality that has been defined.
         """
         try:
             modality_spsn = {}
@@ -435,8 +400,14 @@ class System(object):
     @modalities.setter
     def modalities(self, modality_spsn: Dict[Any, List[float]]):
         """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
-        diagnostic modalities, compute the system's observation matrix 
-        :math:`\\mathbf{B}`.
+        diagnostic modalities, create a 2x2 matrix for every disgnostic 
+        modality that stores 
+        
+        .. math::
+            \\begin{pmatrix}
+            s_P & 1 - s_N \\\\
+            1 - s_P & s_N
+            \\end{pmatrix}
         """
         self._modality_tables = {}
         for mod, spsn in modality_spsn.items():
@@ -474,7 +445,7 @@ class System(object):
                 diagnoses_dict = {}
                 for k,modality in enumerate(self._modality_tables):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self._B[i,j] = self.obs_prob(diagnoses_dict, log=False)
+                self._B[i,j] = self.obs_prob(diagnoses_dict)
     
     @property
     def B(self):

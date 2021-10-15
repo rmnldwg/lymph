@@ -28,17 +28,6 @@ class BilateralSystem(object):
     bilaterally by creating two :class:`System` instances that are symmetric in 
     their connections. The parameters describing the spread probabilities 
     however need not be symmetric.
-
-    Args:
-        graph: Dictionary of the same kind as for initialization of 
-            :class:`System`. This graph will be passed to the constructors of 
-            two :class:`System` attributes of this class.
-            
-        base_symmetric: If ``True``, the spread probabilities of the two 
-            sides from the tumor(s) to the LNLs will be set symmetrically.
-            
-        trans_symmetric: If ``True``, the spread probabilities among the 
-            LNLs will be set symmetrically.
             
     See Also:
         :class:`System`: Two instances of this class are created as attributes.
@@ -47,6 +36,17 @@ class BilateralSystem(object):
                  graph: dict = {},
                  base_symmetric: bool = False,
                  trans_symmetric: bool = True):
+        """Initialize both sides of the network as :class:`System` instances:
+        
+        Args:
+            graph: Dictionary of the same kind as for initialization of 
+                :class:`System`. This graph will be passed to the constructors of 
+                two :class:`System` attributes of this class.
+            base_symmetric: If ``True``, the spread probabilities of the two 
+                sides from the tumor(s) to the LNLs will be set symmetrically.
+            trans_symmetric: If ``True``, the spread probabilities among the 
+                LNLs will be set symmetrically.
+        """
         self.system = {}
         self.system["ipsi"] = System(graph=graph)   # ipsilateral and...
         self.system["contra"] = System(graph=graph)   # ...contralateral part of the network
