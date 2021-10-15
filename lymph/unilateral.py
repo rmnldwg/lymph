@@ -1,10 +1,8 @@
 import numpy as np
 from numpy.linalg import matrix_power as mat_pow
-import scipy as sp 
-import scipy.stats
 import pandas as pd
 import warnings
-from typing import Union, Optional, List, Dict, Any, Tuple
+from typing import Union, Optional, List, Dict, Any
 
 from lymph.new_lymph import change_base
 

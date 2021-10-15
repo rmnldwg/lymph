@@ -88,7 +88,10 @@ class Node(object):
     @typ.setter
     def typ(self, newtyp: str):
         """Set the type of the node (either ``"tumor"`` or ``"lnl"``)."""
-        if newtyp in ["tumor", "lnl"]:
+        if newtyp == "tumor":
+            self._typ = newtyp
+            self.state = 1
+        elif newtyp == "lnl":
             self._typ = newtyp
         else:
             raise ValueError("Only types 'tumor' and 'lnl' are available.")
