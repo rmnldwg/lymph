@@ -3,4 +3,3 @@ numpy
 scipy
 pytest
 coverage
-python-igraph
