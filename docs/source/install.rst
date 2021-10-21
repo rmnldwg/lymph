@@ -21,7 +21,7 @@ or the file ``setup.py``
 
     python setup.py
 
-.. note:: You will need to have  python 3.6 or higher installed.
+.. note:: You will need to have  python 3.8 or higher installed.
 
 In the future we plan to make the ``lymph`` package available on PyPI, so that 
 it may be easier to install using `pip` or `conda <https://conda.io>`_.
