@@ -36,7 +36,7 @@ class BilateralSystem(object):
                  graph: dict = {},
                  base_symmetric: bool = False,
                  trans_symmetric: bool = True):
-        """Initialize both sides of the network as :class:`System` instances:
+        """Initialize both sides of the network as a :class:`System` instance:
         
         Args:
             graph: Dictionary of the same kind as for initialization of 
