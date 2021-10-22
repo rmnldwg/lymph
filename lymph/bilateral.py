@@ -51,35 +51,6 @@ class BilateralSystem(object):
         self.system["ipsi"] = System(graph=graph)   # ipsilateral and...
         self.system["contra"] = System(graph=graph)   # ...contralateral part of the network
         
-        # sort all the edges into the two sides (ipsi & contra, first index) 
-        # and into base (from tumor to LNL) & trans (from LNL to LNL) along the 
-        # second index. 
-        self.edges = np.empty(shape=(2,2), dtype=list)
-        
-        # ipsi
-        ipsi_base, ipsi_trans = [], []
-        for e in self.system["ipsi"].edges:
-            if e.start.typ == 'tumor':
-                ipsi_base.append(e)
-            elif e.start.typ == 'lnl':
-                ipsi_trans.append(e)
-            else:
-                raise Exception(f"Node {e.start.name} has no correct type.")
-        self.edges[0,0] = ipsi_base
-        self.edges[0,1] = ipsi_trans
-        
-        # contra
-        contra_base, contra_trans = [], []
-        for e in self.system["contra"].edges:
-            if e.start.typ == 'tumor':
-                contra_base.append(e)
-            elif e.start.typ == 'lnl':
-                contra_trans.append(e)
-            else:
-                raise Exception(f"Node {e.start.name} has no correct type.")
-        self.edges[1,0] = contra_base
-        self.edges[1,1] = contra_trans
-        
         self.base_symmetric = base_symmetric
         self.trans_symmetric = trans_symmetric
     
@@ -114,55 +85,66 @@ class BilateralSystem(object):
     
     @property
     def spread_probs(self) -> np.ndarray:
+        """Return the spread probabilities of the :class:`Edge` instances in 
+        the network. If there are no symmetries, the first elements in the 
+        retuned list are the ipsilateral base probabilities, then the 
+        contralateral ones and afterwards the same for the transition 
+        probabilities. If there are symmetries, the respective block from the 
+        contralateral side is skipped and the returned list hence shorter. 
         """
-        Return the spread probabilities of the :class:`Edge` instances in 
-        the network. Length and structure of ``theta`` depends on the set 
-        symmetries of the network.
+        len_base = len(self.system["ipsi"].base_edges)
         
-        See Also:
-            :meth:`theta`: Setting the spread probabilities and symmetries.
-        """
-        spread_probs = np.array([], dtype=float)
-        switch = [self.base_symmetric, self.trans_symmetric]
-        for edge_type in [0,1]:
-            tmp = [e.t for e in self.edges[0,edge_type]]
-            spread_probs = np.append(spread_probs, tmp.copy())
-            if not switch[edge_type]:
-                tmp = [e.t for e in self.edges[1,edge_type]]
-                spread_probs = np.append(spread_probs, tmp.copy())
+        spread_probs_ipsi = self.system["ipsi"].spread_probs
+        spread_probs_contra = self.system["contra"].spread_probs
+        
+        spread_probs = spread_probs_ipsi[:len_base]
+        if not self.base_symmetric:
+            spread_probs = np.concatenate(
+                [spread_probs, spread_probs_contra[:len_base]]
+            )
+        
+        spread_probs = np.concatenate([spread_probs, spread_probs_ipsi[len_base:]])
+        if not self.trans_symmetric:
+            spread_probs = np.concatenate(
+                [spread_probs, spread_probs_contra[len_base:]]
+            )
         
         return spread_probs
     
 
     @spread_probs.setter
-    def spread_probs(self, spread_probs: np.ndarray):
-        """
-        Set the spread probabilities of the :class:`Edge` instances in the 
+    def spread_probs(self, new_spread_probs: np.ndarray):
+        """Set the spread probabilities of the :class:`Edge` instances in the 
         the network.
         """
-        switch = [self.base_symmetric, self.trans_symmetric]
-        cursor = 0
-        for edge_type in [0,1]:
-            for side in [0,1]:
-                num = len(self.edges[side,edge_type])
-                tmp = spread_probs[cursor:cursor+num]
-                for i,e in enumerate(self.edges[side,edge_type]):
-                    e.t = tmp[i]
-                if switch[edge_type]:
-                    for i,e in enumerate(self.edges[1,edge_type]):
-                        e.t = tmp[i]
-                    cursor += num
-                    break
-                else:
-                    cursor += num
+        len_base = len(self.system["ipsi"].base_edges)
+        len_trans = len(self.system["ipsi"].trans_edges)
         
-        for side in ["ipsi", "contra"]:
-            try:
-                self.system[side]._gen_A()
-            except AttributeError:
-                n = len(self.system[side].state_list)
-                self.system[side].A = np.zeros(shape=(n,n))
-                self.system[side]._gen_A()
+        base_ipsi = new_spread_probs[:len_base]
+        spread_probs_ipsi = base_ipsi
+        new_spread_probs = new_spread_probs[len_base:]
+        if self.base_symmetric:
+            spread_probs_contra = base_ipsi
+        else:
+            spread_probs_contra = new_spread_probs[:len_base]
+            new_spread_probs = new_spread_probs[len_base:]
+        
+        trans_ipsi = new_spread_probs[:len_trans]
+        spread_probs_ipsi = np.concatenate(
+            [spread_probs_ipsi, trans_ipsi]
+        )
+        trans_contra = new_spread_probs[len_trans:]   
+        if self.trans_symmetric:
+            spread_probs_contra = np.concatenate(
+                [spread_probs_contra, trans_ipsi]
+            )
+        else:
+            spread_probs_contra = np.concatenate(
+                [spread_probs_contra, trans_contra]
+            )
+        
+        self.system["ipsi"].spread_probs = spread_probs_ipsi
+        self.system["contra"].spread_probs = spread_probs_contra
 
 
     @property

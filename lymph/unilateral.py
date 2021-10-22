@@ -67,10 +67,9 @@ class System(object):
                 string). The corresponding value is a list of names this node should 
                 be connected to via an :class:`Edge`.
         """
-        self.tumors = []    # list of nodes with type tumour
-        self.lnls = []      # list of all lymph node levels
-        self.nodes = []     # list of all nodes in the graph
-        self.edges = []     # list of all edges connecting nodes in the graph
+        self.nodes = []        # list of all nodes in the graph
+        self.tumors = []       # list of nodes with type tumour
+        self.lnls = []         # list of all lymph node levels        
         
         for key in graph:
             self.nodes.append(Node(name=key[1], typ=key[0]))
@@ -80,11 +79,22 @@ class System(object):
                 self.tumors.append(node)
             else:
                 self.lnls.append(node)
+        
+        
+        self.edges = []        # list of all edges connecting nodes in the graph
+        self.base_edges = []   # list of edges, going out from tumors
+        self.trans_edges = []  # list of edges, connecting LNLs
 
         for key, values in graph.items():
             for value in values:
                 self.edges.append(Edge(self.find_node(key[1]), 
                                        self.find_node(value)))
+
+        for edge in self.edges:
+            if edge.start.typ == "tumor":
+                self.base_edges.append(edge)
+            else:
+                self.trans_edges.append(edge)
 
 
     def __str__(self):
@@ -186,16 +196,14 @@ class System(object):
 
     @property
     def spread_probs(self) -> np.ndarray:
-        """
-        Return the spread probabilities of the :class:`Edge` instances in 
+        """Return the spread probabilities of the :class:`Edge` instances in 
         the network in the order they appear in the graph.
         """
         return np.array([edge.t for edge in self.edges], dtype=float)
 
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: np.ndarray):
-        """
-        Set the spread probabilities of the :class:`Edge` instances in the 
+        """Set the spread probabilities of the :class:`Edge` instances in the 
         the network in the order they were created from the graph.
         """
         if len(new_spread_probs) != len(self.edges):
