@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 from typing import Union, Optional, List, Dict, Any
 
-from pandas.core import base
-
 from .unilateral import System
 from .bilateral import BilateralSystem
 
@@ -36,7 +34,19 @@ class MidexSystem(BilateralSystem):
         alpha_mix: float = 0.,
         trans_symmetric: bool = True
     ):
-        """"""
+        """In addition to the bilateral network, also initialize a third net 
+        for the contralateral spread in case of mid-sagittal extension.
+        
+        Args:
+            graph: Dictionary of the same kind as for initialization of 
+                :class:`System`. This graph will be passed to the constructors of 
+                two :class:`System` attributes of this class.
+            alpha_mix: Initial mixing parameter between ipsi- & contralateral 
+                base probabilities that determines the contralateral base 
+                probabilities for the patients with mid-sagittal extension.
+            trans_symmetric: If ``True``, the spread probabilities among the 
+                LNLs will be set symmetrically.
+        """
         super().__init__(
             graph=graph, 
             base_symmetric=False, 
@@ -49,12 +59,18 @@ class MidexSystem(BilateralSystem):
     
     @property
     def spread_probs(self) -> np.ndarray:
-        """"""
+        """Return the spread probabilities in the network, as well as the 
+        mixing parameter that determines the base probabilities for patients 
+        whose tumor extends over the mid-sagittal plane.
+        """
         return np.concatenate([super().spread_probs, self.alpha_mix])
     
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: np.ndarray):
-        """"""
+        """Set the spread probabilities, as well as the mxining parameter for 
+        the base probabilities in the case of a tumor extending over the mid-
+        sagittal plane.
+        """
         self.alpha_mix = new_spread_probs[-1]
         
         # normal bilateral spread probs
