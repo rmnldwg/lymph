@@ -56,7 +56,7 @@ def bidata():
     return pd.read_csv("./tests/bilateral_mockup_data.csv", header=[0,1,2])
 
 @pytest.fixture
-def expected_C_dict():
+def expected_C():
     return {"early": np.array([[0, 0, 0, 1, 1],
                                [0, 0, 0, 0, 1],
                                [0, 0, 0, 0, 0],
@@ -75,7 +75,7 @@ def expected_C_dict():
                                [1, 0, 0]])}
     
 @pytest.fixture
-def expected_f_dict():
+def expected_f():
     return {"early": np.array([1, 1, 1, 1, 1]),
             "late" : np.array([1, 1, 2])}
 
@@ -153,17 +153,17 @@ def test_B_matrices(bisys, modality_spsn):
     
     
 def test_load_data(bisys, bidata, t_stages, modality_spsn, 
-                   expected_C_dict, expected_f_dict):
+                   expected_C, expected_f):
     bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
     
-    assert hasattr(bisys.system["ipsi"], 'C_dict')
-    assert hasattr(bisys.system["ipsi"], 'f_dict')
-    assert hasattr(bisys.system["contra"], 'C_dict')
-    assert hasattr(bisys.system["contra"], 'f_dict')
+    assert hasattr(bisys.system["ipsi"], 'C')
+    assert hasattr(bisys.system["ipsi"], 'f')
+    assert hasattr(bisys.system["contra"], 'C')
+    assert hasattr(bisys.system["contra"], 'f')
     
     for stage in t_stages:
-        bi_ipsi_C = bisys.system["ipsi"].C_dict[stage]
-        bi_contra_C = bisys.system["contra"].C_dict[stage]
+        bi_ipsi_C = bisys.system["ipsi"].C[stage]
+        bi_contra_C = bisys.system["contra"].C[stage]
         assert bi_ipsi_C.shape == bi_contra_C.shape
 
 

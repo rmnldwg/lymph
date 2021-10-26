@@ -83,7 +83,12 @@ class MidexSystem(BilateralSystem):
         trans_ipsi = self.system["ipsi"].spread_probs[len_base:]
         base_contra = self.system["contra"].spread_probs[:len_base]
         
-        base_ext = self.alpha_mix * base_ipsi + (1 - self.alpha_mix) * base_contra
+        # contralateral base probabilities for midline extension as a linear 
+        # mix of ipsilateral base probs and contralateral ones when there's no 
+        # midline extension
+        base_ext = (
+            self.alpha_mix * base_ipsi + (1 - self.alpha_mix) * base_contra
+        )
         self.system["contra_ext"].spread_probs = np.concatenate(
             [base_ext, trans_ipsi]
         )

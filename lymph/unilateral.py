@@ -461,16 +461,23 @@ class System(object):
             return self._B 
 
 
-    def _gen_C(self,
-               table: np.ndarray,
-               delete_ones: bool = True,
-               aggregate_duplicates: bool = True) -> np.ndarray:
-        """Generate matrix :math:`\\mathbf{C}` that marginalizes over complete 
-        observations when a patient's diagnose is incomplete.
+    def _gen_C(
+        self,
+        table: np.ndarray,
+        t_stage: Optional[str] = None,
+        delete_ones: bool = True,
+        aggregate_duplicates: bool = True
+    ):
+        """Generate data matrix :math:`\\mathbf{C}` for every T-stage that 
+        marginalizes over complete observations when a patient's diagnose is 
+        incomplete.
         
         Args:
             table: 2D array where rows represent patients (of the same T-stage) 
                 and columns are LNL involvements.
+            
+            t_stage: T-stage for which to compute the data matrix. Should only 
+                be provided for the ``"HMM"`` model.
             
             delete_ones: If ``True``, columns in the :math:`\\mathbf{C}` matrix 
                 that contain only ones (meaning the respective diagnose is 
@@ -480,32 +487,61 @@ class System(object):
             aggregate_duplicates: If ``True``, the number of occurences of 
                 diagnoses in the :math:`\\mathbf{C}` matrix is counted and 
                 collected in a vector :math:`\\mathbf{f}`. The duplicate 
-                columns are then deleted.
-        
-        Returns:
-            Matrix of ones and zeros that can be used to marginalize over 
-            possible diagnoses.  
+                columns are then deleted.  
             
         :meta public:     
         """
-        C = np.zeros(shape=(len(self.obs_list), len(table)), dtype=bool)
+        if not hasattr(self, "_C") or not hasattr(self, "_f"):
+            self._C = {}
+            self._f = {}
+        
+        if t_stage is None:
+            # T-stage is not provided, when mode is "BN".
+            t_stage = "BN"
+        
+        tmp_C = np.zeros(shape=(len(self.obs_list), len(table)), dtype=bool)
         for i,row in enumerate(table):
             for j,obs in enumerate(self.obs_list):
                 # save whether all not missing observations match or not
-                C[j,i] = np.all(np.equal(obs, row, 
-                                         where=~np.isnan(row.astype(float)),
-                                         out=np.ones_like(row, dtype=bool)))
+                tmp_C[j,i] = np.all(
+                    np.equal(obs, row, 
+                             where=~np.isnan(row.astype(float)),
+                             out=np.ones_like(row, dtype=bool))
+                )
                 
         if delete_ones:
-            sum_over_C = np.sum(C, axis=0)
+            sum_over_C = np.sum(tmp_C, axis=0)
             keep_idx = np.argwhere(sum_over_C != len(self.obs_list)).flatten()
-            C = C[:,keep_idx]
+            tmp_C = tmp_C[:,keep_idx]
             
         if aggregate_duplicates:
-            C, f = np.unique(C, axis=1, return_counts=True)
-            return C, f
-            
-        return C, np.ones(shape=(len(table)), dtype=int)
+            tmp_C, tmp_f = np.unique(tmp_C, axis=1, return_counts=True)
+        else:
+            tmp_f = np.ones(shape=len(table), dtype=int)
+        
+        self._C[t_stage] = tmp_C.copy()
+        self._f[t_stage] = tmp_f.copy()
+    
+    @property
+    def C(self) -> Dict[str, np.ndarray]:
+        """Return the dictionary containing data matrices for each T-stage.
+        """
+        try:
+            return self._C
+        except AttributeError:
+            msg = ("No data was loaded yet.")
+            raise AttributeError(msg)
+    
+    @property
+    def f(self) -> Dict[str, np.ndarray]:
+        """Return the frequency vector containing the number of occurences of 
+        patients.
+        """
+        try:
+            return self._f
+        except AttributeError:
+            msg = ("No data was loaded yet.")
+            raise AttributeError(msg)
 
 
     def load_data(
@@ -553,30 +589,18 @@ class System(object):
         
         # For the Hidden Markov Model
         if mode=="HMM":
-            self.C_dict = {}
-            self.f_dict = {}
-            
             if t_stages is None:
                 t_stages = list(set(data[("Info", "T-stage")]))
 
             for stage in t_stages:
                 table = data.loc[data[('Info', 'T-stage')] == stage,
                                  self._modality_tables.keys()].values
-                C, f = self._gen_C(table, **gen_C_kwargs)
-                    
-                self.C_dict[stage] = C.copy()
-                self.f_dict[stage] = f.copy()
+                self._gen_C(table, stage, **gen_C_kwargs)
 
         # For the Bayesian Network
         elif mode=="BN":
-            self.C = np.array([], dtype=int)
-            self.f = np.array([], dtype=int)
-
             table = data[self._modality_tables.keys()].values
-            C, f = self._gen_C(table, **gen_C_kwargs)
-            
-            self.C = C.copy()
-            self.f = f.copy()
+            self._gen_C(table, **gen_C_kwargs)
 
 
     def _evolve(
@@ -734,8 +758,8 @@ class System(object):
             
             llh = 0.
             for stage in t_stages:
-                p = state_probs[stage] @ self.B @ self.C_dict[stage]
-                llh += self.f_dict[stage] @ np.log(p)
+                p = state_probs[stage] @ self.B @ self.C[stage]
+                llh += self.f[stage] @ np.log(p)
         
         # likelihood for the Bayesian network
         elif mode == "BN":
@@ -747,7 +771,7 @@ class System(object):
                     a[i] *= node.bn_prob()
 
             b = a @ self.B
-            llh = self.f @ np.log(b @ self.C)
+            llh = self.f["BN"] @ np.log(b @ self.C["BN"])
         
         return llh
 

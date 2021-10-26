@@ -301,7 +301,7 @@ class BilateralSystem(object):
             return -np.inf
         
         if t_stages is None:
-            t_stages = list(self.system["ipsi"].f_dict.keys())
+            t_stages = list(self.system["ipsi"].f.keys())
         
         self.spread_probs = spread_probs
         
@@ -331,9 +331,9 @@ class BilateralSystem(object):
                 )
                 log_p = np.log(
                     np.sum(
-                        self.system["ipsi"].C_dict[stage]
+                        self.system["ipsi"].C[stage]
                         * (joint_diagnose_prob 
-                           @ self.system["contra"].C_dict[stage]),
+                           @ self.system["contra"].C[stage]),
                         axis=0
                     )
                 )
@@ -364,9 +364,9 @@ class BilateralSystem(object):
                 )
                 log_p = np.log(
                     np.sum(
-                        self.system["ipsi"].C_dict[stage]
+                        self.system["ipsi"].C[stage]
                         * (joint_diagnose_prob 
-                           @ self.system["contra"].C_dict[stage]),
+                           @ self.system["contra"].C[stage]),
                         axis=0
                     )
                 )

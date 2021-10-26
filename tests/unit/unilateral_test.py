@@ -50,7 +50,7 @@ def modality_spsn():
     return {'test-o-meter': [0.99, 0.88]}
 
 @pytest.fixture
-def expected_C_dict():
+def expected_C():
     return {"early": np.array([[0, 0, 0, 1, 1],
                                [0, 0, 0, 0, 1],
                                [0, 0, 0, 0, 0],
@@ -69,7 +69,7 @@ def expected_C_dict():
                                [1, 0, 0]])}
     
 @pytest.fixture
-def expected_f_dict():
+def expected_f():
     return {"early": np.array([1, 1, 1, 1, 1]),
             "late" : np.array([1, 1, 2])}
     
@@ -127,15 +127,15 @@ def test_B_matrix(sys, modality_spsn):
     
     
 def test_load_data(
-    sys, data, t_stages, modality_spsn, expected_C_dict, expected_f_dict
+    sys, data, t_stages, modality_spsn, expected_C, expected_f
 ):
     sys.load_data(
         data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
     )
     
     for stage in t_stages:
-        assert np.all(np.equal(sys.C_dict[stage], expected_C_dict[stage]))
-        assert np.all(np.equal(sys.f_dict[stage], expected_f_dict[stage]))
+        assert np.all(np.equal(sys.C[stage], expected_C[stage]))
+        assert np.all(np.equal(sys.f[stage], expected_f[stage]))
 
 
 @pytest.mark.parametrize(
