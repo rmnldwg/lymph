@@ -30,4 +30,4 @@ class Edge(object):
     
     def __str__(self):
         """Print basic info"""
-        return f"{self.start.name} -- {100 * self.t:.2f}% --> {self.end.name}"
+        return f"{self.start}-{100 * self.t:.1f}%->{self.end}"

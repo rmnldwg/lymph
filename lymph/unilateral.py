@@ -100,30 +100,12 @@ class System(object):
     def __str__(self):
         """Print info about the structure and parameters of the graph.
         """
-        string = "Tumor(s):\n"
-        for tumor in self.tumors:
-            if tumor.typ != "tumor":
-                raise RuntimeError("Tumor node is not of type tumor")
-            
-            prefix = tumor.name + " ---"
-            for o in tumor.out:
-                string += f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}\n"
-                prefix = "".join([" "] * (len(tumor.name) + 1)) + "`--"
-                
-        longest = 0
-        for lnl in self.lnls:
-            if len(lnl.name) > longest:
-                longest = len(lnl.name)
-
-        string += "\nLNL(s):\n"
-        for lnl in self.lnls:
-            if lnl.typ != "lnl":
-                raise RuntimeError("LNL node is not of type LNL")
-
-            prefix = lnl.name + " ---" + ("-" * (longest - len(lnl.name)))
-            for o in lnl.out:
-                string += f"\t{prefix} {o.t * 100: >4.1f} % --> {o.end.name}\n"
-                prefix = " " * (len(lnl.name) + 1) + "`--" + ("-" * (longest - len(lnl.name)))
+        num_tumors = len(self.tumors)
+        num_lnls   = len(self.lnls)
+        string = (
+            f"Lymphatic system with {num_tumors} tumor and {num_lnls} LNL.\n"
+            + " ".join([f"{e}" for e in self.edges])
+        )
                 
         return string
 

@@ -53,9 +53,7 @@ class Node(object):
     
     def __str__(self):
         """Print basic info"""
-        num_inc = len(self.inc)
-        num_out = len(self.out)
-        return f"{num_inc:d} --> {self.name} ({self.typ}) --> {num_out:d}"
+        return self.name
     
     
     @property
