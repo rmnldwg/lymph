@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 from typing import Union, Optional, List, Dict, Any
 
-from .unilateral import System
-from .bilateral import Bilateral, BilateralSystem
+from .unilateral import Unilateral
+from .bilateral import Bilateral
 
 
 class MidexSystem(object):

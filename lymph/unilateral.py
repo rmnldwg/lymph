@@ -159,15 +159,13 @@ class Unilateral(object):
     
     @property
     def state(self):
-        """
-        Return the currently set state of the system.
+        """Return the currently set state of the system.
         """
         return np.array([lnl.state for lnl in self.lnls], dtype=bool)
 
     @state.setter
     def state(self, newstate: np.ndarray):
-        """
-        Sets the state of the system to ``newstate``.
+        """Sets the state of the system to ``newstate``.
         """
         if len(newstate) != len(self.lnls):
             raise ValueError("length of newstate must match # of LNLs")
@@ -178,8 +176,14 @@ class Unilateral(object):
     
     @property
     def base_probs(self):
-        """Return the spread probablities from the tumor(s) that directly drain 
-        into lymph node levels.
+        """The spread probablities parametrizing the edges that represent the 
+        lymphatic drainage from the tumor(s) to the individual lymph node 
+        levels.
+        
+        Setting these requires an array with a length equal to the number of 
+        edges in the graph that start with a tumor node. After setting these 
+        values, the transition matrix - if it was precomputed - is deleted 
+        so it can be recomputed with the new parameters.
         """
         return np.array([edge.t for edge in self.base_edges], dtype=float)
     
@@ -187,13 +191,12 @@ class Unilateral(object):
     def base_probs(self, new_base_probs):
         """Set the spread probabilities for the connections from the tumor to 
         the LNLs.
-        
-        Note:
-            This function performs no checks and does not recompute the 
-            transition matrix :math:`A`! So, be careful with that method!
         """
         for i, edge in enumerate(self.base_edges):
             edge.t = new_base_probs[i]
+        
+        if hasattr(self, "_A"):
+            del self._A
 
 
     @property
@@ -201,27 +204,34 @@ class Unilateral(object):
         """Return the spread probablities of the connections between the lymph 
         node levels. Here, "trans" stands for "transmission" (among the LNLs), 
         not "transition" as in the transition to another state.
+        
+        When setting an array of length equal to the number of connections 
+        among the LNL is required. After setting the new values, the transition 
+        matrix - if previously computed - is deleted again, so that it will be 
+        recomputed with the new parameters.
         """
         return np.array([edge.t for edge in self.trans_edges], dtype=float)
     
     @trans_probs.setter
     def trans_probs(self, new_trans_probs):
-        """Set the spread probabilities for the connections among the LNLs. 
-        Here, "trans" stands for "transmission" (among the LNLs), not 
-        "transition" as in the transition to another state.
-        
-        Note:
-            This function performs no checks and does not recompute the 
-            transition matrix :math:`A`! So, be careful with that method!
+        """Set the spread probabilities for the connections among the LNLs.
         """
         for i, edge in enumerate(self.trans_edges):
             edge.t = new_trans_probs[i]
+        
+        if hasattr(self, "_A"):
+            del self._A
 
 
     @property
     def spread_probs(self) -> np.ndarray:
-        """Return the spread probabilities of the :class:`Edge` instances in 
-        the network in the order they appear in the graph.
+        """These are the probabilities of metastatic spread. They indicate how 
+        probable it is that a tumor or already cancerous lymph node level 
+        spreads further along a certain edge of the graph representing the 
+        lymphatic network.
+        
+        Setting these requires an array with a length equal to the number of 
+        lymph node levels.
         """
         return np.concatenate([self.base_probs, self.trans_probs])
 
@@ -231,17 +241,9 @@ class Unilateral(object):
         the network in the order they were created from the graph.
         """
         num_base_edges = len(self.base_edges)
-        num_edges = len(self.edges)
-        
-        if len(new_spread_probs) != num_edges:
-            msg = (f"# of parameters ({len(new_spread_probs)}) must "
-                   f"match # of edges ({num_edges})")
-            raise ValueError(msg)
         
         self.base_probs = new_spread_probs[:num_base_edges]
         self.trans_probs = new_spread_probs[num_base_edges:]
-        
-        self._gen_A()
             
 
     def comp_transition_prob(

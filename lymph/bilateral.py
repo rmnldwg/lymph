@@ -1,4 +1,5 @@
 import numpy as np
+from pandas.core import base
 import scipy as sp 
 import scipy.stats
 from scipy.special import factorial as fact
@@ -99,32 +100,77 @@ class Bilateral(object):
     
     
     @property
-    def spread_probs(self) -> np.ndarray:
-        """Return the spread probabilities of the :class:`Edge` instances in 
-        the network. If there are no symmetries, the first elements in the 
-        retuned list are the ipsilateral base probabilities, then the 
-        contralateral ones and afterwards the same for the transition 
-        probabilities. If there are symmetries, the respective block from the 
-        contralateral side is skipped and the returned list hence shorter. 
+    def base_probs(self) -> np.ndarray:
+        """Probabilities of lymphatic spread from the tumor(s) to the lymph 
+        node levels. If the ipsi- & contralateral spread from the tumor is set 
+        to be symmetric (``base_symmetric = True``) this only returns the 
+        parameters of one side.
+        
+        When setting these parameters, the length of the provided array only 
+        needs to be half as long if ``base_symmetric`` is ``True``, since both 
+        sides will be set to the same values.
         """
-        len_base = len(self.ipsi.base_edges)
+        if self.base_symmetric:
+            return self.ipsi.base_probs
+        else:
+            return np.concatenate([self.ipsi.base_probs, 
+                                   self.contra.base_probs])
+    
+    @base_probs.setter
+    def base_probs(self, new_base_probs: np.ndarray):
+        """Set the base probabilities from the tumor(s) to the LNLs.
+        """
+        if self.base_symmetric:
+            self.ipsi.base_probs = new_base_probs
+            self.contra.base_probs = new_base_probs
+        else:
+            num_base_probs = len(self.ipsi.base_edges)
+            self.ipsi.base_probs = new_base_probs[:num_base_probs]
+            self.contra.base_probs = new_base_probs[num_base_probs:]
+
+    
+    @property
+    def trans_probs(self) -> np.ndarray:
+        """Probabilities of lymphatic spread among the lymph node levels. If 
+        this ipsi- & contralateral spread is set to be symmetric 
+        (``trans_symmetric = True``) this only returns the parameters of one 
+        side.
         
-        spread_probs_ipsi = self.ipsi.spread_probs
-        spread_probs_contra = self.contra.spread_probs
+        And correspondingly, if setting these transmission probability one only 
+        needs half as large an array if ``trans_symmetric`` is ``True``.
+        """
+        if self.trans_symmetric:
+            return self.ipsi.trans_probs
+        else:
+            return np.concatenate([self.ipsi.trans_probs, 
+                                   self.contra.trans_probs])
+    
+    @trans_probs.setter
+    def trans_probs(self, new_trans_probs: np.ndarray):
+        """Set the transmission probabilities (from LNL to LNL) of the network.
+        """
+        if self.trans_symmetric:
+            self.ipsi.trans_probs = new_trans_probs
+            self.contra.trans_probs = new_trans_probs
+        else:
+            num_trans_probs = len(self.ipsi.trans_edges)
+            self.ipsi.trans_probs = new_trans_probs[:num_trans_probs]
+            self.contra.trans_probs = new_trans_probs[num_trans_probs:]
+    
+    
+    @property
+    def spread_probs(self) -> np.ndarray:
+        """The parameters representing the probabilities for lymphatic spread 
+        along a directed edge of the graph representing the lymphatic network.
         
-        spread_probs = spread_probs_ipsi[:len_base]
-        if not self.base_symmetric:
-            spread_probs = np.concatenate(
-                [spread_probs, spread_probs_contra[:len_base]]
-            )
-        
-        spread_probs = np.concatenate([spread_probs, spread_probs_ipsi[len_base:]])
-        if not self.trans_symmetric:
-            spread_probs = np.concatenate(
-                [spread_probs, spread_probs_contra[len_base:]]
-            )
-        
-        return spread_probs
+        If the bilateral network is set to have symmetries, the length of the 
+        list/array of numbers that need to be provided will be shorter. E.g., 
+        when the bilateral lzmphatic network is completely asymmetric, it 
+        requires an array of length :math:`2n_b + 2n_t` where :math:`n_b` is 
+        the number of edges from the tumor to the LNLs and :math:`n_t` the 
+        number of edges among the LNLs.
+        """
+        return np.concatenate([self.base_probs, self.trans_probs])
     
 
     @spread_probs.setter
@@ -132,34 +178,14 @@ class Bilateral(object):
         """Set the spread probabilities of the :class:`Edge` instances in the 
         the network.
         """
-        len_base = len(self.ipsi.base_edges)
-        len_trans = len(self.ipsi.trans_edges)
+        num_base_probs = len(self.ipsi.base_edges)
         
-        base_ipsi = new_spread_probs[:len_base]
-        spread_probs_ipsi = base_ipsi
-        new_spread_probs = new_spread_probs[len_base:]
         if self.base_symmetric:
-            spread_probs_contra = base_ipsi
+            self.base_probs = new_spread_probs[:num_base_probs]
+            self.trans_probs = new_spread_probs[num_base_probs:]
         else:
-            spread_probs_contra = new_spread_probs[:len_base]
-            new_spread_probs = new_spread_probs[len_base:]
-        
-        trans_ipsi = new_spread_probs[:len_trans]
-        spread_probs_ipsi = np.concatenate(
-            [spread_probs_ipsi, trans_ipsi]
-        )
-        trans_contra = new_spread_probs[len_trans:]   
-        if self.trans_symmetric:
-            spread_probs_contra = np.concatenate(
-                [spread_probs_contra, trans_ipsi]
-            )
-        else:
-            spread_probs_contra = np.concatenate(
-                [spread_probs_contra, trans_contra]
-            )
-        
-        self.ipsi.spread_probs = spread_probs_ipsi
-        self.contra.spread_probs = spread_probs_contra
+            self.base_probs = new_spread_probs[:2*num_base_probs]
+            self.trans_probs = new_spread_probs[2*num_base_probs:]
 
 
     @property
