@@ -25,7 +25,7 @@ def test_edge(start_node, end_node, t):
     assert new_edge.start == start_node
     assert new_edge.end == end_node
     assert new_edge.t == t
-    assert str(new_edge) == f"{start_node.name} -- {100*t:.2f}% --> {end_node.name}"
+    assert str(new_edge) == f"{start_node}-{100*t:.1f}%->{end_node}"
     
     assert new_edge in start_node.out
     assert new_edge in end_node.inc

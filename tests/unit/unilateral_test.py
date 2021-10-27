@@ -83,7 +83,7 @@ def sys():
              ('lnl', 'one'):       ['two', 'three'],
              ('lnl', 'two'):       ['three'],
              ('lnl', 'three'):     []}
-    return lymph.System(graph=graph)
+    return lymph.Unilateral(graph=graph)
 
 @pytest.fixture
 def loaded_sys(sys, data, t_stages, modality_spsn):

@@ -85,7 +85,7 @@ def bisys():
              ('lnl', 'one'):       ['two', 'three'],
              ('lnl', 'two'):       ['three'],
              ('lnl', 'three'):     []}
-    return lymph.BilateralSystem(graph=graph)
+    return lymph.Bilateral(graph=graph)
 
 @pytest.fixture
 def loaded_bisys(bisys, bidata, t_stages, modality_spsn):

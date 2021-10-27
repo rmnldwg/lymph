@@ -3,17 +3,17 @@ import pandas as pd
 from typing import Union, Optional, List, Dict, Any
 
 from .unilateral import System
-from .bilateral import BilateralSystem
+from .bilateral import Bilateral, BilateralSystem
 
 
-class MidexSystem(BilateralSystem):
+class MidexSystem(object):
     """Model a bilateral lymphatic system where an additional risk factor can 
     be provided in the data: Whether or not the primary tumor extended over the 
     mid-sagittal line. 
     
     It is reasonable to assume (and supported by data) that such an extension 
     significantly increases the risk for metastatic spread to the contralateral 
-    side of the neck. This subclass attempts to capture this using a simple 
+    side of the neck. This class attempts to capture this using a simple 
     assumption: We assume that the probability of spread to the contralateral 
     side for patients *with* midline extension is larger than for patients 
     *without* it, but smaller than the probability of spread to the ipsilateral 
@@ -34,8 +34,11 @@ class MidexSystem(BilateralSystem):
         alpha_mix: float = 0.,
         trans_symmetric: bool = True
     ):
-        """In addition to the bilateral network, also initialize a third net 
-        for the contralateral spread in case of mid-sagittal extension.
+        """Construct the class in a similar fashion to the :class:`Bilateral`: 
+        That class contains one :class:`Unilateral` for each side of the neck, 
+        while this class will contain two instances of :class:`Bilateral`, one 
+        for the case of a midline extension and one for the case of no midline 
+        extension.
         
         Args:
             graph: Dictionary of the same kind as for initialization of 
@@ -46,50 +49,17 @@ class MidexSystem(BilateralSystem):
                 probabilities for the patients with mid-sagittal extension.
             trans_symmetric: If ``True``, the spread probabilities among the 
                 LNLs will be set symmetrically.
-        """
-        super().__init__(
-            graph=graph, 
-            base_symmetric=False, 
-            trans_symmetric=trans_symmetric
-        )
         
-        self.system["contra_ext"] = System(graph=graph)
+        See Also:
+            :class:`Bilateral`: Two of these are held as attributes by this 
+                class. One for the case of a mid-sagittal extension of the 
+                primary tumor and one for the case of no such extension.
+        """
+        self.ext   = Bilateral(
+            graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
+        )
+        self.noext = Bilateral(
+            graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
+        )
         self.alpha_mix = alpha_mix
-    
-    
-    @property
-    def spread_probs(self) -> np.ndarray:
-        """Return the spread probabilities in the network, as well as the 
-        mixing parameter that determines the base probabilities for patients 
-        whose tumor extends over the mid-sagittal plane.
-        """
-        return np.concatenate([super().spread_probs, self.alpha_mix])
-    
-    @spread_probs.setter
-    def spread_probs(self, new_spread_probs: np.ndarray):
-        """Set the spread probabilities, as well as the mxining parameter for 
-        the base probabilities in the case of a tumor extending over the mid-
-        sagittal plane.
-        """
-        self.alpha_mix = new_spread_probs[-1]
-        
-        # normal bilateral spread probs
-        new_spread_probs = new_spread_probs[:-1]
-        super().spread_probs.fset(self, new_spread_probs)
-        
-        # spread probs for contralateral side with midline extension
-        len_base = len(self.system["ipsi"].base_edges)
-        base_ipsi = self.system["ipsi"].spread_probs[:len_base]
-        trans_ipsi = self.system["ipsi"].spread_probs[len_base:]
-        base_contra = self.system["contra"].spread_probs[:len_base]
-        
-        # contralateral base probabilities for midline extension as a linear 
-        # mix of ipsilateral base probs and contralateral ones when there's no 
-        # midline extension
-        base_ext = (
-            self.alpha_mix * base_ipsi + (1 - self.alpha_mix) * base_contra
-        )
-        self.system["contra_ext"].spread_probs = np.concatenate(
-            [base_ext, trans_ipsi]
-        )
         

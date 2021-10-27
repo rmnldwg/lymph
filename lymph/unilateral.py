@@ -53,7 +53,7 @@ def change_base(
 
 
 
-class System(object):
+class Unilateral(object):
     """Class that models metastatic progression in a lymphatic system by 
     representing it as a directed graph. The progression itself can be modelled 
     via hidden Markov models (HMM) or Bayesian networks (BN). 
@@ -174,6 +174,48 @@ class System(object):
         
         for i, node in enumerate(self.lnls):  # only set lnl's states
             node.state = int(newstate[i])
+    
+    
+    @property
+    def base_probs(self):
+        """Return the spread probablities from the tumor(s) that directly drain 
+        into lymph node levels.
+        """
+        return np.array([edge.t for edge in self.base_edges], dtype=float)
+    
+    @base_probs.setter
+    def base_probs(self, new_base_probs):
+        """Set the spread probabilities for the connections from the tumor to 
+        the LNLs.
+        
+        Note:
+            This function performs no checks and does not recompute the 
+            transition matrix :math:`A`! So, be careful with that method!
+        """
+        for i, edge in enumerate(self.base_edges):
+            edge.t = new_base_probs[i]
+
+
+    @property
+    def trans_probs(self):
+        """Return the spread probablities of the connections between the lymph 
+        node levels. Here, "trans" stands for "transmission" (among the LNLs), 
+        not "transition" as in the transition to another state.
+        """
+        return np.array([edge.t for edge in self.trans_edges], dtype=float)
+    
+    @trans_probs.setter
+    def trans_probs(self, new_trans_probs):
+        """Set the spread probabilities for the connections among the LNLs. 
+        Here, "trans" stands for "transmission" (among the LNLs), not 
+        "transition" as in the transition to another state.
+        
+        Note:
+            This function performs no checks and does not recompute the 
+            transition matrix :math:`A`! So, be careful with that method!
+        """
+        for i, edge in enumerate(self.trans_edges):
+            edge.t = new_trans_probs[i]
 
 
     @property
@@ -181,26 +223,33 @@ class System(object):
         """Return the spread probabilities of the :class:`Edge` instances in 
         the network in the order they appear in the graph.
         """
-        return np.array([edge.t for edge in self.edges], dtype=float)
+        return np.concatenate([self.base_probs, self.trans_probs])
 
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: np.ndarray):
         """Set the spread probabilities of the :class:`Edge` instances in the 
         the network in the order they were created from the graph.
         """
-        if len(new_spread_probs) != len(self.edges):
+        num_base_edges = len(self.base_edges)
+        num_edges = len(self.edges)
+        
+        if len(new_spread_probs) != num_edges:
             msg = (f"# of parameters ({len(new_spread_probs)}) must "
-                   f"match # of edges ({len(self.edges)})")
+                   f"match # of edges ({num_edges})")
             raise ValueError(msg)
         
-        for i, edge in enumerate(self.edges):
-            edge.t = new_spread_probs[i]
+        self.base_probs = new_spread_probs[:num_base_edges]
+        self.trans_probs = new_spread_probs[num_base_edges:]
         
         self._gen_A()
             
 
-    def trans_prob(self, newstate: List[int], acquire: bool = False) -> float:
-        """Computes the probability to transition to newstate, given its 
+    def comp_transition_prob(
+        self, 
+        newstate: List[int], 
+        acquire: bool = False
+    ) -> float:
+        """Computes the probability to transition to ``newstate``, given its 
         current state.
 
         Args:
@@ -227,7 +276,10 @@ class System(object):
         return res
 
 
-    def obs_prob(self, diagnoses_dict: Dict[str, List[int]]) -> float:
+    def comp_observation_prob(
+        self, 
+        diagnoses_dict: Dict[str, List[int]]
+    ) -> float:
         """Computes the probability to see certain diagnoses, given the 
         system's current state.
 
@@ -349,7 +401,7 @@ class System(object):
         for i,state in enumerate(self.state_list):
             self.state = state
             for j in self.mask[i]:
-                self._A[i,j] = self.trans_prob(self.state_list[j])
+                self._A[i,j] = self.comp_transition_prob(self.state_list[j])
     
     @property
     def A(self):
@@ -431,7 +483,7 @@ class System(object):
                 diagnoses_dict = {}
                 for k,modality in enumerate(self._modality_tables):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self._B[i,j] = self.obs_prob(diagnoses_dict)
+                self._B[i,j] = self.comp_observation_prob(diagnoses_dict)
     
     @property
     def B(self):
@@ -937,3 +989,17 @@ class System(object):
                                         where=(inv!=None),
                                         out=np.ones_like(state, dtype=bool)))
             return cX @ res
+
+
+
+class System(Unilateral):
+    """Class kept for compatibility after renaming to :class:`Unilateral`.
+    
+    See Also:
+        :class:`Unilateral`
+    """
+    def __init__(self, *args, **kwargs):
+        msg = ("This class has been renamed to `Unilateral`.")
+        warnings.warn(msg, DeprecationWarning)
+        
+        super().__init__(*args, **kwargs)

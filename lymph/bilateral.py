@@ -8,7 +8,7 @@ from typing import Union, Optional, List, Dict, Any
 
 from .node import Node
 from .edge import Edge
-from .unilateral import System
+from .unilateral import Unilateral
 
 
 def fast_binomial_pmf(k, n, p):
@@ -23,7 +23,7 @@ def fast_binomial_pmf(k, n, p):
 
 # I chose not to make this one a child of System, since it is basically only a 
 # container for two System instances
-class BilateralSystem(object):
+class Bilateral(object):
     """Class that models metastatic progression in a lymphatic system 
     bilaterally by creating two :class:`System` instances that are symmetric in 
     their connections. The parameters describing the spread probabilities 
@@ -47,20 +47,35 @@ class BilateralSystem(object):
             trans_symmetric: If ``True``, the spread probabilities among the 
                 LNLs will be set symmetrically.
         """
-        self.system = {}
-        self.system["ipsi"] = System(graph=graph)   # ipsilateral and...
-        self.system["contra"] = System(graph=graph)   # ...contralateral part of the network
+        self.ipsi   = Unilateral(graph=graph)   # ipsilateral and...
+        self.contra = Unilateral(graph=graph)   # ...contralateral network
         
-        self.base_symmetric = base_symmetric
+        self.base_symmetric  = base_symmetric
         self.trans_symmetric = trans_symmetric
     
     
     def __str__(self):
         string = "### IPSILATERAL ###\n"
-        string += self.system["ipsi"].__str__()
+        string += self.ipsi.__str__()
         string += "\n### CONTRALATERAL ###\n"
-        string += self.system["contra"].__str__()
+        string += self.contra.__str__()
         return string
+    
+    
+    @property
+    def system(self):
+        """Return a dictionary with the ipsi- & contralateral side's 
+        :class:`System` under the keys ``"ipsi"`` and ``"contra"`` respectively.
+        
+        This is needed since in some weak moment, I thought it would be a great 
+        idea if a class named ``BilateralSystem`` had an attriute called 
+        ``system`` which contained two instances of the ``System`` class under 
+        the keys ``"ipsi"`` and ``"contra"``...
+        """
+        return {
+            "ipsi"  : self.ipsi,
+            "contra": self.contra
+        }
     
     
     @property
@@ -69,8 +84,8 @@ class BilateralSystem(object):
         Return the currently state (healthy or involved) of all LNLs in the 
         system.
         """
-        ipsi_state = self.system["ipsi"].state
-        contra_state = self.system["contra"].state
+        ipsi_state = self.ipsi.state
+        contra_state = self.contra.state
         return np.concatenate([ipsi_state, contra_state])
     
     
@@ -79,8 +94,8 @@ class BilateralSystem(object):
         """
         Set the state of the system to ``newstate``.
         """
-        self.system["ipsi"].state = newstate[:len(self.system["ipsi"].lnls)]
-        self.system["contra"].state = newstate[len(self.system["ipsi"].lnls):]
+        self.ipsi.state = newstate[:len(self.ipsi.lnls)]
+        self.contra.state = newstate[len(self.ipsi.lnls):]
     
     
     @property
@@ -92,10 +107,10 @@ class BilateralSystem(object):
         probabilities. If there are symmetries, the respective block from the 
         contralateral side is skipped and the returned list hence shorter. 
         """
-        len_base = len(self.system["ipsi"].base_edges)
+        len_base = len(self.ipsi.base_edges)
         
-        spread_probs_ipsi = self.system["ipsi"].spread_probs
-        spread_probs_contra = self.system["contra"].spread_probs
+        spread_probs_ipsi = self.ipsi.spread_probs
+        spread_probs_contra = self.contra.spread_probs
         
         spread_probs = spread_probs_ipsi[:len_base]
         if not self.base_symmetric:
@@ -117,8 +132,8 @@ class BilateralSystem(object):
         """Set the spread probabilities of the :class:`Edge` instances in the 
         the network.
         """
-        len_base = len(self.system["ipsi"].base_edges)
-        len_trans = len(self.system["ipsi"].trans_edges)
+        len_base = len(self.ipsi.base_edges)
+        len_trans = len(self.ipsi.trans_edges)
         
         base_ipsi = new_spread_probs[:len_base]
         spread_probs_ipsi = base_ipsi
@@ -143,8 +158,8 @@ class BilateralSystem(object):
                 [spread_probs_contra, trans_contra]
             )
         
-        self.system["ipsi"].spread_probs = spread_probs_ipsi
-        self.system["contra"].spread_probs = spread_probs_contra
+        self.ipsi.spread_probs = spread_probs_ipsi
+        self.contra.spread_probs = spread_probs_contra
 
 
     @property
@@ -156,8 +171,8 @@ class BilateralSystem(object):
         See Also:
             :meth:`System.set_modalities`: Setting modalities in unilateral System.
         """
-        ipsi_modality_spsn = self.system["ipsi"].modalities
-        if ipsi_modality_spsn != self.system["contra"].modalities:
+        ipsi_modality_spsn = self.ipsi.modalities
+        if ipsi_modality_spsn != self.contra.modalities:
             msg = ("Ipsi- & contralaterally stored modalities are not the same")
             raise RuntimeError(msg)
         
@@ -171,8 +186,8 @@ class BilateralSystem(object):
         diagnostic modalities, compute the system's two observation matrices 
         :math:`\\mathbf{B}_i` and :math:`\\mathbf{B}_c`.
         """
-        self.system["ipsi"].modalities = modality_spsn
-        self.system["contra"].modalities = modality_spsn
+        self.ipsi.modalities = modality_spsn
+        self.contra.modalities = modality_spsn
     
     
     def load_data(
@@ -216,14 +231,14 @@ class BilateralSystem(object):
         
         # generate both side's C matrix with duplicates and ones
         gen_C_kwargs = {'delete_ones': False, 'aggregate_duplicates': False}
-        self.system["ipsi"].load_data(
+        self.ipsi.load_data(
             ipsi_data, 
             t_stages=t_stages,
             modality_spsn=modality_spsn,
             mode=mode,
             gen_C_kwargs=gen_C_kwargs
         )
-        self.system["contra"].load_data(
+        self.contra.load_data(
             contra_data, 
             t_stages=t_stages, 
             modality_spsn=modality_spsn,
@@ -301,7 +316,7 @@ class BilateralSystem(object):
             return -np.inf
         
         if t_stages is None:
-            t_stages = list(self.system["ipsi"].f.keys())
+            t_stages = list(self.ipsi.f.keys())
         
         self.spread_probs = spread_probs
         
@@ -319,21 +334,21 @@ class BilateralSystem(object):
                 
                 # probabilities for any hidden state (ipsi- & contralaterally)
                 state_probs = {}
-                state_probs["ipsi"] = self.system["ipsi"]._evolve(diag_time)
-                state_probs["contra"] = self.system["contra"]._evolve(diag_time)
+                state_probs["ipsi"] = self.ipsi._evolve(diag_time)
+                state_probs["contra"] = self.contra._evolve(diag_time)
                 
                 # matrix with joint probabilities for any combination of ipsi- 
                 # & conralateral diagnoses after given number of time-steps
                 joint_diagnose_prob = (
-                    self.system["ipsi"].B.T 
+                    self.ipsi.B.T 
                     @ np.outer(state_probs["ipsi"], state_probs["contra"])
-                    @ self.system["contra"].B
+                    @ self.contra.B
                 )
                 log_p = np.log(
                     np.sum(
-                        self.system["ipsi"].C[stage]
+                        self.ipsi.C[stage]
                         * (joint_diagnose_prob 
-                           @ self.system["contra"].C[stage]),
+                           @ self.contra.C[stage]),
                         axis=0
                     )
                 )
@@ -351,22 +366,22 @@ class BilateralSystem(object):
             max_t = len(time_dists[t_stages[0]]) - 1
             
             state_probs = {}
-            state_probs["ipsi"] = self.system["ipsi"]._evolve(t_last=max_t)
-            state_probs["contra"] = self.system["contra"]._evolve(t_last=max_t)
+            state_probs["ipsi"] = self.ipsi._evolve(t_last=max_t)
+            state_probs["contra"] = self.contra._evolve(t_last=max_t)
             
             for stage in t_stages:
                 joint_diagnose_prob = (
-                    self.system["ipsi"].B.T
+                    self.ipsi.B.T
                     @ state_probs["ipsi"].T
                     @ np.diag(time_dists[stage])
                     @ state_probs["contra"]
-                    @ self.system["contra"].B
+                    @ self.contra.B
                 )
                 log_p = np.log(
                     np.sum(
-                        self.system["ipsi"].C[stage]
+                        self.ipsi.C[stage]
                         * (joint_diagnose_prob 
-                           @ self.system["contra"].C[stage]),
+                           @ self.contra.C[stage]),
                         axis=0
                     )
                 )
@@ -440,7 +455,7 @@ class BilateralSystem(object):
             the diagnose time for each T-stage.
         
         See Also:
-            :math:`log_likelihood`: The `theta` argument of this function is 
+            :meth:`log_likelihood`: The `theta` argument of this function is 
                 split into `spread_probs` and `diag_times`, which are then 
                 passed to the actual likelihood function.
         """
@@ -621,9 +636,23 @@ class BilateralSystem(object):
         # matching complete observations that give rise to the specific 
         # diagnose. The result should be just a number
         pDD = (cZ["ipsi"].T
-               @ self.system["ipsi"].B.T
+               @ self.ipsi.B.T
                @ pXX
-               @ self.system["contra"].B
+               @ self.contra.B
                @ cZ["contra"])
         
         return pDDII / pDD
+
+
+
+class BilateralSystem(Bilateral):
+    """Class kept for compatibility after renaming to :class:`Bilateral`.
+    
+    See Also:
+        :class:`Bilateral`
+    """
+    def __init__(self, *args, **kwargs):
+        msg = ("This class has been renamed to `Bilateral`.")
+        warnings.warn(msg, DeprecationWarning)
+        
+        super().__init__(*args, **kwargs)
