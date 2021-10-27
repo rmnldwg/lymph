@@ -103,7 +103,8 @@ class Unilateral(object):
         num_tumors = len(self.tumors)
         num_lnls   = len(self.lnls)
         string = (
-            f"Lymphatic system with {num_tumors} tumor and {num_lnls} LNL.\n"
+            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
+            f"and {num_lnls} LNL(s).\n"
             + " ".join([f"{e}" for e in self.edges])
         )
                 

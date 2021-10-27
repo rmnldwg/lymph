@@ -26,23 +26,26 @@ def fast_binomial_pmf(k, n, p):
 # container for two System instances
 class Bilateral(object):
     """Class that models metastatic progression in a lymphatic system 
-    bilaterally by creating two :class:`System` instances that are symmetric in 
-    their connections. The parameters describing the spread probabilities 
-    however need not be symmetric.
+    bilaterally by creating two :class:`Unilateral` instances that are 
+    symmetric in their connections. The parameters describing the spread 
+    probabilities however need not be symmetric.
             
     See Also:
-        :class:`System`: Two instances of this class are created as attributes.
+        :class:`Unilateral`: Two instances of this class are created as 
+        attributes.
     """
     def __init__(self, 
                  graph: dict = {},
                  base_symmetric: bool = False,
                  trans_symmetric: bool = True):
-        """Initialize both sides of the network as a :class:`System` instance:
+        """Initialize both sides of the network as a :class:`Unilateral` 
+        instance:
         
         Args:
             graph: Dictionary of the same kind as for initialization of 
-                :class:`System`. This graph will be passed to the constructors of 
-                two :class:`System` attributes of this class.
+                :class:`Unilateral`. This graph will be passed to the 
+                constructors of two :class:`Unilateral` attributes of this 
+                class.
             base_symmetric: If ``True``, the spread probabilities of the two 
                 sides from the tumor(s) to the LNLs will be set symmetrically.
             trans_symmetric: If ``True``, the spread probabilities among the 
@@ -56,17 +59,30 @@ class Bilateral(object):
     
     
     def __str__(self):
-        string = "### IPSILATERAL ###\n"
-        string += self.ipsi.__str__()
-        string += "\n### CONTRALATERAL ###\n"
-        string += self.contra.__str__()
+        """Print info about the structure and parameters of the bilateral 
+        lymphatic system.
+        """
+        num_tumors = len(self.ipsi.tumors)
+        num_lnls   = len(self.ipsi.lnls)
+        string = (
+            f"Bilateral lymphatic system with {num_tumors} tumor(s) "
+            f"and 2 * {num_lnls} LNL(s).\n"
+        )
+        string += "Symmetry: " 
+        string += "base " if self.base_symmetric else ""
+        string += "trans\n" if self.trans_symmetric else "\n"
+        string += "Ipsilateral:\t" + " ".join([f"{e}" for e in self.ipsi.edges])
+        string += "\n"
+        string += "Contralateral:\t" + " ".join([f"{e}" for e in self.contra.edges])
+        
         return string
     
     
     @property
     def system(self):
         """Return a dictionary with the ipsi- & contralateral side's 
-        :class:`System` under the keys ``"ipsi"`` and ``"contra"`` respectively.
+        :class:`Unilateral` under the keys ``"ipsi"`` and ``"contra"`` 
+        respectively.
         
         This is needed since in some weak moment, I thought it would be a great 
         idea if a class named ``BilateralSystem`` had an attriute called 
@@ -165,7 +181,7 @@ class Bilateral(object):
         
         If the bilateral network is set to have symmetries, the length of the 
         list/array of numbers that need to be provided will be shorter. E.g., 
-        when the bilateral lzmphatic network is completely asymmetric, it 
+        when the bilateral lymphatic network is completely asymmetric, it 
         requires an array of length :math:`2n_b + 2n_t` where :math:`n_b` is 
         the number of edges from the tumor to the LNLs and :math:`n_t` the 
         number of edges among the LNLs.
@@ -195,7 +211,8 @@ class Bilateral(object):
         :math:`\\mathbf{B}^{\\text{i}}` and :math:`\\mathbf{B}^{\\text{c}}`.
                 
         See Also:
-            :meth:`System.set_modalities`: Setting modalities in unilateral System.
+            :meth:`Unilateral.set_modalities`: Setting modalities in unilateral 
+            System.
         """
         ipsi_modality_spsn = self.ipsi.modalities
         if ipsi_modality_spsn != self.contra.modalities:
@@ -233,9 +250,10 @@ class Bilateral(object):
                 are given.
         
         See Also:
-            :meth:`System.load_data`: Data loading method of unilateral system.
+            :meth:`Unilateral.load_data`: Data loading method of unilateral 
+            system.
             
-            :meth:`System._gen_C`: Generate marginalization matrix.
+            :meth:`Unilateral._gen_C`: Generate marginalization matrix.
         """
         # split the DataFrame into two, one for ipsi-, one for contralateral
         ipsi_data = data.drop(
@@ -335,8 +353,8 @@ class Bilateral(object):
             and diagnose times or distributions over diagnose times.
         
         See Also:
-            :meth:`System.log_likelihood`: The log-likelihood function of the 
-                unilateral system.
+            :meth:`Unilateral.log_likelihood`: The log-likelihood function of 
+            the unilateral system.
         """
         if not self._spread_probs_are_valid(spread_probs):
             return -np.inf

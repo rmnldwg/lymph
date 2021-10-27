@@ -19,11 +19,13 @@ from .node import *
 from .edge import *
 from .unilateral import *
 from .bilateral import *
+from .midline import *
 
 __all__ = [
     "Node",
     "Edge",
-    "System",
-    "BilateralSystem",
+    "Unilateral", "System",
+    "Bilateral", "BilateralSystem",
+    "MidlineBilateral"
     "change_base",
 ]

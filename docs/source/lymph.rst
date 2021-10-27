@@ -12,19 +12,26 @@ Recently, we added the convenience class :class:`BilateralSystem` that automatic
 Lymph system
 ------------
 
-.. autoclass:: lymph.System
+.. autoclass:: lymph.Unilateral
    :members:
 
 Bilateral lymph system
 ----------------------
 
-.. autoclass:: lymph.BilateralSystem
+.. autoclass:: lymph.Bilateral
    :members:
+
+Bilateral lymphatic system with midline extension
+-------------------------------------------------
+
+.. autoclass:: lymph.MidlineBilateral
+    :members:
 
 Edge
 ----
 
-Represents a lymphatic drainage pathway and therefore are spread probability.
+Represents a lymphatic drainage pathway and therefore are spread probability. 
+It is represented by the simplest possible class suitable for the task.
 
 .. autoclass:: lymph.Edge
    :members:
