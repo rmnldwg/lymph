@@ -206,12 +206,11 @@ class Bilateral(object):
 
     @property
     def modalities(self):
-        """
-        Compute the two system's observation matrices 
+        """Compute the two system's observation matrices 
         :math:`\\mathbf{B}^{\\text{i}}` and :math:`\\mathbf{B}^{\\text{c}}`.
                 
         See Also:
-            :meth:`Unilateral.set_modalities`: Setting modalities in unilateral 
+            :meth:`Unilateral.modalities`: Setting modalities in unilateral 
             System.
         """
         ipsi_modality_spsn = self.ipsi.modalities
@@ -223,7 +222,7 @@ class Bilateral(object):
     
     
     @modalities.setter
-    def modalities(self, modality_spsn: Dict[Any, List[float]]):
+    def modalities(self, modality_spsn: Dict[str, List[float]]):
         """
         Given specificity :math:`s_P` & sensitivity :math:`s_N` of different 
         diagnostic modalities, compute the system's two observation matrices 
@@ -240,14 +239,30 @@ class Bilateral(object):
         modality_spsn: Optional[Dict[str, List[float]]] = None, 
         mode: str = "HMM"
     ):
-        """
+        """Load a dataset by converting it into internal representation as data 
+        matrix.
+        
         Args:
             data: Table with rows of patients. Columns must have three levels. 
-                The first column is ('Info', 'tumor', 'T-stage'). The rest of 
+                The first column is ('info', 'tumor', 't_stage'). The rest of 
                 the columns are separated by modality names on the top level, 
                 then subdivided into 'ipsi' & 'contra' by the second level and
                 finally, in the third level, the names of the lymph node level 
-                are given.
+                are given. Here is an example of such a table: 
+                
+                +---------+---------------------+-----------------------+
+                |  info   |         MRI         |         PET           |
+                +---------+----------+----------+-----------+-----------+
+                |  tumor  |   ipsi   |  contra  |   ipsi    |  contra   |
+                +---------+----------+----------+-----------+-----------+
+                | t_stage |    II    |    II    |    II     |    II     |
+                +=========+==========+==========+===========+===========+
+                | early   | ``True`` | ``None`` | ``True``  | ``False`` |
+                +---------+----------+----------+-----------+-----------+
+                | late    | ``None`` | ``None`` | ``False`` | ``False`` |
+                +---------+----------+----------+-----------+-----------+
+                | early   | ``True`` | ``True`` | ``True``  | ``None``  |
+                +---------+----------+----------+-----------+-----------+
         
         See Also:
             :meth:`Unilateral.load_data`: Data loading method of unilateral 

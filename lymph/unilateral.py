@@ -134,7 +134,8 @@ class Unilateral(object):
         return None
 
 
-    def get_graph(self) -> dict:
+    @property
+    def graph(self) -> dict:
         """Lists the graph as it was provided when the system was created.
         """
         res = []
@@ -145,17 +146,6 @@ class Unilateral(object):
             res.append((node.name, out))
             
         return dict(res)
-
-
-    def list_edges(self) -> List[Edge]:
-        """Lists all edges of the system with its corresponding start and end 
-        nodes.
-        """
-        res = []
-        for edge in self.edges:
-            res.append((edge.start.name, edge.end.name, edge.t))
-            
-        return res
     
     
     @property
@@ -597,11 +587,23 @@ class Unilateral(object):
 
         Args:
             data: Table with rows of patients. Must have a two-level 
-                :class:`MultiIndex` where the top-level has categories 'Info' 
+                :class:`MultiIndex` where the top-level has categories 'info' 
                 and the name of the available diagnostic modalities. Under 
-                'Info', the second level is only 'T-stage', while under the 
+                'info', the second level is only 't_stage', while under the 
                 modality, the names of the diagnosed lymph node levels are 
-                given as the columns.
+                given as the columns. Such a table could look like this:
+                
+                +---------+----------------------+-----------------------+
+                |  info   |         MRI          |          PET          |
+                +---------+----------+-----------+-----------+-----------+
+                | t_stage |    II    |    III    |    II     |    III    |
+                +=========+==========+===========+===========+===========+
+                | early   | ``True`` | ``False`` | ``True``  | ``False`` |
+                +---------+----------+-----------+-----------+-----------+
+                | late    | ``None`` | ``None``  | ``False`` | ``False`` |
+                +---------+----------+-----------+-----------+-----------+
+                | early   | ``True`` | ``True``  | ``True``  | ``None``  |
+                +---------+----------+-----------+-----------+-----------+
 
             t_stages: List of T-stages that should be included in the learning 
                 process. If ommitted, the list of T-stages is extracted from 
@@ -627,10 +629,10 @@ class Unilateral(object):
         # For the Hidden Markov Model
         if mode=="HMM":
             if t_stages is None:
-                t_stages = list(set(data[("Info", "T-stage")]))
+                t_stages = list(set(data[("info", "t_stage")]))
 
             for stage in t_stages:
-                table = data.loc[data[('Info', 'T-stage')] == stage,
+                table = data.loc[data[('info', 't_stage')] == stage,
                                  self._modality_tables.keys()].values
                 self._gen_C(table, stage, **gen_C_kwargs)
 
