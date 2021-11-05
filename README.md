@@ -2,6 +2,8 @@
 
 **Python package for statistical modelling of lymphatic metastatic spread in head & neck cancer.**
 
+![social card](./docs/source/_static/github-social-card.png)
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat "License")](https://github.com/rmnldwg/lymph/blob/master/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-rmnldwg%2Flymph-blue.svg?style=flat "GitHub")](https://github.com/rmnldwg)
 [![paper](https://img.shields.io/badge/paper-published-success.svg?style=flat "Paper")](https://www.nature.com/articles/s41598-021-91544-1)
