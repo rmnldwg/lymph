@@ -38,16 +38,16 @@ The implemented model is highly interpretable and was developed together with cl
 The mathematical details of the models can be found in [7]_ and [8]_.
 
 
-The code
-========
+Get started
+===========
+
+To learn how to use this package, head over to our `documentation <https://lymph-model.readthedocs.io>`_ where we explain the API of the package and also provide a `quickstart guide <https://lymph-model.readthedocs.io/en/latest/quickstart.html>`_.
 
 The implementation is pure-python and has only a few dependencies. However, it is intended to be used with powerful inference algorithms, e.g. the great sampling package `emcee <https://github.com/dfm/emcee>`_, which we used for our results.
 
-We documented the API of the package, as well how we obtained the results of our paper [8]_ of the hidden Markov model publication on `readthedocs <https://lymph-model.readthedocs.io>`_.
 
-
-Further reading
-===============
+See also
+========
 
 The dataset(s)
 --------------
