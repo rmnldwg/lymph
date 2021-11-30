@@ -98,6 +98,11 @@ class Node(object):
     def trans_prob(self) -> float:
         """Compute the transition probabilities from the current state to all
         other possible states (which is only two).
+        
+        .. warning:: 
+            Despite the similar name, this method about the probability for a 
+            state *transition* has nothing to do with the parameters :math:`t` 
+            that describe the *transmission* probability of cancer between LNLs.
         """
         stay_prob = 1.
 

@@ -414,14 +414,14 @@ class Bilateral(object):
         max_t: Optional[int] = 10,
         time_dists: Optional[Dict[Any, np.ndarray]] = None
     ):
-        """
-        Compute log-likelihood of (already stored) data, given the spread 
+        """Compute log-likelihood of (already stored) data, given the spread 
         probabilities and either a discrete diagnose time or a distribution to 
         use for marginalization over diagnose times.
         
         Args:
             spread_probs: Spread probabiltites from the tumor to the LNLs, as 
-                well as from (already involved) LNLs to downsream LNLs.
+                well as from (already involved) LNLs to downsream LNLs. Includes 
+                both sides of the neck.
             
             t_stages: List of T-stages that are also used in the data to denote 
                 how advanced the primary tumor of the patient is. This does not 
@@ -448,6 +448,10 @@ class Bilateral(object):
             and diagnose times or distributions over diagnose times.
         
         See Also:
+            :attr:`spread_probs`: Property for getting and setting the spread 
+            probabilities, of which a lymphatic network has as many as it has 
+            :class:`Edge` instances (in case no symmetries apply).
+            
             :meth:`Unilateral.log_likelihood`: The log-likelihood function of 
             the unilateral system.
         """
@@ -479,9 +483,9 @@ class Bilateral(object):
         Wraps the :meth:`log_likelihood` method.
 
         Args:
-            theta: Set of parameters, consisting of the base probabilities 
-                :math:`b` (as many as the system has nodes) and the transition 
-                probabilities :math:`t` (as many as the system has edges).
+            theta: The spread probabilities of which a lymphatic system has as 
+            many as the system has :class:`Edge` instances (when no symmetries 
+            apply).
 
             t_stages: List of T-stages that should be included in the learning 
                 process.
@@ -494,7 +498,7 @@ class Bilateral(object):
 
         See Also:
             :meth:`log_likelihood`: Simply calls the actual likelihood function 
-                where it sets the `diag_times` to `None`.
+            where it sets the `diag_times` to `None`.
         """
         return self.log_likelihood(
             theta, t_stages,
@@ -514,8 +518,7 @@ class Bilateral(object):
         
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
-                (as many as the system has :class:`Edge` instances) and the 
-                time of diagnosis for all T-stages.
+                and the time of diagnosis for all T-stages.
                 
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
@@ -528,8 +531,8 @@ class Bilateral(object):
         
         See Also:
             :meth:`log_likelihood`: The `theta` argument of this function is 
-                split into `spread_probs` and `diag_times`, which are then 
-                passed to the actual likelihood function.
+            split into `spread_probs` and `diag_times`, which are then passed 
+            to the actual likelihood function.
         """
         # splitting theta into spread parameters and...
         len_spread_probs = len(theta) - len(t_stages)
@@ -556,8 +559,8 @@ class Bilateral(object):
         
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
-                (as many as the system has :class:`Edge` instances) and the 
-                binomial distribution's :math:`p` parameters.
+                and the binomial distribution's :math:`p` parameters for each 
+                T-category.
                 
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.

@@ -3,7 +3,16 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 import lymph
+from lymph import bilateral
 
+
+@pytest.fixture
+def bisys():
+    graph = {('tumor', 'primary'): ['one', 'two'],
+             ('lnl', 'one'):       ['two', 'three'],
+             ('lnl', 'two'):       ['three'],
+             ('lnl', 'three'):     []}
+    return lymph.Bilateral(graph=graph)
 
 @pytest.fixture
 def midbi():
@@ -12,6 +21,15 @@ def midbi():
              ('lnl', 'two'):       ['three'],
              ('lnl', 'three'):     []}
     return lymph.MidlineBilateral(graph=graph)
+
+
+@pytest.fixture(scope="session")
+def t_stages():
+    return ["early", "late"]
+
+@pytest.fixture
+def modality_spsn():
+    return {'test-o-meter': [0.99, 0.88]}
 
 
 @pytest.fixture
@@ -42,4 +60,42 @@ def test_spread_probs(midbi, new_spread_probs):
                              midbi.ext.contra.base_probs)), (
         "Contralateral base probabilities for midline extension are wrong."
     )
-                           
+
+def test_load_data(bisys, midbi, t_stages, modality_spsn):
+    """Check that data gets loaded correctly. The mockup dataset for the midext 
+    case is designed such that only the contralateral side for patients with 
+    mid-sagittal tumor extension should have a different C-matrix and f-vector.
+    """
+    bidata = pd.read_csv(
+        "./tests/bilateral_mockup_data.csv", header=[0,1,2]
+    )
+    bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
+    
+    middata = pd.read_csv(
+        "./tests/midline_ext_mockup_data.csv", header=[0,1,2]
+    )
+    midbi.load_data(middata, t_stages=t_stages, modality_spsn=modality_spsn)
+    
+    for stage in t_stages:
+        assert np.all(np.equal(
+            bisys.ipsi.C[stage], midbi.ext.ipsi.C[stage]
+        ))
+        assert np.all(np.equal(
+            bisys.ipsi.f[stage], midbi.ext.ipsi.f[stage]
+        ))
+        assert not np.all(np.equal(
+            bisys.contra.C[stage], midbi.ext.contra.C[stage]
+        ))
+        
+        assert np.all(np.equal(
+            bisys.ipsi.C[stage], midbi.noext.ipsi.C[stage]
+        ))
+        assert np.all(np.equal(
+            bisys.ipsi.f[stage], midbi.noext.ipsi.f[stage]
+        ))
+        assert np.all(np.equal(
+            bisys.contra.C[stage], midbi.noext.contra.C[stage]
+        ))
+        assert np.all(np.equal(
+            bisys.contra.f[stage], midbi.noext.contra.f[stage]
+        ))

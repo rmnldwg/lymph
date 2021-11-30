@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Union, Optional, List, Dict, Any
 
 from .unilateral import Unilateral
-from .bilateral import Bilateral
+from .bilateral import Bilateral, fast_binomial_pmf
 
 
 class MidlineBilateral(object):
@@ -93,6 +93,9 @@ class MidlineBilateral(object):
             self.alpha_mix * self.noext.ipsi.base_probs 
             + (1 - self.alpha_mix) * self.noext.contra.base_probs
         )
+        
+        # avoid unnecessary double computation of ipsilateral transition matrix
+        self.noext.ipsi._A = self.ext.ipsi.A
     
     
     @property
@@ -109,6 +112,9 @@ class MidlineBilateral(object):
         """
         self.noext.trans_probs = new_params
         self.ext.trans_probs = new_params
+        
+        # avoid unnecessary double computation of ipsilateral transition matrix
+        self.noext.ipsi._A = self.ext.ipsi.A
     
     
     @property
@@ -233,4 +239,172 @@ class MidlineBilateral(object):
             modality_spsn=modality_spsn, 
             mode=mode
         )
+    
+    
+    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
+        """Check that the spread probability (rates) are all within limits.
+        """
+        if new_spread_probs.shape != self.spread_probs.shape:
+            msg = ("Shape of provided spread parameters does not match network")
+            raise ValueError(msg)
+        if np.any(np.greater(0., new_spread_probs)):
+            return False
+        if np.any(np.greater(new_spread_probs, 1.)):
+            return False
+        
+        return True
+    
+    
+    def log_likelihood(
+        self,
+        spread_probs: np.ndarray,
+        t_stages: Optional[List[Any]] = None,
+        diag_times: Optional[Dict[Any, int]] = None,
+        max_t: Optional[int] = 10,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None
+    ) -> float:
+        """Compute log-likelihood of (already stored) data, given the spread 
+        probabilities and either a discrete diagnose time or a distribution to 
+        use for marginalization over diagnose times.
+        
+        Args:
+            spread_probs: Spread probabiltites from the tumor to the LNLs, as 
+                well as from (already involved) LNLs to downsream LNLs. This 
+                includes both sides of the neck and also different sets of 
+                probabilities for patients with tumor that do or do not extend 
+                over the mid-sagittal line. Also includes the :math:`\\alpha` 
+                mixing parameter.
             
+            t_stages: List of T-stages that are also used in the data to denote 
+                how advanced the primary tumor of the patient is. This does not 
+                need to correspond to the clinical T-stages 'T1', 'T2' and so 
+                on, but can also be more abstract like 'early', 'late' etc.
+            
+            diag_times: For each T-stage, one can specify with what time step 
+                the likelihood should be computed. If this is set to `None`, 
+                and a distribution over diagnose times `time_dists` is provided, 
+                the function marginalizes over diagnose times.
+            
+            max_t: Latest possible diagnose time. This is only used to return 
+                `-np.inf` in case one of the `diag_times` exceeds this value.
+            
+            time_dists: Distribution over diagnose times that can be used to 
+                compute the likelihood of the data, given the spread 
+                probabilities, but marginalized over the time of diagnosis. If 
+                set to `None`, a diagnose time must be explicitly set for each 
+                T-stage.
+        
+        Returns:
+            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D` 
+            is the data and :math:`\\theta` is the tuple of spread probabilities 
+            and diagnose times or distributions over diagnose times.
+        
+        See Also:
+            :meth:`Unilateral.log_likelihood`: The log-likelihood function of 
+            the unilateral system.
+            
+            :meth:`Bilateral.log_likelihood`: Log-likelihood function of the 
+            bilateral system, not concerned with midline extension.
+        """
+        if not self._spread_probs_are_valid(spread_probs):
+            return -np.inf
+        
+        self.spread_probs = spread_probs
+        
+        llh = 0.
+        
+        llh += self.ext._log_likelihood(
+            t_stages=t_stages, 
+            diag_times=diag_times, 
+            max_t=max_t, 
+            time_dists=time_dists
+        )
+        
+        llh += self.noext._log_likelihood(
+            t_stages=t_stages, 
+            diag_times=diag_times, 
+            max_t=max_t, 
+            time_dists=time_dists
+        )
+        
+        return llh
+    
+    
+    def marginal_log_likelihood(
+        self, 
+        theta: np.ndarray, 
+        t_stages: Optional[List[Any]] = None, 
+        time_dists: dict = {}
+    ) -> float:
+        """
+        Compute the likelihood of the (already stored) data, given the spread 
+        parameters, marginalized over time of diagnosis via time distributions. 
+        Wraps the :meth:`log_likelihood` method.
+
+        Args:
+            theta: Set of parameters, consisting of the base probabilities 
+                :math:`b` (as many as the system has nodes) and the transition 
+                probabilities :math:`t` (as many as the system has edges).
+
+            t_stages: List of T-stages that should be included in the learning 
+                process.
+
+            time_dists: Distribution over the probability of diagnosis at 
+                different times :math:`t` given T-stage.
+
+        Returns:
+            The log-likelihood of a parameter sample.
+
+        See Also:
+            :meth:`log_likelihood`: Simply calls the actual likelihood function 
+            where it sets the `diag_times` to `None`.
+        """
+        return self.log_likelihood(
+            theta, t_stages,
+            diag_times=None, time_dists=time_dists
+        )
+    
+    
+    def binom_marg_log_likelihood(
+        self, 
+        theta: np.ndarray, 
+        t_stages: List[Any],
+        max_t: int = 10
+    ) -> float:
+        """
+        Compute marginal log-likelihood using binomial distributions to sum 
+        over the diagnose times.
+        
+        Args:
+            theta: Set of parameters, consisting of the spread probabilities 
+                and the binomial distribution's :math:`p` parameters for each 
+                T-category.
+                
+            t_stages: keywords of T-stages that are present in the dictionary of 
+                C matrices and the previously loaded dataset.
+                
+            max_t: Latest accepted time-point.
+            
+        Returns:
+            The log-likelihood of the (already stored) data, given the spread 
+            prbabilities as well as the parameters for binomial distribtions 
+            used to marginalize over diagnose times.
+        """
+        # splitting theta into spread parameters and...
+        len_spread_probs = len(theta) - len(t_stages)
+        spread_probs = theta[:len_spread_probs]
+        # ...p-values for the binomial distribution
+        p = theta[len_spread_probs:]
+        
+        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
+            return -np.inf
+        
+        t = np.arange(max_t + 1)
+        time_dists = {}
+        for i,stage in enumerate(t_stages):
+            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
+        
+        return self.marginal_log_likelihood(
+            spread_probs, t_stages, 
+            time_dists=time_dists
+        )

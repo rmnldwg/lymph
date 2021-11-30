@@ -72,6 +72,10 @@ def expected_C():
 def expected_f():
     return {"early": np.array([1, 1, 1, 1, 1]),
             "late" : np.array([1, 1, 2])}
+
+@pytest.fixture
+def empty_data():
+    return pd.read_csv("./tests/unilateral_mockup_data.csv", header=[0,1], nrows=0)
     
 @pytest.fixture
 def data():
@@ -127,12 +131,21 @@ def test_B_matrix(sys, modality_spsn):
     
     
 def test_load_data(
-    sys, data, t_stages, modality_spsn, expected_C, expected_f
+    sys, empty_data, data, t_stages, modality_spsn, expected_C, expected_f
 ):
+    """Check that unilateral system handles lodaing data correctly, including 
+    an empty dataset.
+    """
+    sys.load_data(
+        empty_data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
+    )
+    for stage in t_stages:
+        assert sys.C[stage].shape[1] == 0
+        assert len(sys.f[stage]) == 0
+    
     sys.load_data(
         data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
     )
-    
     for stage in t_stages:
         assert np.all(np.equal(sys.C[stage], expected_C[stage]))
         assert np.all(np.equal(sys.f[stage], expected_f[stage]))
