@@ -169,7 +169,13 @@ class Unilateral(object):
     def base_probs(self):
         """The spread probablities parametrizing the edges that represent the 
         lymphatic drainage from the tumor(s) to the individual lymph node 
-        levels.
+        levels. This array is composed of these elements:
+        
+        +-------------+-------------+----------------+-------------+
+        | :math:`b_1` | :math:`b_2` | :math:`\\cdots` | :math:`b_n` |
+        +-------------+-------------+----------------+-------------+
+        
+        Where :math:`n` is the number of edges between the tumor and the LNLs.
         
         Setting these requires an array with a length equal to the number of 
         edges in the graph that start with a tumor node. After setting these 
@@ -195,6 +201,10 @@ class Unilateral(object):
         """Return the spread probablities of the connections between the lymph 
         node levels. Here, "trans" stands for "transmission" (among the LNLs), 
         not "transition" as in the transition to another state.
+        
+        Its shape is similar to the one of the :attr:`base_probs` but it lists 
+        the transmission probabilities :math:`t_{a \\rightarrow b}` in the 
+        order they were defined in the initial graph.
         
         When setting an array of length equal to the number of connections 
         among the LNL is required. After setting the new values, the transition 
@@ -222,7 +232,8 @@ class Unilateral(object):
         lymphatic network.
         
         Setting these requires an array with a length equal to the number of 
-        lymph node levels.
+        edges in the network. It's essentially a concatenation of the 
+        :attr:`base_probs` and the :attr:`trans_probs`.
         """
         return np.concatenate([self.base_probs, self.trans_probs])
 
@@ -384,7 +395,7 @@ class Unilateral(object):
     def _gen_A(self):
         """
         Generates the transition matrix :math:`\\mathbf{A}`, which contains 
-        the :math:`P \\left( X_{t+1} \\mid X_t \\right)`. :math:`\\mathbf{A}` 
+        the :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}` 
         is a square matrix with size ``(# of states)``. The lower diagonal is 
         zero.
         """
@@ -397,12 +408,14 @@ class Unilateral(object):
                 self._A[i,j] = self.comp_transition_prob(self.state_list[j])
     
     @property
-    def A(self):
+    def A(self) -> np.ndarray:
         """Return the transition matrix :math:`\\mathbf{A}`, which contains the 
-        probability to transition from any state to any other state within one 
-        time-step :math:`P \\left( X_{t+1} \\mid X_t \\right)`. 
-        :math:`\\mathbf{A}` is a square matrix with size ``(# of states)``. The 
-        lower diagonal is zero, because self-healing is forbidden.
+        probability to transition from any state :math:`S_t` to any other state 
+        :math:`S_{t+1}` one timestep later: 
+        :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}` is a 
+        square matrix with size ``(# of states)``. The lower diagonal is zero, 
+        because those entries correspond to transitions that would require 
+        self-healing.
         """
         try:
             return self._A
@@ -462,7 +475,7 @@ class Unilateral(object):
 
     def _gen_B(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains 
-        the :math:`P \\left(Z_t \\mid X_t \\right)`. :math:`\\mathbf{B}` has the 
+        the :math:`P \\left(D \\mid S \\right)`. :math:`\\mathbf{B}` has the 
         shape ``(# of states, # of possible observations)``.
         """
         n_lnl = len(self.lnls)
@@ -479,8 +492,13 @@ class Unilateral(object):
                 self._B[i,j] = self.comp_observation_prob(diagnoses_dict)
     
     @property
-    def B(self):
-        """Return the observation matrix."""
+    def B(self) -> np.ndarray:
+        """Return the observation matrix :math:`\\mathbf{B}`. It encodes the 
+        probability to see a certain diagnose :math:`D`, given a particular 
+        true (but hidden) state :math:`S`: :math:`P\\left( D \\mid S \\right)`. 
+        It is meant to be multiplied from the right onto the transition matrix 
+        :math:`\\mathbf{A}`.
+        """
         try:
             return self._B
         except AttributeError:
@@ -654,9 +672,9 @@ class Unilateral(object):
                 involvement probabilities.
             
             t_last: Last time step to consider. This function computes 
-                involvement probabilities for all :math:`t` in between `t_frist` 
-                and `t_last`. If `t_first == t_last`, "math:`p(S \\mid t)` is 
-                computed only at that time.
+                involvement probabilities for all :math:`t` in between 
+                ``t_frist`` and ``t_last``. If ``t_first == t_last``, 
+                :math:`p(S \\mid t)` is computed only at that time.
         
         Returns:
             A matrix with the values :math:`p(S \\mid t)` for each time-step.
@@ -827,8 +845,8 @@ class Unilateral(object):
 
         Args:
             theta: Set of parameters, consisting of the base probabilities 
-                :math:`b` (as many as the system has nodes) and the transition 
-                probabilities :math:`t` (as many as the system has edges).
+                :math:`b` and the transition probabilities :math:`t`. Those are 
+                concatenated into an array of the form 
 
             t_stages: List of T-stages that should be included in the learning 
                 process.

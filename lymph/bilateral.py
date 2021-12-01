@@ -120,11 +120,20 @@ class Bilateral(object):
         """Probabilities of lymphatic spread from the tumor(s) to the lymph 
         node levels. If the ipsi- & contralateral spread from the tumor is set 
         to be symmetric (``base_symmetric = True``) this only returns the 
-        parameters of one side.
+        parameters of one side. So, the returned array is composed like so:
+        
+        +-----------------+--------------------+
+        | base probs ipsi | base probs contra* |
+        +-----------------+--------------------+
+        
+        *Only when ``base_symmetric = False``, which is the default.
         
         When setting these parameters, the length of the provided array only 
         needs to be half as long if ``base_symmetric`` is ``True``, since both 
         sides will be set to the same values.
+        
+        See Also:
+            :attr:`Unilateral.base_probs`
         """
         if self.base_symmetric:
             return self.ipsi.base_probs
@@ -150,10 +159,19 @@ class Bilateral(object):
         """Probabilities of lymphatic spread among the lymph node levels. If 
         this ipsi- & contralateral spread is set to be symmetric 
         (``trans_symmetric = True``) this only returns the parameters of one 
-        side.
+        side. Similiar to the :attr:`base_probs`, this array's shape is:
+        
+        +------------------+---------------------+
+        | trans probs ipsi | trans probs contra* |
+        +------------------+---------------------+
+        
+        *Only if ``trans_symmetric = False``.
         
         And correspondingly, if setting these transmission probability one only 
         needs half as large an array if ``trans_symmetric`` is ``True``.
+        
+        See Also:
+            :attr:`Unilateral.trans_probs`
         """
         if self.trans_symmetric:
             return self.ipsi.trans_probs
@@ -185,6 +203,19 @@ class Bilateral(object):
         requires an array of length :math:`2n_b + 2n_t` where :math:`n_b` is 
         the number of edges from the tumor to the LNLs and :math:`n_t` the 
         number of edges among the LNLs.
+        
+        Similar to the :attr:`base_probs` and the :attr:`trans_probs`, we can 
+        describe its shape like this:
+        
+        +-----------------+--------------------+------------------+----------------------+
+        | base probs ipsi | base probs contra* | trans probs ipsi | trans probs contra** |
+        +-----------------+--------------------+------------------+----------------------+
+        
+        | *Only if ``base_symmetric = False``, which is the default.
+        | **Only if ``trans_symmetric = False``.
+        
+        See Also:
+            :attr:`Unilateral.spread_probs`
         """
         return np.concatenate([self.base_probs, self.trans_probs])
     
@@ -421,7 +452,14 @@ class Bilateral(object):
         Args:
             spread_probs: Spread probabiltites from the tumor to the LNLs, as 
                 well as from (already involved) LNLs to downsream LNLs. Includes 
-                both sides of the neck.
+                both sides of the neck. The composition of this array is:
+                
+                +----------------------------+-----------------------------+
+                | base probs (ipsi & contra) | trans probs (ipsi & contra) |
+                +----------------------------+-----------------------------+
+                
+                If certain symmetries are chosen, only one set of base or 
+                transmission probabilities might have to be provided.
             
             t_stages: List of T-stages that are also used in the data to denote 
                 how advanced the primary tumor of the patient is. This does not 
@@ -483,9 +521,16 @@ class Bilateral(object):
         Wraps the :meth:`log_likelihood` method.
 
         Args:
-            theta: The spread probabilities of which a lymphatic system has as 
-            many as the system has :class:`Edge` instances (when no symmetries 
-            apply).
+            theta: Spread probabiltites from the tumor to the LNLs, as well as 
+                from (already involved) LNLs to downsream LNLs. Includes both 
+                sides of the neck. The composition of this array is:
+                
+                +----------------------------+-----------------------------+
+                | base probs (ipsi & contra) | trans probs (ipsi & contra) |
+                +----------------------------+-----------------------------+
+                
+                If certain symmetries are chosen, only one set of base or 
+                transmission probabilities might have to be provided.
 
             t_stages: List of T-stages that should be included in the learning 
                 process.
@@ -518,7 +563,12 @@ class Bilateral(object):
         
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
-                and the time of diagnosis for all T-stages.
+                and the time of diagnosis for all T-stages. It is therefore 
+                made up these parts and in that order:
+                
+                +------------+-------------+----------------+
+                | base probs | trans probs | diagnose times |
+                +------------+-------------+----------------+
                 
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
@@ -560,7 +610,12 @@ class Bilateral(object):
         Args:
             theta: Set of parameters, consisting of the spread probabilities 
                 and the binomial distribution's :math:`p` parameters for each 
-                T-category.
+                T-category. One has to provide a concatenated array of these 
+                numbers like this:
+                
+                +------------+-------------+--------------------------+
+                | base probs | trans probs | binomial :math`p` params |
+                +------------+-------------+--------------------------+
                 
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.

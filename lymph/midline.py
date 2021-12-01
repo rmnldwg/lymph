@@ -69,7 +69,12 @@ class MidlineBilateral(object):
         """Base probabilities of metastatic lymphatic spread from the tumor(s) 
         to the lymph node levels. This will return a concatenation of the 
         ipsilateral base probabilities and the contralateral ones without the 
-        midline extension, as well as - lastly - the mixing parameter alpha.
+        midline extension, as well as - lastly - the mixing parameter alpha. 
+        The returned array has therefore this composition:
+        
+        +-----------------+-------------------+--------------+
+        | base probs ipsi | base probs contra | mixing param |
+        +-----------------+-------------------+--------------+
         
         When setting these, one also needs to provide this mixing parameter as 
         the last entry in the provided array.
@@ -126,7 +131,11 @@ class MidlineBilateral(object):
         tumor(s) to the ipsilateral LNLs, then the same values for the spread 
         to the contralateral LNLs, after this the spread probabilities among 
         the LNLs (which is assumed to be symmetric ipsi- & contralaterally) and 
-        finally the mixing parameter :math:`\\alpha`.
+        finally the mixing parameter :math:`\\alpha`. So, it's form is
+        
+        +-----------------+-------------------+-------------+--------------+
+        | base probs ipsi | base probs contra | trans probs | mixing param |
+        +-----------------+-------------------+-------------+--------------+
         """
         spread_probs = self.noext.spread_probs
         return np.concatenate([spread_probs, [self.alpha_mix]])
@@ -273,7 +282,11 @@ class MidlineBilateral(object):
                 includes both sides of the neck and also different sets of 
                 probabilities for patients with tumor that do or do not extend 
                 over the mid-sagittal line. Also includes the :math:`\\alpha` 
-                mixing parameter.
+                mixing parameter. So, this consists of 
+                
+                +------------+-------------+--------------+
+                | base probs | trans probs | mixing param |
+                +------------+-------------+--------------+
             
             t_stages: List of T-stages that are also used in the data to denote 
                 how advanced the primary tumor of the patient is. This does not 
@@ -343,8 +356,13 @@ class MidlineBilateral(object):
 
         Args:
             theta: Set of parameters, consisting of the base probabilities 
-                :math:`b` (as many as the system has nodes) and the transition 
-                probabilities :math:`t` (as many as the system has edges).
+                :math:`b` and the transition probabilities :math:`t`, as well 
+                as the mixing parameter :math:`\\alpha`. So, it consists of 
+                these entries:
+                
+                +------------+-------------+--------------+
+                | base probs | trans probs | mixing param |
+                +------------+-------------+--------------+
 
             t_stages: List of T-stages that should be included in the learning 
                 process.
@@ -371,14 +389,18 @@ class MidlineBilateral(object):
         t_stages: List[Any],
         max_t: int = 10
     ) -> float:
-        """
-        Compute marginal log-likelihood using binomial distributions to sum 
+        """Compute marginal log-likelihood using binomial distributions to sum 
         over the diagnose times.
         
         Args:
-            theta: Set of parameters, consisting of the spread probabilities 
-                and the binomial distribution's :math:`p` parameters for each 
-                T-category.
+            theta: Set of parameters, consisting of the spread probabilities, 
+                the mixing parameter :math:`\\alpha` and the binomial 
+                distribution's :math:`p` parameters for each T-category. So, 
+                its form is
+                
+                +------------+-------------+--------------+-----------------+
+                | base probs | trans probs | mixing param | binomial params |
+                +------------+-------------+--------------+-----------------+
                 
             t_stages: keywords of T-stages that are present in the dictionary of 
                 C matrices and the previously loaded dataset.
@@ -408,3 +430,21 @@ class MidlineBilateral(object):
             spread_probs, t_stages, 
             time_dists=time_dists
         )
+    
+    
+    def risk(self, *args, midline_extension: bool = True, **kwargs) -> float:
+        """Compute the risk of nodal involvement given a specific diagnose.
+        
+        Args:
+            midline_extension: Whether or not the patient's tumor extends over 
+                the mid-sagittal line.
+        
+        See Also:
+            :meth:`Bilateral.risk`: Depending on whether or not the patient's 
+            tumor does extend over the midline, the risk function of the 
+            respective :class:`Bilateral` instance gets called.
+        """
+        if midline_extension:
+            return self.ext.risk(*args, **kwargs)
+        else:
+            return self.noext.risk(*args, **kwargs)
