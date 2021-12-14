@@ -1,13 +1,87 @@
 import numpy as np
+import pandas as pd
 from typing import Optional, Union, Dict, List, Any
 
 import emcee
-from emcee import ensemble
+from emcee
 import h5py
 
 from .unilateral import Unilateral
 from .bilateral import Bilateral
 from .midline import MidlineBilateral
+
+
+def lyprox_to_lymph(
+    data: pd.DataFrame, 
+    method: str = "unilateral",
+    modalities: List[str] = ["MRI", "PET"],
+    convert_t_stage: Optional[Dict[int, Any]] = None
+) -> pd.DataFrame:
+    """Convert LyProX output into ``DataFrame`` that the lymph package can use 
+    for sampling.
+    
+    Args:
+        data: pandas ``DataFrame`` exported from the LyProX interface.
+        method: Can be ``"unilateral"``, ``"bilateral"`` or ``"midline"``. It 
+            corresponds to the three lymphatic network classes that are 
+            implemented in the lymph package.
+        modalities: List of diagnostic modalities that should be extracted from 
+            the exported data.
+        convert_t_stage: For each of the possible T-categories (0, 1, 2, 3, 4) 
+            this dictionary holds a key where the corresponding value is the 
+            'converted' T-category. For example, if one only wants to 
+            differentiate between 'early' and 'late', then that dictionary 
+            would look like this:
+            
+            .. code-block:: python
+                
+                convert_t_stage = {
+                    0: 'early',
+                    1: 'early',
+                    2: 'early',
+                    3: 'late',
+                    4: 'late'
+                }
+    Returns: 
+        A converted ``DataFrame`` that can then be used with the lymph package.
+    """
+    noncentral_data = data.loc[data[("tumor", "1", "side")] != "central"]
+    lateralization = noncentral_data[("tumor", "1", "side")]
+    t_stage_data = noncentral_data[("tumor", "1", "t_stage")]
+    midline_extension_data = noncentral_data[("tumor", "1", "extension")]
+    
+    diagnostic_data = noncentral_data[modalities].drop(columns=["date"], level=2)
+    # copying just to get DataFrae of same structure and with same columns
+    sorted_data = diagnostic_data.copy()
+    # rename columns for assignment later
+    sorted_data = sorted_data.rename(columns={"right": "ipsi", "left": "contra"})
+    other_ = {"right": "left", "left": "right"}
+    
+    for mod in modalities:
+        for side in ["left", "right"]:
+            ipsi_diagnoses = diagnostic_data.loc[
+                lateralization == side, (mod, side)
+            ]
+            contra_diagnoses = diagnostic_data.loc[
+                lateralization == side, (mod, other_[side])
+            ]
+            sorted_data.loc[lateralization == side, (mod, "ipsi")] = ipsi_diagnoses.values
+            sorted_data.loc[lateralization == side, (mod, "contra")] = contra_diagnoses.values
+    
+    if convert_t_stage is not None:
+        sorted_data[("info", "tumor", "t_stage")] = [
+            convert_t_stage[t] for t in t_stage_data.values
+        ]
+    else:
+        sorted_data[("info", "tumor", "t_stage")] = t_stage_data
+    
+    if method == "midline":
+        sorted_data[("info", "tumor", "midline_extension")] = midline_extension_data
+    elif method == "unilateral":
+        sorted_data = sorted_data.drop(columns=["contra"], level=1)
+        sorted_data.columns = sorted_data.columns.droplevel(1)
+    
+    return sorted_data
 
 
 class EnsembleSampler(emcee.EnsembleSampler):
