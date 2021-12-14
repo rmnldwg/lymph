@@ -3,3 +3,5 @@ numpy
 scipy
 pytest
 coverage
+emcee
+h5py
