@@ -15,7 +15,7 @@ from .node import node_trans_prob, Node
 from .edge import Edge
 from .unilateral import change_base, Unilateral, System
 from .bilateral import Bilateral, BilateralSystem
-from .midline import MidlineBilaterallymph
+from .midline import MidlineBilateral
 
 __all__ = [
     "Node",

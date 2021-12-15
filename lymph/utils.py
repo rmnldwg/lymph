@@ -1,13 +1,10 @@
 import numpy as np
 import pandas as pd
-from typing import Optional, Union, Dict, List, Any
+from pathlib import Path
+from typing import Callable, Optional, Union, Dict, List, Any
 
 import emcee
 import h5py
-
-from .unilateral import Unilateral
-from .bilateral import Bilateral
-from .midline import MidlineBilateral
 
 
 def lyprox_to_lymph(
@@ -16,11 +13,11 @@ def lyprox_to_lymph(
     modalities: List[str] = ["MRI", "PET"],
     convert_t_stage: Optional[Dict[int, Any]] = None
 ) -> pd.DataFrame:
-    """Convert LyProX output into ``DataFrame`` that the lymph package can use 
-    for sampling.
+    """Convert LyProX output into pandas :class:`DataFrame` that the lymph 
+    package can use for sampling.
     
     Args:
-        data: pandas ``DataFrame`` exported from the LyProX interface.
+        data: Patient data exported from the LyProX interface.
         method: Can be ``"unilateral"``, ``"bilateral"`` or ``"midline"``. It 
             corresponds to the three lymphatic network classes that are 
             implemented in the lymph package.
@@ -42,7 +39,8 @@ def lyprox_to_lymph(
                     4: 'late'
                 }
     Returns: 
-        A converted ``DataFrame`` that can then be used with the lymph package.
+        A converted pandas :class:`DataFrame` that can then be used with the 
+        lymph package.
     """
     noncentral_data = data.loc[data[("tumor", "1", "side")] != "central"]
     lateralization = noncentral_data[("tumor", "1", "side")]
@@ -85,15 +83,14 @@ def lyprox_to_lymph(
 
 class EnsembleSampler(emcee.EnsembleSampler):
     """A custom version of emcee's ``EnsembleSampler`` that adds convenience 
-    methods for storing and loading setting, samples and more to and from an 
+    methods for storing and loading settings, samples and more to and from an 
     HDF5 file for better reproduceability.
     """
-    
     def __init__(
         self, 
-        nwalkers, 
+        log_prob_fn, 
         ndim, 
-        log_prob_fn,
+        nwalkers=None, 
         pool=None, 
         moves=None, 
         args=None, 
@@ -103,10 +100,21 @@ class EnsembleSampler(emcee.EnsembleSampler):
         blobs_dtype=None, 
         parameter_names: Optional[Union[Dict[str, int], List[str]]] = None
     ):
-        """Before initializing the sampler, extract the instance of the used 
-        lymph system and store the filename of the HDF5 file where the sampler's 
-        settings and results are supposed to be stored.
+        """This class' constructor defines two more default arguments: 
+        ``nwalkers`` is now just 10 times ``ndim`` if not otherwise specified 
+        and ``moves`` is 80% :class:`DEMove` with 20% :class:`DESnookerMove`.
+        
+        See Also:
+            :class:`emcee.EnsembleSampler`: This utility class inherits all its 
+            main functionality from `emcee <https://emcee.readthedocs.io>`_.
         """
+        if nwalkers is None:
+            nwalkers = 10 * ndim
+        
+        if moves is None:
+            moves = [(emcee.moves.DEMove(),        0.8), 
+                     (emcee.moves.DESnookerMove(), 0.2)]
+        
         super().__init__(
             nwalkers, 
             ndim, 
@@ -120,147 +128,65 @@ class EnsembleSampler(emcee.EnsembleSampler):
             blobs_dtype=blobs_dtype, 
             parameter_names=parameter_names
         )
-        
-        # extract instance of lymph system used
-        self.lymph_system = log_prob_fn.__self__
-        
-        self.hdf5_filepath = hdf5_filepath
-        self.hdf5_groupname = hdf5_groupname
     
+    def to_hdf5(
+        self, 
+        filename: str, 
+        groupname: str = "", 
+        attr_list: List[str] = ["nwalkers", "ndim", "acceptance_fraction"]
+    ):
+        """Export samples and important settings to an HDF5 file. 
+        
+        Args:
+            filename: Name of or path to HDF5 file.
+            groupname: Name of the group where the info is supposed to be 
+                stored. There, a new subgroup 'sampler' will be created which 
+                will then hold the attributes of the ``EnsembleSampler`` and 
+                the chain.
+            attr_list: List of attributes of the ``EnsembleSampler`` to store 
+                in the HDF5 file.
+        """
+        filename = Path(filename).resolve()
+        with h5py.File(filename, mode='a') as file:
+            group = file.require_group(f"{groupname}/sampler")
+            for attr in attr_list:
+                if hasattr(self, attr):
+                    group.attrs[attr] = getattr(self, attr)
+            chain = group.require_dataset("chain")
+            chain[...] = self.get_chain()
+            log_prob = group.require_dataset("log_prob")
+            log_prob[...] = self.get_log_prob()
     
     @classmethod
-    def from_dict(
-        cls, 
-        kwargs_dict: Dict[str, Any],
-        log_prob_fn, 
-        pool=None, 
-        moves=None, 
-        args=None, 
-        kwargs=None, 
-        backend=None, 
-        vectorize=False, 
-        blobs_dtype=None, 
-        parameter_names: Optional[Union[Dict[str, int], List[str]]] = None
+    def from_hdf5(
+        cls,
+        log_prob_fn: Callable,
+        filename: str, 
+        groupname: str = "",
+        **kwargs
     ):
-        """Create an ``EnsembleSampler`` from a dictionary of arguments (e.g. 
-        as they might be stored in an HDF5 file).
+        """Create an ``EnsembleSampler`` from some stored parameters and a 
+        log-probability function.
+        
+        Args:
+            filename: Name of or path to HDF5 file.
+            groupname: Name of the group where the info is supposed to be 
+                stored. There, it searches the subgroup 'sampler' for the 
+                attributes to create an ``EnsembleSampler`` from.
+            log_prob_fn: The log-probability function to use for sampling.
+        
+        Returns:
+            A new ``EnsembleSampler``.
         """
-        nwalkers = kwargs_dict["nwalkers"]
-        ndim = kwargs_dict["ndim"]
-        nsteps = kwargs_dict["nsteps"]
-        burnin = kwargs_dict["burnin"]
+        filename = Path(filename).resolve()
+        with h5py.File(filename, 'r') as file:
+            group = file[f"{groupname}/sampler"]
+            nwalkers = group.attrs["nwalkers"]
+            ndim = group.attrs["ndim"]
         
-        # get class that was used
-        if (cls_name := kwargs_dict["lymph_sys_cls"]) == "Unilateral":
-            lymph_sys_cls = Unilateral
-        elif cls_name == "Bilateral":
-            lymph_sys_cls = Bilateral
-        elif cls_name == "MidlineBilateral":
-            lymph_sys_cls = MidlineBilateral
-        else:
-            raise ValueError(
-                "Class name defined in attributes does not match any of the "
-                "available classes to model lymphatic spread."
-            )
-        
-        # infer method from extracted class and method name
-        log_prob_fn = None
-        for attr in dir(lymph_sys_cls):
-            is_callable = callable(getattr(lymph_sys_cls, attr))
-            is_dunder = attr.startswith("__")
-            is_match = attr == kwargs_dict["log_prob_fn"]
-            if is_callable and not is_dunder and is_match:
-                log_prob_fn = getattr(lymph_sys_cls, attr)
-        
-        if log_prob_fn == None:
-            raise ValueError(
-                "The specified name of the log-likelihood function is not a "
-                "method of the described class."
-            )
-        
-        # instantiate ensemble sampler from extracted values
-        ensemble_sampler = cls.__init__(
-            # extracted from the provided dictionary
+        return cls(
             nwalkers=nwalkers,
             ndim=ndim,
             log_prob_fn=log_prob_fn,
-            # provided via keyword arguments
-            pool=pool, 
-            moves=moves, 
-            args=args, 
-            kwargs=kwargs, 
-            backend=backend, 
-            vectorize=vectorize, 
-            blobs_dtype=blobs_dtype, 
-            parameter_names=parameter_names
+            **kwargs
         )
-        # add final settings
-        ensemble_sampler.nsteps = nsteps
-        ensemble_sampler.burnin = burnin
-    
-    def to_dict(
-        self,
-        keys: List[str] = ["nwalkers", 
-                           "ndim", 
-                           "nsteps", 
-                           "burnin", 
-                           "log_prob_fn"]
-    ) -> Dict[str, Any]:
-        """Try to return a dictionary that fully specifies the 
-        ``EnsembleSampler``. The returned dictionary contains essentially all 
-        the arguments to call the ``__init__`` method.
-        """
-        res = {}
-        for key in keys:
-            if hasattr(self, key):
-                res[key] = getattr(self, key)
-                
-        return res
-    
-    
-    def run_mcmc(self, initial_state, nsteps=None, burnin=None, **kwargs):
-        """Wrap emcee's ``run_mcmc`` method so that it stores the used settings 
-        before and the resulting samples before performing the actual sampling.
-        """
-        if nsteps is not None:
-            self.nsteps = nsteps
-        elif not hasattr(self, "nsteps"):
-            raise ValueError(
-                "If `nsteps` hasn't been set yet, it must be provided as an "
-                "argument in this run function."
-            )
-        
-        if burnin is not None:
-            self.burnin = burnin
-        elif not hasattr(self, "burnin"):
-            raise ValueError(
-                "If `burnin` hasn't been set yet, it must be provided as an "
-                "argument in this run function."
-            )
-            
-        # store settings about sampler & lymph system
-        with h5py.File(self.hdf5_filepath, 'a') as hdf5_file:
-            hdf5_group = hdf5_file.require_group(self.hdf5_groupname)
-            attrs_dict = self.to_dict()
-            attrs_dict.update(self.lymph_system.to_dict())
-            for key, value in attrs_dict.items():
-                hdf5_group.attrs[key] = value
-            
-            hdf5_patient_data = hdf5_group.require_dataset("patient_data")
-            hdf5_patient_data[...] = self.lymph_system.data
-        
-        res = super().run_mcmc(initial_state, self.nsteps, progress=True, **kwargs)
-        
-        # store samples etc
-        with h5py.File(self.hdf5_filepath, 'a') as hdf5_file:
-            hdf5_group = hdf5_file.require_group(self.hdf5_groupname)
-            hdf5_group.attrs["acceptance_fraction"] = np.mean(
-                self.acceptance_fraction, axis=0
-            )
-            hdf5_samples = hdf5_group.require_dataset("samples")
-            hdf5_samples[...] = self.get_chain(flat=True, discard=self.burnin)
-            
-            hdf5_log_prob = hdf5_group.require_dataset("log_prob")
-            hdf5_log_prob[...] = self.get_log_prob(flat=True, discard=self.burnin)
-            
-        return res

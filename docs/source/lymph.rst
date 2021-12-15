@@ -51,3 +51,15 @@ cached function outside:
 
 .. autoclass:: lymph.Node
    :members:
+
+Utils
+-----
+
+We provide some additional utility functions and classes that aren't necessary 
+for the inference or risk estimation per se, but make life just a little bit 
+easier... maybe.
+
+.. autofunction:: lymph.utils.lyprox_to_lymph
+
+.. autoclass:: lymph.utils.EnsembleSampler
+    :members:
