@@ -3,7 +3,6 @@ import pandas as pd
 from typing import Optional, Union, Dict, List, Any
 
 import emcee
-from emcee
 import h5py
 
 from .unilateral import Unilateral
@@ -85,16 +84,16 @@ def lyprox_to_lymph(
 
 
 class EnsembleSampler(emcee.EnsembleSampler):
-    """A custom wrapper around emcee's ``EnsembleSampler``.
+    """A custom version of emcee's ``EnsembleSampler`` that adds convenience 
+    methods for storing and loading setting, samples and more to and from an 
+    HDF5 file for better reproduceability.
     """
     
     def __init__(
         self, 
         nwalkers, 
         ndim, 
-        log_prob_fn, 
-        hdf5_filepath,
-        hdf5_groupname='/',
+        log_prob_fn,
         pool=None, 
         moves=None, 
         args=None, 
