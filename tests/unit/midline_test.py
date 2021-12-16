@@ -45,9 +45,8 @@ def loaded_midbi(data, t_stages, modality_spsn):
              ('lnl', 'two'):       ['three'],
              ('lnl', 'three'):     []}
     midbi = lymph.MidlineBilateral(graph=graph)
-    midbi.load_data(data["midext"], 
-                    t_stages=t_stages, 
-                    modality_spsn=modality_spsn)
+    midbi.modalities = modality_spsn
+    midbi.patient_data = data["midext"]
     return midbi
 
 @pytest.fixture
@@ -84,13 +83,11 @@ def test_load_data(bisys, midbi, data, t_stages, modality_spsn):
     case is designed such that only the contralateral side for patients with 
     mid-sagittal tumor extension should have a different C-matrix and f-vector.
     """
-    bisys.load_data(data["bilateral"], 
-                    t_stages=t_stages, 
-                    modality_spsn=modality_spsn)
+    bisys.modalities = modality_spsn
+    bisys.patient_data = data["bilateral"]
     
-    midbi.load_data(data["midext"], 
-                    t_stages=t_stages, 
-                    modality_spsn=modality_spsn)
+    midbi.modalities = modality_spsn
+    midbi.patient_data = data["midext"]
     
     for stage in t_stages:
         assert np.all(np.equal(

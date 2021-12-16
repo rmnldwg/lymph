@@ -1,10 +1,14 @@
+from h5py._hl import dataset
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Callable, Optional, Union, Dict, List, Any
+from typing import Callable, Optional, Union, Dict, List, Any, Tuple
+import json
 
 import emcee
 import h5py
+
+import lymph
 
 
 def lyprox_to_lymph(
@@ -190,3 +194,88 @@ class EnsembleSampler(emcee.EnsembleSampler):
             log_prob_fn=log_prob_fn,
             **kwargs
         )
+
+
+def tupledict_to_jsondict(dict: Dict[Tuple[str], List[str]]) -> Dict[str, List[str]]:
+    """Take a dictionary that has tuples as keys and stringify those keys so 
+    that it can be serialized to JSON.
+    """
+    jsondict = {}
+    for k, v in dict.items():
+        jsondict[",".join(k)] = v
+    return jsondict
+
+def jsondict_to_tupledict(dict: Dict[str, List[str]]) -> Dict[Tuple[str], List[str]]:
+    """Take a serialized JSON dictionary where the keys are strings of 
+    comma-separated names and convert them into keys of tuples.
+    """
+    tupledict = {}
+    for k, v in dict.items():
+        tupledict[tuple(n for n in k.split(","))] = v
+    return tupledict
+    
+
+
+class HDF5Mixin(object):
+    """Mixin for the :class:`Unilateral`, :class:`Bilateral` and 
+    :class:`MidlineBilateral` classes to provide the ability to store and load 
+    settings to and from an HDF5 file.
+    """
+    graph: Dict[Tuple[str], List[str]]
+    
+    def to_hdf5(
+        self,
+        filename: str,
+        groupname: str = "",
+    ):
+        """Store some important settings as well as the loaded data in the 
+        specified HDF5 file.
+        
+        Args:
+            filename: Name of or path to HDF5 file.
+            groupname: Name of the group where the info is supposed to be 
+                stored. There, a new subgroup 'lymph' will be created which 
+                will then hold the attributes of the respective class and its 
+                data.
+        """
+        filename = Path(filename).resolve()
+        
+        with h5py.File(filename, 'a') as file:
+            group = file.require_group(f"{groupname}/lymph")
+            group.attrs["class"] = self.__class__.__name__
+            group.attrs["graph"] = json.dumps(tupledict_to_jsondict(self.graph))
+            patient_data = group.require_dataset("patient_data")
+            patient_data[...] = self.patient_data
+    
+
+def from_hdf5(
+    filename: str,
+    groupname: str = "",
+    **kwargs
+):
+    """Create a lymph system instance from the information saved in an HDF5 
+    file.
+    """
+    filename = Path(filename).resolve()
+    
+    with h5py.File(filename, 'a') as file:
+        group = file.require_group(f"{groupname}/lymph")
+        classname = group.attrs["class"]
+        graph = jsondict_to_tupledict(group.attrs["graph"])
+        patient_data = group["patient_data"]
+    
+    if classname == "Unilateral":
+        new_cls = lymph.Unilateral
+    elif classname == "Bilateral":
+        new_cls = lymph.Bilateral
+    elif classname == "MidlineBilateral":
+        new_cls = lymph.MidlineBilateral
+    else:
+        raise RuntimeError(
+            "The classname loaded from the file does not correspond to an "
+            "implemented class in the `lymph` package."
+        )
+    
+    new_sys = new_cls(graph=graph, **kwargs)
+    new_sys.patient_data = patient_data
+    return new_sys

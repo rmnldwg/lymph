@@ -89,7 +89,8 @@ def bisys():
 
 @pytest.fixture
 def loaded_bisys(bisys, bidata, t_stages, modality_spsn):
-    bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
+    bisys.modalities = modality_spsn
+    bisys.patient_data = bidata
     return bisys
 
 @pytest.fixture
@@ -98,9 +99,10 @@ def spread_probs(bisys):
     
 
 def test_initialization(bisys):
-    assert hasattr(bisys, 'system')
-    assert "ipsi" in bisys.system
-    assert "contra" in bisys.system
+    assert hasattr(bisys, 'ipsi')
+    assert isinstance(bisys.ipsi, lymph.Unilateral)
+    assert hasattr(bisys, 'contra')
+    assert isinstance(bisys.contra, lymph.Unilateral)
     
     
 @pytest.mark.parametrize("base_symmetric, trans_symmetric", 
@@ -121,49 +123,50 @@ def test_spread_probs_and_A_matrices(bisys, base_symmetric, trans_symmetric):
     assert np.all(np.equal(spread_probs, bisys.spread_probs))
     
     # check A matrices
-    assert hasattr(bisys.system["ipsi"], 'A')
+    assert hasattr(bisys.ipsi, 'A')
     for t in range(10):
-        row_sums = np.sum(np.linalg.matrix_power(bisys.system["ipsi"].A, t), 
+        row_sums = np.sum(np.linalg.matrix_power(bisys.ipsi.A, t), 
                           axis=1)
         assert np.all(np.isclose(row_sums, 1.))
     
-    assert hasattr(bisys.system["contra"], 'A')
+    assert hasattr(bisys.contra, 'A')
     for t in range(10):
-        row_sums = np.sum(np.linalg.matrix_power(bisys.system["contra"].A, t), 
+        row_sums = np.sum(np.linalg.matrix_power(bisys.contra.A, t), 
                           axis=1)
         assert np.all(np.isclose(row_sums, 1.))
         
     if base_symmetric and trans_symmetric:
-        assert np.all(np.equal(bisys.system["ipsi"].A, 
-                               bisys.system["contra"].A))
+        assert np.all(np.equal(bisys.ipsi.A, 
+                               bisys.contra.A))
     else:
-        assert ~np.all(np.equal(bisys.system["ipsi"].A, 
-                                bisys.system["contra"].A))
+        assert ~np.all(np.equal(bisys.ipsi.A, 
+                                bisys.contra.A))
         
 
 def test_B_matrices(bisys, modality_spsn):
     bisys.modalities = modality_spsn
-    assert hasattr(bisys.system["ipsi"], 'B')
-    assert hasattr(bisys.system["contra"], 'B')
+    assert hasattr(bisys.ipsi, 'B')
+    assert hasattr(bisys.contra, 'B')
     
-    row_sums = np.sum(bisys.system["ipsi"].B, axis=1)
+    row_sums = np.sum(bisys.ipsi.B, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
     
-    assert np.all(np.equal(bisys.system["ipsi"].B, bisys.system["contra"].B))
+    assert np.all(np.equal(bisys.ipsi.B, bisys.contra.B))
     
     
 def test_load_data(bisys, bidata, t_stages, modality_spsn, 
                    expected_C, expected_f):
-    bisys.load_data(bidata, t_stages=t_stages, modality_spsn=modality_spsn)
+    bisys.modalities = modality_spsn
+    bisys.patient_data = bidata
     
-    assert hasattr(bisys.system["ipsi"], 'C')
-    assert hasattr(bisys.system["ipsi"], 'f')
-    assert hasattr(bisys.system["contra"], 'C')
-    assert hasattr(bisys.system["contra"], 'f')
+    assert hasattr(bisys.ipsi, 'C')
+    assert hasattr(bisys.ipsi, 'f')
+    assert hasattr(bisys.contra, 'C')
+    assert hasattr(bisys.contra, 'f')
     
     for stage in t_stages:
-        bi_ipsi_C = bisys.system["ipsi"].C[stage]
-        bi_contra_C = bisys.system["contra"].C[stage]
+        bi_ipsi_C = bisys.ipsi.C[stage]
+        bi_contra_C = bisys.contra.C[stage]
         assert bi_ipsi_C.shape == bi_contra_C.shape
 
 
@@ -395,14 +398,14 @@ def test_risk(
         mode="HMM"
     )
 
-    ipsi_risk = loaded_bisys.system["ipsi"].risk(
+    ipsi_risk = loaded_bisys.ipsi.risk(
         inv=inv_ipsi,
         diagnoses={"test-o-meter": diag_ipsi},
         time_dist=time_dist,
         mode="HMM"
     )
     
-    contra_risk = loaded_bisys.system["contra"].risk(
+    contra_risk = loaded_bisys.contra.risk(
         inv=inv_contra,
         diagnoses={"test-o-meter": diag_contra},
         time_dist=time_dist,

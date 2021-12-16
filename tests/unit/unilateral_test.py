@@ -91,7 +91,8 @@ def sys():
 
 @pytest.fixture
 def loaded_sys(sys, data, t_stages, modality_spsn):
-    sys.load_data(data, t_stages=t_stages, modality_spsn=modality_spsn)
+    sys.modalities = modality_spsn
+    sys.patient_data = data
     return sys
 
 @pytest.fixture
@@ -136,16 +137,15 @@ def test_load_data(
     """Check that unilateral system handles lodaing data correctly, including 
     an empty dataset.
     """
-    sys.load_data(
-        empty_data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
-    )
-    for stage in t_stages:
-        assert sys.C[stage].shape[1] == 0
-        assert len(sys.f[stage]) == 0
+    sys.modalities = modality_spsn
+    sys.patient_data = empty_data
     
-    sys.load_data(
-        data, t_stages=t_stages, modality_spsn=modality_spsn, mode="HMM"
-    )
+    for stage in t_stages:
+        assert not hasattr(sys, "C")
+        assert not hasattr(sys, "f")
+    
+    sys.patient_data = data
+    
     for stage in t_stages:
         assert np.all(np.equal(sys.C[stage], expected_C[stage]))
         assert np.all(np.equal(sys.f[stage], expected_f[stage]))

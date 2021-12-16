@@ -2,10 +2,11 @@ import numpy as np
 from numpy.linalg import matrix_power as mat_pow
 import pandas as pd
 import warnings
-from typing import Union, Optional, List, Dict, Any
+from typing import Union, Optional, List, Dict, Any, Tuple
 
 from .node import Node, node_trans_prob
 from .edge import Edge
+from .utils import HDF5Mixin
 
 
 def change_base(
@@ -53,7 +54,7 @@ def change_base(
 
 
 
-class Unilateral(object):
+class Unilateral(HDF5Mixin):
     """Class that models metastatic progression in a lymphatic system by 
     representing it as a directed graph. The progression itself can be modelled 
     via hidden Markov models (HMM) or Bayesian networks (BN). 
@@ -135,17 +136,13 @@ class Unilateral(object):
 
 
     @property
-    def graph(self) -> dict:
+    def graph(self) -> Dict[Tuple[str], List[str]]:
         """Lists the graph as it was provided when the system was created.
         """
-        res = []
+        res = {}
         for node in self.nodes:
-            out = []
-            for o in node.out:
-                out.append(o.end.name)
-            res.append((node.name, out))
-            
-        return dict(res)
+            res[(node.typ, node.name)] = [o.end.name for o in node.out]
+        return res
     
     
     @property
@@ -587,6 +584,45 @@ class Unilateral(object):
         except AttributeError:
             msg = ("No data was loaded yet.")
             raise AttributeError(msg)
+
+
+    @property
+    def patient_data(self):
+        """Table with rows of patients. Must have a two-level 
+        :class:`MultiIndex` where the top-level has categories 'info' and the 
+        name of the available diagnostic modalities. Under 'info', the second 
+        level is only 't_stage', while under the modality, the names of the 
+        diagnosed lymph node levels are given as the columns. Such a table 
+        could look like this:
+                
+        +---------+----------------------+-----------------------+
+        |  info   |         MRI          |          PET          |
+        +---------+----------+-----------+-----------+-----------+
+        | t_stage |    II    |    III    |    II     |    III    |
+        +=========+==========+===========+===========+===========+
+        | early   | ``True`` | ``False`` | ``True``  | ``False`` |
+        +---------+----------+-----------+-----------+-----------+
+        | late    | ``None`` | ``None``  | ``False`` | ``False`` |
+        +---------+----------+-----------+-----------+-----------+
+        | early   | ``True`` | ``True``  | ``True``  | ``None``  |
+        +---------+----------+-----------+-----------+-----------+
+        """
+        try:
+            return self._patient_data
+        except AttributeError:
+            raise AttributeError(
+                "No patient data has been loaded yet"
+            )
+            
+    @patient_data.setter
+    def patient_data(self, patient_data: pd.DataFrame):
+        """Load the patient data. For now, this just calls the :meth:`load_data` 
+        method, but at a later point, I would like to write a function here 
+        that generates the pandas :class:`DataFrame` from the internal matrix 
+        representation of the data.
+        """
+        self._patient_data = patient_data.copy()
+        self.load_data(patient_data)
 
 
     def load_data(

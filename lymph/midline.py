@@ -1,12 +1,14 @@
+import warnings
 import numpy as np
 import pandas as pd
-from typing import Union, Optional, List, Dict, Any
+from typing import Union, Optional, List, Dict, Any, Tuple
 
 from .unilateral import Unilateral
 from .bilateral import Bilateral, fast_binomial_pmf
+from .utils import HDF5Mixin
 
 
-class MidlineBilateral(object):
+class MidlineBilateral(HDF5Mixin):
     """Model a bilateral lymphatic system where an additional risk factor can 
     be provided in the data: Whether or not the primary tumor extended over the 
     mid-sagittal line. 
@@ -62,6 +64,13 @@ class MidlineBilateral(object):
             graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
         )
         self.alpha_mix = alpha_mix
+    
+    
+    @property
+    def graph(self) -> Dict[Tuple[str], List[str]]:
+        """Return the (unilateral) graph that was used to create this network.
+        """
+        return self.noext.graph
     
     
     @property
@@ -181,6 +190,50 @@ class MidlineBilateral(object):
         self.ext.modalities = modality_spsn
     
     
+    @property
+    def patient_data(self):
+        """A pandas :class:`DataFrame` with rows of patients and columns of 
+        patient and involvement details. The table's header should have three 
+        levels that categorize the individual lymph node level's involvement to 
+        the corresponding diagnostic modality (first level), the side of the 
+        LNL (second level) and finaly the name of the LNL (third level). 
+        Additionally, the patient's T-category must be stored under ('info', 
+        'tumor', 't_stage') and whether the tumor extends over the mid-sagittal 
+        line should be noted under ('info', 'tumor', 'midline_extension'). So, 
+        part of this table could look like this:
+
+        +-----------------------------+------------------+------------------+
+        |            info             |       MRI        |       PET        |
+        +-----------------------------+--------+---------+--------+---------+ 
+        |            tumor            |  ipsi  | contra  |  ipsi  | contra  |
+        +---------+-------------------+--------+---------+--------+---------+ 
+        | t_stage | midline_extension |   II   |   II    |   II   |   II    |
+        +=========+===================+========+=========+========+=========+
+        | early   | ``True``          |``True``|``None`` |``True``|``False``|
+        +---------+-------------------+--------+---------+--------+---------+
+        | late    | ``True``          |``None``|``None`` |``None``|``None`` |
+        +---------+-------------------+--------+---------+--------+---------+
+        | early   | ``False``         |``True``|``False``|``True``|``True`` |
+        +---------+-------------------+--------+---------+--------+---------+
+        """
+        try:
+            return self._patient_data
+        except AttributeError:
+            raise AttributeError(
+                "No patient data has been loaded yet"
+            )
+    
+    @patient_data.setter
+    def patient_data(self, patient_data: pd.DataFrame):
+        """Load the patient data. For now, this just calls the :meth:`load_data` 
+        method, but at a later point, I would like to write a function here 
+        that generates the pandas :class:`DataFrame` from the internal matrix 
+        representation of the data.
+        """
+        self._patient_data = patient_data.copy()
+        self.load_data(patient_data)
+        
+    
     def load_data(
         self, 
         data: pd.DataFrame,
@@ -224,6 +277,8 @@ class MidlineBilateral(object):
                 this must be provided to build the observation matrix.
         
         See Also:
+            :attr:`patient_data`: The attribute for loading and exporting data.
+            
             :meth:`Bilateral.load_data`: Loads data into a bilateral network by 
             splitting it into ipsi- & contralateral side and passing each to 
             the respective unilateral method (see below).

@@ -1,15 +1,12 @@
 import numpy as np
-from pandas.core import base
-import scipy as sp 
-import scipy.stats
 from scipy.special import factorial as fact
 import pandas as pd
 import warnings
-from typing import Union, Optional, List, Dict, Any
+from typing import Union, Optional, List, Dict, Any, Tuple
 
-from .node import Node
-from .edge import Edge
+
 from .unilateral import Unilateral
+from .utils import HDF5Mixin
 
 
 def fast_binomial_pmf(k, n, p):
@@ -24,7 +21,7 @@ def fast_binomial_pmf(k, n, p):
 
 # I chose not to make this one a child of System, since it is basically only a 
 # container for two System instances
-class Bilateral(object):
+class Bilateral(HDF5Mixin):
     """Class that models metastatic progression in a lymphatic system 
     bilaterally by creating two :class:`Unilateral` instances that are 
     symmetric in their connections. The parameters describing the spread 
@@ -76,6 +73,13 @@ class Bilateral(object):
         string += "Contralateral:\t" + " ".join([f"{e}" for e in self.contra.edges])
         
         return string
+    
+    
+    @property
+    def graph(self) -> Dict[Tuple[str], List[str]]:
+        """Return the (unilateral) graph that was used to create this network.
+        """
+        return self.ipsi.graph
     
     
     @property
@@ -262,6 +266,47 @@ class Bilateral(object):
         self.ipsi.modalities = modality_spsn
         self.contra.modalities = modality_spsn
     
+    
+    @property
+    def patient_data(self):
+        """Table with rows of patients. Columns should have three levels. The 
+        first column is ('info', 'tumor', 't_stage'). The rest of the columns 
+        are separated by modality names on the top level, then subdivided into 
+        'ipsi' & 'contra' by the second level and finally, in the third level, 
+        the names of the lymph node level are given. Here is an example of such 
+        a table: 
+
+        +---------+----------------------+----------------------+
+        |  info   |         MRI          |         PET          |
+        +---------+----------+-----------+----------+-----------+
+        |  tumor  |   ipsi   |  contra   |   ipsi   |  contra   |
+        +---------+----------+-----------+----------+-----------+
+        | t_stage |    II    |    II     |    II    |    II     |
+        +=========+==========+===========+==========+===========+
+        | early   | ``True`` | ``None``  | ``True`` | ``False`` |
+        +---------+----------+-----------+----------+-----------+
+        | late    | ``None`` | ``None``  | ``None`` | ``None``  |
+        +---------+----------+-----------+----------+-----------+
+        | early   | ``True`` | ``False`` | ``True`` | ``True``  |
+        +---------+----------+-----------+----------+-----------+
+        """
+        try:
+            return self._patient_data
+        except AttributeError:
+            raise AttributeError(
+                "No patient data has been loaded yet"
+            )
+            
+    @patient_data.setter
+    def patient_data(self, patient_data: pd.DataFrame):
+        """Load the patient data. For now, this just calls the :meth:`load_data` 
+        method, but at a later point, I would like to write a function here 
+        that generates the pandas :class:`DataFrame` from the internal matrix 
+        representation of the data.
+        """
+        self._patient_data = patient_data.copy()
+        self.load_data(patient_data)
+        
     
     def load_data(
         self,
