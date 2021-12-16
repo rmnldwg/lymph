@@ -1,4 +1,3 @@
-from h5py._hl import dataset
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -222,6 +221,8 @@ class HDF5Mixin(object):
     settings to and from an HDF5 file.
     """
     graph: Dict[Tuple[str], List[str]]
+    patient_data: pd.DataFrame
+    modalities: Dict[str, List[float]]
     
     def to_hdf5(
         self,
@@ -244,8 +245,15 @@ class HDF5Mixin(object):
             group = file.require_group(f"{groupname}/lymph")
             group.attrs["class"] = self.__class__.__name__
             group.attrs["graph"] = json.dumps(tupledict_to_jsondict(self.graph))
-            patient_data = group.require_dataset("patient_data")
-            patient_data[...] = self.patient_data
+            group.attrs["modalities"] = json.dumps(self.modalities)
+        
+        with pd.HDFStore(filename, 'a') as store:
+            store.put(
+                key=f"{groupname}/lymph/patient_data", 
+                value=self.patient_data,
+                format="fixed",     # due to MultiIndex this needs to be fixed
+                data_columns=None
+            )
     
 
 def from_hdf5(
@@ -261,8 +269,11 @@ def from_hdf5(
     with h5py.File(filename, 'a') as file:
         group = file.require_group(f"{groupname}/lymph")
         classname = group.attrs["class"]
-        graph = jsondict_to_tupledict(group.attrs["graph"])
-        patient_data = group["patient_data"]
+        graph = jsondict_to_tupledict(json.loads(group.attrs["graph"]))
+        modalities = json.loads(group.attrs["modalities"])
+    
+    with pd.HDFStore(filename, 'a') as store:
+        patient_data = store.get(f"{groupname}/lymph/patient_data")
     
     if classname == "Unilateral":
         new_cls = lymph.Unilateral
@@ -277,5 +288,6 @@ def from_hdf5(
         )
     
     new_sys = new_cls(graph=graph, **kwargs)
+    new_sys.modalities = modalities
     new_sys.patient_data = patient_data
     return new_sys
