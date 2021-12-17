@@ -91,8 +91,8 @@ class EnsembleSampler(emcee.EnsembleSampler):
     """
     def __init__(
         self, 
-        log_prob_fn, 
         ndim, 
+        log_prob_fn, 
         nwalkers=None, 
         pool=None, 
         moves=None, 
@@ -132,10 +132,20 @@ class EnsembleSampler(emcee.EnsembleSampler):
             parameter_names=parameter_names
         )
     
+    def run_mcmc(self, nsteps, **kwargs):
+        """Extract ``initial_state`` from settings of the sampler.
+        """
+        initial_state = np.random.uniform(
+            low=0., high=1., 
+            size=(self.nwalkers, self.ndim)
+        )
+        return super().run_mcmc(initial_state, nsteps, **kwargs)
+    
     def to_hdf5(
         self, 
         filename: str, 
         groupname: str = "", 
+        overwrite: bool = True,
         attr_list: List[str] = ["nwalkers", "ndim", "acceptance_fraction"]
     ):
         """Export samples and important settings to an HDF5 file. 
@@ -146,6 +156,8 @@ class EnsembleSampler(emcee.EnsembleSampler):
                 stored. There, a new subgroup 'sampler' will be created which 
                 will then hold the attributes of the ``EnsembleSampler`` and 
                 the chain.
+            overwrite: If ``True``, any data that might already be stored at 
+                the location will be deleted and overwritten.
             attr_list: List of attributes of the ``EnsembleSampler`` to store 
                 in the HDF5 file.
         """
@@ -155,10 +167,21 @@ class EnsembleSampler(emcee.EnsembleSampler):
             for attr in attr_list:
                 if hasattr(self, attr):
                     group.attrs[attr] = getattr(self, attr)
-            chain = group.require_dataset("chain")
-            chain[...] = self.get_chain()
-            log_prob = group.require_dataset("log_prob")
-            log_prob[...] = self.get_log_prob()
+            
+            chain = self.get_chain()
+            log_prob = self.get_log_prob()
+            
+            if overwrite:
+                try:
+                    del group["chain"]
+                except KeyError:
+                    pass
+                try:
+                    del group["log_prob"]
+                except KeyError:
+                    pass
+            group.create_dataset("chain", data=chain)
+            group.create_dataset("log_prob", data=log_prob)
     
     @classmethod
     def from_hdf5(
@@ -193,6 +216,30 @@ class EnsembleSampler(emcee.EnsembleSampler):
             log_prob_fn=log_prob_fn,
             **kwargs
         )
+        
+    @staticmethod
+    def get_chain_from_hdf5(filename: str, groupname: str = "") -> np.ndarray:
+        """Get the chain that was stored in an HDF5 file previously.
+        """
+        filename = Path(filename).resolve()
+        
+        with h5py.File(filename, 'r') as file:
+            group = file[f"{groupname}/sampler"]
+            chain = np.array(group["chain"])
+        
+        return chain
+    
+    @staticmethod
+    def get_log_prob_from_hdf5(filename: str, groupname: str = "") -> np.ndarray:
+        """Get the log_prob that was stored in an HDF5 file previously.
+        """
+        filename = Path(filename).resolve()
+        
+        with h5py.File(filename, 'r') as file:
+            group = file[f"{groupname}/sampler"]
+            log_prob = np.array(group["log_prob"])
+        
+        return log_prob
 
 
 def tupledict_to_jsondict(dict: Dict[Tuple[str], List[str]]) -> Dict[str, List[str]]:
