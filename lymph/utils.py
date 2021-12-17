@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -18,6 +19,10 @@ def lyprox_to_lymph(
 ) -> pd.DataFrame:
     """Convert LyProX output into pandas :class:`DataFrame` that the lymph 
     package can use for sampling.
+    
+    `LyProX <https://lyprox.org>`_ is our online interface where we make 
+    detailed patterns of involvement on a per-patient basis available and 
+    visualize it in useful ways.
     
     Args:
         data: Patient data exported from the LyProX interface.
@@ -85,7 +90,7 @@ def lyprox_to_lymph(
 
 
 class EnsembleSampler(emcee.EnsembleSampler):
-    """A custom version of emcee's ``EnsembleSampler`` that adds convenience 
+    """A custom wrapper of emcee's ``EnsembleSampler`` that adds convenience 
     methods for storing and loading settings, samples and more to and from an 
     HDF5 file for better reproduceability.
     """
@@ -133,7 +138,8 @@ class EnsembleSampler(emcee.EnsembleSampler):
         )
     
     def run_mcmc(self, nsteps, **kwargs):
-        """Extract ``initial_state`` from settings of the sampler.
+        """Extract ``initial_state`` from settings of the sampler and call 
+        parent's ``run_mcmc`` method.
         """
         initial_state = np.random.uniform(
             low=0., high=1., 
@@ -190,7 +196,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
         filename: str, 
         groupname: str = "",
         **kwargs
-    ):
+    ) -> EnsembleSampler:
         """Create an ``EnsembleSampler`` from some stored parameters and a 
         log-probability function.
         
@@ -202,7 +208,8 @@ class EnsembleSampler(emcee.EnsembleSampler):
             log_prob_fn: The log-probability function to use for sampling.
         
         Returns:
-            A new ``EnsembleSampler``.
+            A new instance with some important settings already loaded from the 
+            HDF5 file.
         """
         filename = Path(filename).resolve()
         with h5py.File(filename, 'r') as file:
@@ -261,7 +268,6 @@ def jsondict_to_tupledict(dict: Dict[str, List[str]]) -> Dict[Tuple[str], List[s
     return tupledict
     
 
-
 class HDF5Mixin(object):
     """Mixin for the :class:`Unilateral`, :class:`Bilateral` and 
     :class:`MidlineBilateral` classes to provide the ability to store and load 
@@ -303,13 +309,24 @@ class HDF5Mixin(object):
             )
     
 
-def from_hdf5(
+def system_from_hdf5(
     filename: str,
     groupname: str = "",
     **kwargs
 ):
     """Create a lymph system instance from the information saved in an HDF5 
     file.
+    
+    Args:
+        filename: Name of the HDF5 file where the info is stored.
+        groupname: Subgroup where to look for the stored settings.
+    
+    Any other keyword arguments are passed directly to the constructor of the 
+    respective class.
+    
+    Returns:
+        An instance of :class:`lymph.Unilateral`, :class:`lymph.Bilateral` or 
+        :class:`lymph.MidlineBilateral`.
     """
     filename = Path(filename).resolve()
     

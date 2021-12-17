@@ -63,3 +63,8 @@ easier... maybe.
 
 .. autoclass:: lymph.utils.EnsembleSampler
     :members:
+
+.. autoclass:: lymph.utils.HDF5Mixin
+    :members:
+
+.. autofunction:: lymph.utils.system_from_hdf5
