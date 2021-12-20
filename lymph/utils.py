@@ -1,9 +1,11 @@
 from __future__ import annotations
 import numpy as np
+from scipy.special import factorial as fact
 import pandas as pd
 from pathlib import Path
 from typing import Callable, Optional, Union, Dict, List, Any, Tuple
 import json
+import warnings
 
 import emcee
 import h5py
@@ -355,3 +357,89 @@ def system_from_hdf5(
     new_sys.modalities = modalities
     new_sys.patient_data = patient_data
     return new_sys
+
+
+def fast_binomial_pmf(k, n, p):
+    """
+    Compute the probability mass function of the binomial distribution.
+    """
+    q = (1 - p)
+    binom_coeff = fact(n) / (fact(k) * fact(n - k))
+    return binom_coeff * p**k * q**(n - k)
+
+
+def change_base(
+    number: int, 
+    base: int, 
+    reverse: bool = False, 
+    length: Optional[int] = None
+) -> str:
+    """Convert an integer into another base.
+    
+    Args:
+        number: Number to convert
+        base: Base of the resulting converted number
+        reverse: If true, the converted number will be printed in reverse order.
+        length: Length of the returned string. If longer than would be 
+            necessary, the output will be padded.
+
+    Returns:
+        The (padded) string of the converted number.
+    """
+    
+    if base > 16:
+        raise ValueError("Base must be 16 or smaller!")
+        
+    convertString = "0123456789ABCDEF"
+    result = ''
+    while number >= base:
+        result = result + convertString[number % base]
+        number = number//base
+    if number > 0:
+        result = result + convertString[number]
+        
+    if length is None:
+        length = len(result)
+    elif length < len(result):
+        length = len(result)
+        warnings.warn("Length cannot be shorter than converted number.")
+        
+    pad = '0' * (length - len(result))
+        
+    if reverse:
+        return result + pad
+    else:
+        return pad + result[::-1]
+
+
+def comp_state_dist(table: np.ndarray) -> Tuple[np.ndarray, List[str]]:
+    """Compute the distribution of distinct states/diagnoses from a table of 
+    individual diagnoses detailing the patterns of lymphatic progression per 
+    patient.
+    
+    Args:
+        table: Rows of patients and columns of LNLs, reporting which LNL was 
+            involved for which patient.
+    
+    Returns:
+        A histogram of unique states and a list of the corresponding state 
+        labels.
+        
+    Note:
+        This, in contrast to :meth:`Unilateral._gen_C`, cannot deal with parts 
+        of the diagnose being unknown. So if, e.g., one level isn't reported 
+        for a patient, that row will just be ignored.
+    """
+    _, num_cols = table.shape
+    table = table.astype(float)
+    state_dist = np.zeros(shape=2**num_cols, dtype=int)
+    for row in table:
+        if not np.any(np.isnan(row)):
+            idx = int(np.sum([n * 2**i for i,n in enumerate(row[::-1])]))
+            state_dist[idx] += 1
+    
+    state_labels = []
+    for i in range(2**num_cols):
+        state_labels.append(change_base(i, 2, length=num_cols))
+    
+    return state_dist, state_labels

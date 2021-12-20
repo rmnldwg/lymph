@@ -6,52 +6,7 @@ from typing import Union, Optional, List, Dict, Any, Tuple
 
 from .node import Node, node_trans_prob
 from .edge import Edge
-from .utils import HDF5Mixin
-
-
-def change_base(
-    number: int, 
-    base: int, 
-    reverse: bool = False, 
-    length: Optional[int] = None
-) -> str:
-    """Convert an integer into another base.
-    
-    Args:
-        number: Number to convert
-        base: Base of the resulting converted number
-        reverse: If true, the converted number will be printed in reverse order.
-        length: Length of the returned string. If longer than would be 
-            necessary, the output will be padded.
-
-    Returns:
-        The (padded) string of the converted number.
-    """
-    
-    if base > 16:
-        raise ValueError("Base must be 16 or smaller!")
-        
-    convertString = "0123456789ABCDEF"
-    result = ''
-    while number >= base:
-        result = result + convertString[number % base]
-        number = number//base
-    if number > 0:
-        result = result + convertString[number]
-        
-    if length is None:
-        length = len(result)
-    elif length < len(result):
-        length = len(result)
-        warnings.warn("Length cannot be shorter than converted number.")
-        
-    pad = '0' * (length - len(result))
-        
-    if reverse:
-        return result + pad
-    else:
-        return pad + result[::-1]
-
+from .utils import HDF5Mixin, change_base
 
 
 class Unilateral(HDF5Mixin):

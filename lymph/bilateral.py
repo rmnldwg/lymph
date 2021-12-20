@@ -1,22 +1,11 @@
 import numpy as np
-from scipy.special import factorial as fact
 import pandas as pd
 import warnings
 from typing import Union, Optional, List, Dict, Any, Tuple
 
 
 from .unilateral import Unilateral
-from .utils import HDF5Mixin
-
-
-def fast_binomial_pmf(k, n, p):
-    """
-    Compute the probability mass function of the binomial distribution.
-    """
-    q = (1 - p)
-    binom_coeff = fact(n) / (fact(k) * fact(n - k))
-    return binom_coeff * p**k * q**(n - k)
-    
+from .utils import HDF5Mixin, fast_binomial_pmf
 
 
 # I chose not to make this one a child of System, since it is basically only a 

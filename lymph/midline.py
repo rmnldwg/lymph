@@ -4,8 +4,8 @@ import pandas as pd
 from typing import Union, Optional, List, Dict, Any, Tuple
 
 from .unilateral import Unilateral
-from .bilateral import Bilateral, fast_binomial_pmf
-from .utils import HDF5Mixin
+from .bilateral import Bilateral
+from .utils import HDF5Mixin, fast_binomial_pmf
 
 
 class MidlineBilateral(HDF5Mixin):
