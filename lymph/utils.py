@@ -147,7 +147,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
             low=0., high=1., 
             size=(self.nwalkers, self.ndim)
         )
-        return super().run_mcmc(initial_state, nsteps, **kwargs)
+        return super().run_mcmc(initial_state, nsteps, progress=True, **kwargs)
     
     def to_hdf5(
         self, 

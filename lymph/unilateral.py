@@ -836,8 +836,7 @@ class Unilateral(HDF5Mixin):
 
         Args:
             theta: Set of parameters, consisting of the base probabilities 
-                :math:`b` and the transition probabilities :math:`t`. Those are 
-                concatenated into an array of the form 
+                :math:`b` and the transition probabilities :math:`t`.
 
             t_stages: List of T-stages that should be included in the learning 
                 process.
