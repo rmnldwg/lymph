@@ -6,7 +6,7 @@ from typing import Union, Optional, List, Dict, Any, Tuple
 
 from .node import Node, node_trans_prob
 from .edge import Edge
-from .utils import HDF5Mixin, change_base
+from .utils import HDF5Mixin, change_base, draw_diagnose_times
 
 
 class Unilateral(HDF5Mixin):
@@ -1009,63 +1009,24 @@ class Unilateral(HDF5Mixin):
                                         out=np.ones_like(state, dtype=bool)))
             return cX @ res
     
-    def generate_dataset(
+    
+    def _draw_patient_diagnoses(
         self,
-        npatients: int,
-        t_stage_probs: List[float],
-        diag_times: Optional[Dict[Any, int]] = None,
-        max_t: Optional[int] = None,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
-    ) -> pd.DataFrame:
-        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+        diag_times: List[int],
+    ) -> np.ndarray:
+        """Draw random possible observations for a list of T-stages and 
+        diagnose times.
         
         Args:
-            npatients: Number of patients to generate.
-            
-            t_stage_probs: Probability to find a patient in a certain T-stage.
-            
-            diag_times: For each T-stage, one can specify until which time step 
-                the corresponding patients should be evolved. If this is set to 
-                `None`, and a distribution over diagnose times `time_dists` is 
-                provided, the diagnose time is drawn from the `time_dist`.
-            
-            max_t: Latest possible diagnose time. This is only used to return 
-                `-np.inf` in case one of the `diag_times` exceeds this value.
-            
-            time_dists: Distributions over diagnose times that can be used to 
-                draw a diagnose time for the respective T-stage.
+            diag_times: List of diagnose times for each patient who's diagnose 
+                is supposed to be drawn.
         """
-        if not np.isclose(np.sum(t_stage_probs), 1):
-            raise ValueError("Distribution over T-stages must sum to 1.")
-        
-        # draw the diagnose times for each patient
-        if diag_times is not None:
-            t_stages = list(diag_times.keys())
-            drawn_t_stages = np.random.choice(
-                t_stages,
-                p=t_stage_probs,
-                size=npatients
-            )
-            drawn_diag_times = [diag_times[t] for t in drawn_t_stages]
-        elif time_dists is not None:
-            t_stages = list(time_dists.keys())
-            max_t = len(time_dists[t_stages[0]]) - 1
-            time_steps = np.arange(max_t + 1)
-            
-            drawn_t_stages = np.random.choice(
-                t_stages,
-                p=t_stage_probs,
-                size=npatients
-            )
-            drawn_diag_times = [
-                np.random.choice(time_steps, p=time_dists[t])
-                for t in drawn_t_stages
-            ]
+        max_t = np.max(diag_times)
         
         # use the drawn diagnose times to compute probabilities over states and 
         # diagnoses
         per_time_state_probs = self._evolve(t_last=max_t)
-        per_patient_state_probs = per_time_state_probs[drawn_diag_times]
+        per_patient_state_probs = per_time_state_probs[diag_times]
         per_patient_obs_probs = per_patient_state_probs @ self.B
         
         # then, draw a diagnose from the possible ones
@@ -1074,7 +1035,37 @@ class Unilateral(HDF5Mixin):
             np.random.choice(obs_idx, p=obs_prob)
             for obs_prob in per_patient_obs_probs
         ]
-        drawn_obs = self.obs_list[drawn_obs_idx]
+        drawn_obs = self.obs_list[drawn_obs_idx].astype(bool)
+        return drawn_obs
+    
+    
+    def generate_dataset(
+        self,
+        num_patients: int,
+        stage_dist: List[float],
+        diag_times: Optional[Dict[Any, int]] = None,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+    ) -> pd.DataFrame:
+        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+        
+        Args:
+            num_patients: Number of patients to generate.
+            stage_dist: Probability to find a patient in a certain T-stage.
+            diag_times: For each T-stage, one can specify until which time step 
+                the corresponding patients should be evolved. If this is set to 
+                ``None``, and a distribution over diagnose times ``time_dists`` 
+                is provided, the diagnose time is drawn from the ``time_dist``.
+            time_dists: Distributions over diagnose times that can be used to 
+                draw a diagnose time for the respective T-stage.
+        """
+        drawn_t_stages, drawn_diag_times = draw_diagnose_times(
+            num_patients=num_patients, 
+            stage_dist=stage_dist,
+            diag_times=diag_times,
+            time_dists=time_dists
+        )
+        
+        drawn_obs = self._draw_patient_diagnoses(drawn_diag_times)
         
         # construct MultiIndex for dataset from stored modalities
         modalities = list(self.modalities.keys())
@@ -1082,7 +1073,7 @@ class Unilateral(HDF5Mixin):
         multi_cols = pd.MultiIndex.from_product([modalities, lnl_names])
         
         # create DataFrame
-        dataset = pd.DataFrame(drawn_obs.astype(bool), columns=multi_cols)
+        dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
         dataset[('info', 't_stage')] = drawn_t_stages
         
         return dataset

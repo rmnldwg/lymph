@@ -5,7 +5,7 @@ from typing import Union, Optional, List, Dict, Any, Tuple
 
 
 from .unilateral import Unilateral
-from .utils import HDF5Mixin, fast_binomial_pmf
+from .utils import HDF5Mixin, fast_binomial_pmf, draw_diagnose_times
 
 
 # I chose not to make this one a child of System, since it is basically only a 
@@ -806,7 +806,49 @@ class Bilateral(HDF5Mixin):
                @ cZ["contra"])
         
         return pDDII / pDD
-
+    
+    
+    def generate_dataset(
+        self,
+        num_patients: int,
+        stage_dist: List[float],
+        diag_times: Optional[Dict[Any, int]] = None,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+    ) -> pd.DataFrame:
+        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+        
+        Args:
+            num_patients: Number of patients to generate.
+            stage_dist: Probability to find a patient in a certain T-stage.
+            diag_times: For each T-stage, one can specify until which time step 
+                the corresponding patients should be evolved. If this is set to 
+                ``None``, and a distribution over diagnose times ``time_dists`` 
+                is provided, the diagnose time is drawn from the ``time_dist``.
+            time_dists: Distributions over diagnose times that can be used to 
+                draw a diagnose time for the respective T-stage.
+        """
+        drawn_t_stages, drawn_diag_times = draw_diagnose_times(
+            num_patients=num_patients, 
+            stage_dist=stage_dist,
+            diag_times=diag_times,
+            time_dists=time_dists
+        )
+        
+        drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)
+        drawn_obs_contra = self.contra._draw_patient_diagnoses(drawn_diag_times)
+        drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
+        
+        # construct MultiIndex for dataset from stored modalities
+        sides = ["ipsi", "contra"]
+        modalities = list(self.modalities.keys())
+        lnl_names = [lnl.name for lnl in self.lnls]
+        multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
+        
+        # create DataFrame
+        dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
+        dataset[('info', 'tumor', 't_stage')] = drawn_t_stages
+        
+        return dataset
 
 
 class BilateralSystem(Bilateral):
