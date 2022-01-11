@@ -1082,7 +1082,7 @@ class Unilateral(HDF5Mixin):
         multi_cols = pd.MultiIndex.from_product([modalities, lnl_names])
         
         # create DataFrame
-        dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
+        dataset = pd.DataFrame(drawn_obs.astype(bool), columns=multi_cols)
         dataset[('info', 't_stage')] = drawn_t_stages
         
         return dataset
