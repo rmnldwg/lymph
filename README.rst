@@ -4,8 +4,8 @@
     :target: https://github.com/rmnldwg/lymph/blob/master/LICENSE
 .. image:: https://img.shields.io/badge/GitHub-rmnldwg%2Flymph-blue.svg?style=flat
     :target: https://github.com/rmnldwg
-.. image:: https://img.shields.io/badge/paper-published-success.svg?style=flat
-    :target: https://www.nature.com/articles/s41598-021-91544-1
+.. image:: https://img.shields.io/badge/DOI-10.1038%2Fs41598--021--91544--1-success.svg?style=flat
+    :target: https://doi.org/10.1038/s41598-021-91544-1
 .. image:: https://github.com/rmnldwg/lymph/actions/workflows/ci.yml/badge.svg?style=flat
     :target: https://github.com/rmnldwg/lymph/actions
 .. image:: https://readthedocs.org/projects/lymph-model/badge
@@ -44,6 +44,12 @@ Get started
 To learn how to use this package, head over to our `documentation <https://lymph-model.readthedocs.io>`_ where we explain the API of the package and also provide a `quickstart guide <https://lymph-model.readthedocs.io/en/latest/quickstart.html>`_.
 
 The implementation is pure-python and has only a few dependencies. However, it is intended to be used with powerful inference algorithms, e.g. the great sampling package `emcee <https://github.com/dfm/emcee>`_, which we used for our results.
+
+
+Attribution
+===========
+
+If you use this code in you work you may either attribute use by citing our `paper <https://doi.org/10.1038/s41598-021-91544-1>`_ or by using the ``CITATION.cff`` file in this repository, which specifically cites the software.
 
 
 See also

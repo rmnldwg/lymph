@@ -1,1 +1,2 @@
 lymph/_version.py export-subst
+notebook/* linguist-documentation

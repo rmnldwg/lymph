@@ -1,0 +1,38 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: lymph
+message: 'If you use this software, please cite it as below.'
+type: software
+authors:
+  - given-names: Roman
+    family-names: Ludwig
+    email: roman.ludwig@usz.ch
+    affiliation: University Hospital Zurich
+    orcid: 'https://orcid.org/0000-0001-9434-328X'
+  - given-names: Bertrand
+    family-names: Pouymayou
+    email: bertrand.pouymayou@usz.ch
+    affiliation: University Hospital Zurich
+    orcid: 'https://orcid.org/0000-0002-8060-7827'
+  - given-names: Panagiotis
+    family-names: Balermpas
+    email: panagiotis.balermpas@usz.ch
+    affiliation: University Hospital Zurich
+    orcid: 'https://orcid.org/0000-0001-5261-6446'
+  - given-names: Jan
+    family-names: Unkelbach
+    email: jan.unkelbach@usz.ch
+    affiliation: University Hospital Zurich
+    orcid: 'https://orcid.org/0000-0002-4275-990X'
+repository-code: 'https://github.com/rmnldwg/lymph'
+url: 'https://lymph-model.readthedocs.io/en/latest/'
+abstract: >-
+  Python package for statistical modelling of
+  lymphatic metastatic spread in head & neck cancer.
+keywords:
+  - head & neck squamous cell carcinoma
+  - probabilistic model
+  - lymphatic progression
+license: MIT
