@@ -331,11 +331,11 @@ class Unilateral(HDF5Mixin):
         expensive computation of entries in the transition matrix that are zero 
         anyways, because self-healing is forbidden.
         
-        For example: The hidden state ``[True, True, False]`` in a network 
-        with only one tumor and two LNLs (one involved, one healthy) corresponds 
-        to the index ``1`` and can only evolve into the state 
-        ``[True, True, True]``, which has index 2. So, the key-value pair for 
-        that particular hidden state would be ``1: [2]``.
+        For example: The hidden state ``[True, False]`` in a network with only 
+        one tumor and two LNLs (one involved, one healthy) corresponds to the 
+        index ``1`` and can only evolve into the state ``[True, True]``, which 
+        has index 3. So, the key-value pair for that particular hidden state 
+        would be ``1: [3]``.
         """
         try:
             return self._mask
@@ -405,6 +405,12 @@ class Unilateral(HDF5Mixin):
             1 - s_P & s_N
             \\end{pmatrix}
         """
+        
+        if hasattr(self, "_B"):
+            del self._B
+        if hasattr(self, "_obs_list"):
+            del self._obs_list
+                
         self._modality_tables = {}
         for mod, spsn in modality_spsn.items():
             if not isinstance(mod, str):
@@ -1002,7 +1008,84 @@ class Unilateral(HDF5Mixin):
                                         where=(inv!=None),
                                         out=np.ones_like(state, dtype=bool)))
             return cX @ res
-
+    
+    def generate_dataset(
+        self,
+        npatients: int,
+        t_stage_probs: List[float],
+        diag_times: Optional[Dict[Any, int]] = None,
+        max_t: Optional[int] = None,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+    ) -> pd.DataFrame:
+        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+        
+        Args:
+            npatients: Number of patients to generate.
+            
+            t_stage_probs: Probability to find a patient in a certain T-stage.
+            
+            diag_times: For each T-stage, one can specify until which time step 
+                the corresponding patients should be evolved. If this is set to 
+                `None`, and a distribution over diagnose times `time_dists` is 
+                provided, the diagnose time is drawn from the `time_dist`.
+            
+            max_t: Latest possible diagnose time. This is only used to return 
+                `-np.inf` in case one of the `diag_times` exceeds this value.
+            
+            time_dists: Distributions over diagnose times that can be used to 
+                draw a diagnose time for the respective T-stage.
+        """
+        if not np.isclose(np.sum(t_stage_probs), 1):
+            raise ValueError("Distribution over T-stages must sum to 1.")
+        
+        # draw the diagnose times for each patient
+        if diag_times is not None:
+            t_stages = list(diag_times.keys())
+            drawn_t_stages = np.random.choice(
+                t_stages,
+                p=t_stage_probs,
+                size=npatients
+            )
+            drawn_diag_times = [diag_times[t] for t in drawn_t_stages]
+        elif time_dists is not None:
+            t_stages = list(time_dists.keys())
+            max_t = len(time_dists[t_stages[0]]) - 1
+            time_steps = np.arange(max_t + 1)
+            
+            drawn_t_stages = np.random.choice(
+                t_stages,
+                p=t_stage_probs,
+                size=npatients
+            )
+            drawn_diag_times = [
+                np.random.choice(time_steps, p=time_dists[t])
+                for t in drawn_t_stages
+            ]
+        
+        # use the drawn diagnose times to compute probabilities over states and 
+        # diagnoses
+        per_time_state_probs = self._evolve(t_last=max_t)
+        per_patient_state_probs = per_time_state_probs[drawn_diag_times]
+        per_patient_obs_probs = per_patient_state_probs @ self.B
+        
+        # then, draw a diagnose from the possible ones
+        obs_idx = np.arange(len(self.obs_list))
+        drawn_obs_idx = [
+            np.random.choice(obs_idx, p=obs_prob)
+            for obs_prob in per_patient_obs_probs
+        ]
+        drawn_obs = self.obs_list[drawn_obs_idx]
+        
+        # construct MultiIndex for dataset from stored modalities
+        modalities = list(self.modalities.keys())
+        lnl_names = [lnl.name for lnl in self.lnls]
+        multi_cols = pd.MultiIndex.from_product([modalities, lnl_names])
+        
+        # create DataFrame
+        dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
+        dataset[('info', 't_stage')] = drawn_t_stages
+        
+        return dataset
 
 
 class System(Unilateral):
