@@ -1,9 +1,6 @@
-from attr import s
-from numpy.lib.npyio import load
 import pytest
 import numpy as np
 import scipy as sp
-import scipy.stats
 import pandas as pd
 import lymph
 
@@ -67,7 +64,7 @@ def expected_C():
                                [0, 0, 0],
                                [1, 0, 0],
                                [1, 0, 0]])}
-    
+
 @pytest.fixture
 def expected_f():
     return {"early": np.array([1, 1, 1, 1, 1]),
@@ -76,7 +73,7 @@ def expected_f():
 @pytest.fixture
 def empty_data():
     return pd.read_csv("./tests/unilateral_mockup_data.csv", header=[0,1], nrows=0)
-    
+
 @pytest.fixture
 def data():
     return pd.read_csv("./tests/unilateral_mockup_data.csv", header=[0,1])
@@ -116,47 +113,47 @@ def test_A_matrix(sys):
     spread_probs = np.random.uniform(size=(len(sys.edges)))
     sys.spread_probs = spread_probs
     assert hasattr(sys, 'A')
-    
+
     for t in range(10):
         row_sums = np.sum(np.linalg.matrix_power(sys.A, t), axis=1)
         assert np.all(np.isclose(row_sums, 1.))
-    
-    
+
+
 def test_B_matrix(sys, modality_spsn):
     sys.modalities = modality_spsn
     matrix_B = sys.B
     assert hasattr(sys, "_B")
-    
+
     row_sums = np.sum(matrix_B, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
-    
-    
+
+
 def test_load_data(
     sys, empty_data, data, t_stages, modality_spsn, expected_C, expected_f
 ):
-    """Check that unilateral system handles lodaing data correctly, including 
+    """Check that unilateral system handles lodaing data correctly, including
     an empty dataset.
     """
     sys.modalities = modality_spsn
     sys.patient_data = empty_data
-    
+
     for stage in t_stages:
         assert not hasattr(sys, "C")
         assert not hasattr(sys, "f")
-    
+
     sys.patient_data = data
-    
+
     for stage in t_stages:
         assert np.all(np.equal(sys.C[stage], expected_C[stage]))
         assert np.all(np.equal(sys.f[stage], expected_f[stage]))
 
 
 @pytest.mark.parametrize(
-    "marginalize, has_spread_probs_invalid", 
+    "marginalize, has_spread_probs_invalid",
     [(True, True), (False, True), (True, False), (False, False)]
 )
 def test_log_likelihood(
-    loaded_sys, spread_probs, t_stages, diag_times, time_dists, 
+    loaded_sys, spread_probs, t_stages, diag_times, time_dists,
     marginalize, has_spread_probs_invalid
 ):
     """Check the basic likelihood function."""
@@ -169,21 +166,21 @@ def test_log_likelihood(
                 diag_times=None, time_dists=None,
                 mode="HMM"
             )
-        
+
         with pytest.raises(ValueError):
             assert loaded_sys.log_likelihood(
                 spread_probs, t_stages,
                 diag_times=[], time_dists=None,
                 mode="HMM"
             )
-        
+
         with pytest.raises(ValueError):
             assert loaded_sys.log_likelihood(
                 spread_probs, t_stages,
                 diag_times=None, time_dists=np.array([]),
                 mode="HMM"
             )
-    
+
     if marginalize:
         diag_times = None
     else:
@@ -192,9 +189,9 @@ def test_log_likelihood(
         for stage in t_stages:
             small_shift = np.random.uniform(-0.2, 0.2)
             shifted_diag_times[stage] = diag_times[stage] + small_shift
-        
+
     llh = loaded_sys.log_likelihood(
-        spread_probs, t_stages, 
+        spread_probs, t_stages,
         diag_times=diag_times, time_dists=time_dists,
         mode="HMM"
     )
@@ -204,7 +201,7 @@ def test_log_likelihood(
 
     if not marginalize:
         shifted_llh = loaded_sys.log_likelihood(
-            spread_probs, t_stages, 
+            spread_probs, t_stages,
             diag_times=shifted_diag_times, time_dists=time_dists,
             mode="HMM"
         )
@@ -212,7 +209,7 @@ def test_log_likelihood(
 
 
 def test_marginal_log_likelihood(
-    loaded_sys, 
+    loaded_sys,
     t_stages,
     early_time_dist,
     late_time_dist
@@ -223,14 +220,14 @@ def test_marginal_log_likelihood(
                                               "late" : late_time_dist}
     )
     assert llh < 0.
-    
+
     theta = np.random.uniform(size=(len(loaded_sys.edges))) + 1.
     llh = loaded_sys.marginal_log_likelihood(
         theta, t_stages=t_stages, time_dists={"early": early_time_dist,
                                               "late" : late_time_dist}
     )
     assert np.isinf(llh)
-    
+
     theta = np.random.uniform(size=len(loaded_sys.spread_probs) + 3)
     with pytest.raises(ValueError):
         llh = loaded_sys.marginal_log_likelihood(
@@ -247,29 +244,29 @@ def test_time_log_likelihood(loaded_sys, t_stages):
         theta, t_stages=t_stages, max_t=10
     )
     assert llh_1 < 0.
-    
+
     times = np.array([0.8, 3.85])
     theta = np.concatenate([spread_probs, times])
     llh_2 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert np.isclose(llh_1, llh_2)
-    
+
     times = np.array([0.8, 3.4])
     theta = np.concatenate([spread_probs, times])
     llh_3 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert ~np.isclose(llh_1, llh_3)
-    
+
     times = np.array([0.8, 10.6])
     theta = np.concatenate([spread_probs, times])
     llh_4 = loaded_sys.time_log_likelihood(
         theta, t_stages=t_stages, max_t=10
     )
     assert np.isinf(llh_4)
-    
-    
+
+
 @pytest.mark.parametrize("inv, diagnoses, diag_time, mode", [
     (np.array([0,0,0])   , {'test-o-meter': np.array([0,1,0])}   , 3   , "HMM"),
     (np.array([None,0,1]), {'test-o-meter': np.array([1,0,0])}   , 3   , "HMM"),
@@ -283,12 +280,12 @@ def test_time_log_likelihood(loaded_sys, t_stages):
 def test_risk(loaded_sys, inv, diagnoses, diag_time, mode):
     spread_probs = np.random.uniform(size=loaded_sys.spread_probs.shape)
     time_dist = np.ones(shape=(10)) / 10.
-    
+
     # new risk with no involvement specified
     risk = loaded_sys.risk(
-        spread_probs, 
-        inv=inv, diagnoses=diagnoses, 
-        diag_time=diag_time, time_dist=time_dist, 
+        spread_probs,
+        inv=inv, diagnoses=diagnoses,
+        diag_time=diag_time, time_dist=time_dist,
         mode=mode
     )
     if inv is None:
