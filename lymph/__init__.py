@@ -7,6 +7,8 @@ __author__ = "Roman Ludwig"
 __email__ = "roman.ludwig@usz.ch"
 __uri__ = "https://github.com/rmnldwg/lymph"
 
+# nopycln: file
+
 from ._version import get_versions
 
 __version__ = get_versions()['version']
@@ -14,6 +16,7 @@ del get_versions
 
 from .bilateral import Bilateral, BilateralSystem
 from .edge import Edge
+from .midline import MidlineBilateral
 from .node import Node
 from .unilateral import System, Unilateral
 
