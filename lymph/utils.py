@@ -500,3 +500,30 @@ def draw_diagnose_times(
         )
     
     return drawn_t_stages, drawn_diag_times
+
+
+def draw_from_simplex(ndim: int, nsample: int = 1) -> np.ndarray:
+    """Draw uniformly from an n-dimensional simplex.
+    
+    Args:
+        ndim: Dimensionality of simplex to draw from.
+        nsample: Number of samples to draw from the simplex.
+    
+    Returns:
+        A matrix of shape (nsample, ndim) that sums to one along axis 1.
+    """
+    rand = np.random.uniform(size=(nsample, ndim-1))
+    unsorted = np.concatenate(
+        [np.zeros(shape=(nsample,1)), rand, np.ones(shape=(nsample,1))],
+        axis=1
+    )
+    sorted = np.sort(unsorted, axis=1)
+    
+    diff_arr = np.concatenate([[-1., 1.], np.zeros(ndim-1)])
+    diff_mat = np.array([np.roll(diff_arr, i) for i in range(ndim)]).T
+    res = sorted @ diff_mat
+    
+    if nsample == 1:
+        return res[0]
+    else:
+        return res
