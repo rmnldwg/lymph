@@ -1,0 +1,11 @@
+References
+==========
+
+.. [1] Vincent Grégoire and Others, "Selection and delineation of lymph node target volumes in head and neck conformal radiotherapy. Proposal for standardizing terminology and procedure based on the surgical experience", Radiother. Oncol., vol. 56, pp. 135–150, 2000, doi: https://doi.org/10.1016/S0167-8140(00)00202-4.
+.. [2] Vincent Grégoire, A. Eisbruch, M. Hamoir, and P. Levendag, "Proposal for the delineation of the nodal CTV in the node-positive and the post-operative neck", Radiotherapy and Oncology, vol. 79, no. 1, pp. 15–20, Apr. 2006, doi: https://doi.org/10.1016/j.radonc.2006.03.009.
+.. [3] Vincent Grégoire et al., "Delineation of the neck node levels for head and neck tumors: A 2013 update. DAHANCA, EORTC, HKNPCSG, NCIC CTG, NCRI, RTOG, TROG consensus guidelines", Radiotherapy and Oncology, vol. 110, no. 1, pp. 172–181, Jan. 2014, doi: https://doi.org/10.1016/j.radonc.2013.10.010.
+.. [4] Julian Biau et al., "Selection of lymph node target volumes for definitive head and neck radiation therapy: a 2019 Update", Radiotherapy and Oncology, vol. 134, pp. 1–9, May 2019, doi: https://doi.org/10.1016/j.radonc.2019.01.018.
+.. [5] Jatin. P. Shah, F. C. Candela, and A. K. Poddar, "The patterns of cervical lymph node metastases from squamous carcinoma of the oral cavity", Cancer, vol. 66, no. 1, pp. 109–113, 1990, doi: https://doi.org/10.1002/1097-0142(19900701)66:1<109::AID-CNCR2820660120>3.0.CO;2-A.
+.. [6] Laurence Bauwens et al., "Prevalence and distribution of cervical lymph node metastases in HPV-positive and HPV-negative oropharyngeal squamous cell carcinoma", Radiother Oncol, vol. 157, pp. 122–129, Apr. 2021, doi: https://doi.org/10.1016/j.radonc.2021.01.028.
+.. [7] Bertrand Pouymayou, P. Balermpas, O. Riesterer, M. Guckenberger, and J. Unkelbach, "A Bayesian network model of lymphatic tumor progression for personalized elective CTV definition in head and neck cancers", Physics in Medicine & Biology, vol. 64, no. 16, p. 165003, Aug. 2019, doi: https://doi.org/10.1088/1361-6560/ab2a18.
+.. [8] Roman Ludwig, B. Pouymayou, P. Balermpas, and J. Unkelbach, "A hidden Markov model for lymphatic tumor progression in the head and neck", Sci Rep, vol. 11, no. 1, p. 12261, Dec. 2021, doi: https://doi.org/10.1038/s41598-021-91544-1.
