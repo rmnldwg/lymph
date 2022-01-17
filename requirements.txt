@@ -1,8 +1,5 @@
 pandas
 numpy
 scipy
-pytest
-coverage
 emcee
-corner
 h5py
