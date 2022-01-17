@@ -1,5 +1,5 @@
-Info,test-o-meter,test-o-meter,test-o-meter
-T-stage,one,two,three
+info,test-o-meter,test-o-meter,test-o-meter
+t_stage,one,two,three
 early,1,1,1
 early,1,0,1
 early,,1,1

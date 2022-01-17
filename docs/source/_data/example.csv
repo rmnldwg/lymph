@@ -1,5 +1,5 @@
-Info,pathology,pathology,pathology,pathology
-T-stage,I,II,III,IV
+info,pathology,pathology,pathology,pathology
+t_stage,I,II,III,IV
 early,1,0,0,0
 early,0,1,0,0
 early,0,1,0,0

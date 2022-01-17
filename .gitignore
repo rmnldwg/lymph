@@ -73,8 +73,10 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
+# documentation
 docs/_build/
+pdocs/
+pdoc3/
 
 # PyBuilder
 target/
@@ -114,6 +116,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.test
 
 # Spyder project settings
 .spyderproject
