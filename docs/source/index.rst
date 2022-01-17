@@ -11,7 +11,7 @@ The ``lymph`` package
     :target: https://github.com/rmnldwg
 .. image:: https://img.shields.io/badge/DOI-10.1038%2Fs41598--021--91544--1-success.svg?style=flat
     :target: https://doi.org/10.1038/s41598-021-91544-1
-.. image:: https://github.com/rmnldwg/lymph/actions/workflows/ci.yml/badge.svg?style=flat
+.. image:: https://github.com/rmnldwg/lymph/actions/workflows/tests.yml/badge.svg?style=flat
     :target: https://github.com/rmnldwg/lymph/actions
 .. image:: https://readthedocs.org/projects/lymph-model/badge
     :target: https://lymph-model.readthedocs.io
