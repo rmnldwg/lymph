@@ -1,7 +1,7 @@
 # This is a workflow that runs test on the package
 name: tests
 
-# Controls when the action will run. 
+# Controls when the action will run.
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
@@ -36,4 +36,4 @@ jobs:
         run: |
           coverage run --source=./lymph --omit=./lymph/__init__.py,./lymph/_version.py -m pytest ./tests
           coverage report
-        
+

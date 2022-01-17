@@ -1,9 +1,8 @@
-import pytest
 import numpy as np
-import scipy as sp
 import pandas as pd
+import pytest
+
 import lymph
-from lymph import bilateral
 
 
 @pytest.fixture
@@ -45,9 +44,8 @@ def loaded_midbi(data, t_stages, modality_spsn):
              ('lnl', 'two'):       ['three'],
              ('lnl', 'three'):     []}
     midbi = lymph.MidlineBilateral(graph=graph)
-    midbi.load_data(data["midext"], 
-                    t_stages=t_stages, 
-                    modality_spsn=modality_spsn)
+    midbi.modalities = modality_spsn
+    midbi.patient_data = data["midext"]
     return midbi
 
 @pytest.fixture
@@ -57,41 +55,39 @@ def new_spread_probs(midbi):
 
 def test_spread_probs(midbi, new_spread_probs):
     midbi.spread_probs = new_spread_probs
-    
+
     assert np.all(np.equal(new_spread_probs, midbi.spread_probs)), (
         "Spread probabilities haven't been set correctly."
     )
-    assert np.all(np.equal(midbi.noext.ipsi.base_probs, 
+    assert np.all(np.equal(midbi.noext.ipsi.base_probs,
                            midbi.ext.ipsi.base_probs)), (
         "Ipsilateral base probabilities not the same."
     )
-    assert np.all(np.equal(midbi.noext.trans_probs, 
+    assert np.all(np.equal(midbi.noext.trans_probs,
                            midbi.ext.trans_probs)), (
         "Transition probabilities not the same."
     )
-    
+
     computed_ext_base_contra = (
-        midbi.alpha_mix * midbi.noext.ipsi.base_probs 
+        midbi.alpha_mix * midbi.noext.ipsi.base_probs
         + (1 - midbi.alpha_mix) * midbi.noext.contra.base_probs
     )
-    assert np.all(np.isclose(computed_ext_base_contra, 
+    assert np.all(np.isclose(computed_ext_base_contra,
                              midbi.ext.contra.base_probs)), (
         "Contralateral base probabilities for midline extension are wrong."
     )
 
 def test_load_data(bisys, midbi, data, t_stages, modality_spsn):
-    """Check that data gets loaded correctly. The mockup dataset for the midext 
-    case is designed such that only the contralateral side for patients with 
+    """Check that data gets loaded correctly. The mockup dataset for the midext
+    case is designed such that only the contralateral side for patients with
     mid-sagittal tumor extension should have a different C-matrix and f-vector.
     """
-    bisys.load_data(data["bilateral"], 
-                    t_stages=t_stages, 
-                    modality_spsn=modality_spsn)
-    
-    midbi.load_data(data["midext"], 
-                    t_stages=t_stages, 
-                    modality_spsn=modality_spsn)
-    
+    bisys.modalities = modality_spsn
+    bisys.patient_data = data["bilateral"]
+
+    midbi.modalities = modality_spsn
+    midbi.patient_data = data["midext"]
+
     for stage in t_stages:
         assert np.all(np.equal(
             bisys.ipsi.C[stage], midbi.ext.ipsi.C[stage]
@@ -102,7 +98,7 @@ def test_load_data(bisys, midbi, data, t_stages, modality_spsn):
         assert not np.all(np.equal(
             bisys.contra.C[stage], midbi.ext.contra.C[stage]
         ))
-        
+
         assert np.all(np.equal(
             bisys.ipsi.C[stage], midbi.noext.ipsi.C[stage]
         ))
