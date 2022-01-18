@@ -841,11 +841,13 @@ class Bilateral(HDF5Mixin):
         # construct MultiIndex for dataset from stored modalities
         sides = ["ipsi", "contra"]
         modalities = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.lnls]
+        lnl_names = [lnl.name for lnl in self.ipsi.lnls]
         multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
 
         # create DataFrame
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
+        dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
+        dataset = dataset.sort_index(axis="columns", level=0)
         dataset[('info', 'tumor', 't_stage')] = drawn_t_stages
 
         return dataset
