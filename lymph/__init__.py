@@ -19,12 +19,14 @@ from .edge import Edge
 from .midline import MidlineBilateral
 from .node import Node
 from .unilateral import System, Unilateral
+from .utils import EnsembleSampler, HDF5Mixin, change_base, system_from_hdf5
 
 __all__ = [
     "Node",
     "Edge",
     "Unilateral", "System",
     "Bilateral", "BilateralSystem",
-    "MidlineBilateral"
-    "change_base",
+    "MidlineBilateral",
+    "EnsembleSampler", "HDF5Mixin",
+    "system_from_hdf5", "change_base",
 ]
