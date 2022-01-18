@@ -3,3 +3,5 @@ numpy
 scipy
 emcee
 h5py
+tables
+tqdm
