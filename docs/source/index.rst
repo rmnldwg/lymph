@@ -18,6 +18,7 @@ Documentation
    install
    quickstart
    lymph
+   hdf5
    license
 
 Index & search
