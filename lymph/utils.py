@@ -169,7 +169,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
             size=(self.nwalkers, self.ndim)
         )
 
-        acor_list = np.empty(max_steps, dtype=float)
+        acor_list = []
         old_acor = np.inf
         idx = 0
 
@@ -180,7 +180,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
 
             # ...compute the autocorrelation time and store it in an array.
             new_acor = self.get_autocorr_time(tol=0)
-            acor_list[idx] = np.mean(new_acor)
+            acor_list.append(np.mean(new_acor))
             idx += 1
 
             # check convergence based on two criterions:
