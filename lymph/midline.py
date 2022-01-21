@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 
 from .bilateral import Bilateral
-from .utils import HDF5Mixin, fast_binomial_pmf
+from .utils import HDFMixin, fast_binomial_pmf
 
 
-class MidlineBilateral(HDF5Mixin):
+class MidlineBilateral(HDFMixin):
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
     mid-sagittal line.
@@ -31,9 +31,10 @@ class MidlineBilateral(HDF5Mixin):
 
     def __init__(
         self,
-        graph: dict = {},
+        graph: Dict[Tuple[str], List[str]] = {},
         alpha_mix: float = 0.,
-        trans_symmetric: bool = True
+        trans_symmetric: bool = True,
+        **kwargs
     ):
         """The class is constructed in a similar fashion to the
         :class:`Bilateral`: That class contains one :class:`Unilateral` for

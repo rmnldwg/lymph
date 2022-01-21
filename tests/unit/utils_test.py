@@ -1,7 +1,55 @@
 import numpy as np
+import pandas as pd
 import pytest
 
-from lymph.utils import draw_diagnose_times, draw_from_simplex
+from lymph.unilateral import Unilateral
+from lymph.utils import draw_diagnose_times, draw_from_simplex, system_from_hdf
+
+
+@pytest.fixture
+def unilateral_model():
+    graph = {
+        ('tumor', 'primary'): ['one', 'two'],
+        ('lnl', 'one'):       ['two', 'three'],
+        ('lnl', 'two'):       ['three'],
+        ('lnl', 'three'):     []
+    }
+    modalities = {'test-o-meter': [0.99, 0.88]}
+    patient_data = pd.read_csv(
+        "./tests/unilateral_mockup_data.csv",
+        header=[0,1]
+    )
+
+    model = Unilateral(graph)
+    model.modalities = modalities
+    model.patient_data = patient_data
+    return model
+
+
+def test_hdf_io(unilateral_model, tmp_path):
+    graph = unilateral_model.graph
+    modalities = unilateral_model.modalities
+    patient_data = unilateral_model.patient_data
+
+    unilateral_model.to_hdf(
+        filename=tmp_path / "test.h5",
+        name="model"
+    )
+
+    recovered_model = system_from_hdf(
+        filename=tmp_path / "test.h5",
+        name="model"
+    )
+
+    assert recovered_model.graph == graph, (
+        "Model graph was not correctly recovered"
+    )
+    assert recovered_model.modalities == modalities, (
+        "Model's modalities were not correctly recovered"
+    )
+    assert recovered_model.patient_data.equals(patient_data), (
+        "Model's stored data was not correclty recovered"
+    )
 
 
 @pytest.mark.parametrize("ndim",    [2,  5,   8,   12])

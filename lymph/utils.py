@@ -228,7 +228,7 @@ def jsondict_to_tupledict(dict: Dict[str, List[str]]) -> Dict[Tuple[str], List[s
     return tupledict
 
 
-class HDF5Mixin(object):
+class HDFMixin(object):
     """Mixin for the :class:`Unilateral`, :class:`Bilateral` and
     :class:`MidlineBilateral` classes to provide the ability to store and load
     settings to and from an HDF5 file.
@@ -237,40 +237,44 @@ class HDF5Mixin(object):
     patient_data: pd.DataFrame
     modalities: Dict[str, List[float]]
 
-    def to_hdf5(
+    def to_hdf(
         self,
         filename: str,
-        groupname: str = "",
+        name: str = "",
     ):
         """Store some important settings as well as the loaded data in the
         specified HDF5 file.
 
         Args:
             filename: Name of or path to HDF5 file.
-            groupname: Name of the group where the info is supposed to be
-                stored. There, a new subgroup 'lymph' will be created which
-                will then hold the attributes of the respective class and its
-                data.
+            name: Name of the group where the info is supposed to be
+                stored.
         """
         filename = Path(filename).resolve()
 
         with h5py.File(filename, 'a') as file:
-            group = file.require_group(f"{groupname}/lymph")
+            group = file.require_group(f"{name}")
             group.attrs["class"] = self.__class__.__name__
             group.attrs["graph"] = json.dumps(tupledict_to_jsondict(self.graph))
             group.attrs["modalities"] = json.dumps(self.modalities)
+            group.attrs["base_symmetric"] = getattr(
+                self, "base_symmetric", "None"
+            )
+            group.attrs["trans_symmetric"] = getattr(
+                self, "trans_symmetric", "None"
+            )
 
         with pd.HDFStore(filename, 'a') as store:
             store.put(
-                key=f"{groupname}/lymph/patient_data",
+                key=f"{name}/patient_data",
                 value=self.patient_data,
                 format="fixed",     # due to MultiIndex this needs to be fixed
                 data_columns=None
             )
 
-def system_from_hdf5(
+def system_from_hdf(
     filename: str,
-    groupname: str = "",
+    name: str = "",
     **kwargs
 ):
     """Create a lymph system instance from the information saved in an HDF5
@@ -278,7 +282,7 @@ def system_from_hdf5(
 
     Args:
         filename: Name of the HDF5 file where the info is stored.
-        groupname: Subgroup where to look for the stored settings.
+        name: Subgroup where to look for the stored settings and data.
 
     Any other keyword arguments are passed directly to the constructor of the
     respective class.
@@ -288,15 +292,18 @@ def system_from_hdf5(
         :class:`lymph.MidlineBilateral`.
     """
     filename = Path(filename).resolve()
+    recover_None = lambda val: val if val != "None" else None
 
     with h5py.File(filename, 'a') as file:
-        group = file.require_group(f"{groupname}/lymph")
+        group = file.require_group(f"{name}")
         classname = group.attrs["class"]
         graph = jsondict_to_tupledict(json.loads(group.attrs["graph"]))
         modalities = json.loads(group.attrs["modalities"])
+        base_symmetric = recover_None(group.attrs["base_symmetric"])
+        trans_symmetric = recover_None(group.attrs["trans_symmetric"])
 
     with pd.HDFStore(filename, 'a') as store:
-        patient_data = store.get(f"{groupname}/lymph/patient_data")
+        patient_data = store.get(f"{name}/patient_data")
 
     if classname == "Unilateral":
         new_cls = lymph.Unilateral
@@ -310,7 +317,12 @@ def system_from_hdf5(
             "implemented class in the `lymph` package."
         )
 
-    new_sys = new_cls(graph=graph, **kwargs)
+    new_sys = new_cls(
+        graph=graph,
+        base_symmetric=base_symmetric,
+        trans_symmetric=trans_symmetric,
+        **kwargs
+    )
     new_sys.modalities = modalities
     new_sys.patient_data = patient_data
     return new_sys

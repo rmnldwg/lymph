@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 
 from .unilateral import Unilateral
-from .utils import HDF5Mixin, draw_diagnose_times, fast_binomial_pmf
+from .utils import HDFMixin, draw_diagnose_times, fast_binomial_pmf
 
 
 # I chose not to make this one a child of System, since it is basically only a
 # container for two System instances
-class Bilateral(HDF5Mixin):
+class Bilateral(HDFMixin):
     """Class that models metastatic progression in a lymphatic system
     bilaterally by creating two :class:`Unilateral` instances that are
     symmetric in their connections. The parameters describing the spread
@@ -20,10 +20,13 @@ class Bilateral(HDF5Mixin):
         :class:`Unilateral`: Two instances of this class are created as
         attributes.
     """
-    def __init__(self,
-                 graph: dict = {},
-                 base_symmetric: bool = False,
-                 trans_symmetric: bool = True):
+    def __init__(
+        self,
+        graph: Dict[Tuple[str], List[str]] = {},
+        base_symmetric: bool = False,
+        trans_symmetric: bool = True,
+        **kwargs
+    ):
         """Initialize both sides of the network as a :class:`Unilateral`
         instance:
 
