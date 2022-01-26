@@ -7,15 +7,15 @@ from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
 from .node import Node, node_trans_prob
-from .utils import HDF5Mixin, change_base, draw_diagnose_times
+from .utils import HDFMixin, change_base, draw_diagnose_times
 
 
-class Unilateral(HDF5Mixin):
+class Unilateral(HDFMixin):
     """Class that models metastatic progression in a lymphatic system by
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: dict = {}):
+    def __init__(self, graph: Dict[Tuple[str], List[str]] = {}, **kwargs):
         """Initialize the underlying graph:
 
         Args:
