@@ -58,7 +58,7 @@ See also
 The dataset(s)
 --------------
 
-A large and detailed dataset containing the patterns of lymphatic progression of patients treated at the USZ are available `here <https://github.com/rmnldwg/lydata>`_.
+A large and detailed dataset containing the patterns of lymphatic progression of patients treated at the USZ are available in `this repo <https://github.com/rmnldwg/lydata>`_ on GitHub. We have also published a paper on the dataset and our interface (described below) in *Radiotherapy & Oncology* [9]_. A preprint is available on *medRxiv* [10]_.
 
 This data may be used to train the model.
 
