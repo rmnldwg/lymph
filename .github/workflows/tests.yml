@@ -35,6 +35,6 @@ jobs:
       - name: Run tests
         run: |
           coverage run --omit=tests/*,*/_*.py -m pytest ./tests
-      - name: Upload report to codecov
-        uses: codecov/codecov-actions@v2
-        with:
+          coverage html --omit=tests/*,*/_*.py -d coverage
+          coverage json --omit=tests/*,*/_*.py -o coverage/report.json
+          coverage report
