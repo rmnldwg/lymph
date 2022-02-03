@@ -8,7 +8,7 @@
     :target: https://doi.org/10.1038/s41598-021-91544-1
 .. image:: https://github.com/rmnldwg/lymph/actions/workflows/tests.yml/badge.svg?style=flat
     :target: https://github.com/rmnldwg/lymph/actions
-.. image:: https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/rmnldwg/lymph/docs-update/coverage/report.json&label=coverage&query=<$.totals.percent_covered_display>&color=green
+.. image:: https://img.shields.io/badge/dynamic/json?color=green&label=coverage&query=%24.totals.percent_covered_display&suffix=%25&url=https%3A%2F%2Fraw.githubusercontent.com%2Frmnldwg%2Flymph%2Fdocs-update%2Fcoverage%2Freport.json
     :target: https://google.com
 .. image:: https://readthedocs.org/projects/lymph-model/badge
     :target: https://lymph-model.readthedocs.io
