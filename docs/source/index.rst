@@ -17,8 +17,8 @@ Documentation
 
    install
    quickstart
+   sampling
    lymph
-   hdf5
    license
 
 Index & search
