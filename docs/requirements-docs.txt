@@ -2,5 +2,5 @@
 sphinx
 sphinx-rtd-theme
 sphinx-autodoc-typehints
-nbsphinx
+myst-nb
 ipython
