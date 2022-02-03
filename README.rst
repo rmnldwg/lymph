@@ -49,7 +49,7 @@ The implementation is pure-python and has only a few dependencies. However, it i
 Attribution
 ===========
 
-If you use this code in you work you may either attribute use by citing our `paper <https://doi.org/10.1038/s41598-021-91544-1>`_ or by using the ``CITATION.cff`` file in this repository, which specifically cites the software.
+If you use this code in you work you may either attribute use by citing our `paper <https://doi.org/10.1038/s41598-021-91544-1>`_ [8]_ or by using the ``CITATION.cff`` file in this repository, which specifically cites the software.
 
 
 See also

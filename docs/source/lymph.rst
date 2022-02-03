@@ -52,7 +52,7 @@ Utils
 
 We provide some additional utility functions and classes that aren't necessary for the inference or risk estimation per se, but make life just a little bit easier.
 
-Especially for reproducability of inference rounds there are some neat functions that interact with the HDF5 file format that allows to store quite some metadata. Head over to :doc:`this tutorial <hdf5>` to get an idea of how this could be helpful.
+Especially for reproducability of inference rounds there are some neat functions that interact with the HDF5 file format that allows to store quite some metadata. Head over to :doc:`this tutorial <sampling>` to get an idea of how this could be helpful.
 
 .. autofunction:: lymph.utils.lyprox_to_lymph
 
