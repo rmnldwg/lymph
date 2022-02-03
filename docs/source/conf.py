@@ -41,8 +41,12 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
     'sphinx_autodoc_typehints',
-    'nbsphinx'
+    'myst_nb'
 ]
+
+# MyST settings
+myst_enable_extensions = ["colon_fence", "dollarmath"]
+jupyter_execute_notebooks = "off"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
