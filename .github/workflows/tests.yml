@@ -34,6 +34,7 @@ jobs:
           pip install .
       - name: Run tests
         run: |
-          coverage run --source=./lymph --omit=./lymph/__init__.py,./lymph/_version.py -m pytest ./tests
-          coverage report
-
+          coverage run --omit=tests/*,*/_*.py -m pytest ./tests
+          coverage xml
+      - name: Upload to codecov
+        uses: codecov/codecov-action@v2

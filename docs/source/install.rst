@@ -1,8 +1,7 @@
 Installation
 ============
 
-This package is not (yet) on PyPI, so it must be installed from a local
-directory. To do this, first clone the github repository
+This package is not (yet) on PyPI, so it must be installed from a local directory. To do this, first clone the github repository
 
 .. code-block:: bash
 
@@ -23,5 +22,4 @@ or the file ``setup.py``
 
 .. note:: You will need to have  python 3.8 or higher installed.
 
-In the future we plan to make the ``lymph`` package available on PyPI, so that
-it may be easier to install using `pip` or `conda <https://conda.io>`_.
+In the future we plan to make the ``lymph`` package available on PyPI, so that it may be easier to install using `pip` or `conda <https://conda.io>`_.

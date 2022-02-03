@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import warnings
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import emcee
 import h5py
@@ -93,15 +93,14 @@ def lyprox_to_lymph(
 
 
 class EnsembleSampler(emcee.EnsembleSampler):
-    """A custom wrapper of emcee's ``EnsembleSampler`` that adds convenience
-    methods for storing and loading settings, samples and more to and from an
-    HDF5 file for better reproduceability.
+    """A custom wrapper of emcee's ``EnsembleSampler`` that adds a sampling
+    method that automatically tracks convergence.
     """
     def __init__(
         self,
+        nwalkers,
         ndim,
         log_prob_fn,
-        nwalkers=None,
         pool=None,
         moves=None,
         args=None,
@@ -111,145 +110,103 @@ class EnsembleSampler(emcee.EnsembleSampler):
         blobs_dtype=None,
         parameter_names: Optional[Union[Dict[str, int], List[str]]] = None
     ):
-        """This class' constructor defines two more default arguments:
-        ``nwalkers`` is now just 10 times ``ndim`` if not otherwise specified
-        and ``moves`` is 80% :class:`DEMove` with 20% :class:`DESnookerMove`.
-
-        See Also:
-            :class:`emcee.EnsembleSampler`: This utility class inherits all its
-            main functionality from `emcee <https://emcee.readthedocs.io>`_.
+        """Just define a default mixture of moves.
         """
-        if nwalkers is None:
-            nwalkers = 10 * ndim
-
         if moves is None:
-            moves = [(emcee.moves.DEMove(),        0.8),
-                     (emcee.moves.DESnookerMove(), 0.2)]
+            moves = [
+                (emcee.moves.DEMove(),        0.8),
+                (emcee.moves.DESnookerMove(), 0.2)
+            ]
 
         super().__init__(
             nwalkers,
             ndim,
             log_prob_fn,
-            pool=pool,
-            moves=moves,
-            args=args,
-            kwargs=kwargs,
-            backend=backend,
-            vectorize=vectorize,
-            blobs_dtype=blobs_dtype,
-            parameter_names=parameter_names
+            pool,
+            moves,
+            args,
+            kwargs,
+            backend,
+            vectorize,
+            blobs_dtype,
+            parameter_names
         )
 
-    def run_mcmc(self, nsteps, **kwargs):
-        """Extract ``initial_state`` from settings of the sampler and call
-        parent's ``run_mcmc`` method.
+    def run_sampling(
+        self,
+        max_steps: int = 10000,
+        check_interval: int = 100,
+        trust_threshold: float = 50.,
+        rel_acor_threshold: float = 0.05,
+        verbose: bool = True,
+        **kwargs
+    ) -> np.ndarray:
+        """Extract ``start`` from settings of the sampler and perform sampling
+        while monitoring the convergence.
+
+        Args:
+            max_steps: Maximum number of sampling steps to perform.
+            check_interval: Number of sampling steps after which to check for
+                convergence.
+            trust_threshold: The autocorrelation estimate is only trusted when
+                it is smaller than the number of samples drawn divided by this
+                parameter.
+            rel_acor_threshold: The relative change of two consequtive trusted
+                autocorrelation estimates must fall below.
+            verbose: Show progress during sampling and success at the end.
+            **kwargs: Any other ``kwargs`` are directly passed to the ``sample``
+                method.
+
+        Returns:
+            A list of mean autocorrelation times, computed every
+            ``check_interval`` samples.
         """
-        initial_state = np.random.uniform(
+        if verbose:
+            print("Starting sampling")
+
+        start = np.random.uniform(
             low=0., high=1.,
             size=(self.nwalkers, self.ndim)
         )
-        return super().run_mcmc(initial_state, nsteps, progress=True, **kwargs)
 
-    def to_hdf5(
-        self,
-        filename: str,
-        groupname: str = "",
-        overwrite: bool = True,
-        attr_list: List[str] = ["nwalkers", "ndim", "acceptance_fraction"]
-    ):
-        """Export samples and important settings to an HDF5 file.
+        acor_list = []
+        old_acor = np.inf
+        idx = 0
 
-        Args:
-            filename: Name of or path to HDF5 file.
-            groupname: Name of the group where the info is supposed to be
-                stored. There, a new subgroup 'sampler' will be created which
-                will then hold the attributes of the ``EnsembleSampler`` and
-                the chain.
-            overwrite: If ``True``, any data that might already be stored at
-                the location will be deleted and overwritten.
-            attr_list: List of attributes of the ``EnsembleSampler`` to store
-                in the HDF5 file.
-        """
-        filename = Path(filename).resolve()
-        with h5py.File(filename, mode='a') as file:
-            group = file.require_group(f"{groupname}/sampler")
-            for attr in attr_list:
-                if hasattr(self, attr):
-                    group.attrs[attr] = getattr(self, attr)
+        for sample in self.sample(start, iterations=max_steps, progress=verbose, **kwargs):
+            # after `check_interval` number of samples...
+            if self.iteration % check_interval:
+                continue
 
-            chain = self.get_chain()
-            log_prob = self.get_log_prob()
+            # ...compute the autocorrelation time and store it in an array.
+            new_acor = self.get_autocorr_time(tol=0)
+            acor_list.append(np.mean(new_acor))
+            idx += 1
 
-            if overwrite:
-                try:
-                    del group["chain"]
-                except KeyError:
-                    pass
-                try:
-                    del group["log_prob"]
-                except KeyError:
-                    pass
-            group.create_dataset("chain", data=chain)
-            group.create_dataset("log_prob", data=log_prob)
+            # check convergence based on two criterions:
+            # - has the acor time crossed the N / `trust_theshold` line?
+            # - did the acor time stay stable?
+            is_converged = np.all(new_acor * trust_threshold < self.iteration)
+            rel_acor_diff = np.abs(old_acor - new_acor) / new_acor
+            is_converged &= np.all(rel_acor_diff < rel_acor_threshold)
 
-    @classmethod
-    def from_hdf5(
-        cls,
-        log_prob_fn: Callable,
-        filename: str,
-        groupname: str = "",
-        **kwargs
-    ) -> EnsembleSampler:
-        """Create an ``EnsembleSampler`` from some stored parameters and a
-        log-probability function.
+            # if it has converged, stop
+            if is_converged:
+                break
 
-        Args:
-            filename: Name of or path to HDF5 file.
-            groupname: Name of the group where the info is supposed to be
-                stored. There, it searches the subgroup 'sampler' for the
-                attributes to create an ``EnsembleSampler`` from.
-            log_prob_fn: The log-probability function to use for sampling.
+            old_acor = new_acor
 
-        Returns:
-            A new instance with some important settings already loaded from the
-            HDF5 file.
-        """
-        filename = Path(filename).resolve()
-        with h5py.File(filename, 'r') as file:
-            group = file[f"{groupname}/sampler"]
-            nwalkers = group.attrs["nwalkers"]
-            ndim = group.attrs["ndim"]
+        if verbose:
+            if is_converged:
+                print(f"Sampler converged after {self.iteration} steps")
+            else:
+                print("Max. number of steps reached")
 
-        return cls(
-            nwalkers=nwalkers,
-            ndim=ndim,
-            log_prob_fn=log_prob_fn,
-            **kwargs
-        )
+            acc_frac = 100 * np.mean(self.acceptance_fraction)
+            print(f"Acceptance fraction = {acc_frac:.2f}%")
+            print(f"Mean autocorrelation time = {np.mean(old_acor):.2f}")
 
-    @staticmethod
-    def get_chain_from_hdf5(filename: str, groupname: str = "") -> np.ndarray:
-        """Get the chain that was stored in an HDF5 file previously.
-        """
-        filename = Path(filename).resolve()
-
-        with h5py.File(filename, 'r') as file:
-            group = file[f"{groupname}/sampler"]
-            chain = np.array(group["chain"])
-
-        return chain
-
-    @staticmethod
-    def get_log_prob_from_hdf5(filename: str, groupname: str = "") -> np.ndarray:
-        """Get the log_prob that was stored in an HDF5 file previously.
-        """
-        filename = Path(filename).resolve()
-
-        with h5py.File(filename, 'r') as file:
-            group = file[f"{groupname}/sampler"]
-            log_prob = np.array(group["log_prob"])
-
-        return log_prob
+        return acor_list
 
 
 def tupledict_to_jsondict(dict: Dict[Tuple[str], List[str]]) -> Dict[str, List[str]]:
@@ -271,7 +228,7 @@ def jsondict_to_tupledict(dict: Dict[str, List[str]]) -> Dict[Tuple[str], List[s
     return tupledict
 
 
-class HDF5Mixin(object):
+class HDFMixin(object):
     """Mixin for the :class:`Unilateral`, :class:`Bilateral` and
     :class:`MidlineBilateral` classes to provide the ability to store and load
     settings to and from an HDF5 file.
@@ -280,41 +237,44 @@ class HDF5Mixin(object):
     patient_data: pd.DataFrame
     modalities: Dict[str, List[float]]
 
-    def to_hdf5(
+    def to_hdf(
         self,
         filename: str,
-        groupname: str = "",
+        name: str = "",
     ):
         """Store some important settings as well as the loaded data in the
         specified HDF5 file.
 
         Args:
             filename: Name of or path to HDF5 file.
-            groupname: Name of the group where the info is supposed to be
-                stored. There, a new subgroup 'lymph' will be created which
-                will then hold the attributes of the respective class and its
-                data.
+            name: Name of the group where the info is supposed to be
+                stored.
         """
         filename = Path(filename).resolve()
 
         with h5py.File(filename, 'a') as file:
-            group = file.require_group(f"{groupname}/lymph")
+            group = file.require_group(f"{name}")
             group.attrs["class"] = self.__class__.__name__
             group.attrs["graph"] = json.dumps(tupledict_to_jsondict(self.graph))
             group.attrs["modalities"] = json.dumps(self.modalities)
+            group.attrs["base_symmetric"] = getattr(
+                self, "base_symmetric", "None"
+            )
+            group.attrs["trans_symmetric"] = getattr(
+                self, "trans_symmetric", "None"
+            )
 
         with pd.HDFStore(filename, 'a') as store:
             store.put(
-                key=f"{groupname}/lymph/patient_data",
+                key=f"{name}/patient_data",
                 value=self.patient_data,
                 format="fixed",     # due to MultiIndex this needs to be fixed
                 data_columns=None
             )
 
-
-def system_from_hdf5(
+def system_from_hdf(
     filename: str,
-    groupname: str = "",
+    name: str = "",
     **kwargs
 ):
     """Create a lymph system instance from the information saved in an HDF5
@@ -322,7 +282,7 @@ def system_from_hdf5(
 
     Args:
         filename: Name of the HDF5 file where the info is stored.
-        groupname: Subgroup where to look for the stored settings.
+        name: Subgroup where to look for the stored settings and data.
 
     Any other keyword arguments are passed directly to the constructor of the
     respective class.
@@ -332,15 +292,18 @@ def system_from_hdf5(
         :class:`lymph.MidlineBilateral`.
     """
     filename = Path(filename).resolve()
+    recover_None = lambda val: val if val != "None" else None
 
     with h5py.File(filename, 'a') as file:
-        group = file.require_group(f"{groupname}/lymph")
+        group = file.require_group(f"{name}")
         classname = group.attrs["class"]
         graph = jsondict_to_tupledict(json.loads(group.attrs["graph"]))
         modalities = json.loads(group.attrs["modalities"])
+        base_symmetric = recover_None(group.attrs["base_symmetric"])
+        trans_symmetric = recover_None(group.attrs["trans_symmetric"])
 
     with pd.HDFStore(filename, 'a') as store:
-        patient_data = store.get(f"{groupname}/lymph/patient_data")
+        patient_data = store.get(f"{name}/patient_data")
 
     if classname == "Unilateral":
         new_cls = lymph.Unilateral
@@ -354,7 +317,12 @@ def system_from_hdf5(
             "implemented class in the `lymph` package."
         )
 
-    new_sys = new_cls(graph=graph, **kwargs)
+    new_sys = new_cls(
+        graph=graph,
+        base_symmetric=base_symmetric,
+        trans_symmetric=trans_symmetric,
+        **kwargs
+    )
     new_sys.modalities = modalities
     new_sys.patient_data = patient_data
     return new_sys

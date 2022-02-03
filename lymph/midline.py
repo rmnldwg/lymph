@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 
 from .bilateral import Bilateral
-from .utils import HDF5Mixin, fast_binomial_pmf
+from .utils import HDFMixin, fast_binomial_pmf
 
 
-class MidlineBilateral(HDF5Mixin):
+class MidlineBilateral(HDFMixin):
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
     mid-sagittal line.
@@ -31,9 +31,10 @@ class MidlineBilateral(HDF5Mixin):
 
     def __init__(
         self,
-        graph: dict = {},
+        graph: Dict[Tuple[str], List[str]] = {},
         alpha_mix: float = 0.,
-        trans_symmetric: bool = True
+        trans_symmetric: bool = True,
+        **kwargs
     ):
         """The class is constructed in a similar fashion to the
         :class:`Bilateral`: That class contains one :class:`Unilateral` for
@@ -502,3 +503,48 @@ class MidlineBilateral(HDF5Mixin):
             return self.ext.risk(*args, **kwargs)
         else:
             return self.noext.risk(*args, **kwargs)
+
+
+    def generate_dataset(
+        self,
+        num_patients: int,
+        stage_dist: List[float],
+        ext_prob: float,
+        diag_times: Optional[Dict[Any, int]] = None,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+    ) -> pd.DataFrame:
+        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+
+        Args:
+            num_patients: Number of patients to generate.
+            stage_dist: Probability to find a patient in a certain T-stage.
+            ext_prob: Probability that a patient's primary tumor extends over
+                the mid-sagittal line.
+            diag_times: For each T-stage, one can specify until which time step
+                the corresponding patients should be evolved. If this is set to
+                ``None``, and a distribution over diagnose times ``time_dists``
+                is provided, the diagnose time is drawn from the ``time_dist``.
+            time_dists: Distributions over diagnose times that can be used to
+                draw a diagnose time for the respective T-stage.
+        """
+        drawn_ext = np.random.choice(
+            [True, False], p=[ext_prob, 1. - ext_prob], size=num_patients
+        )
+        ext_dataset = self.ext.generate_dataset(
+            num_patients=num_patients,
+            stage_dist=stage_dist,
+            diag_times=diag_times,
+            time_dists=time_dists
+        )
+        noext_dataset = self.noext.generate_dataset(
+            num_patients=num_patients,
+            stage_dist=stage_dist,
+            diag_times=diag_times,
+            time_dists=time_dists
+        )
+
+        dataset = noext_dataset.copy()
+        dataset.loc[drawn_ext] = ext_dataset.loc[drawn_ext]
+        dataset[('info', 'tumor', 'midline_extension')] = drawn_ext
+
+        return dataset
