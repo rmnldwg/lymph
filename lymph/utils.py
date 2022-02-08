@@ -59,7 +59,7 @@ def lyprox_to_lymph(
     midline_extension_data = noncentral_data[("tumor", "1", "extension")]
 
     diagnostic_data = noncentral_data[modalities].drop(columns=["date"], level=2)
-    # copying just to get DataFrae of same structure and with same columns
+    # copying just to get DataFrame of same structure and with same columns
     sorted_data = diagnostic_data.copy()
     # rename columns for assignment later
     sorted_data = sorted_data.rename(columns={"right": "ipsi", "left": "contra"})
@@ -172,6 +172,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
         acor_list = []
         old_acor = np.inf
         idx = 0
+        is_converged = False
 
         for sample in self.sample(start, iterations=max_steps, progress=verbose, **kwargs):
             # after `check_interval` number of samples...
@@ -215,6 +216,9 @@ def tupledict_to_jsondict(dict: Dict[Tuple[str], List[str]]) -> Dict[str, List[s
     """
     jsondict = {}
     for k, v in dict.items():
+        if np.any([',' in s for s in k]):
+            raise ValueError("Strings in in key tuple must not contain commas")
+
         jsondict[",".join(k)] = v
     return jsondict
 
@@ -328,11 +332,10 @@ def system_from_hdf(
     return new_sys
 
 
-def fast_binomial_pmf(k, n, p):
+def fast_binomial_pmf(k: int, n: int, p: float):
+    """Compute the probability mass function of the binomial distribution.
     """
-    Compute the probability mass function of the binomial distribution.
-    """
-    q = (1 - p)
+    q = (1. - p)
     binom_coeff = fact(n) / (fact(k) * fact(n - k))
     return binom_coeff * p**k * q**(n - k)
 
@@ -355,9 +358,12 @@ def change_base(
     Returns:
         The (padded) string of the converted number.
     """
-
+    if number < 0:
+        raise ValueError("Cannot convert negative numbers")
     if base > 16:
         raise ValueError("Base must be 16 or smaller!")
+    elif base < 2:
+        raise ValueError("There is no unary number system, base must be > 2")
 
     convertString = "0123456789ABCDEF"
     result = ''
@@ -435,6 +441,8 @@ def draw_diagnose_times(
     Returns:
         The drawn T-stages as well as the drawn diagnose times.
     """
+    if num_patients < 1:
+        raise ValueError("Number of patients to draw must be 1 or larger")
     if not np.isclose(np.sum(stage_dist), 1):
         raise ValueError("Distribution over T-stages must sum to 1.")
 
@@ -481,6 +489,11 @@ def draw_from_simplex(ndim: int, nsample: int = 1) -> np.ndarray:
     Returns:
         A matrix of shape (nsample, ndim) that sums to one along axis 1.
     """
+    if ndim < 1:
+        raise ValueError("Cannot generate less than 1D samples")
+    if nsample < 1:
+        raise ValueError("Generating less than one sample doesn't make sense")
+
     rand = np.random.uniform(size=(nsample, ndim-1))
     unsorted = np.concatenate(
         [np.zeros(shape=(nsample,1)), rand, np.ones(shape=(nsample,1))],
@@ -492,7 +505,4 @@ def draw_from_simplex(ndim: int, nsample: int = 1) -> np.ndarray:
     diff_mat = np.array([np.roll(diff_arr, i) for i in range(ndim)]).T
     res = sorted @ diff_mat
 
-    if nsample == 1:
-        return res[0]
-    else:
-        return res
+    return res
