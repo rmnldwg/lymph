@@ -6,9 +6,9 @@ import numpy as np
 
 @lru_cache()
 def node_trans_prob(in_states: Tuple[int], in_weights: Tuple[float]):
-    """Compute probability of a random variable to remain in its state (0) or
-    switch to be involved (1) based on its parent's states and the weights of
-    the connecting arcs. Cached for better performance.
+    """Compute probability of a random variable to remain in its healthy state
+    (0) or switch to be involved (1) based on its parent's states and the
+    weights of the connecting arcs. Cached for better performance.
 
     Args:
         in_states: States of the parent nodes.
@@ -42,9 +42,16 @@ class Node(object):
             state: Current state this LNL is in. Can be in {0, 1}.
             typ: Can be either ``"lnl"``, ``"tumor"``.
         """
+        if type(name) is not str:
+            raise TypeError("Name of node must be a string")
+        if int(state) not in [0,1]:
+            raise ValueError("State must be castable to 0 or 1")
+        if typ not in ["lnl", "tumor"]:
+            raise ValueError("Typ of node must be either `lnl` or `tumor`")
+
         self.name = name
         self.typ = typ
-        self.state = state
+        self.state = int(state)
 
         self.inc = []
         self.out = []
@@ -68,7 +75,10 @@ class Node(object):
         """Set the state of the node and make sure the state of a tumor node
         cannot be changed."""
         if self.typ == "lnl":
-            self._state = newstate
+            if int(newstate) not in [0,1]:
+                raise ValueError("State of node must be either 0 or 1")
+            self._state = int(newstate)
+
         elif self.typ == "tumor":
             self._state = 1
 
@@ -103,15 +113,15 @@ class Node(object):
             state *transition* has nothing to do with the parameters :math:`t`
             that describe the *transmission* probability of cancer between LNLs.
         """
-        stay_prob = 1.
+        healthy_prob = 1.
 
         if self.state:
-            return [1., 0.]
+            return [0., 1.]
 
         for edge in self.inc:
-            stay_prob *= (1 - edge.t) ** edge.start.state
+            healthy_prob *= (1 - edge.t) ** edge.start.state
 
-        return [stay_prob, 1. - stay_prob]
+        return [healthy_prob, 1. - healthy_prob]
 
 
     def obs_prob(

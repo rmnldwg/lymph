@@ -1,17 +1,20 @@
+import hypothesis.strategies as st
+import numpy as np
 import pytest
+from hypothesis import given
 
 from lymph import Edge, Node
 
 
-@pytest.fixture(params=[0, 1], ids=["start_healthy", "start_involved"])
+@pytest.fixture(params=[0, 1], ids=["start_healthy", "start_involved"], scope="session")
 def start_node(request):
     return Node("start", request.param, "lnl")
 
-@pytest.fixture(params=[0, 1], ids=["end_healthy", "end_involved"])
+@pytest.fixture(params=[0, 1], ids=["end_healthy", "end_involved"], scope="session")
 def end_node(request):
     return Node("end", request.param, "lnl")
 
-@pytest.mark.parametrize("t", [0.1, 0.4, 0.85])
+@given(t=st.floats())
 def test_edge(start_node, end_node, t):
     """Check basic functionality of Edge class."""
     with pytest.raises(TypeError):
@@ -19,6 +22,11 @@ def test_edge(start_node, end_node, t):
 
     with pytest.raises(TypeError):
         new_edge = Edge(start=start_node, end="end", t=t)
+
+    if t < 0. or t > 1. or np.isnan(t):
+        with pytest.raises(ValueError):
+            new_edge = Edge(start=start_node, end=end_node, t=t)
+        return
 
     new_edge = Edge(start=start_node, end=end_node, t=t)
 

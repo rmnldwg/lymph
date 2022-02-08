@@ -20,6 +20,8 @@ class Edge(object):
             raise TypeError("Start must be instance of Node!")
         if type(end) is not Node:
             raise TypeError("End must be instance of Node!")
+        if not (t >= 0. and t <= 1.):
+            raise ValueError("Transmission parameter must be in interval [0,1]")
 
         self.start = start
         self.start.out.append(self)
