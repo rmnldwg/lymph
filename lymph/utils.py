@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import warnings
+from operator import mod
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -367,11 +368,15 @@ def change_base(
 
     convertString = "0123456789ABCDEF"
     result = ''
-    while number >= base:
-        result = result + convertString[number % base]
-        number = number//base
-    if number > 0:
-        result = result + convertString[number]
+
+    if number == 0:
+        result += '0'
+    else:
+        while number >= base:
+            result += convertString[number % base]
+            number = number//base
+        if number > 0:
+            result += convertString[number]
 
     if length is None:
         length = len(result)

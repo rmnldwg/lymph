@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
-from hypothesis import assume, given
+from hypothesis import assume, example, given
 
 from lymph.unilateral import Unilateral
 from lymph.utils import (
@@ -104,42 +104,47 @@ def test_fast_binomial_pmf(k, n, p):
 
 
 @given(
-    number=st.integers(),
-    base=st.integers(),
-    reverse=st.booleans(),
-    length=st.one_of(st.integers(), st.none()),
+    number=st.integers(-1),
+    base=st.integers(-1, 17),
+    length=st.integers(0, 1000),
 )
-def test_change_base(number, base, reverse, length):
+@example(number=-1, base=17, length=0)
+def test_change_base(number, base, length):
     char_string = "0123456789ABCDEF"
 
     if number < 0 or base < 2 or base > 16:
         with pytest.raises(ValueError):
-            _ = change_base(number, base, reverse, length)
+            _ = change_base(number, base, False, length)
+        with pytest.raises(ValueError):
+            _ = change_base(number, base, True, length)
         return
 
-    num_in_new_base = change_base(number, base, reverse, length)
-
+    num_in_new_base = change_base(number, base, False, length)
     assert np.all([char in char_string[:base] for char in num_in_new_base]), (
         "Converted number contains unexpected characters"
     )
+    assert len(num_in_new_base) >= length, (
+        "Converted number is too short"
+    )
+    assert num_in_new_base == change_base(number, base, True, length)[::-1], (
+        "Reversed string should be the same as the string reversed"
+    )
 
-    if length is not None:
-        assert len(num_in_new_base) >= length, (
-            "Converted number is too short"
-        )
+    num_in_new_base = change_base(number, base, False, -abs(length))
+    assert num_in_new_base == change_base(number, base, False, None), (
+        "Negative length and length=None should yield same result"
+    )
 
-    num_in_new_base = change_base(number, base, reverse, length=0)
+    num_in_new_base = change_base(number, base, True, length=0)
     if base < 10 and number > 1:
         assert len(num_in_new_base) >= len(str(number)), (
             "If base < 10, converted number must be longer"
         )
 
-    num_in_new_base = change_base(number, 10, reverse, length)
-    if reverse:
-        num_in_new_base = num_in_new_base[::-1]
-        assert int(num_in_new_base) == number, (
-            "Cannot recover number of base 10 via python's casting method"
-        )
+    num_in_new_base = change_base(number, 10, False, length)
+    assert int(num_in_new_base) == number, (
+        "Cannot recover number of base 10 via python's casting method"
+    )
 
 
 
@@ -148,7 +153,7 @@ def test_change_base(number, base, reverse, length):
     t_stages=st.one_of(
         st.lists(st.integers(0), min_size=1, max_size=20, unique=True),
         st.lists(st.characters(whitelist_categories=('L', 'N')), min_size=1, max_size=20, unique=True),
-        st.lists(st.text(), min_size=1, max_size=20, unique=True),
+        st.lists(st.text(min_size=1), min_size=1, max_size=20, unique=True),
     ),
     max_t=st.integers(1,100)
 )
