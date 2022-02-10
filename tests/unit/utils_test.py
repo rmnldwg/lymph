@@ -1,13 +1,15 @@
+import hypothesis.extra.numpy as npst
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
-from hypothesis import assume, example, given
+from hypothesis import assume, example, given, settings
 
 from lymph.unilateral import Unilateral
 from lymph.utils import (
     change_base,
+    comp_state_dist,
     draw_diagnose_times,
     draw_from_simplex,
     fast_binomial_pmf,
@@ -147,12 +149,34 @@ def test_change_base(number, base, length):
     )
 
 
+@given(
+    table=st.integers(1, 4).flatmap(
+        lambda n: npst.arrays(dtype=bool, shape=(100,2**n))
+    )
+)
+@settings(deadline=2000, max_examples=20)
+def test_comp_state_dist(table):
+    state_dist, state_labels = comp_state_dist(table)
+
+    assert len(state_dist) == len(state_labels), (
+        "There must be as many labels as 'bin' ins the histogram"
+    )
+
+    for count,label in zip(state_dist, state_labels):
+        state = np.array([bool(int(digit)) for digit in label])
+        recount = np.sum(np.all(state == table, axis=1))
+        assert count == recount, (
+            f"Counts don't match up for state {state} and count {count}"
+        )
+
 
 @given(
     num_patients=st.integers(-1, 1000),
     t_stages=st.one_of(
         st.lists(st.integers(0), min_size=1, max_size=20, unique=True),
-        st.lists(st.characters(whitelist_categories=('L', 'N')), min_size=1, max_size=20, unique=True),
+        st.lists(st.characters(whitelist_categories=('L', 'N'),
+                               blacklist_characters=''),
+                 min_size=1, max_size=20, unique=True),
         st.lists(st.text(min_size=1), min_size=1, max_size=20, unique=True),
     ),
     max_t=st.integers(1,100)
@@ -187,6 +211,21 @@ def test_draw_diagnose_times(
                 time_dists=time_dists
             )
         return
+
+    with pytest.raises(ValueError):
+        drawn_t_stages, drawn_diagnose_times = draw_diagnose_times(
+            num_patients=num_patients,
+            stage_dist=stage_dist + 1.,
+            diag_times=diag_times,
+            time_dists=None
+        )
+    with pytest.raises(ValueError):
+        drawn_t_stages, drawn_diagnose_times = draw_diagnose_times(
+            num_patients=num_patients,
+            stage_dist=stage_dist,
+            diag_times=None,
+            time_dists=None
+        )
 
     drawn_t_stages, drawn_diagnose_times = draw_diagnose_times(
         num_patients=num_patients,
