@@ -116,7 +116,7 @@ class Node(object):
         """
         try:
             return obstable[int(obs), self.state]
-        except ValueError:
+        except:
             return 1.
 
 
