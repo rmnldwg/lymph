@@ -37,7 +37,6 @@ class Unilateral(HDFMixin):
             else:
                 self.lnls.append(node)
 
-
         self.edges = []        # list of all edges connecting nodes in the graph
         self.base_edges = []   # list of edges, going out from tumors
         self.trans_edges = []  # list of edges, connecting LNLs
@@ -64,7 +63,6 @@ class Unilateral(HDFMixin):
             f"and {num_lnls} LNL(s).\n"
             + " ".join([f"{e}" for e in self.edges])
         )
-
         return string
 
 
@@ -74,7 +72,6 @@ class Unilateral(HDFMixin):
         for node in self.nodes:
             if node.name == name:
                 return node
-
         return None
 
 
@@ -87,7 +84,6 @@ class Unilateral(HDFMixin):
                 for o in node.out:
                     if o.end.name == endname:
                         return o
-
         return None
 
 
@@ -124,9 +120,9 @@ class Unilateral(HDFMixin):
         lymphatic drainage from the tumor(s) to the individual lymph node
         levels. This array is composed of these elements:
 
-        +-------------+-------------+----------------+-------------+
+        +-------------+-------------+-----------------+-------------+
         | :math:`b_1` | :math:`b_2` | :math:`\\cdots` | :math:`b_n` |
-        +-------------+-------------+----------------+-------------+
+        +-------------+-------------+-----------------+-------------+
 
         Where :math:`n` is the number of edges between the tumor and the LNLs.
 
@@ -345,8 +341,7 @@ class Unilateral(HDFMixin):
 
 
     def _gen_allowed_transitions(self):
-        """Generate a dictionary that contains for each row of
-        :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
+        """Generate the allowed transitions.
         """
         self._allowed_transitions = {}
         for i in range(len(self.state_list)):
@@ -358,11 +353,10 @@ class Unilateral(HDFMixin):
 
     @property
     def allowed_transitions(self):
-        """Return a dictionary with keys for each possible hidden state. The
-        respective value is then a list of all hidden state indices that can be
-        reached from that key's state. This allows the model to skip the
-        expensive computation of entries in the transition matrix that are zero
-        anyways, because self-healing is forbidden.
+        """Return a dictionary that contains for each row :math:`i` of the
+        transition matrix :math:`\\mathbf{A}` the column numbers :math:`j` for
+        which the transtion probability :math:`P\\left( x_j \\mid x_i \\right)`
+        is not zero due to the forbidden self-healing.
 
         For example: The hidden state ``[True, False]`` in a network with only
         one tumor and two LNLs (one involved, one healthy) corresponds to the
