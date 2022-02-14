@@ -285,8 +285,6 @@ class MidlineBilateral(HDFMixin):
 
             :meth:`Unilateral.load_data`: Data loading method of the unilateral
             network.
-
-            :meth:`Unilateral._gen_C`: Generate the data matrix from the tables.
         """
         ext_data = data.loc[data[("info", "tumor", "midline_extension")]]
         noext_data = data.loc[~data[("info", "tumor", "midline_extension")]]

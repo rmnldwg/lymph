@@ -335,8 +335,6 @@ class Bilateral(HDFMixin):
         See Also:
             :meth:`Unilateral.load_data`: Data loading method of unilateral
             system.
-
-            :meth:`Unilateral._gen_C`: Generate marginalization matrix.
         """
         # split the DataFrame into two, one for ipsi-, one for contralateral
         ipsi_data = data.drop(
@@ -356,21 +354,17 @@ class Bilateral(HDFMixin):
             columns=contra_data.columns.droplevel(1)
         )
 
-        # generate both side's C matrix with duplicates and ones
-        gen_C_kwargs = {'delete_ones': False, 'aggregate_duplicates': False}
         self.ipsi.load_data(
             ipsi_data,
             t_stages=t_stages,
             modality_spsn=modality_spsn,
-            mode=mode,
-            gen_C_kwargs=gen_C_kwargs
+            mode=mode
         )
         self.contra.load_data(
             contra_data,
             t_stages=t_stages,
             modality_spsn=modality_spsn,
-            mode=mode,
-            gen_C_kwargs=gen_C_kwargs
+            mode=mode
         )
 
 

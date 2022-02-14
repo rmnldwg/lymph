@@ -56,30 +56,6 @@ def bidata():
     return pd.read_csv("./tests/bilateral_mockup_data.csv", header=[0,1,2])
 
 @pytest.fixture
-def expected_C():
-    return {"early": np.array([[0, 0, 0, 1, 1],
-                               [0, 0, 0, 0, 1],
-                               [0, 0, 0, 0, 0],
-                               [0, 0, 1, 0, 0],
-                               [0, 0, 0, 0, 0],
-                               [0, 1, 0, 0, 0],
-                               [0, 0, 0, 0, 0],
-                               [1, 0, 1, 0, 0]]),
-            "late" : np.array([[0, 0, 1],
-                               [0, 0, 0],
-                               [0, 1, 1],
-                               [0, 0, 0],
-                               [0, 0, 0],
-                               [0, 0, 0],
-                               [1, 0, 0],
-                               [1, 0, 0]])}
-
-@pytest.fixture
-def expected_f():
-    return {"early": np.array([1, 1, 1, 1, 1]),
-            "late" : np.array([1, 1, 2])}
-
-@pytest.fixture
 def bisys():
     graph = {('tumor', 'primary'): ['one', 'two'],
              ('lnl', 'one'):       ['two', 'three'],
@@ -158,20 +134,9 @@ def test_B_matrices(bisys, modality_spsn):
     assert np.all(np.equal(bisys.ipsi.B, bisys.contra.B))
 
 
-def test_load_data(bisys, bidata, t_stages, modality_spsn,
-                   expected_C, expected_f):
+def test_load_data(bisys, bidata, t_stages, modality_spsn):
     bisys.modalities = modality_spsn
     bisys.patient_data = bidata
-
-    assert hasattr(bisys.ipsi, 'C')
-    assert hasattr(bisys.ipsi, 'f')
-    assert hasattr(bisys.contra, 'C')
-    assert hasattr(bisys.contra, 'f')
-
-    for stage in t_stages:
-        bi_ipsi_C = bisys.ipsi.C[stage]
-        bi_contra_C = bisys.contra.C[stage]
-        assert bi_ipsi_C.shape == bi_contra_C.shape
 
 
 @pytest.mark.parametrize(

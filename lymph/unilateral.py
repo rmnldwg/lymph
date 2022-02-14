@@ -515,89 +515,6 @@ class Unilateral(HDFMixin):
             return self._B
 
 
-    def _gen_C(
-        self,
-        table: np.ndarray,
-        t_stage: Optional[str] = None,
-        delete_ones: bool = True,
-        aggregate_duplicates: bool = True
-    ):
-        """Generate data matrix :math:`\\mathbf{C}` for every T-stage that
-        marginalizes over complete observations when a patient's diagnose is
-        incomplete.
-
-        Args:
-            table: 2D array where rows represent patients (of the same T-stage)
-                and columns are LNL involvements.
-
-            t_stage: T-stage for which to compute the data matrix. Should only
-                be provided for the ``"HMM"`` model.
-
-            delete_ones: If ``True``, columns in the :math:`\\mathbf{C}` matrix
-                that contain only ones (meaning the respective diagnose is
-                completely unknown) are removed, since they only add zeros to
-                the log-likelihood.
-
-            aggregate_duplicates: If ``True``, the number of occurences of
-                diagnoses in the :math:`\\mathbf{C}` matrix is counted and
-                collected in a vector :math:`\\mathbf{f}`. The duplicate
-                columns are then deleted.
-
-        :meta public:
-        """
-        if not hasattr(self, "_C") or not hasattr(self, "_f"):
-            self._C = {}
-            self._f = {}
-
-        if t_stage is None:
-            # T-stage is not provided, when mode is "BN".
-            t_stage = "BN"
-
-        tmp_C = np.zeros(shape=(len(self.obs_list), len(table)), dtype=bool)
-        for i,row in enumerate(table):
-            for j,obs in enumerate(self.obs_list):
-                # save whether all not missing observations match or not
-                tmp_C[j,i] = np.all(
-                    np.equal(obs, row,
-                             where=~np.isnan(row.astype(float)),
-                             out=np.ones_like(row, dtype=bool))
-                )
-
-        if delete_ones:
-            sum_over_C = np.sum(tmp_C, axis=0)
-            keep_idx = np.argwhere(sum_over_C != len(self.obs_list)).flatten()
-            tmp_C = tmp_C[:,keep_idx]
-
-        if aggregate_duplicates:
-            tmp_C, tmp_f = np.unique(tmp_C, axis=1, return_counts=True)
-        else:
-            tmp_f = np.ones(shape=len(table), dtype=int)
-
-        self._C[t_stage] = tmp_C.copy()
-        self._f[t_stage] = tmp_f.copy()
-
-    @property
-    def C(self) -> Dict[str, np.ndarray]:
-        """Return the dictionary containing data matrices for each T-stage.
-        """
-        try:
-            return self._C
-        except AttributeError:
-            msg = ("No data was loaded yet.")
-            raise AttributeError(msg)
-
-    @property
-    def f(self) -> Dict[str, np.ndarray]:
-        """Return the frequency vector containing the number of occurences of
-        patients.
-        """
-        try:
-            return self._f
-        except AttributeError:
-            msg = ("No data was loaded yet.")
-            raise AttributeError(msg)
-
-
     def _gen_observation_matrix(self, table: pd.DataFrame, t_stage: str):
         """Generate the matrix containing the probabilities to see the provided
         diagnose, given any possible hidden state. The resulting matrix has
@@ -680,8 +597,6 @@ class Unilateral(HDFMixin):
         t_stages: Optional[List[int]] = None,
         modality_spsn: Optional[Dict[str, List[float]]] = None,
         mode: str = "HMM",
-        gen_C_kwargs: dict = {'delete_ones': True,
-                              'aggregate_duplicates': True}
     ):
         """
         Transform tabular patient data (:class:`pd.DataFrame`) into internal
@@ -717,11 +632,6 @@ class Unilateral(HDFMixin):
                 be ommitted if the modalities where already defined.
 
             mode: `"HMM"` for hidden Markov model and `"BN"` for Bayesian net.
-
-            gen_C_kwargs: Keyword arguments for the :meth:`_gen_C`. For
-                efficiency, both ``delete_ones`` and ``aggregate_duplicates``
-                should be set to one, resulting in a smaller :math:`\\mathbf{C}`
-                matrix and an additional count vector :math:`\\mathbf{f}`.
         """
         if modality_spsn is not None:
             self.modalities = modality_spsn
@@ -739,13 +649,13 @@ class Unilateral(HDFMixin):
                     data[('info', 't_stage')] == stage,
                     self._spsn_tables.keys()
                 ]
-                self._gen_C(table.values, stage, **gen_C_kwargs)
                 self._gen_observation_matrix(table, stage)
 
         # For the Bayesian Network
         elif mode=="BN":
-            table = data[self._spsn_tables.keys()].values
-            self._gen_C(table, **gen_C_kwargs)
+            table = data[self._spsn_tables.keys()]
+            stage = "BN"
+            self._gen_observation_matrix(table, stage)
 
 
     def _evolve(
@@ -915,7 +825,7 @@ class Unilateral(HDFMixin):
                 for node in self.lnls:
                     state_probs[i] *= node.bn_prob()
 
-            p = state_probs @ self.observation_matrix
+            p = state_probs @ self.observation_matrix["BN"]
             llh = np.sum(np.log(p))
 
         return llh
