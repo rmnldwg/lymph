@@ -751,7 +751,7 @@ class Bilateral(HDFMixin):
             # create one large diagnose vector from the individual modalitie's
             # diagnoses
             obs = np.array([])
-            for mod in self.system[side]._modality_tables:
+            for mod in self.system[side]._spsn_tables:
                 if mod in diagnoses[side]:
                     obs = np.append(obs, diagnoses[side][mod])
                 else:

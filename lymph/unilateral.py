@@ -6,7 +6,7 @@ import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
-from .node import Node, node_trans_prob
+from .node import Node
 from .utils import HDFMixin, change_base, draw_diagnose_times
 
 
@@ -225,7 +225,7 @@ class Unilateral(HDFMixin):
             if not lnl.state:
                 in_states = tuple(edge.start.state for edge in lnl.inc)
                 in_weights = tuple(edge.t for edge in lnl.inc)
-                res *= node_trans_prob(in_states, in_weights)[newstate[i]]
+                res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
 
         if acquire:
             self.state = newstate
@@ -233,15 +233,41 @@ class Unilateral(HDFMixin):
         return res
 
 
-    def comp_observation_prob(
+    def comp_observation_prob(self, diagnoses: pd.Series):
+        """Compute the probability to observe a diagnose given the current
+        state of the network.
+
+        Args:
+            diagnoses: One row of the pandas table containing all the patient
+                data. This ``pd.Series`` object must have ``pd.MultiIndex``
+                columns with two levels: First, the modalities and then the
+                LNLs.
+
+        Returns:
+            The probability of observing this particular combination of
+            diagnoses, given the current state of the system.
+        """
+        prob = 1.
+
+        for modality, spsn in self._spsn_tables.items():
+            if modality in diagnoses:
+                mod_diagnose = diagnoses[modality]
+                for lnl in self.lnls:
+                    if lnl.name in mod_diagnose:
+                        prob *= lnl.obs_prob(mod_diagnose[lnl.name], spsn)
+        return prob
+
+
+
+    def comp_B_prob(
         self,
-        diagnoses_dict: Dict[str, List[int]]
+        diagnoses: Dict[str, List[int]]
     ) -> float:
         """Computes the probability to see certain diagnoses, given the
         system's current state.
 
         Args:
-            diagnoses_dict: Dictionary of diagnoses (one for each diagnostic
+            diagnoses: Dictionary of diagnoses (one for each diagnostic
                 modality). A diagnose must be an array of integers that is as
                 long as the the system has LNLs.
 
@@ -250,13 +276,14 @@ class Unilateral(HDFMixin):
         """
         prob = 1.
 
-        for modality, diagnoses in diagnoses_dict.items():
-            if len(diagnoses) != len(self.lnls):
+        for modality, diagnose in diagnoses.items():
+            if len(diagnose) != len(self.lnls):
                 raise ValueError("length of observations must match # of LNLs")
 
             for i, lnl in enumerate(self.lnls):
-                prob *= lnl.obs_prob(obs=diagnoses[i],
-                                     obstable=self._modality_tables[modality])
+                prob *= lnl.obs_prob(
+                    obs=diagnose[i], obstable=self._spsn_tables[modality]
+                )
         return prob
 
 
@@ -286,7 +313,7 @@ class Unilateral(HDFMixin):
     def _gen_obs_list(self):
         """Generates the list of possible observations.
         """
-        n_obs = len(self._modality_tables)
+        n_obs = len(self._spsn_tables)
 
         if not hasattr(self, "_obs_list"):
             self._obs_list = np.zeros(
@@ -384,7 +411,7 @@ class Unilateral(HDFMixin):
         """
         try:
             modality_spsn = {}
-            for mod, table in self._modality_tables.items():
+            for mod, table in self._spsn_tables.items():
                 modality_spsn[mod] = [table[0,0], table[1,1]]
             return modality_spsn
 
@@ -412,7 +439,7 @@ class Unilateral(HDFMixin):
         if hasattr(self, "_obs_list"):
             del self._obs_list
 
-        self._modality_tables = {}
+        self._spsn_tables = {}
         for mod, spsn in modality_spsn.items():
             if not isinstance(mod, str):
                 msg = ("Modality names must be strings.")
@@ -428,7 +455,7 @@ class Unilateral(HDFMixin):
                 raise ValueError(msg)
 
             sp, sn = spsn
-            self._modality_tables[mod] = np.array([[sp     , 1. - sn],
+            self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
                                                    [1. - sp, sn     ]])
 
 
@@ -446,9 +473,9 @@ class Unilateral(HDFMixin):
             self.state = state
             for j,obs in enumerate(self.obs_list):
                 diagnoses_dict = {}
-                for k,modality in enumerate(self._modality_tables):
+                for k,modality in enumerate(self._spsn_tables):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self._B[i,j] = self.comp_observation_prob(diagnoses_dict)
+                self._B[i,j] = self.comp_B_prob(diagnoses_dict)
 
     @property
     def B(self) -> np.ndarray:
@@ -546,6 +573,43 @@ class Unilateral(HDFMixin):
         except AttributeError:
             msg = ("No data was loaded yet.")
             raise AttributeError(msg)
+
+
+    def _gen_observation_matrix(self, table: pd.DataFrame, t_stage: str):
+        """Generate the matrix containing the probabilities to see the provided
+        diagnose, given any possible hidden state. The resulting matrix has
+        size :math:`2^N \\times M` where :math:`N` is the number of nodes in
+        the graph and :math:`M` the number of patients.
+
+        Args:
+            table: pandas ``DataFrame`` containing rows of patients. Must have
+                ``MultiIndex`` columns with two levels: First, the modalities
+                and second, the LNLs.
+            t_stage: The T-stage all the patients in ``table`` belong to.
+        """
+        if not hasattr(self, "observation_matrix"):
+            self._observation_matrix = {}
+
+        shape = (len(self.state_list), len(table))
+        self._observation_matrix[t_stage] = np.ones(shape=shape)
+
+        for i,state in enumerate(self.state_list):
+            self.state = state
+
+            for j, (_, patient) in enumerate(table.iterrows()):
+                patient_obs_prob = self.comp_observation_prob(patient)
+                self._observation_matrix[t_stage][i,j] = patient_obs_prob
+
+
+    @property
+    def observation_matrix(self):
+        try:
+            return self._observation_matrix
+        except AttributeError:
+            raise AttributeError(
+                "No data has been loaded and hence no observation matrix has "
+                "been computed."
+            )
 
 
     @property
@@ -648,13 +712,16 @@ class Unilateral(HDFMixin):
                 t_stages = list(set(data[("info", "t_stage")]))
 
             for stage in t_stages:
-                table = data.loc[data[('info', 't_stage')] == stage,
-                                 self._modality_tables.keys()].values
-                self._gen_C(table, stage, **gen_C_kwargs)
+                table = data.loc[
+                    data[('info', 't_stage')] == stage,
+                    self._spsn_tables.keys()
+                ]
+                self._gen_C(table.values, stage, **gen_C_kwargs)
+                self._gen_observation_matrix(table, stage)
 
         # For the Bayesian Network
         elif mode=="BN":
-            table = data[self._modality_tables.keys()].values
+            table = data[self._spsn_tables.keys()].values
             self._gen_C(table, **gen_C_kwargs)
 
 
@@ -779,7 +846,7 @@ class Unilateral(HDFMixin):
         # hidden Markov model
         if mode == "HMM":
             if t_stages is None:
-                t_stages = list(self.f_dict.keys())
+                t_stages = list(self.observation_matrix.keys())
 
             state_probs = {}
 
@@ -813,8 +880,8 @@ class Unilateral(HDFMixin):
 
             llh = 0.
             for stage in t_stages:
-                p = state_probs[stage] @ self.B @ self.C[stage]
-                llh += self.f[stage] @ np.log(p)
+                p = state_probs[stage] @ self.observation_matrix[stage]
+                llh += np.sum(np.log(p))
 
         # likelihood for the Bayesian network
         elif mode == "BN":
@@ -825,8 +892,8 @@ class Unilateral(HDFMixin):
                 for node in self.lnls:
                     a[i] *= node.bn_prob()
 
-            b = a @ self.B
-            llh = self.f["BN"] @ np.log(b @ self.C["BN"])
+            p = a @ self.observation_matrix
+            llh = np.sum(np.log(p))
 
         return llh
 
@@ -947,7 +1014,7 @@ class Unilateral(HDFMixin):
         # create one large diagnose vector from the individual modalitie's
         # diagnoses
         obs = np.array([])
-        for mod in self._modality_tables:
+        for mod in self._spsn_tables:
             if mod in diagnoses:
                 obs = np.append(obs, diagnoses[mod])
             else:
