@@ -416,18 +416,14 @@ class Bilateral(HDFMixin):
                 state_probs["ipsi"] = self.ipsi._evolve(diag_time)
                 state_probs["contra"] = self.contra._evolve(diag_time)
 
-                # matrix with joint probabilities for any combination of ipsi-
-                # & conralateral diagnoses after given number of time-steps
-                joint_diagnose_prob = (
-                    self.ipsi.B.T
-                    @ np.outer(state_probs["ipsi"], state_probs["contra"])
-                    @ self.contra.B
-                )
+                # joint probs for ipsi- & contralateral hidden states
+                joint_state_probs = np.outer(state_probs["ipsi"],
+                                             state_probs["contra"])
                 log_p = np.log(
                     np.sum(
-                        self.ipsi.C[stage]
-                        * (joint_diagnose_prob
-                           @ self.contra.C[stage]),
+                        self.ipsi.observation_matrix[stage]
+                        * (joint_state_probs
+                           @ self.contra.observation_matrix[stage]),
                         axis=0
                     )
                 )
@@ -449,18 +445,16 @@ class Bilateral(HDFMixin):
             state_probs["contra"] = self.contra._evolve(t_last=max_t)
 
             for stage in t_stages:
-                joint_diagnose_prob = (
-                    self.ipsi.B.T
-                    @ state_probs["ipsi"].T
+                joint_state_probs = (
+                    state_probs["ipsi"].T
                     @ np.diag(time_dists[stage])
                     @ state_probs["contra"]
-                    @ self.contra.B
                 )
                 log_p = np.log(
                     np.sum(
-                        self.ipsi.C[stage]
-                        * (joint_diagnose_prob
-                           @ self.contra.C[stage]),
+                        self.ipsi.observation_matrix[stage]
+                        * (joint_state_probs
+                           @ self.contra.observation_matrix[stage]),
                         axis=0
                     )
                 )

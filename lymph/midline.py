@@ -109,7 +109,7 @@ class MidlineBilateral(HDFMixin):
         )
 
         # avoid unnecessary double computation of ipsilateral transition matrix
-        self.noext.ipsi._A = self.ext.ipsi.A
+        self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -128,7 +128,7 @@ class MidlineBilateral(HDFMixin):
         self.ext.trans_probs = new_params
 
         # avoid unnecessary double computation of ipsilateral transition matrix
-        self.noext.ipsi._A = self.ext.ipsi.A
+        self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property

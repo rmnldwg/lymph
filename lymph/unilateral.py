@@ -145,8 +145,8 @@ class Unilateral(HDFMixin):
         for i, edge in enumerate(self.base_edges):
             edge.t = new_base_probs[i]
 
-        if hasattr(self, "_A"):
-            del self._A
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
 
 
     @property
@@ -173,8 +173,8 @@ class Unilateral(HDFMixin):
         for i, edge in enumerate(self.trans_edges):
             edge.t = new_trans_probs[i]
 
-        if hasattr(self, "_A"):
-            del self._A
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
 
 
     @property
@@ -372,20 +372,22 @@ class Unilateral(HDFMixin):
             return self._mask
 
 
-    def _gen_A(self):
+    def _gen_transition_matrix(self):
         """
         Generates the transition matrix :math:`\\mathbf{A}`, which contains
         the :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}`
         is a square matrix with size ``(# of states)``. The lower diagonal is
         zero.
         """
-        if not hasattr(self, "_A"):
-            self._A = np.zeros(shape=(2**len(self.lnls), 2**len(self.lnls)))
+        if not hasattr(self, "_transition_matrix"):
+            shape = (2**len(self.lnls), 2**len(self.lnls))
+            self._transition_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
             self.state = state
             for j in self.mask[i]:
-                self._A[i,j] = self.comp_transition_prob(self.state_list[j])
+                transition_prob = self.comp_transition_prob(self.state_list[j])
+                self._transition_matrix[i,j] = transition_prob
 
     @property
     def A(self) -> np.ndarray:
@@ -397,11 +399,32 @@ class Unilateral(HDFMixin):
         because those entries correspond to transitions that would require
         self-healing.
         """
+        warnings.warn(
+            "The unintuitive `A` will be dropped for the more semantic "
+            "`transition_matrix`.",
+            DeprecationWarning
+        )
         try:
-            return self._A
+            return self._transition_matrix
         except AttributeError:
-            self._gen_A()
-            return self._A
+            self._gen_transition_matrix()
+            return self._transition_matrix
+
+    @property
+    def transition_matrix(self) -> np.ndarray:
+        """Return the transition matrix :math:`\\mathbf{A}`, which contains the
+        probability to transition from any state :math:`S_t` to any other state
+        :math:`S_{t+1}` one timestep later:
+        :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}` is a
+        square matrix with size ``(# of states)``. The lower diagonal is zero,
+        because those entries correspond to transitions that would require
+        self-healing.
+        """
+        try:
+            return self._transition_matrix
+        except AttributeError:
+            self._gen_transition_matrix()
+            return self._transition_matrix
 
 
     @property
@@ -751,7 +774,7 @@ class Unilateral(HDFMixin):
         start_state[0] = 1.
 
         # compute involvement at first time-step
-        state = start_state @ mat_pow(self.A, t_first)
+        state = start_state @ mat_pow(self.transition_matrix, t_first)
 
         if t_last is None:
             return state
@@ -769,7 +792,7 @@ class Unilateral(HDFMixin):
         # compute subsequent time-steps, effectively incrementing time until end
         for i in range(len_time_range):
             state_probs[i] = state
-            state = state @ self.A
+            state = state @ self.transition_matrix
 
         state_probs[-1] = state
 
@@ -885,14 +908,14 @@ class Unilateral(HDFMixin):
 
         # likelihood for the Bayesian network
         elif mode == "BN":
-            a = np.ones(shape=(len(self.state_list),), dtype=float)
+            state_probs = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
                 self.state = state
                 for node in self.lnls:
-                    a[i] *= node.bn_prob()
+                    state_probs[i] *= node.bn_prob()
 
-            p = a @ self.observation_matrix
+            p = state_probs @ self.observation_matrix
             llh = np.sum(np.log(p))
 
         return llh

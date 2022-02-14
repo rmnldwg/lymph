@@ -123,24 +123,28 @@ def test_spread_probs_and_A_matrices(bisys, base_symmetric, trans_symmetric):
     assert np.all(np.equal(spread_probs, bisys.spread_probs))
 
     # check A matrices
-    assert hasattr(bisys.ipsi, 'A')
+    assert hasattr(bisys.ipsi, 'transition_matrix')
     for t in range(10):
-        row_sums = np.sum(np.linalg.matrix_power(bisys.ipsi.A, t),
-                          axis=1)
+        row_sums = np.sum(
+            np.linalg.matrix_power(bisys.ipsi.transition_matrix, t),
+            axis=1
+        )
         assert np.all(np.isclose(row_sums, 1.))
 
-    assert hasattr(bisys.contra, 'A')
+    assert hasattr(bisys.contra, 'transition_matrix')
     for t in range(10):
-        row_sums = np.sum(np.linalg.matrix_power(bisys.contra.A, t),
-                          axis=1)
+        row_sums = np.sum(
+            np.linalg.matrix_power(bisys.contra.transition_matrix, t),
+            axis=1
+        )
         assert np.all(np.isclose(row_sums, 1.))
 
     if base_symmetric and trans_symmetric:
-        assert np.all(np.equal(bisys.ipsi.A,
-                               bisys.contra.A))
+        assert np.all(np.equal(bisys.ipsi.transition_matrix,
+                               bisys.contra.transition_matrix))
     else:
-        assert ~np.all(np.equal(bisys.ipsi.A,
-                                bisys.contra.A))
+        assert ~np.all(np.equal(bisys.ipsi.transition_matrix,
+                                bisys.contra.transition_matrix))
 
 
 def test_B_matrices(bisys, modality_spsn):
