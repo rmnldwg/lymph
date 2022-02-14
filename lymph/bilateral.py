@@ -415,9 +415,9 @@ class Bilateral(HDFMixin):
                                              state_probs["contra"])
                 log_p = np.log(
                     np.sum(
-                        self.ipsi.observation_matrix[stage]
+                        self.ipsi.diagnose_matrices[stage]
                         * (joint_state_probs
-                           @ self.contra.observation_matrix[stage]),
+                           @ self.contra.diagnose_matrices[stage]),
                         axis=0
                     )
                 )
@@ -446,9 +446,9 @@ class Bilateral(HDFMixin):
                 )
                 log_p = np.log(
                     np.sum(
-                        self.ipsi.observation_matrix[stage]
+                        self.ipsi.diagnose_matrices[stage]
                         * (joint_state_probs
-                           @ self.contra.observation_matrix[stage]),
+                           @ self.contra.diagnose_matrices[stage]),
                         axis=0
                     )
                 )
@@ -769,7 +769,7 @@ class Bilateral(HDFMixin):
                        "over it must be given.")
                 raise ValueError(msg)
 
-            pD[side] = self.system[side].B @ cZ[side]
+            pD[side] = self.system[side].observation_matrix @ cZ[side]
 
         # joint probability of Xi & Xc (marginalized over time). Acts as prior
         # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix
@@ -791,9 +791,9 @@ class Bilateral(HDFMixin):
         # matching complete observations that give rise to the specific
         # diagnose. The result should be just a number
         pDD = (cZ["ipsi"].T
-               @ self.ipsi.B.T
+               @ self.ipsi.observation_matrix.T
                @ pXX
-               @ self.contra.B
+               @ self.contra.observation_matrix
                @ cZ["contra"])
 
         return pDDII / pDD

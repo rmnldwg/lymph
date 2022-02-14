@@ -19,10 +19,10 @@ class Unilateral(HDFMixin):
         """Initialize the underlying graph:
 
         Args:
-            graph: Every key in this dictionary is a 2-tuple containing the type of
-                the :class:`Node` ("tumor" or "lnl") and its name (arbitrary
-                string). The corresponding value is a list of names this node should
-                be connected to via an :class:`Edge`.
+            graph: Every key in this dictionary is a 2-tuple containing the
+                type of the :class:`Node` ("tumor" or "lnl") and its name
+                (arbitrary string). The corresponding value is a list of names
+                this node should be connected to via an :class:`Edge`.
         """
         self.nodes = []        # list of all nodes in the graph
         self.tumors = []       # list of nodes with type tumour
@@ -233,7 +233,37 @@ class Unilateral(HDFMixin):
         return res
 
 
-    def comp_observation_prob(self, diagnoses: pd.Series):
+    def comp_observation_prob(self, observations: Dict[str, List[int]]) -> float:
+        """Computes the probability to see s specific observation, given the
+        system's current state.
+
+        Args:
+            observations: Dictionary of observations (one for each diagnostic
+                modality). A diagnose must be an array of integers that is as
+                long as the the system has LNLs.
+
+        Returns:
+            The probability to see the given observations.
+
+        See Also:
+            :meth:`comp_diagnose_prob`: This is essentially the same method but
+            instead of a dictionary of observations it takes a row from a pandas
+            DataFrame.
+        """
+        prob = 1.
+
+        for modality, diagnose in observations.items():
+            if len(diagnose) != len(self.lnls):
+                raise ValueError("length of observations must match # of LNLs")
+
+            for i, lnl in enumerate(self.lnls):
+                prob *= lnl.obs_prob(
+                    obs=diagnose[i], obstable=self._spsn_tables[modality]
+                )
+        return prob
+
+
+    def comp_diagnose_prob(self, diagnoses: pd.Series) -> float:
         """Compute the probability to observe a diagnose given the current
         state of the network.
 
@@ -246,6 +276,11 @@ class Unilateral(HDFMixin):
         Returns:
             The probability of observing this particular combination of
             diagnoses, given the current state of the system.
+
+        See Also:
+            :meth:`comp_observation_prob`: This is essentially the same method
+            but instead of a pandas row it takes a dictionry with observations
+            as input.
         """
         prob = 1.
 
@@ -255,35 +290,6 @@ class Unilateral(HDFMixin):
                 for lnl in self.lnls:
                     if lnl.name in mod_diagnose:
                         prob *= lnl.obs_prob(mod_diagnose[lnl.name], spsn)
-        return prob
-
-
-
-    def comp_B_prob(
-        self,
-        diagnoses: Dict[str, List[int]]
-    ) -> float:
-        """Computes the probability to see certain diagnoses, given the
-        system's current state.
-
-        Args:
-            diagnoses: Dictionary of diagnoses (one for each diagnostic
-                modality). A diagnose must be an array of integers that is as
-                long as the the system has LNLs.
-
-        Returns:
-            The probability to see the given diagnoses.
-        """
-        prob = 1.
-
-        for modality, diagnose in diagnoses.items():
-            if len(diagnose) != len(self.lnls):
-                raise ValueError("length of observations must match # of LNLs")
-
-            for i, lnl in enumerate(self.lnls):
-                prob *= lnl.obs_prob(
-                    obs=diagnose[i], obstable=self._spsn_tables[modality]
-                )
         return prob
 
 
@@ -338,21 +344,20 @@ class Unilateral(HDFMixin):
             return self._obs_list
 
 
-    def _gen_mask(self):
-        """
-        Generates a dictionary that contains for each row of
+    def _gen_allowed_transitions(self):
+        """Generate a dictionary that contains for each row of
         :math:`\\mathbf{A}` those indices where :math:`\\mathbf{A}` is NOT zero.
         """
-        self._mask = {}
+        self._allowed_transitions = {}
         for i in range(len(self.state_list)):
-            self._mask[i] = []
+            self._allowed_transitions[i] = []
             for j in range(len(self.state_list)):
                 if not np.any(np.greater(self.state_list[i,:],
                                          self.state_list[j,:])):
-                    self._mask[i].append(j)
+                    self._allowed_transitions[i].append(j)
 
     @property
-    def mask(self):
+    def allowed_transitions(self):
         """Return a dictionary with keys for each possible hidden state. The
         respective value is then a list of all hidden state indices that can be
         reached from that key's state. This allows the model to skip the
@@ -366,15 +371,14 @@ class Unilateral(HDFMixin):
         would be ``1: [3]``.
         """
         try:
-            return self._mask
+            return self._allowed_transitions
         except AttributeError:
-            self._gen_mask()
-            return self._mask
+            self._gen_allowed_transitions()
+            return self._allowed_transitions
 
 
     def _gen_transition_matrix(self):
-        """
-        Generates the transition matrix :math:`\\mathbf{A}`, which contains
+        """Generate the transition matrix :math:`\\mathbf{A}`, which contains
         the :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}`
         is a square matrix with size ``(# of states)``. The lower diagonal is
         zero.
@@ -385,7 +389,7 @@ class Unilateral(HDFMixin):
 
         for i,state in enumerate(self.state_list):
             self.state = state
-            for j in self.mask[i]:
+            for j in self.allowed_transitions[i]:
                 transition_prob = self.comp_transition_prob(self.state_list[j])
                 self._transition_matrix[i,j] = transition_prob
 
@@ -457,8 +461,8 @@ class Unilateral(HDFMixin):
             \\end{pmatrix}
         """
 
-        if hasattr(self, "_B"):
-            del self._B
+        if hasattr(self, "_observation_matrix"):
+            del self._observation_matrix
         if hasattr(self, "_obs_list"):
             del self._obs_list
 
@@ -482,15 +486,16 @@ class Unilateral(HDFMixin):
                                                    [1. - sp, sn     ]])
 
 
-    def _gen_B(self):
+    def _gen_observation_matrix(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains
         the :math:`P \\left(D \\mid S \\right)`. :math:`\\mathbf{B}` has the
         shape ``(# of states, # of possible observations)``.
         """
         n_lnl = len(self.lnls)
 
-        if not hasattr(self, "_B"):
-            self._B = np.zeros(shape=(len(self.state_list), len(self.obs_list)))
+        if not hasattr(self, "_observation_matrix"):
+            shape = (len(self.state_list), len(self.obs_list))
+            self._observation_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
             self.state = state
@@ -498,10 +503,10 @@ class Unilateral(HDFMixin):
                 diagnoses_dict = {}
                 for k,modality in enumerate(self._spsn_tables):
                     diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self._B[i,j] = self.comp_B_prob(diagnoses_dict)
+                self._observation_matrix[i,j] = self.comp_observation_prob(diagnoses_dict)
 
     @property
-    def B(self) -> np.ndarray:
+    def observation_matrix(self) -> np.ndarray:
         """Return the observation matrix :math:`\\mathbf{B}`. It encodes the
         probability to see a certain diagnose :math:`D`, given a particular
         true (but hidden) state :math:`S`: :math:`P\\left( D \\mid S \\right)`.
@@ -509,13 +514,13 @@ class Unilateral(HDFMixin):
         :math:`\\mathbf{A}`.
         """
         try:
-            return self._B
+            return self._observation_matrix
         except AttributeError:
-            self._gen_B()
-            return self._B
+            self._gen_observation_matrix()
+            return self._observation_matrix
 
 
-    def _gen_observation_matrix(self, table: pd.DataFrame, t_stage: str):
+    def _gen_diagnose_matrices(self, table: pd.DataFrame, t_stage: str):
         """Generate the matrix containing the probabilities to see the provided
         diagnose, given any possible hidden state. The resulting matrix has
         size :math:`2^N \\times M` where :math:`N` is the number of nodes in
@@ -527,24 +532,24 @@ class Unilateral(HDFMixin):
                 and second, the LNLs.
             t_stage: The T-stage all the patients in ``table`` belong to.
         """
-        if not hasattr(self, "observation_matrix"):
-            self._observation_matrix = {}
+        if not hasattr(self, "diagnose_matrices"):
+            self._diagnose_matrices = {}
 
         shape = (len(self.state_list), len(table))
-        self._observation_matrix[t_stage] = np.ones(shape=shape)
+        self._diagnose_matrices[t_stage] = np.ones(shape=shape)
 
         for i,state in enumerate(self.state_list):
             self.state = state
 
             for j, (_, patient) in enumerate(table.iterrows()):
-                patient_obs_prob = self.comp_observation_prob(patient)
-                self._observation_matrix[t_stage][i,j] = patient_obs_prob
+                patient_obs_prob = self.comp_diagnose_prob(patient)
+                self._diagnose_matrices[t_stage][i,j] = patient_obs_prob
 
 
     @property
-    def observation_matrix(self):
+    def diagnose_matrices(self):
         try:
-            return self._observation_matrix
+            return self._diagnose_matrices
         except AttributeError:
             raise AttributeError(
                 "No data has been loaded and hence no observation matrix has "
@@ -649,13 +654,13 @@ class Unilateral(HDFMixin):
                     data[('info', 't_stage')] == stage,
                     self._spsn_tables.keys()
                 ]
-                self._gen_observation_matrix(table, stage)
+                self._gen_diagnose_matrices(table, stage)
 
         # For the Bayesian Network
         elif mode=="BN":
             table = data[self._spsn_tables.keys()]
             stage = "BN"
-            self._gen_observation_matrix(table, stage)
+            self._gen_diagnose_matrices(table, stage)
 
 
     def _evolve(
@@ -779,7 +784,7 @@ class Unilateral(HDFMixin):
         # hidden Markov model
         if mode == "HMM":
             if t_stages is None:
-                t_stages = list(self.observation_matrix.keys())
+                t_stages = list(self.diagnose_matrices.keys())
 
             state_probs = {}
 
@@ -813,7 +818,7 @@ class Unilateral(HDFMixin):
 
             llh = 0.
             for stage in t_stages:
-                p = state_probs[stage] @ self.observation_matrix[stage]
+                p = state_probs[stage] @ self.diagnose_matrices[stage]
                 llh += np.sum(np.log(p))
 
         # likelihood for the Bayesian network
@@ -825,7 +830,7 @@ class Unilateral(HDFMixin):
                 for node in self.lnls:
                     state_probs[i] *= node.bn_prob()
 
-            p = state_probs @ self.observation_matrix["BN"]
+            p = state_probs @ self.diagnose_matrices["BN"]
             llh = np.sum(np.log(p))
 
         return llh
@@ -917,11 +922,11 @@ class Unilateral(HDFMixin):
                 the currently set parameters will be used.
 
             inv: Specific hidden involvement one is interested in. If only parts
-                of the state are of interest, the remainder can be masked with
+                of the state are of interest, the remainder can be allowed_transitionsed with
                 values ``None``. If specified, the functions returns a single
                 risk.
 
-            diagnoses: Dictionary that can hold a potentially incomplete (mask
+            diagnoses: Dictionary that can hold a potentially incomplete (allowed_transitions
                 with ``None``) diagnose for every available modality. Leaving
                 out available modalities will assume a completely missing
                 diagnosis.
@@ -980,10 +985,10 @@ class Unilateral(HDFMixin):
         # compute the probability of observing a diagnose z and being in a
         # state x which is P(z,x) = P(z|x)P(x). Do that for all combinations of
         # x and z and put it in a matrix
-        pZX = self.B.T * pX
+        pZX = self.observation_matrix.T * pX
 
         # vector of probabilities for seeing a diagnose z
-        pZ = pX @ self.B
+        pZ = pX @ self.observation_matrix
 
         # build vector to marginalize over diagnoses
         cZ = np.zeros(shape=(len(pZ)), dtype=bool)
@@ -1028,7 +1033,7 @@ class Unilateral(HDFMixin):
         # diagnoses
         per_time_state_probs = self._evolve(t_last=max_t)
         per_patient_state_probs = per_time_state_probs[diag_times]
-        per_patient_obs_probs = per_patient_state_probs @ self.B
+        per_patient_obs_probs = per_patient_state_probs @ self.observation_matrix
 
         # then, draw a diagnose from the possible ones
         obs_idx = np.arange(len(self.obs_list))

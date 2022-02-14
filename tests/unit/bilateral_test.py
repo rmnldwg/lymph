@@ -123,15 +123,17 @@ def test_spread_probs_and_A_matrices(bisys, base_symmetric, trans_symmetric):
                                 bisys.contra.transition_matrix))
 
 
-def test_B_matrices(bisys, modality_spsn):
+def test_observation_matrix(bisys, modality_spsn):
     bisys.modalities = modality_spsn
-    assert hasattr(bisys.ipsi, 'B')
-    assert hasattr(bisys.contra, 'B')
+    assert hasattr(bisys.ipsi, 'observation_matrix')
+    assert hasattr(bisys.contra, 'observation_matrix')
 
-    row_sums = np.sum(bisys.ipsi.B, axis=1)
+    row_sums = np.sum(bisys.ipsi.observation_matrix, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
 
-    assert np.all(np.equal(bisys.ipsi.B, bisys.contra.B))
+    assert np.all(
+        np.equal(bisys.ipsi.observation_matrix, bisys.contra.observation_matrix)
+    )
 
 
 def test_load_data(bisys, bidata, t_stages, modality_spsn):

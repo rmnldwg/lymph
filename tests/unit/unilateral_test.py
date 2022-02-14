@@ -99,12 +99,12 @@ def test_A_matrix(sys):
         assert np.all(np.isclose(row_sums, 1.))
 
 
-def test_B_matrix(sys, modality_spsn):
+def test_observation_matrix_matrix(sys, modality_spsn):
     sys.modalities = modality_spsn
-    matrix_B = sys.B
-    assert hasattr(sys, "_B")
+    matrix_observation_matrix = sys.observation_matrix
+    assert hasattr(sys, "_observation_matrix")
 
-    row_sums = np.sum(matrix_B, axis=1)
+    row_sums = np.sum(matrix_observation_matrix, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
 
 
