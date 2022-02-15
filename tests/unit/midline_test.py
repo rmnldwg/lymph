@@ -87,27 +87,3 @@ def test_load_data(bisys, midbi, data, t_stages, modality_spsn):
 
     midbi.modalities = modality_spsn
     midbi.patient_data = data["midext"]
-
-    for stage in t_stages:
-        assert np.all(np.equal(
-            bisys.ipsi.C[stage], midbi.ext.ipsi.C[stage]
-        ))
-        assert np.all(np.equal(
-            bisys.ipsi.f[stage], midbi.ext.ipsi.f[stage]
-        ))
-        assert not np.all(np.equal(
-            bisys.contra.C[stage], midbi.ext.contra.C[stage]
-        ))
-
-        assert np.all(np.equal(
-            bisys.ipsi.C[stage], midbi.noext.ipsi.C[stage]
-        ))
-        assert np.all(np.equal(
-            bisys.ipsi.f[stage], midbi.noext.ipsi.f[stage]
-        ))
-        assert np.all(np.equal(
-            bisys.contra.C[stage], midbi.noext.contra.C[stage]
-        ))
-        assert np.all(np.equal(
-            bisys.contra.f[stage], midbi.noext.contra.f[stage]
-        ))

@@ -395,9 +395,9 @@ def comp_state_dist(table: np.ndarray) -> Tuple[np.ndarray, List[str]]:
         labels.
 
     Note:
-        This, in contrast to :meth:`Unilateral._gen_C`, cannot deal with parts
-        of the diagnose being unknown. So if, e.g., one level isn't reported
-        for a patient, that row will just be ignored.
+        This function cannot deal with parts of the diagnose being unknown. So
+        if, e.g., one level isn't reported for a patient, that row will just be
+        ignored.
     """
     _, num_cols = table.shape
     table = table.astype(float)

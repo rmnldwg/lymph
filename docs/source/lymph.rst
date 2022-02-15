@@ -63,3 +63,13 @@ Especially for reproducability of inference rounds there are some neat functions
     :members:
 
 .. autofunction:: lymph.utils.system_from_hdf5
+
+.. autofunction:: lymph.utils.fast_binomial_pmf
+
+.. autofunction:: lymph.utils.change_base
+
+.. autofunction:: lymph.utils.comp_state_dist
+
+.. autofunction:: lymph.utils.draw_diagnose_times
+
+.. autofunction:: lymph.utils.draw_from_simplex
