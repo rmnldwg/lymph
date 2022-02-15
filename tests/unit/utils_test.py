@@ -48,10 +48,11 @@ def gen_text_tuples(n):
 
 @given(
     st.dictionaries(
-        keys=st.integers(1,20).flatmap(gen_text_tuples),
+        keys=st.integers(1,10).flatmap(gen_text_tuples),
         values=st.one_of(st.floats(), st.integers(), st.text())
     )
 )
+@settings(max_examples=20)
 def test_json_tupledict_interface(tuple_dict):
     assert tuple_dict == jsondict_to_tupledict(tupledict_to_jsondict(tuple_dict)), (
         "Converting round trip did not work"
@@ -151,7 +152,7 @@ def test_change_base(number, base, length):
 
 @given(
     table=st.integers(1, 4).flatmap(
-        lambda n: npst.arrays(dtype=bool, shape=(100,2**n))
+        lambda n: npst.arrays(dtype=bool, shape=(50,2**n))
     )
 )
 @settings(deadline=2000, max_examples=20)

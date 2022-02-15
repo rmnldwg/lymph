@@ -3,8 +3,7 @@ import numpy as np
 import pytest
 from hypothesis import given
 
-from lymph import Edge, Node
-from lymph.node import node_trans_prob
+from lymph import Node
 
 
 @pytest.fixture(scope="session", params=[
@@ -123,37 +122,20 @@ def test_typ(old_typ, state, new_typ):
 
 
 @given(
-    inc_tuple=st.integers(1, 20).flatmap(
+    inc=st.integers(min_value=0, max_value=10).flatmap(
         lambda n: st.tuples(
             st.tuples(*([st.booleans()] * n)),
             st.tuples(*([st.floats(0., 1.)] * n))
         )
-    ),
-    state=st.booleans()
+    )
 )
-def test_trans_prob(inc_tuple, state):
-    inc_states, inc_probs = inc_tuple
+def test_trans_prob(inc):
+    inc_states, inc_weights = inc
 
-    target_node = Node("arbitrary", state, "lnl")
-
-    for i, inc in enumerate(zip(inc_states, inc_probs)):
-        s, p = inc
-        tmp_node = Node(f"inc_{i}", s, "lnl")
-        tmp_edge = Edge(tmp_node, target_node, p)
-
-    if int(state) == 1:
-        assert target_node.trans_prob() == [0., 1.], (
-            "Node in state 1 must remain "
-        )
-    else:
-        method_res = target_node.trans_prob()
-        cached_func_res = node_trans_prob(inc_states, inc_probs)
-        assert len(method_res) == 2, (
-            "Must return two transition probabilities"
-        )
-        assert np.isclose(np.sum(method_res), 1.), (
-            "Probabilities must sum to 1"
-        )
-        assert np.all(np.equal(method_res, cached_func_res)), (
-            "Transition probabilities must be the same for both functions"
-        )
+    cached_func_res = Node.trans_prob(inc_states, inc_weights)
+    assert len(cached_func_res) == 2, (
+        "Must return two transition probabilities"
+    )
+    assert np.isclose(np.sum(cached_func_res), 1.), (
+        "Probabilities must sum to 1"
+    )

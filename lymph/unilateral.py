@@ -24,6 +24,11 @@ class Unilateral(HDFMixin):
                 (arbitrary string). The corresponding value is a list of names
                 this node should be connected to via an :class:`Edge`.
         """
+        name_list = [tpl[1] for tpl in graph.keys()]
+        name_set = {tpl[1] for tpl in graph.keys()}
+        if len(name_list) != len(name_set):
+            raise ValueError("Tumor and LNL cannot have the same name")
+
         self.nodes = []        # list of all nodes in the graph
         self.tumors = []       # list of nodes with type tumour
         self.lnls = []         # list of all lymph node levels
