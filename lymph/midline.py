@@ -109,7 +109,7 @@ class MidlineBilateral(HDFMixin):
         )
 
         # avoid unnecessary double computation of ipsilateral transition matrix
-        self.noext.ipsi._A = self.ext.ipsi.A
+        self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -128,7 +128,7 @@ class MidlineBilateral(HDFMixin):
         self.ext.trans_probs = new_params
 
         # avoid unnecessary double computation of ipsilateral transition matrix
-        self.noext.ipsi._A = self.ext.ipsi.A
+        self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -285,8 +285,6 @@ class MidlineBilateral(HDFMixin):
 
             :meth:`Unilateral.load_data`: Data loading method of the unilateral
             network.
-
-            :meth:`Unilateral._gen_C`: Generate the data matrix from the tables.
         """
         ext_data = data.loc[data[("info", "tumor", "midline_extension")]]
         noext_data = data.loc[~data[("info", "tumor", "midline_extension")]]

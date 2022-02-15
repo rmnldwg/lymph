@@ -1,33 +1,7 @@
 from functools import lru_cache
-from typing import Tuple
+from typing import List, Tuple, Union
 
 import numpy as np
-
-
-@lru_cache()
-def node_trans_prob(in_states: Tuple[int], in_weights: Tuple[float]):
-    """Compute probability of a random variable to remain in its healthy state
-    (0) or switch to be involved (1) based on its parent's states and the
-    weights of the connecting arcs. Cached for better performance.
-
-    Args:
-        in_states: States of the parent nodes.
-        in_weights: Weights of the incoming arcs.
-
-    Returns:
-        Probability to remain healthy and probability to become metastatic
-        as a list of length 2.
-
-    Note:
-        This function should only be called when the :class:`Node`, to which the
-        incoming weights and states refer to, is in state ``0``. Otherwise,
-        meaning it is already involved/metastatic, it must stay in this state
-        no matter what, because self-healing is forbidden.
-    """
-    stay_prob = 1.
-    for state, weight in zip(in_states, in_weights):
-        stay_prob *= (1. - weight) ** state
-    return [stay_prob, 1. - stay_prob]
 
 
 class Node(object):
@@ -104,30 +78,42 @@ class Node(object):
             raise ValueError("Only types 'tumor' and 'lnl' are available.")
 
 
-    def trans_prob(self) -> float:
-        """Compute the transition probabilities from the current state to all
-        other possible states (which is only two).
+    @staticmethod
+    @lru_cache
+    def trans_prob(
+        in_states: Tuple[int], in_weights: Tuple[float]
+    ) -> List[float]:
+        """Compute probability of a random variable to remain in its state (0)
+        or switch to be involved (1) based on its parent's states and the
+        weights of the connecting arcs. This is a static, cached method for
+        better performance.
 
-        .. warning::
-            Despite the similar name, this method about the probability for a
-            state *transition* has nothing to do with the parameters :math:`t`
-            that describe the *transmission* probability of cancer between LNLs.
+        Args:
+            in_states: States of the parent nodes.
+            in_weights: Weights of the incoming arcs.
+
+        Returns:
+            Probability to remain healthy and probability to become metastatic
+            as a list of length 2.
+
+        Note:
+            This function should only be called when the :class:`Node`, to
+            which the incoming weights and states refer to, is in state ``0``.
+            Otherwise, meaning it is already involved/metastatic, it must stay
+            in this state no matter what, because self-healing is forbidden.
         """
         healthy_prob = 1.
-
-        if self.state:
-            return [0., 1.]
-
-        for edge in self.inc:
-            healthy_prob *= (1 - edge.t) ** edge.start.state
-
+        for state, weight in zip(in_states, in_weights):
+            healthy_prob *= (1. - weight) ** state
         return [healthy_prob, 1. - healthy_prob]
 
 
     def obs_prob(
-        self, obs: int, obstable: np.ndarray = np.eye(2)) -> float:
+        self, obs: Union[float, int], obstable: np.ndarray = np.eye(2)
+    ) -> float:
         """Compute the probability of observing a certain diagnose, given its
-        current state.
+        current state. If the diagnose is unspecified (e.g. ``None`` or
+        ``NaN``), the probability is of that "diagnose" is 1.
 
         Args:
             obs: Diagnose/observation for the node.
@@ -138,7 +124,10 @@ class Node(object):
         Returns:
             The probability of observing the given diagnose.
         """
-        return obstable[obs, self.state]
+        if obs is None or np.isnan(obs):
+            return 1.
+        else:
+            return obstable[int(obs), self.state]
 
 
     def bn_prob(self, log: bool = False) -> float:

@@ -48,30 +48,6 @@ def modality_spsn():
     return {'test-o-meter': [0.99, 0.88]}
 
 @pytest.fixture
-def expected_C():
-    return {"early": np.array([[0, 0, 0, 1, 1],
-                               [0, 0, 0, 0, 1],
-                               [0, 0, 0, 0, 0],
-                               [0, 0, 1, 0, 0],
-                               [0, 0, 0, 0, 0],
-                               [0, 1, 0, 0, 0],
-                               [0, 0, 0, 0, 0],
-                               [1, 0, 1, 0, 0]]),
-            "late" : np.array([[0, 0, 1],
-                               [0, 0, 0],
-                               [0, 1, 1],
-                               [0, 0, 0],
-                               [0, 0, 0],
-                               [0, 0, 0],
-                               [1, 0, 0],
-                               [1, 0, 0]])}
-
-@pytest.fixture
-def expected_f():
-    return {"early": np.array([1, 1, 1, 1, 1]),
-            "late" : np.array([1, 1, 2])}
-
-@pytest.fixture
 def empty_data():
     return pd.read_csv("./tests/unilateral_mockup_data.csv", header=[0,1], nrows=0)
 
@@ -113,24 +89,27 @@ def test_set_and_get_state(sys):
 def test_A_matrix(sys):
     spread_probs = np.random.uniform(size=(len(sys.edges)))
     sys.spread_probs = spread_probs
-    assert hasattr(sys, 'A')
+    assert hasattr(sys, 'transition_matrix')
 
     for t in range(10):
-        row_sums = np.sum(np.linalg.matrix_power(sys.A, t), axis=1)
+        row_sums = np.sum(
+            np.linalg.matrix_power(sys.transition_matrix, t),
+            axis=1
+        )
         assert np.all(np.isclose(row_sums, 1.))
 
 
-def test_B_matrix(sys, modality_spsn):
+def test_observation_matrix_matrix(sys, modality_spsn):
     sys.modalities = modality_spsn
-    matrix_B = sys.B
-    assert hasattr(sys, "_B")
+    matrix_observation_matrix = sys.observation_matrix
+    assert hasattr(sys, "_observation_matrix")
 
-    row_sums = np.sum(matrix_B, axis=1)
+    row_sums = np.sum(matrix_observation_matrix, axis=1)
     assert np.all(np.isclose(row_sums, 1.))
 
 
 def test_load_data(
-    sys, empty_data, data, t_stages, modality_spsn, expected_C, expected_f
+    sys, empty_data, data, t_stages, modality_spsn
 ):
     """Check that unilateral system handles lodaing data correctly, including
     an empty dataset.
@@ -138,15 +117,7 @@ def test_load_data(
     sys.modalities = modality_spsn
     sys.patient_data = empty_data
 
-    for stage in t_stages:
-        assert not hasattr(sys, "C")
-        assert not hasattr(sys, "f")
-
     sys.patient_data = data
-
-    for stage in t_stages:
-        assert np.all(np.equal(sys.C[stage], expected_C[stage]))
-        assert np.all(np.equal(sys.f[stage], expected_f[stage]))
 
 
 @pytest.mark.parametrize(
