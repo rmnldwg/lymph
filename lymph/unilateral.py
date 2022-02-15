@@ -229,63 +229,43 @@ class Unilateral(HDFMixin):
         return res
 
 
-    def comp_observation_prob(self, observations: Dict[str, List[int]]) -> float:
-        """Computes the probability to see a specific observation, given the
-        system's current state.
-
-        Args:
-            observations: Dictionary of observations (one for each diagnostic
-                modality). A diagnose must be an array of integers that is as
-                long as the the system has LNLs.
-
-        Returns:
-            The probability to see the given observations.
-
-        See Also:
-            :meth:`comp_diagnose_prob`: This is essentially the same method but
-            instead of a dictionary of observations it takes a row from a pandas
-            DataFrame.
-        """
-        prob = 1.
-
-        for modality, diagnose in observations.items():
-            if len(diagnose) != len(self.lnls):
-                raise ValueError("length of observations must match # of LNLs")
-
-            for i, lnl in enumerate(self.lnls):
-                prob *= lnl.obs_prob(
-                    obs=diagnose[i], obstable=self._spsn_tables[modality]
-                )
-        return prob
-
-
-    def comp_diagnose_prob(self, diagnoses: pd.Series) -> float:
+    def comp_diagnose_prob(
+        self,
+        diagnoses: Union[pd.Series, Dict[str, list]]
+    ) -> float:
         """Compute the probability to observe a diagnose given the current
         state of the network.
 
         Args:
-            diagnoses: One row of the pandas table containing all the patient
-                data. This ``pd.Series`` object must have ``pd.MultiIndex``
-                columns with two levels: First, the modalities and then the
-                LNLs.
+            diagnoses: Either a pandas ``Series`` object corresponding to one
+                row of a patient data table, or a dictionry with keys of
+                diagnostic modalities and values of diagnoses for the respective
+                modality.
 
         Returns:
             The probability of observing this particular combination of
             diagnoses, given the current state of the system.
-
-        See Also:
-            :meth:`comp_observation_prob`: This is essentially the same method
-            but instead of a pandas row it takes a dictionry with observations
-            as input.
         """
         prob = 1.
+        is_pandas = type(diagnoses) == pd.Series
 
         for modality, spsn in self._spsn_tables.items():
             if modality in diagnoses:
                 mod_diagnose = diagnoses[modality]
-                for lnl in self.lnls:
-                    if lnl.name in mod_diagnose:
-                        prob *= lnl.obs_prob(mod_diagnose[lnl.name], spsn)
+                if not is_pandas and len(mod_diagnose) != len(self.lnls):
+                    raise ValueError(
+                        "When providing a dictionary, the length of the "
+                        "individual diagnoses must match the number of LNLs"
+                    )
+                for i,lnl in enumerate(self.lnls):
+                    if is_pandas and lnl.name in mod_diagnose:
+                        lnl_diagnose = mod_diagnose[lnl.name]
+                    elif not is_pandas:
+                        lnl_diagnose = mod_diagnose[i]
+                    else:
+                        continue
+
+                    prob *= lnl.obs_prob(lnl_diagnose, spsn)
         return prob
 
 
@@ -502,7 +482,7 @@ class Unilateral(HDFMixin):
                 observations = {}
                 for k,modality in enumerate(self._spsn_tables):
                     observations[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self._observation_matrix[i,j] = self.comp_observation_prob(observations)
+                self._observation_matrix[i,j] = self.comp_diagnose_prob(observations)
 
     @property
     def observation_matrix(self) -> np.ndarray:
@@ -916,8 +896,7 @@ class Unilateral(HDFMixin):
         time_dist: Optional[np.ndarray] = None,
         mode: str = "HMM"
     ) -> Union[float, np.ndarray]:
-        """
-        Compute risk(s) of involvement given a specific (but potentially
+        """Compute risk(s) of involvement given a specific (but potentially
         incomplete) diagnosis.
 
         Args:
@@ -925,20 +904,20 @@ class Unilateral(HDFMixin):
                 the currently set parameters will be used.
 
             inv: Specific hidden involvement one is interested in. If only parts
-                of the state are of interest, the remainder can be allowed_transitionsed with
+                of the state are of interest, the remainder can be masked with
                 values ``None``. If specified, the functions returns a single
                 risk.
 
-            diagnoses: Dictionary that can hold a potentially incomplete (allowed_transitions
+            diagnoses: Dictionary that can hold a potentially incomplete (mask
                 with ``None``) diagnose for every available modality. Leaving
                 out available modalities will assume a completely missing
                 diagnosis.
 
-            diag_time: Time of diagnosis. Either this or the `time_dist` to
+            diag_time: Time of diagnosis. Either this or the ``time_dist`` to
                 marginalize over diagnose times must be given.
 
             time_dist: Distribution to marginalize over diagnose times. Either
-                this, or the `diag_time` must be given.
+                this, or the ``diag_time`` must be given.
 
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires
                 the ``time_dist``) or to ``"BN"`` for the Bayesian network
@@ -1055,7 +1034,8 @@ class Unilateral(HDFMixin):
         diag_times: Optional[Dict[Any, int]] = None,
         time_dists: Optional[Dict[Any, np.ndarray]] = None,
     ) -> pd.DataFrame:
-        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+        """Generate/sample a pandas :class:`DataFrame` from the defined network
+        using the samples and diagnostic modalities that have been set.
 
         Args:
             num_patients: Number of patients to generate.
@@ -1065,7 +1045,8 @@ class Unilateral(HDFMixin):
                 ``None``, and a distribution over diagnose times ``time_dists``
                 is provided, the diagnose time is drawn from the ``time_dist``.
             time_dists: Distributions over diagnose times that can be used to
-                draw a diagnose time for the respective T-stage.
+                draw a diagnose time for the respective T-stage. If ``None``,
+                ``diag_times`` must be provided.
         """
         drawn_t_stages, drawn_diag_times = draw_diagnose_times(
             num_patients=num_patients,
@@ -1095,7 +1076,9 @@ class System(Unilateral):
         :class:`Unilateral`
     """
     def __init__(self, *args, **kwargs):
-        msg = ("This class has been renamed to `Unilateral`.")
-        warnings.warn(msg, DeprecationWarning)
+        warnings.warn(
+            "This class has been renamed to `Unilateral`.",
+            DeprecationWarning
+        )
 
         super().__init__(*args, **kwargs)
