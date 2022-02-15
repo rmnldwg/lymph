@@ -114,10 +114,10 @@ class Node(object):
         Returns:
             The probability of observing the given diagnose.
         """
-        try:
-            return obstable[int(obs), self.state]
-        except:
+        if obs is None or np.isnan(obs):
             return 1.
+        else:
+            return obstable[int(obs), self.state]
 
 
     def bn_prob(self, log: bool = False) -> float:

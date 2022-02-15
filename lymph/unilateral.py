@@ -230,7 +230,7 @@ class Unilateral(HDFMixin):
 
 
     def comp_observation_prob(self, observations: Dict[str, List[int]]) -> float:
-        """Computes the probability to see s specific observation, given the
+        """Computes the probability to see a specific observation, given the
         system's current state.
 
         Args:
@@ -396,6 +396,9 @@ class Unilateral(HDFMixin):
         square matrix with size ``(# of states)``. The lower diagonal is zero,
         because those entries correspond to transitions that would require
         self-healing.
+
+        Warning:
+            This will be deprecated in favour of :attr:`transition_matrix`.
         """
         warnings.warn(
             "The unintuitive `A` will be dropped for the more semantic "
@@ -482,8 +485,10 @@ class Unilateral(HDFMixin):
 
     def _gen_observation_matrix(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains
-        the :math:`P \\left(D \\mid S \\right)`. :math:`\\mathbf{B}` has the
-        shape ``(# of states, # of possible observations)``.
+        the probabilities :math:`P \\left(D \\mid S \\right)` of any possible
+        unique observation :math:`D` given any possible true hidden state
+        :math:`S`. :math:`\\mathbf{B}` has the shape ``(# of states, # of
+        possible observations)``.
         """
         n_lnl = len(self.lnls)
 
@@ -494,18 +499,22 @@ class Unilateral(HDFMixin):
         for i,state in enumerate(self.state_list):
             self.state = state
             for j,obs in enumerate(self.obs_list):
-                diagnoses_dict = {}
+                observations = {}
                 for k,modality in enumerate(self._spsn_tables):
-                    diagnoses_dict[modality] = obs[n_lnl * k : n_lnl * (k+1)]
-                self._observation_matrix[i,j] = self.comp_observation_prob(diagnoses_dict)
+                    observations[modality] = obs[n_lnl * k : n_lnl * (k+1)]
+                self._observation_matrix[i,j] = self.comp_observation_prob(observations)
 
     @property
     def observation_matrix(self) -> np.ndarray:
         """Return the observation matrix :math:`\\mathbf{B}`. It encodes the
-        probability to see a certain diagnose :math:`D`, given a particular
-        true (but hidden) state :math:`S`: :math:`P\\left( D \\mid S \\right)`.
+        probability :math:`P\\left( D \\mid S \\right)` to see a certain
+        diagnose :math:`D`, given a particular true (but hidden) state :math:`S`.
         It is meant to be multiplied from the right onto the transition matrix
         :math:`\\mathbf{A}`.
+
+        See Also:
+            :attr:`transition_matrix`: The mentioned transition matrix
+            :math:`\\mathbf{A}`.
         """
         try:
             return self._observation_matrix
