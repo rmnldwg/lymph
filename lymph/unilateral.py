@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ class Unilateral(HDFMixin):
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], List[str]] = {}, **kwargs):
+    def __init__(self, graph: Dict[Tuple[str], Set[str]] = {}, **kwargs):
         """Initialize the underlying graph:
 
         Args:
@@ -27,7 +27,7 @@ class Unilateral(HDFMixin):
         name_list = [tpl[1] for tpl in graph.keys()]
         name_set = {tpl[1] for tpl in graph.keys()}
         if len(name_list) != len(name_set):
-            raise ValueError("Tumor and LNL cannot have the same name")
+            raise ValueError("No tumor and LNL can have the same name")
 
         self.nodes = []        # list of all nodes in the graph
         self.tumors = []       # list of nodes with type tumour
@@ -47,7 +47,7 @@ class Unilateral(HDFMixin):
         self.trans_edges = []  # list of edges, connecting LNLs
 
         for key, values in graph.items():
-            for value in values:
+            for value in set(values):
                 self.edges.append(Edge(self.find_node(key[1]),
                                        self.find_node(value)))
 
@@ -93,7 +93,7 @@ class Unilateral(HDFMixin):
 
 
     @property
-    def graph(self) -> Dict[Tuple[str], List[str]]:
+    def graph(self) -> Dict[Tuple[str, str], Set[str]]:
         """Lists the graph as it was provided when the system was created.
         """
         res = {}
@@ -106,17 +106,17 @@ class Unilateral(HDFMixin):
     def state(self):
         """Return the currently set state of the system.
         """
-        return np.array([lnl.state for lnl in self.lnls], dtype=bool)
+        return np.array([lnl.state for lnl in self.lnls], dtype=int)
 
     @state.setter
     def state(self, newstate: np.ndarray):
         """Sets the state of the system to ``newstate``.
         """
-        if len(newstate) != len(self.lnls):
+        if len(newstate) < len(self.lnls):
             raise ValueError("length of newstate must match # of LNLs")
 
         for i, node in enumerate(self.lnls):  # only set lnl's states
-            node.state = int(newstate[i])
+            node.state = newstate[i]
 
 
     @property
@@ -708,9 +708,9 @@ class Unilateral(HDFMixin):
         if new_spread_probs.shape != self.spread_probs.shape:
             msg = ("Shape of provided spread parameters does not match network")
             raise ValueError(msg)
-        if np.any(np.greater(0., new_spread_probs)):
+        if np.any(0. > new_spread_probs):
             return False
-        if np.any(np.greater(new_spread_probs, 1.)):
+        if np.any(new_spread_probs > 1.):
             return False
 
         return True

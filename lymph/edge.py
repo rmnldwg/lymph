@@ -20,8 +20,8 @@ class Edge(object):
             raise TypeError("Start must be instance of Node!")
         if type(end) is not Node:
             raise TypeError("End must be instance of Node!")
-        if not (t >= 0. and t <= 1.):
-            raise ValueError("Transmission parameter must be in interval [0,1]")
+        if start == end:
+            raise ValueError("Start and end node must be different")
 
         self.start = start
         self.start.out.append(self)
@@ -33,3 +33,14 @@ class Edge(object):
     def __str__(self):
         """Print basic info"""
         return f"{self.start}-{100 * self.t:.1f}%->{self.end}"
+
+    @property
+    def t(self):
+        return self._t
+
+    @t.setter
+    def t(self, new_t: float):
+        if new_t <= 1. and new_t >= 0.:
+            self._t = new_t
+        else:
+            raise ValueError("Transmission probability must be between 0 and 1")

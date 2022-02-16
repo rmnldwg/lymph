@@ -1,6 +1,7 @@
 import hypothesis.strategies as st
 import numpy as np
 import pytest
+from custom_strategies import nodes
 from hypothesis import given
 
 from lymph import Node
@@ -62,16 +63,17 @@ def test_constructor(name, state, typ):
     assert len(new_node.out) == 0, (
         "Newly created node has outgoing connections"
     )
+    assert str(new_node) == new_node.name, (
+        "String representation does not match with node's name"
+    )
 
 
 @given(
-    old_state=st.booleans(),
+    tumor_node=nodes(is_tumor=True, generate_valid=True),
+    lnl_node=nodes(is_lnl=True, generate_valid=True),
     new_state=st.one_of(st.integers(), st.booleans())
 )
-def test_state(old_state, new_state):
-    tumor_node = Node(name="atumor", state=old_state, typ="tumor")
-    lnl_node = Node(name="alnl", state=old_state, typ="lnl")
-
+def test_state(tumor_node, lnl_node, new_state):
     tumor_node.state = new_state
     assert tumor_node.state == 1, (
         "Tumor node's state must always be 1"
@@ -93,13 +95,10 @@ def test_state(old_state, new_state):
 
 
 @given(
-    old_typ=st.one_of(st.just("lnl"), st.just("tumor")),
-    state=st.booleans(),
+    node=nodes(generate_valid=True),
     new_typ=st.one_of(st.text(), st.just("lnl"), st.just("tumor"))
 )
-def test_typ(old_typ, state, new_typ):
-    node = Node("arbitrary", state, old_typ)
-
+def test_typ(node, new_typ):
     if new_typ not in ["lnl", "tumor"]:
         with pytest.raises(ValueError):
             node.typ = new_typ
