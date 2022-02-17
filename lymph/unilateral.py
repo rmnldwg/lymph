@@ -227,6 +227,9 @@ class Unilateral(HDFMixin):
                 in_states = tuple(edge.start.state for edge in lnl.inc)
                 in_weights = tuple(edge.t for edge in lnl.inc)
                 res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
+            elif not newstate[i]:
+                res = 0.
+                break
 
         if acquire:
             self.state = newstate

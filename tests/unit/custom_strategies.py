@@ -92,11 +92,18 @@ def graphs(
 
 def gen_model(
     graph: Dict[Tuple[str, str], Set[str]],
+    state: Optional[List[int]] = None,
     spread_probs: Optional[List[float]] = None,
     modalities: Optional[Dict[str, List[float]]] = None,
 ) -> Unilateral:
     """Generate model from various params"""
     model = Unilateral(graph)
+
+    if state is not None:
+        if len(state) < len(model.state):
+            nrepeat = (len(model.state) // len(state)) + 1
+            state = np.tile(state, nrepeat)
+        model.state = state
 
     if spread_probs is not None:
         if len(spread_probs) < len(model.spread_probs):
@@ -110,6 +117,7 @@ def gen_model(
     return model
 
 def models(
+    state = none(),
     spread_probs = none(),
     modalities = none()
 ) -> SearchStrategy:
@@ -117,6 +125,7 @@ def models(
     return builds(
         gen_model,
         graph=graphs(unique=True),
+        state=state,
         spread_probs=spread_probs,
         modalities=modalities,
     )
