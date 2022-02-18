@@ -1,9 +1,21 @@
 
 import numpy as np
+import pandas as pd
 import pytest
-from custom_strategies import graphs, models
+from custom_strategies import graphs, modalities, model_diagnose_tuples, models
 from hypothesis import assume, given
-from hypothesis.strategies import booleans, floats, integers, lists, one_of
+from hypothesis.strategies import (
+    booleans, 
+    floats, 
+    integers, 
+    lists, 
+    one_of,
+    tuples,
+    just,
+    text,
+    characters,
+    dictionaries
+)
 
 from lymph import Edge, Node, Unilateral
 
@@ -275,7 +287,7 @@ def test_comp_transition_prob(model, newstate, acquire):
         assert np.all(model.state == newstate), (
             "Model did not acquire the new state"
         )
-    if len(model.state) < 6:
+    if len(model.state) < 8:
         prob_sum = 0.
         for ns in model.state_list:
             prob_sum += model.comp_transition_prob(ns)
@@ -284,10 +296,50 @@ def test_comp_transition_prob(model, newstate, acquire):
         )
 
 
-@given(
-    model=models(),
-    diagnoses=one_of()
-)
-def test_comp_diagnose_prob(model, diagnoses):
+@given(models(modalities=modalities()).flatmap(model_diagnose_tuples))
+def test_comp_diagnose_prob(model_and_diagnose):
     """Test the correct computation of the diagnose probability."""
-    assert False
+    model, pd_diagnose = model_and_diagnose
+    
+    dict_diagnose = {}
+    invalid_dict_diagnose = {}
+    none_dict_diagnose = {}
+    for mod in model.modalities.keys():
+        dict_diagnose[mod] = pd_diagnose[mod].values
+        invalid_dict_diagnose[mod] = np.append(pd_diagnose[mod].values, True)
+        none_dict_diagnose[mod] = [None] * len(dict_diagnose[mod])
+    
+    pd_diag_prob = model.comp_diagnose_prob(pd_diagnose)
+    dict_diag_prob = model.comp_diagnose_prob(dict_diagnose)
+    none_diag_prob = model.comp_diagnose_prob(none_dict_diagnose)
+    assert pd_diag_prob == dict_diag_prob, (
+        "Same diagnose in different formats must have equal probability"
+    )
+    assert pd_diag_prob <= 1. and pd_diag_prob >= 0., (
+        "Probability must be between 0 and 1"
+    )
+    assert none_diag_prob == 1., (
+        "When all diagnoses are unabserverd, probability must be 1"
+    )
+    
+    with pytest.raises(ValueError):
+        model.comp_diagnose_prob(invalid_dict_diagnose)
+
+
+@given(model=models())
+def test_state_list(model):
+    assert not hasattr(model, "_state_list"), (
+        "Model should not have state list after initialization"
+    )
+    
+    state_list = model.state_list
+    
+    assert hasattr(model, "_state_list"), (
+        "Model did not generate state list"
+    )
+    assert len(state_list) == 2**len(model.lnls), (
+        "Wrong number of states"
+    )
+    assert len(np.unique(state_list, axis=0)) == len(state_list), (
+        "Cannot have duplicates in state list"
+    )

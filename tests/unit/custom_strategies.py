@@ -1,7 +1,14 @@
-from enum import unique
-from typing import Dict, List, Optional, Set, Tuple
+from typing import (
+    Dict, 
+    List, 
+    Optional, 
+    Set, 
+    Tuple, 
+    Union
+)
 
 import numpy as np
+import pandas as pd
 from hypothesis.strategies import (
     SearchStrategy,
     booleans,
@@ -15,7 +22,10 @@ from hypothesis.strategies import (
     one_of,
     slices,
     text,
+    tuples,
+    dictionaries,
 )
+from hypothesis.extra import pandas as hypd
 
 from lymph import Node
 from lymph.unilateral import Unilateral
@@ -58,6 +68,8 @@ def gen_graph(
     max_size = np.min([len(node_names), len(are_tumors), len(slice_list)])
     node_names = node_names[:max_size]
     are_tumors = are_tumors[:max_size]
+    if max_size > 0 and np.all(are_tumors):
+        are_tumors[0] = False
     slice_list = slice_list[:max_size]
 
     graph = {}
@@ -89,6 +101,19 @@ def graphs(
         )
     )
 
+
+def modalities(valid: bool = True) -> SearchStrategy:
+    """Create SearchStrategy for (valid) modalities."""
+    if valid:
+        spsn_strategy = lists(floats(0.5, 1.), min_size=2, max_size=2)
+    else:
+        spsn_strategy = lists(one_of(floats(), integers()), min_size=1)
+        
+    return dictionaries(
+        keys=text(alphabet=characters(whitelist_categories='L'), min_size=1),
+        values=spsn_strategy,
+        min_size=1 if valid else None
+    )
 
 def gen_model(
     graph: Dict[Tuple[str, str], Set[str]],
@@ -124,8 +149,23 @@ def models(
     """Define hypothesis strategy for generating Unilateral models"""
     return builds(
         gen_model,
-        graph=graphs(unique=True),
+        graph=graphs(min_size=1, unique=True),
         state=state,
         spread_probs=spread_probs,
         modalities=modalities,
     )
+
+
+def gen_MultiIndex(model: Unilateral) -> pd.Series:
+    """Generate a pandas Series diagnose from a diagnose dictionary."""
+    modalities = list(model.modalities.keys())
+    lnl_names = [lnl.name for lnl in model.lnls]
+    return pd.MultiIndex.from_product([modalities, lnl_names])
+
+def model_diagnose_tuples(model: Unilateral) -> SearchStrategy:
+    multiindex = gen_MultiIndex(model)
+    series = hypd.series(
+        elements=one_of(booleans(), none()),
+        index=just(multiindex)
+    )
+    return tuples(just(model), series)
