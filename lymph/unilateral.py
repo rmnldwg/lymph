@@ -468,7 +468,7 @@ class Unilateral(HDFMixin):
 
             sp, sn = spsn
             self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
-                                                   [1. - sp, sn     ]])
+                                               [1. - sp, sn     ]])
 
 
     def _gen_observation_matrix(self):

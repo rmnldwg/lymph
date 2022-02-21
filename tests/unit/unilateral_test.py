@@ -1,20 +1,23 @@
 
 import numpy as np
-import pandas as pd
 import pytest
-from custom_strategies import graphs, modalities, model_diagnose_tuples, models
-from hypothesis import assume, given
+from custom_strategies import (
+    graphs,
+    modalities,
+    model_diagnose_tuples,
+    model_patientdata_tuples,
+    models,
+)
+from helpers import are_probabilities
+from hypothesis import assume, given, settings
 from hypothesis.strategies import (
-    booleans, 
-    floats, 
-    integers, 
-    lists, 
-    one_of,
-    tuples,
-    just,
-    text,
+    booleans,
     characters,
-    dictionaries
+    floats,
+    integers,
+    lists,
+    one_of,
+    text,
 )
 
 from lymph import Edge, Node, Unilateral
@@ -300,7 +303,7 @@ def test_comp_transition_prob(model, newstate, acquire):
 def test_comp_diagnose_prob(model_and_diagnose):
     """Test the correct computation of the diagnose probability."""
     model, pd_diagnose = model_and_diagnose
-    
+
     dict_diagnose = {}
     invalid_dict_diagnose = {}
     none_dict_diagnose = {}
@@ -308,7 +311,7 @@ def test_comp_diagnose_prob(model_and_diagnose):
         dict_diagnose[mod] = pd_diagnose[mod].values
         invalid_dict_diagnose[mod] = np.append(pd_diagnose[mod].values, True)
         none_dict_diagnose[mod] = [None] * len(dict_diagnose[mod])
-    
+
     pd_diag_prob = model.comp_diagnose_prob(pd_diagnose)
     dict_diag_prob = model.comp_diagnose_prob(dict_diagnose)
     none_diag_prob = model.comp_diagnose_prob(none_dict_diagnose)
@@ -321,7 +324,7 @@ def test_comp_diagnose_prob(model_and_diagnose):
     assert none_diag_prob == 1., (
         "When all diagnoses are unabserverd, probability must be 1"
     )
-    
+
     with pytest.raises(ValueError):
         model.comp_diagnose_prob(invalid_dict_diagnose)
 
@@ -331,9 +334,9 @@ def test_state_list(model):
     assert not hasattr(model, "_state_list"), (
         "Model should not have state list after initialization"
     )
-    
+
     state_list = model.state_list
-    
+
     assert hasattr(model, "_state_list"), (
         "Model did not generate state list"
     )
@@ -342,4 +345,196 @@ def test_state_list(model):
     )
     assert len(np.unique(state_list, axis=0)) == len(state_list), (
         "Cannot have duplicates in state list"
+    )
+
+@given(model=models(), modalities=modalities(valid=True))
+@settings(max_examples=49)  # when I use 50 or more, it freezes
+def test_obs_list(model, modalities):
+    assert not hasattr(model, "_obs_list"), (
+        "Model should not have obs list after initialization"
+    )
+
+    model.modalities = modalities
+    obs_list = model.obs_list
+
+    assert hasattr(model, "_obs_list"), (
+        "Model did not generate obs list"
+    )
+    assert len(obs_list) == 2**(len(model.lnls) * len(modalities)), (
+        "Wrong number of possible observations"
+    )
+
+
+@given(model=models())
+def test_allowed_transitions(model):
+    """Assert that the mask only allows (the computation of) transitions that
+    do not involve self-healing."""
+    assert not hasattr(model, "_allowed_transitions"), (
+        "Model should not have allowed transitions after initialization"
+    )
+
+    num_states = 2**len(model.lnls)
+    allowed_transitions = model.allowed_transitions
+
+    assert hasattr(model, "_allowed_transitions"), (
+        "Model did not create allowed transitions"
+    )
+    assert len(allowed_transitions) == len(model.state_list), (
+        "Every state must have allowed transitions"
+    )
+    assert allowed_transitions[0] == list(range(0,len(model.state_list))), (
+        "Healthy state must be able to transition into any other state"
+    )
+
+    for state_idx, next_state_idxs in allowed_transitions.items():
+        model.state = model.state_list[state_idx]
+        forbidden_state_idxs = set(range(num_states)).difference(set(next_state_idxs))
+        for forbidden_state_idx in forbidden_state_idxs:
+            forbidden_state = model.state_list[forbidden_state_idx]
+            assert model.comp_transition_prob(newstate=forbidden_state) == 0., (
+                "Transition probability to all fobidden states must be zero"
+            )
+
+
+@given(model=models())
+@settings(max_examples=49)  # when I use 50 or more, it freezes
+def test_transition_matrix(model):
+    """Verify the properties of the tranistion matrix A"""
+    assert not hasattr(model, "_transition_matrix"), (
+        "Model should not have transition matrix after initializations"
+    )
+
+    A = model.A
+    del model._transition_matrix
+    transition_matrix = model.transition_matrix
+
+    assert np.all(A == transition_matrix), (
+        "`A` and transition matrix must be the same"
+    )
+
+    num_states = 2**len(model.lnls)
+    assert transition_matrix.shape == (num_states, num_states), (
+        "Transition matrix has wrong shape"
+    )
+    assert np.all(np.isclose(np.sum(transition_matrix, axis=1), 1.)), (
+        "Transition matrix must be stochastic matrix (rows sum to 1)"
+    )
+
+
+@given(model=models(), modalities=modalities(valid=False))
+def test_modalities(model, modalities):
+    assert not hasattr(model, "_spsn_tables"), (
+        "Model shoud not have spsn tables after initialization"
+    )
+
+    flattened_spsn = [s for spsn in modalities.values() for s in spsn]
+    has_not_len2 = np.any([len(spsn) != 2 for spsn in modalities.values()])
+    is_below_lb = np.any(np.greater(0.5, flattened_spsn))
+    is_above_ub = np.any(np.less(1., flattened_spsn))
+
+    if has_not_len2 or is_below_lb or is_above_ub:
+        with pytest.raises(ValueError):
+            model.modalities = modalities
+        return
+
+    model.modalities = modalities
+
+    assert hasattr(model, "_spsn_tables"), (
+        "Model did not create spsn tables"
+    )
+    assert modalities == model.modalities, (
+        "Modalities were not recovered correctly"
+    )
+
+    for mod, spsn in modalities.items():
+        assert mod in model._spsn_tables, (
+            "Modality not recognized"
+        )
+        assert spsn[0] == model._spsn_tables[mod][0,0], (
+            "Wrong specificity"
+        )
+        assert spsn[1] == model._spsn_tables[mod][1,1], (
+            "Wrong sensitivity"
+        )
+        assert np.all(np.isclose(np.sum(model._spsn_tables[mod], axis=0), 1.)), (
+            "spsn table must sum to one along columns"
+        )
+
+    modalities[0] = [0.7, 0.7]
+    with pytest.raises(TypeError):
+        model.modalities = modalities
+
+    del model._spsn_tables
+    with pytest.raises(AttributeError):
+        modalities = model.modalities
+
+
+@given(model=models(modalities=modalities()))
+@settings(max_examples=40)
+def test_observation_matrix(model):
+    """Make sure the observation matrix is correct"""
+    assert not hasattr(model, "_observation_matrix"), (
+        "Model should not have observation matrix after initialization"
+    )
+
+    num_lnls = len(model.lnls)
+    num_mod = len(model.modalities)
+    observation_matrix = model.observation_matrix
+
+    assert hasattr(model, "_observation_matrix"), (
+        "Model did not create observation matrix"
+    )
+    assert observation_matrix.shape == (2**num_lnls, 2**(num_lnls * num_mod)), (
+        "Observation matrix has wrong shape"
+    )
+    assert np.all(np.isclose(np.sum(observation_matrix, axis=1), 1.)), (
+        "Observation matrix must be stochastic matrix (rows sum to 1)"
+    )
+
+    model.modalities = {"simple": [1., 1.]}
+    observation_matrix = model.observation_matrix
+
+    assert np.all(observation_matrix == np.eye(2**num_lnls)), (
+        "For sensitivity & specificity of 100%, observation matrix of only one "
+        "modality must be the unit matrix"
+    )
+
+
+@given(
+    model_and_table=models(modalities=modalities()).flatmap(model_patientdata_tuples),
+    t_stage=one_of(
+        integers(),
+        characters(whitelist_categories='L'),
+        text(alphabet=characters(whitelist_categories='L'), min_size=1)
+    )
+)
+def test_diagnose_matrices(model_and_table, t_stage):
+    """Test the generation of the diagnose matrix from a dataset of patients"""
+    model, table = model_and_table
+    num_lnls = len(model.lnls)
+    num_pats = len(table)
+
+    assert not hasattr(model, "_diagnose_matrices"), (
+        "Model should not have diagnose matrix after initialization"
+    )
+
+    with pytest.raises(AttributeError):
+        diagnose_matrices = model.diagnose_matrix
+
+    model._gen_diagnose_matrices(table, t_stage)
+
+    assert hasattr(model, "_diagnose_matrices"), (
+        "Model did not create diagnose matrices"
+    )
+
+    diagnose_matrices = model.diagnose_matrices
+
+    assert t_stage in diagnose_matrices, (
+        "Diagnose matrix not associated with given T-stage"
+    )
+    assert diagnose_matrices[t_stage].shape == (2**num_lnls, num_pats), (
+        "Diagnose matrix has wrong shape"
+    )
+    assert are_probabilities(diagnose_matrices[t_stage]), (
+        "Diagnose matrix must be stochastic (rows sum to 1)"
     )

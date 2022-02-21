@@ -1,19 +1,14 @@
-from typing import (
-    Dict, 
-    List, 
-    Optional, 
-    Set, 
-    Tuple, 
-    Union
-)
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
+from hypothesis.extra import pandas as hypd
 from hypothesis.strategies import (
     SearchStrategy,
     booleans,
     builds,
     characters,
+    dictionaries,
     floats,
     integers,
     just,
@@ -23,9 +18,7 @@ from hypothesis.strategies import (
     slices,
     text,
     tuples,
-    dictionaries,
 )
-from hypothesis.extra import pandas as hypd
 
 from lymph import Node
 from lymph.unilateral import Unilateral
@@ -81,7 +74,7 @@ def gen_graph(
 
 def graphs(
     min_size: int = 0,
-    max_size: int = 1000,
+    max_size: int = 8,
     unique: bool = False
 ) -> SearchStrategy:
     """Define hypothesis strategy for generating graphs"""
@@ -107,12 +100,15 @@ def modalities(valid: bool = True) -> SearchStrategy:
     if valid:
         spsn_strategy = lists(floats(0.5, 1.), min_size=2, max_size=2)
     else:
-        spsn_strategy = lists(one_of(floats(), integers()), min_size=1)
-        
+        spsn_strategy = lists(one_of(floats(0.5, 1.), floats()), min_size=1)
+
+    key_strategy = text(alphabet=characters(whitelist_categories='L'),
+                        min_size=1)
     return dictionaries(
-        keys=text(alphabet=characters(whitelist_categories='L'), min_size=1),
+        keys=key_strategy,
         values=spsn_strategy,
-        min_size=1 if valid else None
+        min_size=1 if valid else 0,
+        max_size=3 if valid else 100,
     )
 
 def gen_model(
@@ -169,3 +165,10 @@ def model_diagnose_tuples(model: Unilateral) -> SearchStrategy:
         index=just(multiindex)
     )
     return tuples(just(model), series)
+
+def model_patientdata_tuples(model: Unilateral) -> SearchStrategy:
+    multiindex = gen_MultiIndex(model)
+    patient_data = hypd.data_frames(
+        columns=hypd.columns(multiindex, elements=one_of(none(), booleans())),
+    )
+    return tuples(just(model), patient_data)
