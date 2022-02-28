@@ -9,7 +9,7 @@ from custom_strategies import (
     models,
 )
 from helpers import are_probabilities
-from hypothesis import assume, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis.strategies import (
     booleans,
     characters,
@@ -181,7 +181,7 @@ def test_state(model, newstate):
 )
 def test_base_probs(model, base_probs):
     """Test correct behaviour of base probs"""
-    assume(len(model.base_probs) < len(base_probs))
+    assume(len(model.base_probs) <= len(base_probs))
     base_probs = base_probs[:len(model.base_probs)]
 
     is_larger_than_0 = np.all(np.greater_equal(base_probs, 0.))
@@ -207,8 +207,8 @@ def test_base_probs(model, base_probs):
     trans_probs=lists(one_of(floats(0., 1.), floats()), min_size=1)
 )
 def test_trans_probs(model, trans_probs):
-    """Test correct behaviour of base probs"""
-    assume(len(model.trans_probs) < len(trans_probs))
+    """Test correct behaviour of trans probs"""
+    assume(len(model.trans_probs) <= len(trans_probs))
     trans_probs = trans_probs[:len(model.trans_probs)]
 
     is_larger_than_0 = np.all(np.greater_equal(trans_probs, 0.))
@@ -234,7 +234,7 @@ def test_trans_probs(model, trans_probs):
     spread_probs=lists(one_of(floats(0., 1.), floats()), min_size=1)
 )
 def test_spread_probs(model, spread_probs):
-    """Test correct behaviour of base probs"""
+    """Test correct behaviour of spread probs"""
     assume(len(model.spread_probs) < len(spread_probs))
     spread_probs = spread_probs[:len(model.spread_probs)]
 
@@ -262,7 +262,7 @@ def test_spread_probs(model, spread_probs):
 
 
 @given(
-    model=models(state=lists(integers(0,1), min_size=1)),
+    model=models(states=integers(0,1)),
     newstate=lists(integers(0,1), min_size=1),
     acquire=booleans()
 )
@@ -270,7 +270,7 @@ def test_comp_transition_prob(model, newstate, acquire):
     """Make sure the probability of transitioning from the current state of
     the network to any other given future state is correct.
     """
-    assume(len(model.state) < len(newstate))
+    assume(len(model.state) <= len(newstate))
     newstate = newstate[:len(model.state)]
 
     if not np.all([int(s) in [0,1] for s in newstate]):
@@ -299,7 +299,11 @@ def test_comp_transition_prob(model, newstate, acquire):
         )
 
 
-@given(models(modalities=modalities()).flatmap(model_diagnose_tuples))
+@given(
+    model_diagnose_tuples(
+        models=models(modalities=modalities())
+    )
+)
 def test_comp_diagnose_prob(model_and_diagnose):
     """Test the correct computation of the diagnose probability."""
     model, pd_diagnose = model_and_diagnose
@@ -348,7 +352,7 @@ def test_state_list(model):
     )
 
 @given(model=models(), modalities=modalities(valid=True))
-@settings(max_examples=49)  # when I use 50 or more, it freezes
+@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_obs_list(model, modalities):
     assert not hasattr(model, "_obs_list"), (
         "Model should not have obs list after initialization"
@@ -397,7 +401,7 @@ def test_allowed_transitions(model):
 
 
 @given(model=models())
-@settings(max_examples=49)  # when I use 50 or more, it freezes
+@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_transition_matrix(model):
     """Verify the properties of the tranistion matrix A"""
     assert not hasattr(model, "_transition_matrix"), (
@@ -431,8 +435,9 @@ def test_modalities(model, modalities):
     has_not_len2 = np.any([len(spsn) != 2 for spsn in modalities.values()])
     is_below_lb = np.any(np.greater(0.5, flattened_spsn))
     is_above_ub = np.any(np.less(1., flattened_spsn))
+    is_nan = np.any(np.isnan(flattened_spsn))
 
-    if has_not_len2 or is_below_lb or is_above_ub:
+    if has_not_len2 or is_below_lb or is_above_ub or is_nan:
         with pytest.raises(ValueError):
             model.modalities = modalities
         return
@@ -464,18 +469,16 @@ def test_modalities(model, modalities):
     with pytest.raises(TypeError):
         model.modalities = modalities
 
-    del model._spsn_tables
-    with pytest.raises(AttributeError):
-        modalities = model.modalities
 
-
-@given(model=models(modalities=modalities()))
-@settings(max_examples=40)
-def test_observation_matrix(model):
+@given(model=models(), modalities=modalities())
+@settings(max_examples=10, suppress_health_check=[HealthCheck.data_too_large])
+def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
         "Model should not have observation matrix after initialization"
     )
+
+    model.modalities = modalities
 
     num_lnls = len(model.lnls)
     num_mod = len(model.modalities)
@@ -501,13 +504,16 @@ def test_observation_matrix(model):
 
 
 @given(
-    model_and_table=models(modalities=modalities()).flatmap(model_patientdata_tuples),
+    model_and_table=model_patientdata_tuples(
+        models=models(modalities=modalities())
+    ),
     t_stage=one_of(
         integers(),
         characters(whitelist_categories='L'),
         text(alphabet=characters(whitelist_categories='L'), min_size=1)
     )
 )
+@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_diagnose_matrices(model_and_table, t_stage):
     """Test the generation of the diagnose matrix from a dataset of patients"""
     model, table = model_and_table
