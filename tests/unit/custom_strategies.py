@@ -13,6 +13,7 @@ from hypothesis.strategies import (
     lists,
     none,
     one_of,
+    sampled_from,
     slices,
     text,
 )
@@ -143,7 +144,7 @@ def model_diagnose_tuples(draw, models=models()):
 
 
 @composite
-def model_patientdata_tuples(draw, models=models()):
+def model_patientdata_tuples(draw, models=models(), add_t_stages=False):
     """Define search strategy for a tuple of a model and corresponding patient
     data."""
     model = draw(models)
@@ -156,4 +157,18 @@ def model_patientdata_tuples(draw, models=models()):
             )
         )
     )
+
+    if add_t_stages:
+        t_stages = draw(lists(
+            text(alphabet=characters(whitelist_categories='L'), min_size=1),
+            min_size=1, max_size=6
+        ))
+        available_t_stages = sampled_from(t_stages)
+        t_stage_column = lists(
+            elements=available_t_stages,
+            min_size=len(patient_data),
+            max_size=len(patient_data)
+        )
+        patient_data[("info", "t_stage")] = draw(t_stage_column)
+
     return (model, patient_data)

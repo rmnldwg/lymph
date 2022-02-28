@@ -523,7 +523,7 @@ class Unilateral(HDFMixin):
                 and second, the LNLs.
             t_stage: The T-stage all the patients in ``table`` belong to.
         """
-        if not hasattr(self, "diagnose_matrices"):
+        if not hasattr(self, "_diagnose_matrices"):
             self._diagnose_matrices = {}
 
         shape = (len(self.state_list), len(table))

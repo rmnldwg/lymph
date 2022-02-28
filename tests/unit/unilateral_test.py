@@ -544,3 +544,41 @@ def test_diagnose_matrices(model_and_table, t_stage):
     assert are_probabilities(diagnose_matrices[t_stage]), (
         "Diagnose matrix must be stochastic (rows sum to 1)"
     )
+
+
+@given(
+    model_and_table=model_patientdata_tuples(
+        models=models(modalities=modalities()),
+        add_t_stages=True,
+    )
+)
+def test_patient_data(model_and_table):
+    """Check the correct handling of the data."""
+    model, patient_data = model_and_table
+    t_stages = set(patient_data[("info", "t_stage")].values)
+
+    assert not hasattr(model, "_patient_data"), (
+        "Initialized model should not have patient data"
+    )
+    with pytest.raises(AttributeError):
+        pd = model.patient_data
+
+    model.patient_data = patient_data
+
+    assert hasattr(model, "_patient_data"), (
+        "Model should have stored patient data by now"
+    )
+    assert patient_data.equals(model.patient_data), (
+        "Recovered patient data is not the same as the provided"
+    )
+
+    if len(patient_data) > 0:
+        assert hasattr(model, "_diagnose_matrices"), (
+            "Model did not create diagnose matrices"
+        )
+
+    del model._spsn_tables
+    del model._patient_data
+
+    with pytest.raises(ValueError):
+        model.patient_data = patient_data
