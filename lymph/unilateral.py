@@ -705,7 +705,7 @@ class Unilateral(HDFMixin):
         return state_probs
 
 
-    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
+    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
         if new_spread_probs.shape != self.spread_probs.shape:
@@ -767,7 +767,7 @@ class Unilateral(HDFMixin):
             is the data and :math:`\\theta` is the tuple of spread probabilities
             and diagnose times or distributions over diagnose times.
         """
-        if not self._spread_probs_are_valid(spread_probs):
+        if not self._are_valid_(spread_probs):
             return -np.inf
 
         self.spread_probs = spread_probs
@@ -781,8 +781,9 @@ class Unilateral(HDFMixin):
 
             if diag_times is not None:
                 if len(diag_times) != len(t_stages):
-                    msg = ("One diagnose time must be provided for each T-stage.")
-                    raise ValueError(msg)
+                    raise ValueError(
+                        "One diagnose time must be provided for each T-stage."
+                    )
 
                 for stage in t_stages:
                     diag_time = np.around(diag_times[stage]).astype(int)
@@ -792,9 +793,10 @@ class Unilateral(HDFMixin):
 
             elif time_dists is not None:
                 if len(time_dists) != len(t_stages):
-                    msg = ("One distribution over diagnose times must be provided "
-                        "for each T-stage.")
-                    raise ValueError(msg)
+                    raise ValueError(
+                        "One distribution over diagnose times must be provided "
+                        "for each T-stage."
+                    )
 
                 # subtract 1, to also consider healthy starting state (t = 0)
                 max_t = len(time_dists[t_stages[0]]) - 1
@@ -803,9 +805,10 @@ class Unilateral(HDFMixin):
                     state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
 
             else:
-                msg = ("Either provide a list of diagnose times for each T-stage "
-                    "or a distribution over diagnose times for each T-stage.")
-                raise ValueError(msg)
+                raise ValueError(
+                    "Either provide a list of diagnose times for each T-stage "
+                    "or a distribution over diagnose times for each T-stage."
+                )
 
             llh = 0.
             for stage in t_stages:

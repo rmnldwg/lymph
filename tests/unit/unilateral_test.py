@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 from custom_strategies import (
     graphs,
+    logllh_params,
     modalities,
     model_diagnose_tuples,
     model_patientdata_tuples,
@@ -10,12 +11,14 @@ from custom_strategies import (
 )
 from helpers import are_probabilities
 from hypothesis import HealthCheck, assume, given, settings
+from hypothesis.extra import numpy as hynp
 from hypothesis.strategies import (
     booleans,
     characters,
     floats,
     integers,
     lists,
+    none,
     one_of,
     text,
 )
@@ -576,9 +579,153 @@ def test_patient_data(model_and_table):
         assert hasattr(model, "_diagnose_matrices"), (
             "Model did not create diagnose matrices"
         )
+        assert model.diagnose_matrices.keys() == t_stages, (
+            "Model did not create the right diagnose matrices for the T-stages"
+        )
 
     del model._spsn_tables
     del model._patient_data
 
     with pytest.raises(ValueError):
         model.patient_data = patient_data
+
+
+@given(
+    model=models(),
+    spread_probs=lists(floats(0., 1.), min_size=1),
+    t_first=integers(0, 10),
+    t_last=one_of(none(), integers(1, 20)),
+)
+def test_evolve(model, spread_probs, t_first, t_last):
+    """Assert that the model is evolved correclty over the time steps."""
+    assume(len(model.spread_probs) <= len(spread_probs))
+
+    model.spread_probs = spread_probs[:len(model.spread_probs)]
+
+    if t_last is None:
+        state_probs = model._evolve(t_first, t_last)
+
+        assert len(state_probs) == 2**len(model.lnls), (
+            "Returned state probs have wrong shape"
+        )
+        assert np.isclose(np.sum(state_probs), 1.), (
+            "Sum over probabilities for all states must be 1"
+        )
+    elif t_first > t_last:
+        with pytest.raises(ValueError):
+            state_probs = model._evolve(t_first, t_last)
+    else:
+        state_probs = model._evolve(t_first, t_last)
+
+        assert len(state_probs) == t_last - t_first + 1, (
+            "Evolve function computed wrong number of time steps"
+        )
+        assert state_probs.shape[1] == 2**len(model.lnls), (
+            "Returned state probs have wrong shape"
+        )
+        assert np.all(np.isclose(np.sum(state_probs, axis=1), 1.)), (
+            "Sum over probabilities for all states must be 1"
+        )
+
+
+@given(
+    model=models(),
+    spread_probs=hynp.arrays(
+        dtype=float,
+        shape=integers(1, 1000)
+    ),
+)
+def test_are_valid(model, spread_probs):
+    """Check that the check method works correctly"""
+    num_edges = len(model.edges)
+
+    if len(spread_probs) != num_edges:
+        with pytest.raises(ValueError):
+            model._are_valid_(spread_probs)
+
+    if len(spread_probs) < num_edges:
+        spread_probs = np.tile(spread_probs, num_edges // len(spread_probs) + 1)
+    if len(spread_probs) > num_edges:
+        spread_probs = spread_probs[:num_edges]
+
+    if np.any(spread_probs > 1.) or np.any(spread_probs < 0.):
+        assert not model._are_valid_(spread_probs), (
+            "Invalid spread probs not rejected"
+        )
+    else:
+        assert model._are_valid_(spread_probs), (
+            "Valid spread probs rejected"
+        )
+
+
+@given(logllh_params=logllh_params())
+def test_log_likelihood(logllh_params):
+    """Make sure the log-likelihood function works correctly"""
+    model, spread_probs, diag_times, time_dists = logllh_params
+
+    invalid_spread_probs = spread_probs.copy()
+    if len(invalid_spread_probs) > 0:
+        invalid_spread_probs[0] = 10.
+        invalid_logllh = model.log_likelihood(
+            invalid_spread_probs,
+            diag_times=diag_times,
+            time_dists=time_dists
+        )
+        assert invalid_logllh == -np.inf, (
+            "Invalid spread probs did not yield -inf"
+        )
+
+    t_stages = model.diagnose_matrices.keys()
+
+    if diag_times is not None:
+        if len(diag_times) != len(t_stages):
+            with pytest.raises(ValueError):
+                logllh = model.log_likelihood(
+                    spread_probs,
+                    diag_times=diag_times,
+                    time_dists=time_dists
+                )
+        else:
+            max_t = np.max(list(diag_times.values()))
+            logllh = model.log_likelihood(
+                spread_probs,
+                diag_times=diag_times,
+                max_t=max_t,
+                time_dists=time_dists
+            )
+            assert logllh <= 0. or np.isclose(logllh, 0.), (
+                "Log-likelihood must be larger than -inf but smaller or equal 0"
+            )
+            logllh = model.log_likelihood(
+                spread_probs,
+                diag_times=diag_times,
+                max_t=max_t - 3,
+                time_dists=time_dists
+            )
+            assert logllh == -np.inf, (
+                "Diagnose times later than max_t should give -inf"
+            )
+    elif time_dists is not None:
+        if len(time_dists) != len(t_stages):
+            with pytest.raises(ValueError):
+                logllh = model.log_likelihood(
+                    spread_probs,
+                    diag_times=diag_times,
+                    time_dists=time_dists
+                )
+        else:
+            logllh = model.log_likelihood(
+                spread_probs,
+                diag_times=diag_times,
+                time_dists=time_dists
+            )
+            assert logllh <= 0. or np.isclose(logllh, 0.), (
+                "Log-likelihood must be larger than -inf but smaller or equal 0"
+            )
+    else:
+        with pytest.raises(ValueError):
+            logllh = model.log_likelihood(
+                spread_probs,
+                diag_times=diag_times,
+                time_dists=time_dists
+            )

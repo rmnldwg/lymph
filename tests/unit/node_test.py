@@ -69,8 +69,8 @@ def test_constructor(name, state, typ):
 
 
 @given(
-    tumor_node=nodes(is_tumor=True, generate_valid=True),
-    lnl_node=nodes(is_lnl=True, generate_valid=True),
+    tumor_node=nodes(typ="tumor", generate_valid=True),
+    lnl_node=nodes(typ="lnl", generate_valid=True),
     new_state=st.one_of(st.integers(), st.booleans())
 )
 def test_state(tumor_node, lnl_node, new_state):

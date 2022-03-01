@@ -1,6 +1,7 @@
-
+import numpy as np
 import pandas as pd
 from hypothesis import assume
+from hypothesis.extra import numpy as hynp
 from hypothesis.extra import pandas as hypd
 from hypothesis.strategies import (
     booleans,
@@ -172,3 +173,56 @@ def model_patientdata_tuples(draw, models=models(), add_t_stages=False):
         patient_data[("info", "t_stage")] = draw(t_stage_column)
 
     return (model, patient_data)
+
+
+@composite
+def logllh_params(
+    draw,
+    model_patientdata=model_patientdata_tuples(
+        models=models(modalities=modalities()),
+        add_t_stages=True,
+    )
+):
+    """Search strategy for the parameters of the log-likelihood function"""
+    model, patient_data = draw(model_patientdata)
+    model.patient_data = patient_data
+    assume(hasattr(model, "_diagnose_matrices"))
+
+    n = len(model.spread_probs)
+    spread_probs = draw(hynp.arrays(dtype=float, shape=n, elements=floats(0., 1.)))
+
+    t_stages = sampled_from(list(model.diagnose_matrices.keys()))
+    len_time_dist = draw(integers(1, 50))
+
+    diag_times = draw(
+        one_of(
+            none(),
+            dictionaries(
+                keys=t_stages,
+                values=integers(0, 50),
+                min_size=1
+            )
+        )
+    )
+    time_dists = draw(
+        one_of(
+            none(),
+            dictionaries(
+                keys=t_stages,
+                values=hynp.arrays(
+                    dtype=float,
+                    shape=len_time_dist,
+                    elements=floats(0., allow_nan=False, allow_infinity=False)
+                ),
+                min_size=1
+            )
+        )
+    )
+    if time_dists is not None:
+        # normalize time distributions
+        for key, val in time_dists.items():
+            val_sum = np.sum(val)
+            assume(val_sum > 0.)
+            time_dists[key] = val / val_sum
+
+    return (model, spread_probs, diag_times, time_dists)
