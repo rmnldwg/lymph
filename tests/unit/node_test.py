@@ -2,9 +2,9 @@ import hypothesis.strategies as st
 import numpy as np
 import pytest
 from custom_strategies import nodes
-from hypothesis import given
+from hypothesis import assume, given
 
-from lymph import Node
+from lymph import Edge, Node
 
 
 @pytest.fixture(scope="session", params=[
@@ -138,3 +138,27 @@ def test_trans_prob(inc):
     assert np.isclose(np.sum(cached_func_res), 1.), (
         "Probabilities must sum to 1"
     )
+
+
+@given(
+    node=nodes(generate_valid=True),
+    parents=st.lists(nodes(generate_valid=True), min_size=1, max_size=20),
+    spread_probs=st.lists(st.floats(0., 1.), min_size=1, max_size=40),
+    log=st.booleans(),
+)
+def test_bn_prob(node, parents, spread_probs, log):
+    """Check the Bayesian net probability"""
+    assume(len(spread_probs) >= len(parents))
+    for i,parent in enumerate(parents):
+        new_edge = Edge(start=parent, end=node, t=spread_probs[i])
+
+    bn_prob = node.bn_prob(log=log)
+
+    if not log:
+        assert 0. <= bn_prob <= 1., (
+            "Probability must be between zero and one"
+        )
+    else:
+        assert bn_prob <= 0., (
+            "Log-probability must be smaller or equal zero"
+        )
