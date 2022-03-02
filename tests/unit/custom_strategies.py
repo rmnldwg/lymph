@@ -78,7 +78,7 @@ def graphs(draw, min_size=1, max_size=6, unique=True):
 
 
 @composite
-def modalities(draw, valid=True):
+def modalities(draw, valid=True, min_size=1, max_size=3):
     """Create SearchStrategy for (valid) modalities."""
     if valid:
         spsn_strategy = lists(floats(0.5, 1.0), min_size=2, max_size=2)
@@ -92,8 +92,8 @@ def modalities(draw, valid=True):
     dict_strategy = dictionaries(
         keys=key_strategy,
         values=spsn_strategy,
-        min_size=1 if valid else 0,
-        max_size=3 if valid else 100,
+        min_size=min_size if valid else 0,
+        max_size=max_size if valid else 100,
     )
     return draw(dict_strategy)
 
@@ -176,6 +176,25 @@ def model_patientdata_tuples(draw, models=models(), add_t_stages=False):
 
 
 @composite
+def time_dist_st(draw, min_size=1, max_size=20):
+    """Strategy for distributions over diagnose times"""
+    n = draw(integers(min_size, max_size))
+    unnormalized = draw(
+        hynp.arrays(
+            dtype=float, 
+            shape=n, 
+            elements=floats(
+                min_value=0., exclude_min=True, 
+                allow_nan=False, allow_infinity=None
+            )
+        )
+    )
+    norm = np.linalg.norm(unnormalized)
+    assume(0. < norm < np.inf)
+    return unnormalized / norm
+
+
+@composite
 def logllh_params(
     draw,
     model_patientdata=model_patientdata_tuples(
@@ -209,20 +228,42 @@ def logllh_params(
             none(),
             dictionaries(
                 keys=t_stages,
-                values=hynp.arrays(
-                    dtype=float,
-                    shape=len_time_dist,
-                    elements=floats(0., allow_nan=False, allow_infinity=False)
-                ),
+                values=time_dist_st(),
                 min_size=1
             )
         )
     )
-    if time_dists is not None:
-        # normalize time distributions
-        for key, val in time_dists.items():
-            val_sum = np.sum(val)
-            assume(val_sum > 0.)
-            time_dists[key] = val / val_sum
-
     return (model, spread_probs, diag_times, time_dists)
+
+
+@composite
+def risk_params(
+    draw, 
+    models=models(spread_probs=floats(0., 1)), 
+    modalities=modalities(max_size=1)
+):
+    """Strategy for generating parameters necessary for testing risk function"""
+    model = draw(models)
+    model.modalities = draw(modalities)
+    num_lnls = len(model.lnls)
+    involvement = draw(
+        one_of(
+            none(),
+            lists(
+                one_of(none(), booleans()), 
+                min_size=num_lnls, max_size=num_lnls
+            )
+        )
+    )
+    diagnoses = draw(
+        dictionaries(
+            keys=just(list(model.modalities.keys())[0]),
+            values=lists(
+                one_of(none(), booleans()),
+                min_size=num_lnls, max_size=num_lnls
+            ),
+            min_size=1, max_size=1
+        )
+    )
+    return (model, involvement, diagnoses)
+    

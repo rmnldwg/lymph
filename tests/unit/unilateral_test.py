@@ -1,13 +1,16 @@
 
+from urllib.parse import MAX_CACHE_SIZE
 import numpy as np
 import pytest
 from custom_strategies import (
     graphs,
     logllh_params,
+    risk_params,
     modalities,
     model_diagnose_tuples,
     model_patientdata_tuples,
     models,
+    time_dist_st,
 )
 from helpers import are_probabilities
 from hypothesis import HealthCheck, assume, given, settings
@@ -729,3 +732,49 @@ def test_log_likelihood(logllh_params):
                 diag_times=diag_times,
                 time_dists=time_dists
             )
+
+
+@given(
+    risk_params=risk_params(),
+    time_dist=time_dist_st(),
+)
+def test_risk(risk_params, time_dist):
+    """Test the risk function"""
+    model, involvement, diagnoses = risk_params
+    risk = model.risk(inv=involvement, diagnoses=diagnoses, time_dist=time_dist)
+    
+    if involvement is None:
+        assert len(risk) == 2**len(model.lnls), (
+            "Risk must predict as many risks as there are distinct states"
+        )
+        are_ge_0 = np.all(np.greater_equal(risk, 0.))
+        are_close_0 = np.all(np.isclose(risk, 0.))
+        are_le_1 = np.all(np.less_equal(risk, 1.))
+        are_close_1 = np.all(np.isclose(risk, 1.))
+        assert (are_ge_0 or are_close_0) and (are_le_1 or are_close_1), (
+            "Risk for some states out of bound"
+        )
+    else:
+        is_ge_0 = np.isclose(0., risk) or 0. < risk
+        is_le_1 = np.isclose(1., risk) or risk < 1.
+        assert is_ge_0 and is_le_1, (
+            "Risk must be between zero and one"
+        )
+
+
+@given(
+    model=models(
+        modalities=modalities(max_size=1), 
+        spread_probs=floats(0., 1.)
+    ),
+    diag_times=lists(integers(0), min_size=1, max_size=100),
+)
+@settings(max_examples=10)
+def test_draw_patient_diagnoses(model, diag_times):
+    """Check if model correctly draws patient diagnoses
+    TODO: Not working yet"""
+    patient_diagnoses = model._draw_patient_diagnoses(diag_times)
+    
+    assert len(diag_times) == len(patient_diagnoses), (
+        "Model should draw as many patient diagnoses as diagnose times provided"
+    )
