@@ -53,43 +53,24 @@ def lyprox_to_lymph(
         A converted pandas :class:`DataFrame` that can then be used with the
         lymph package.
     """
-    noncentral_data = data.loc[data[("tumor", "1", "side")] != "central"]
-    lateralization = noncentral_data[("tumor", "1", "side")]
-    t_stage_data = noncentral_data[("tumor", "1", "t_stage")]
-    midline_extension_data = noncentral_data[("tumor", "1", "extension")]
-
-    diagnostic_data = noncentral_data[modalities].drop(columns=["date"], level=2)
-    # copying just to get DataFrae of same structure and with same columns
-    sorted_data = diagnostic_data.copy()
-    # rename columns for assignment later
-    sorted_data = sorted_data.rename(columns={"right": "ipsi", "left": "contra"})
-    other_ = {"right": "left", "left": "right"}
-
-    for mod in modalities:
-        for side in ["left", "right"]:
-            ipsi_diagnoses = diagnostic_data.loc[
-                lateralization == side, (mod, side)
-            ]
-            contra_diagnoses = diagnostic_data.loc[
-                lateralization == side, (mod, other_[side])
-            ]
-            sorted_data.loc[lateralization == side, (mod, "ipsi")] = ipsi_diagnoses.values
-            sorted_data.loc[lateralization == side, (mod, "contra")] = contra_diagnoses.values
+    t_stage_data = data[("tumor", "1", "t_stage")]
+    midline_extension_data = data[("tumor", "1", "extension")]
+    diagnostic_data = data[modalities].drop(columns=["date"], level=2)
 
     if convert_t_stage is not None:
-        sorted_data[("info", "tumor", "t_stage")] = [
+        diagnostic_data[("info", "tumor", "t_stage")] = [
             convert_t_stage[t] for t in t_stage_data.values
         ]
     else:
-        sorted_data[("info", "tumor", "t_stage")] = t_stage_data
+        diagnostic_data[("info", "tumor", "t_stage")] = t_stage_data
 
     if method == "midline":
-        sorted_data[("info", "tumor", "midline_extension")] = midline_extension_data
+        diagnostic_data[("info", "tumor", "midline_extension")] = midline_extension_data
     elif method == "unilateral":
-        sorted_data = sorted_data.drop(columns=["contra"], level=1)
-        sorted_data.columns = sorted_data.columns.droplevel(1)
+        diagnostic_data = diagnostic_data.drop(columns=["contra"], level=1)
+        diagnostic_data.columns = diagnostic_data.columns.droplevel(1)
 
-    return sorted_data
+    return diagnostic_data
 
 
 class EnsembleSampler(emcee.EnsembleSampler):
