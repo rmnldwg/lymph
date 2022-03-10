@@ -109,7 +109,7 @@ class MidlineBilateral(HDFMixin):
         )
 
         # avoid unnecessary double computation of ipsilateral transition matrix
-        self.noext.ipsi._A = self.ext.ipsi.A
+        self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -128,7 +128,7 @@ class MidlineBilateral(HDFMixin):
         self.ext.trans_probs = new_params
 
         # avoid unnecessary double computation of ipsilateral transition matrix
-        self.noext.ipsi._A = self.ext.ipsi.A
+        self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -285,8 +285,6 @@ class MidlineBilateral(HDFMixin):
 
             :meth:`Unilateral.load_data`: Data loading method of the unilateral
             network.
-
-            :meth:`Unilateral._gen_C`: Generate the data matrix from the tables.
         """
         ext_data = data.loc[data[("info", "tumor", "midline_extension")]]
         noext_data = data.loc[~data[("info", "tumor", "midline_extension")]]
@@ -305,7 +303,7 @@ class MidlineBilateral(HDFMixin):
         )
 
 
-    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
+    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
         if new_spread_probs.shape != self.spread_probs.shape:
@@ -374,7 +372,7 @@ class MidlineBilateral(HDFMixin):
             :meth:`Bilateral.log_likelihood`: Log-likelihood function of the
             bilateral system, not concerned with midline extension.
         """
-        if not self._spread_probs_are_valid(spread_probs):
+        if not self._are_valid_(spread_probs):
             return -np.inf
 
         self.spread_probs = spread_probs

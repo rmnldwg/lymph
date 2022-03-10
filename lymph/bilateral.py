@@ -335,8 +335,6 @@ class Bilateral(HDFMixin):
         See Also:
             :meth:`Unilateral.load_data`: Data loading method of unilateral
             system.
-
-            :meth:`Unilateral._gen_C`: Generate marginalization matrix.
         """
         # split the DataFrame into two, one for ipsi-, one for contralateral
         ipsi_data = data.drop(
@@ -356,25 +354,21 @@ class Bilateral(HDFMixin):
             columns=contra_data.columns.droplevel(1)
         )
 
-        # generate both side's C matrix with duplicates and ones
-        gen_C_kwargs = {'delete_ones': False, 'aggregate_duplicates': False}
         self.ipsi.load_data(
             ipsi_data,
             t_stages=t_stages,
             modality_spsn=modality_spsn,
-            mode=mode,
-            gen_C_kwargs=gen_C_kwargs
+            mode=mode
         )
         self.contra.load_data(
             contra_data,
             t_stages=t_stages,
             modality_spsn=modality_spsn,
-            mode=mode,
-            gen_C_kwargs=gen_C_kwargs
+            mode=mode
         )
 
 
-    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
+    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
         if new_spread_probs.shape != self.spread_probs.shape:
@@ -416,18 +410,14 @@ class Bilateral(HDFMixin):
                 state_probs["ipsi"] = self.ipsi._evolve(diag_time)
                 state_probs["contra"] = self.contra._evolve(diag_time)
 
-                # matrix with joint probabilities for any combination of ipsi-
-                # & conralateral diagnoses after given number of time-steps
-                joint_diagnose_prob = (
-                    self.ipsi.B.T
-                    @ np.outer(state_probs["ipsi"], state_probs["contra"])
-                    @ self.contra.B
-                )
+                # joint probs for ipsi- & contralateral hidden states
+                joint_state_probs = np.outer(state_probs["ipsi"],
+                                             state_probs["contra"])
                 log_p = np.log(
                     np.sum(
-                        self.ipsi.C[stage]
-                        * (joint_diagnose_prob
-                           @ self.contra.C[stage]),
+                        self.ipsi.diagnose_matrices[stage]
+                        * (joint_state_probs
+                           @ self.contra.diagnose_matrices[stage]),
                         axis=0
                     )
                 )
@@ -449,18 +439,16 @@ class Bilateral(HDFMixin):
             state_probs["contra"] = self.contra._evolve(t_last=max_t)
 
             for stage in t_stages:
-                joint_diagnose_prob = (
-                    self.ipsi.B.T
-                    @ state_probs["ipsi"].T
+                joint_state_probs = (
+                    state_probs["ipsi"].T
                     @ np.diag(time_dists[stage])
                     @ state_probs["contra"]
-                    @ self.contra.B
                 )
                 log_p = np.log(
                     np.sum(
-                        self.ipsi.C[stage]
-                        * (joint_diagnose_prob
-                           @ self.contra.C[stage]),
+                        self.ipsi.diagnose_matrices[stage]
+                        * (joint_state_probs
+                           @ self.contra.diagnose_matrices[stage]),
                         axis=0
                     )
                 )
@@ -530,7 +518,7 @@ class Bilateral(HDFMixin):
             :meth:`Unilateral.log_likelihood`: The log-likelihood function of
             the unilateral system.
         """
-        if not self._spread_probs_are_valid(spread_probs):
+        if not self._are_valid_(spread_probs):
             return -np.inf
 
         self.spread_probs = spread_probs
@@ -751,7 +739,7 @@ class Bilateral(HDFMixin):
             # create one large diagnose vector from the individual modalitie's
             # diagnoses
             obs = np.array([])
-            for mod in self.system[side]._modality_tables:
+            for mod in self.system[side]._spsn_tables:
                 if mod in diagnoses[side]:
                     obs = np.append(obs, diagnoses[side][mod])
                 else:
@@ -781,7 +769,7 @@ class Bilateral(HDFMixin):
                        "over it must be given.")
                 raise ValueError(msg)
 
-            pD[side] = self.system[side].B @ cZ[side]
+            pD[side] = self.system[side].observation_matrix @ cZ[side]
 
         # joint probability of Xi & Xc (marginalized over time). Acts as prior
         # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix
@@ -803,9 +791,9 @@ class Bilateral(HDFMixin):
         # matching complete observations that give rise to the specific
         # diagnose. The result should be just a number
         pDD = (cZ["ipsi"].T
-               @ self.ipsi.B.T
+               @ self.ipsi.observation_matrix.T
                @ pXX
-               @ self.contra.B
+               @ self.contra.observation_matrix
                @ cZ["contra"])
 
         return pDDII / pDD
