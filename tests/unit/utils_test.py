@@ -91,9 +91,13 @@ def test_hdf_io(unilateral_model, tmp_path):
         name="model"
     )
 
-    assert recovered_model.graph == graph, (
-        "Model graph was not correctly recovered"
-    )
+    for key,val in graph.items():
+        assert key in recovered_model.graph, (
+            "Did not recover all graph keys"
+        )
+        assert set(val) == set(recovered_model.graph[key]), (
+            "Did not recover connections in the graph correctly"
+        )
     assert recovered_model.modalities == modalities, (
         "Model's modalities were not correctly recovered"
     )
