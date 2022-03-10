@@ -91,9 +91,13 @@ def test_hdf_io(unilateral_model, tmp_path):
         name="model"
     )
 
-    assert recovered_model.graph == graph, (
-        "Model graph was not correctly recovered"
-    )
+    for key,val in graph.items():
+        assert key in recovered_model.graph, (
+            "Did not recover all graph keys"
+        )
+        assert set(val) == set(recovered_model.graph[key]), (
+            "Did not recover connections in the graph correctly"
+        )
     assert recovered_model.modalities == modalities, (
         "Model's modalities were not correctly recovered"
     )
@@ -160,8 +164,8 @@ def test_change_base(number, base, length):
 
 
 @given(
-    table=integers(1, 4).flatmap(
-        lambda n: npst.arrays(dtype=bool, shape=(50,2**n))
+    table=integers(1, 3).flatmap(
+        lambda n: npst.arrays(dtype=bool, shape=(30,2**n))
     )
 )
 @settings(deadline=2000, max_examples=20)
