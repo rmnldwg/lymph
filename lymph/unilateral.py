@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ class Unilateral(HDFMixin):
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], List[str]] = {}, **kwargs):
+    def __init__(self, graph: Dict[Tuple[str], Set[str]] = {}, **kwargs):
         """Initialize the underlying graph:
 
         Args:
@@ -24,6 +24,11 @@ class Unilateral(HDFMixin):
                 (arbitrary string). The corresponding value is a list of names
                 this node should be connected to via an :class:`Edge`.
         """
+        name_list = [tpl[1] for tpl in graph.keys()]
+        name_set = {tpl[1] for tpl in graph.keys()}
+        if len(name_list) != len(name_set):
+            raise ValueError("No tumor and LNL can have the same name")
+
         self.nodes = []        # list of all nodes in the graph
         self.tumors = []       # list of nodes with type tumour
         self.lnls = []         # list of all lymph node levels
@@ -42,7 +47,7 @@ class Unilateral(HDFMixin):
         self.trans_edges = []  # list of edges, connecting LNLs
 
         for key, values in graph.items():
-            for value in values:
+            for value in set(values):
                 self.edges.append(Edge(self.find_node(key[1]),
                                        self.find_node(value)))
 
@@ -88,7 +93,7 @@ class Unilateral(HDFMixin):
 
 
     @property
-    def graph(self) -> Dict[Tuple[str], List[str]]:
+    def graph(self) -> Dict[Tuple[str, str], Set[str]]:
         """Lists the graph as it was provided when the system was created.
         """
         res = {}
@@ -101,17 +106,17 @@ class Unilateral(HDFMixin):
     def state(self):
         """Return the currently set state of the system.
         """
-        return np.array([lnl.state for lnl in self.lnls], dtype=bool)
+        return np.array([lnl.state for lnl in self.lnls], dtype=int)
 
     @state.setter
     def state(self, newstate: np.ndarray):
         """Sets the state of the system to ``newstate``.
         """
-        if len(newstate) != len(self.lnls):
+        if len(newstate) < len(self.lnls):
             raise ValueError("length of newstate must match # of LNLs")
 
         for i, node in enumerate(self.lnls):  # only set lnl's states
-            node.state = int(newstate[i])
+            node.state = newstate[i]
 
 
     @property
@@ -222,6 +227,9 @@ class Unilateral(HDFMixin):
                 in_states = tuple(edge.start.state for edge in lnl.inc)
                 in_weights = tuple(edge.t for edge in lnl.inc)
                 res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
+            elif not newstate[i]:
+                res = 0.
+                break
 
         if acquire:
             self.state = newstate
@@ -460,7 +468,7 @@ class Unilateral(HDFMixin):
 
             sp, sn = spsn
             self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
-                                                   [1. - sp, sn     ]])
+                                               [1. - sp, sn     ]])
 
 
     def _gen_observation_matrix(self):
@@ -515,7 +523,7 @@ class Unilateral(HDFMixin):
                 and second, the LNLs.
             t_stage: The T-stage all the patients in ``table`` belong to.
         """
-        if not hasattr(self, "diagnose_matrices"):
+        if not hasattr(self, "_diagnose_matrices"):
             self._diagnose_matrices = {}
 
         shape = (len(self.state_list), len(table))
@@ -697,15 +705,15 @@ class Unilateral(HDFMixin):
         return state_probs
 
 
-    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
+    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
         if new_spread_probs.shape != self.spread_probs.shape:
             msg = ("Shape of provided spread parameters does not match network")
             raise ValueError(msg)
-        if np.any(np.greater(0., new_spread_probs)):
+        if np.any(0. > new_spread_probs):
             return False
-        if np.any(np.greater(new_spread_probs, 1.)):
+        if np.any(new_spread_probs > 1.):
             return False
 
         return True
@@ -759,7 +767,7 @@ class Unilateral(HDFMixin):
             is the data and :math:`\\theta` is the tuple of spread probabilities
             and diagnose times or distributions over diagnose times.
         """
-        if not self._spread_probs_are_valid(spread_probs):
+        if not self._are_valid_(spread_probs):
             return -np.inf
 
         self.spread_probs = spread_probs
@@ -773,8 +781,9 @@ class Unilateral(HDFMixin):
 
             if diag_times is not None:
                 if len(diag_times) != len(t_stages):
-                    msg = ("One diagnose time must be provided for each T-stage.")
-                    raise ValueError(msg)
+                    raise ValueError(
+                        "One diagnose time must be provided for each T-stage."
+                    )
 
                 for stage in t_stages:
                     diag_time = np.around(diag_times[stage]).astype(int)
@@ -784,9 +793,10 @@ class Unilateral(HDFMixin):
 
             elif time_dists is not None:
                 if len(time_dists) != len(t_stages):
-                    msg = ("One distribution over diagnose times must be provided "
-                        "for each T-stage.")
-                    raise ValueError(msg)
+                    raise ValueError(
+                        "One distribution over diagnose times must be provided "
+                        "for each T-stage."
+                    )
 
                 # subtract 1, to also consider healthy starting state (t = 0)
                 max_t = len(time_dists[t_stages[0]]) - 1
@@ -795,9 +805,10 @@ class Unilateral(HDFMixin):
                     state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
 
             else:
-                msg = ("Either provide a list of diagnose times for each T-stage "
-                    "or a distribution over diagnose times for each T-stage.")
-                raise ValueError(msg)
+                raise ValueError(
+                    "Either provide a list of diagnose times for each T-stage "
+                    "or a distribution over diagnose times for each T-stage."
+                )
 
             llh = 0.
             for stage in t_stages:

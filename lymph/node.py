@@ -16,9 +16,16 @@ class Node(object):
             state: Current state this LNL is in. Can be in {0, 1}.
             typ: Can be either ``"lnl"``, ``"tumor"``.
         """
+        if type(name) is not str:
+            raise TypeError("Name of node must be a string")
+        if int(state) not in [0,1]:
+            raise ValueError("State must be castable to 0 or 1")
+        if typ not in ["lnl", "tumor"]:
+            raise ValueError("Typ of node must be either `lnl` or `tumor`")
+
         self.name = name
         self.typ = typ
-        self.state = state
+        self.state = int(state)
 
         self.inc = []
         self.out = []
@@ -42,7 +49,10 @@ class Node(object):
         """Set the state of the node and make sure the state of a tumor node
         cannot be changed."""
         if self.typ == "lnl":
-            self._state = newstate
+            if int(newstate) not in [0,1]:
+                raise ValueError("State of node must be either 0 or 1")
+            self._state = int(newstate)
+
         elif self.typ == "tumor":
             self._state = 1
 
@@ -92,10 +102,10 @@ class Node(object):
             Otherwise, meaning it is already involved/metastatic, it must stay
             in this state no matter what, because self-healing is forbidden.
         """
-        stay_prob = 1.
+        healthy_prob = 1.
         for state, weight in zip(in_states, in_weights):
-            stay_prob *= (1. - weight) ** state
-        return [stay_prob, 1. - stay_prob]
+            healthy_prob *= (1. - weight) ** state
+        return [healthy_prob, 1. - healthy_prob]
 
 
     def obs_prob(

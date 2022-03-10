@@ -303,7 +303,7 @@ class MidlineBilateral(HDFMixin):
         )
 
 
-    def _spread_probs_are_valid(self, new_spread_probs: np.ndarray) -> bool:
+    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
         """Check that the spread probability (rates) are all within limits.
         """
         if new_spread_probs.shape != self.spread_probs.shape:
@@ -372,7 +372,7 @@ class MidlineBilateral(HDFMixin):
             :meth:`Bilateral.log_likelihood`: Log-likelihood function of the
             bilateral system, not concerned with midline extension.
         """
-        if not self._spread_probs_are_valid(spread_probs):
+        if not self._are_valid_(spread_probs):
             return -np.inf
 
         self.spread_probs = spread_probs
