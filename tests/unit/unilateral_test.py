@@ -662,6 +662,7 @@ def test_are_valid(model, spread_probs):
 
 
 @given(logllh_params=logllh_params())
+@settings(max_examples=50, suppress_health_check=HealthCheck.all())
 def test_log_likelihood(logllh_params):
     """Make sure the log-likelihood function works correctly"""
     model, spread_probs, diag_times, time_dists = logllh_params

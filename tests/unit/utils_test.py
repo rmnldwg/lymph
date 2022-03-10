@@ -160,8 +160,8 @@ def test_change_base(number, base, length):
 
 
 @given(
-    table=integers(1, 4).flatmap(
-        lambda n: npst.arrays(dtype=bool, shape=(50,2**n))
+    table=integers(1, 3).flatmap(
+        lambda n: npst.arrays(dtype=bool, shape=(30,2**n))
     )
 )
 @settings(deadline=2000, max_examples=20)

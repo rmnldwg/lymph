@@ -247,7 +247,7 @@ def stage_dist_and_time_dists(draw):
 def logllh_params(
     draw,
     model_patientdata=model_patientdata_tuples(
-        models=models(modalities=modalities()),
+        models=models(modalities=modalities(max_size=2)),
         add_t_stages=True,
     )
 ):
@@ -260,14 +260,14 @@ def logllh_params(
     spread_probs = draw(hynp.arrays(dtype=float, shape=n, elements=floats(0., 1.)))
 
     t_stages = sampled_from(list(model.diagnose_matrices.keys()))
-    len_time_dist = draw(integers(1, 50))
+    len_time_dist = draw(integers(1, 20))
 
     diag_times = draw(
         one_of(
             none(),
             dictionaries(
                 keys=t_stages,
-                values=integers(0, 50),
+                values=integers(0, 20),
                 min_size=1
             )
         )
