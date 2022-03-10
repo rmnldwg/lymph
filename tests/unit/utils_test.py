@@ -1,10 +1,19 @@
 import hypothesis.extra.numpy as npst
-import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
+from custom_strategies import t_stages_st
 from hypothesis import assume, example, given, settings
+from hypothesis.strategies import (
+    characters,
+    dictionaries,
+    floats,
+    integers,
+    one_of,
+    text,
+    tuples,
+)
 
 from lymph.unilateral import Unilateral
 from lymph.utils import (
@@ -41,15 +50,15 @@ def unilateral_model():
 
 def gen_text_tuples(n):
     """Strategy generating tuples of text."""
-    characters = st.characters(blacklist_characters=',')
-    text = st.text(alphabet=characters, min_size=1)
-    strategy = st.tuples(*([text] * n))
+    chars = characters(blacklist_characters=',')
+    txt = text(alphabet=chars, min_size=1)
+    strategy = tuples(*([txt] * n))
     return strategy
 
 @given(
-    st.dictionaries(
-        keys=st.integers(1,10).flatmap(gen_text_tuples),
-        values=st.one_of(st.floats(), st.integers(), st.text())
+    dictionaries(
+        keys=integers(1,10).flatmap(gen_text_tuples),
+        values=one_of(floats(), integers(), text())
     )
 )
 @settings(max_examples=20)
@@ -94,9 +103,9 @@ def test_hdf_io(unilateral_model, tmp_path):
 
 
 @given(
-    k=st.integers(0, 170),
-    n=st.integers(0, 170),
-    p=st.floats(0., 1.)
+    k=integers(0, 170),
+    n=integers(0, 170),
+    p=floats(0., 1.)
 )
 def test_fast_binomial_pmf(k, n, p):
     assume(k <= n)
@@ -107,9 +116,9 @@ def test_fast_binomial_pmf(k, n, p):
 
 
 @given(
-    number=st.integers(-1),
-    base=st.integers(-1, 17),
-    length=st.integers(0, 1000),
+    number=integers(-1),
+    base=integers(-1, 17),
+    length=integers(0, 1000),
 )
 @example(number=-1, base=17, length=0)
 def test_change_base(number, base, length):
@@ -151,7 +160,7 @@ def test_change_base(number, base, length):
 
 
 @given(
-    table=st.integers(1, 4).flatmap(
+    table=integers(1, 4).flatmap(
         lambda n: npst.arrays(dtype=bool, shape=(50,2**n))
     )
 )
@@ -172,15 +181,9 @@ def test_comp_state_dist(table):
 
 
 @given(
-    num_patients=st.integers(-1, 1000),
-    t_stages=st.one_of(
-        st.lists(st.integers(0), min_size=1, max_size=20, unique=True),
-        st.lists(st.characters(whitelist_categories=('L', 'N'),
-                               blacklist_characters=''),
-                 min_size=1, max_size=20, unique=True),
-        st.lists(st.text(min_size=1), min_size=1, max_size=20, unique=True),
-    ),
-    max_t=st.integers(1,100)
+    num_patients=integers(-1, 1000),
+    t_stages=t_stages_st(),
+    max_t=integers(1,100)
 )
 def test_draw_diagnose_times(
     num_patients, t_stages, max_t
@@ -265,8 +268,8 @@ def test_draw_diagnose_times(
 
 
 @given(
-    ndim=st.integers(-1, 1000),
-    nsample=st.integers(-1, 1000)
+    ndim=integers(-1, 1000),
+    nsample=integers(-1, 1000)
 )
 def test_draw_from_simplex(ndim, nsample):
     if ndim < 1 or nsample < 1:

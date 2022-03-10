@@ -448,7 +448,7 @@ def draw_diagnose_times(
     """
     if num_patients < 1:
         raise ValueError("Number of patients to draw must be 1 or larger")
-    if not np.isclose(np.sum(stage_dist), 1):
+    if not np.isclose(np.sum(stage_dist), 1.):
         raise ValueError("Distribution over T-stages must sum to 1.")
 
     # draw the diagnose times for each patient

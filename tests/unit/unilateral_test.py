@@ -1,15 +1,15 @@
 
-from urllib.parse import MAX_CACHE_SIZE
 import numpy as np
 import pytest
 from custom_strategies import (
     graphs,
     logllh_params,
-    risk_params,
     modalities,
     model_diagnose_tuples,
     model_patientdata_tuples,
     models,
+    risk_params,
+    stage_dist_and_time_dists,
     time_dist_st,
 )
 from helpers import are_probabilities
@@ -476,8 +476,8 @@ def test_modalities(model, modalities):
         model.modalities = modalities
 
 
-@given(model=models(), modalities=modalities())
-@settings(max_examples=10, suppress_health_check=[HealthCheck.data_too_large])
+@given(model=models(), modalities=modalities(max_size=2))
+@settings(suppress_health_check=HealthCheck.all())
 def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
@@ -742,17 +742,15 @@ def test_risk(risk_params, time_dist):
     """Test the risk function"""
     model, involvement, diagnoses = risk_params
     risk = model.risk(inv=involvement, diagnoses=diagnoses, time_dist=time_dist)
-    
+
     if involvement is None:
         assert len(risk) == 2**len(model.lnls), (
             "Risk must predict as many risks as there are distinct states"
         )
-        are_ge_0 = np.all(np.greater_equal(risk, 0.))
-        are_close_0 = np.all(np.isclose(risk, 0.))
-        are_le_1 = np.all(np.less_equal(risk, 1.))
-        are_close_1 = np.all(np.isclose(risk, 1.))
-        assert (are_ge_0 or are_close_0) and (are_le_1 or are_close_1), (
-            "Risk for some states out of bound"
+        are_ge_0 = np.all(np.greater_equal(risk, 0.) | np.isclose(risk, 0.))
+        are_le_1 = np.all(np.less_equal(risk, 1.) | np.isclose(risk, 1.))
+        assert are_ge_0 and are_le_1, (
+            f"Risk = {risk} for some states out of bound"
         )
     else:
         is_ge_0 = np.isclose(0., risk) or 0. < risk
@@ -764,17 +762,65 @@ def test_risk(risk_params, time_dist):
 
 @given(
     model=models(
-        modalities=modalities(max_size=1), 
+        modalities=modalities(max_size=2),
         spread_probs=floats(0., 1.)
     ),
-    diag_times=lists(integers(0), min_size=1, max_size=100),
+    diag_times=lists(integers(0,10), min_size=1, max_size=100),
 )
-@settings(max_examples=10)
 def test_draw_patient_diagnoses(model, diag_times):
-    """Check if model correctly draws patient diagnoses
-    TODO: Not working yet"""
+    """Check if model correctly draws patient diagnoses"""
     patient_diagnoses = model._draw_patient_diagnoses(diag_times)
-    
-    assert len(diag_times) == len(patient_diagnoses), (
-        "Model should draw as many patient diagnoses as diagnose times provided"
+
+    expected_shape = (len(diag_times), len(model.modalities) * len(model.lnls))
+    assert patient_diagnoses.shape == expected_shape, (
+        f"Patient diagnoses has shape {patient_diagnoses.shape}, but should "
+        f"have shape {expected_shape}"
+    )
+    assert patient_diagnoses.dtype == bool, (
+        "Drawn diagnoses should be bools"
+    )
+
+
+@given(
+    model=models(
+        modalities=modalities(max_size=2),
+        spread_probs=floats(0., 1.)
+    ),
+    num_patients=integers(1,100),
+    stage_dist_and_time_dists=stage_dist_and_time_dists()
+)
+def test_generate_dataset(model, num_patients, stage_dist_and_time_dists):
+    stage_dist, time_dists = stage_dist_and_time_dists
+    assume('' not in time_dists)
+    generated_data = model.generate_dataset(
+        num_patients=num_patients,
+        stage_dist=stage_dist,
+        time_dists=time_dists,
+    )
+
+    modalities = model.modalities.keys()
+    lvl0_header = generated_data.columns.get_level_values(0)
+    assert all([mod in lvl0_header for mod in modalities]), (
+        "Some model modalities are not present in the generated dataset"
+    )
+    assert "info" in lvl0_header, (
+        "No info column in data header"
+    )
+
+    lvl1_header = generated_data.columns.get_level_values(1)
+    assert all([lnl.name in lvl1_header for lnl in model.lnls]), (
+        f"Some LNLs are not present in the dataset columns"
+    )
+    assert "t_stage" in lvl1_header, (
+        "No T-stage information in data header"
+    )
+
+    expected_shape = (num_patients, len(modalities) * len(model.lnls) + 1)
+    assert generated_data.shape == expected_shape, (
+        "Generated dataset has wrong shape"
+    )
+
+    t_stage_list = list(generated_data["info", "t_stage"].values)
+    assert all([t in list(time_dists.keys()) for t in t_stage_list]), (
+        "Some T-stages in the generated data were not in the original list"
     )

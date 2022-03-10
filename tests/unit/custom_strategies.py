@@ -101,22 +101,18 @@ def modalities(draw, valid=True, min_size=1, max_size=3):
 @composite
 def models(draw, states=None, spread_probs=None, modalities=None):
     """Define search strategy for generating unilateral models"""
-    graph = draw(graphs())
+    graph = draw(graphs(max_size=4))
     model = Unilateral(graph)
 
     if states is not None:
         num_lnls = len(model.lnls)
         model.state = draw(
-            lists(elements=states,
-                  min_size=num_lnls,
-                  max_size=num_lnls)
+            hynp.arrays(dtype=int, shape=num_lnls, elements=states)
         )
     if spread_probs is not None:
         len_spread_probs = len(model.spread_probs)
         model.spread_probs = draw(
-            lists(elements=spread_probs,
-                  min_size=len_spread_probs,
-                  max_size=len_spread_probs)
+            hynp.arrays(dtype=float, shape=len_spread_probs, elements=spread_probs)
         )
     if modalities is not None:
         model.modalities = draw(modalities)
@@ -176,22 +172,75 @@ def model_patientdata_tuples(draw, models=models(), add_t_stages=False):
 
 
 @composite
+def t_stages_st(draw, min_size=1, max_size=20):
+    allowed_chars = characters(
+        whitelist_categories=('L', 'N'), blacklist_characters=''
+    )
+    return draw(
+        one_of(
+            lists(
+                integers(0),
+                min_size=min_size,
+                max_size=max_size,
+                unique=True
+            ),
+            lists(
+                allowed_chars,
+                min_size=min_size,
+                max_size=max_size,
+                unique=True
+            ),
+            lists(
+                text(alphabet=allowed_chars, min_size=1),
+                min_size=min_size,
+                max_size=max_size,
+                unique=True
+            ),
+        )
+    )
+
+@composite
 def time_dist_st(draw, min_size=1, max_size=20):
     """Strategy for distributions over diagnose times"""
     n = draw(integers(min_size, max_size))
     unnormalized = draw(
         hynp.arrays(
-            dtype=float, 
-            shape=n, 
+            dtype=float,
+            shape=n,
             elements=floats(
-                min_value=0., exclude_min=True, 
+                min_value=0., exclude_min=True,
                 allow_nan=False, allow_infinity=None
             )
         )
     )
-    norm = np.linalg.norm(unnormalized)
+    norm = np.sum(unnormalized)
     assume(0. < norm < np.inf)
     return unnormalized / norm
+
+@composite
+def stage_dist_and_time_dists(draw):
+    """This strategy generates a tuple of a distribution over T-stages, for
+    each of which a time distribution is drawn."""
+    t_stages = draw(t_stages_st())
+
+    stage_dist = draw(hynp.arrays(
+        dtype=float, shape=len(t_stages), elements=floats(0.,1.)
+    ))
+    norm = np.sum(stage_dist)
+    assume(0. < norm < np.inf)
+    stage_dist = stage_dist / norm
+
+    max_t = draw(integers(0,10))
+    time_dists = {}
+    for t in t_stages:
+        time_dists[t] = draw(hynp.arrays(
+            dtype=float, shape=max_t+1, elements=floats(0.,1.)
+        ))
+        norm = np.sum(time_dists[t])
+        assume(0. < norm < np.inf)
+        time_dists[t] = time_dists[t] / norm
+
+    return stage_dist, time_dists
 
 
 @composite
@@ -228,7 +277,9 @@ def logllh_params(
             none(),
             dictionaries(
                 keys=t_stages,
-                values=time_dist_st(),
+                values=time_dist_st(
+                    min_size=len_time_dist, max_size=len_time_dist
+                ),
                 min_size=1
             )
         )
@@ -238,8 +289,8 @@ def logllh_params(
 
 @composite
 def risk_params(
-    draw, 
-    models=models(spread_probs=floats(0., 1)), 
+    draw,
+    models=models(spread_probs=floats(0., 1)),
     modalities=modalities(max_size=1)
 ):
     """Strategy for generating parameters necessary for testing risk function"""
@@ -250,7 +301,7 @@ def risk_params(
         one_of(
             none(),
             lists(
-                one_of(none(), booleans()), 
+                one_of(none(), booleans()),
                 min_size=num_lnls, max_size=num_lnls
             )
         )
@@ -266,4 +317,3 @@ def risk_params(
         )
     )
     return (model, involvement, diagnoses)
-    
