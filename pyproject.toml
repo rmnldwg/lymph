@@ -1,10 +1,14 @@
 [build-system]
 requires = [
-    "setuptools >= 44",
+    "setuptools >= 46.4.0",
+    "setuptools_scm >= 6.2.0",
     "wheel",
-    "versioneer-518",
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "lymph/_version.py"
+local_scheme = "no-local-version"
 
 [tool.isort]
 line_length = 79
