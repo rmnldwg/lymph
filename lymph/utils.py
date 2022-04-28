@@ -120,6 +120,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
         trust_threshold: float = 50.,
         rel_acor_threshold: float = 0.05,
         verbose: bool = True,
+        random_state: Optional[Tuple[Any]] = None,
         **kwargs
     ) -> np.ndarray:
         """Extract ``start`` from settings of the sampler and perform sampling
@@ -135,6 +136,10 @@ class EnsembleSampler(emcee.EnsembleSampler):
             rel_acor_threshold: The relative change of two consequtive trusted
                 autocorrelation estimates must fall below.
             verbose: Show progress during sampling and success at the end.
+            random_state: A state of numpy=s random number generator. This is
+                passed to emcee to make sampling deterministic. Note that due
+                to numerical instabilities (I guess), this will not make any
+                sampling round completely deterministic.
             **kwargs: Any other ``kwargs`` are directly passed to the ``sample``
                 method.
 
@@ -145,10 +150,14 @@ class EnsembleSampler(emcee.EnsembleSampler):
         if verbose:
             print("Starting sampling")
 
-        start = np.random.uniform(
+        if random_state is not None:
+            np.random.set_state(random_state)
+
+        coords = np.random.uniform(
             low=0., high=1.,
             size=(self.nwalkers, self.ndim)
         )
+        start = emcee.State(coords, random_state=np.random.get_state())
 
         acor_list = []
         old_acor = np.inf
