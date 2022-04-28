@@ -115,6 +115,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
 
     def run_sampling(
         self,
+        min_steps: int = 0,
         max_steps: int = 10000,
         check_interval: int = 100,
         trust_threshold: float = 50.,
@@ -127,6 +128,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
         while monitoring the convergence.
 
         Args:
+            min_steps: Minimum number of sampling steps to perform.
             max_steps: Maximum number of sampling steps to perform.
             check_interval: Number of sampling steps after which to check for
                 convergence.
@@ -153,6 +155,14 @@ class EnsembleSampler(emcee.EnsembleSampler):
         if random_state is not None:
             np.random.set_state(random_state)
 
+        if max_steps < min_steps:
+            warnings.warn(
+                "Sampling param min_steps is larger than max_steps. Swapping."
+            )
+            tmp = max_steps
+            max_steps = min_steps
+            min_steps = tmp
+
         coords = np.random.uniform(
             low=0., high=1.,
             size=(self.nwalkers, self.ndim)
@@ -164,9 +174,11 @@ class EnsembleSampler(emcee.EnsembleSampler):
         idx = 0
         is_converged = False
 
-        for sample in self.sample(start, iterations=max_steps, progress=verbose, **kwargs):
+        for sample in self.sample(
+            start, iterations=max_steps, progress=verbose, **kwargs
+        ):
             # after `check_interval` number of samples...
-            if self.iteration % check_interval:
+            if self.iteration < min_steps or self.iteration % check_interval:
                 continue
 
             # ...compute the autocorrelation time and store it in an array.
@@ -174,10 +186,12 @@ class EnsembleSampler(emcee.EnsembleSampler):
             acor_list.append(np.mean(new_acor))
             idx += 1
 
-            # check convergence based on two criterions:
+            # check convergence based on three criterions:
+            # - did it run for at least `min_steps`?
             # - has the acor time crossed the N / `trust_theshold` line?
             # - did the acor time stay stable?
-            is_converged = np.all(new_acor * trust_threshold < self.iteration)
+            is_converged = self.iteration >= min_steps
+            is_converged &= np.all(new_acor * trust_threshold < self.iteration)
             rel_acor_diff = np.abs(old_acor - new_acor) / new_acor
             is_converged &= np.all(rel_acor_diff < rel_acor_threshold)
 
