@@ -30,6 +30,10 @@ from hypothesis.strategies import (
 from lymph import Edge, Node, Unilateral
 
 
+settings.register_profile("tests", max_examples=10)
+settings.load_profile("tests")
+
+
 @given(graph=graphs())
 def test_constructor(graph):
     """Test constructor of base model."""
