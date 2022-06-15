@@ -109,7 +109,7 @@ def test_hdf_io(unilateral_model, tmp_path):
 @given(
     k=integers(0, 170),
     n=integers(0, 170),
-    p=floats(0., 1.)
+    p=floats(1e-20, 1.)
 )
 def test_fast_binomial_pmf(k, n, p):
     assume(k <= n)

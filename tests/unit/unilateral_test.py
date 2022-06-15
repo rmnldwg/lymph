@@ -31,7 +31,10 @@ from lymph import Edge, Node, Unilateral
 
 
 settings.register_profile(
-    "tests", max_examples=10, suppress_health_check=HealthCheck.all()
+    "tests",
+    max_examples=10,
+    suppress_health_check=HealthCheck.all(),
+    deadline=None,
 )
 settings.load_profile("tests")
 
