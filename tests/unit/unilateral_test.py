@@ -30,7 +30,9 @@ from hypothesis.strategies import (
 from lymph import Edge, Node, Unilateral
 
 
-settings.register_profile("tests", max_examples=10)
+settings.register_profile(
+    "tests", max_examples=10, suppress_health_check=HealthCheck.all()
+)
 settings.load_profile("tests")
 
 
@@ -191,7 +193,6 @@ def test_state(model, newstate):
 @given(
     model_and_base_probs=st_models_and_probs(gen_prob_type="base"),
 )
-@settings(max_examples=10)
 def test_base_probs(model_and_base_probs):
     """Test correct behaviour of base probs"""
     model, base_probs = model_and_base_probs
@@ -217,7 +218,6 @@ def test_base_probs(model_and_base_probs):
 @given(
     model_and_trans_probs=st_models_and_probs(gen_prob_type="trans"),
 )
-@settings(max_examples=10)
 def test_trans_probs(model_and_trans_probs):
     """Test correct behaviour of trans probs"""
     model, trans_probs = model_and_trans_probs
@@ -243,7 +243,6 @@ def test_trans_probs(model_and_trans_probs):
 @given(
     model_and_spread_probs=st_models_and_probs(gen_prob_type="all"),
 )
-@settings(max_examples=10)
 def test_spread_probs(model_and_spread_probs):
     """Test correct behaviour of trans probs"""
     model, spread_probs = model_and_spread_probs
@@ -362,7 +361,6 @@ def test_state_list(model):
     )
 
 @given(model=models(), modalities=modalities(valid=True))
-@settings(max_examples=10, suppress_health_check=[HealthCheck.data_too_large])
 def test_obs_list(model, modalities):
     assert not hasattr(model, "_obs_list"), (
         "Model should not have obs list after initialization"
@@ -411,7 +409,6 @@ def test_allowed_transitions(model):
 
 
 @given(model=models())
-@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_transition_matrix(model):
     """Verify the properties of the tranistion matrix A"""
     assert not hasattr(model, "_transition_matrix"), (
@@ -481,7 +478,6 @@ def test_modalities(model, modalities):
 
 
 @given(model=models(), modalities=modalities(max_size=2))
-@settings(suppress_health_check=HealthCheck.all())
 def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
@@ -523,7 +519,6 @@ def test_observation_matrix(model, modalities):
         text(alphabet=characters(whitelist_categories='L'), min_size=1)
     )
 )
-@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_diagnose_matrices(model_and_table, t_stage):
     """Test the generation of the diagnose matrix from a dataset of patients"""
     model, table = model_and_table
@@ -666,7 +661,6 @@ def test_are_valid(model, spread_probs):
 
 
 @given(logllh_params=logllh_params())
-@settings(max_examples=50, suppress_health_check=HealthCheck.all())
 def test_log_likelihood(logllh_params):
     """Make sure the log-likelihood function works correctly"""
     model, spread_probs, diag_times, time_dists = logllh_params
@@ -743,7 +737,6 @@ def test_log_likelihood(logllh_params):
     risk_params=st_risk_params(),
     time_dist=st_time_dist(),
 )
-@settings(max_examples=10)
 def test_risk(risk_params, time_dist):
     """Test the risk function"""
     model, involvement, diagnoses = risk_params
