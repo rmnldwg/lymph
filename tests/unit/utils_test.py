@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy as sp
-from custom_strategies import t_stages_st
+from custom_strategies import st_t_stages
 from hypothesis import assume, example, given, settings
 from hypothesis.strategies import (
     characters,
@@ -186,7 +186,7 @@ def test_comp_state_dist(table):
 
 @given(
     num_patients=integers(-1, 1000),
-    t_stages=t_stages_st(),
+    t_stages=st_t_stages(),
     max_t=integers(1,100)
 )
 def test_draw_diagnose_times(
