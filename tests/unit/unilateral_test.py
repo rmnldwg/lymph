@@ -5,12 +5,13 @@ from custom_strategies import (
     graphs,
     logllh_params,
     modalities,
-    model_diagnose_tuples,
-    model_patientdata_tuples,
+    st_model_diagnose_tuples,
+    st_model_patientdata_tuples,
     models,
-    risk_params,
-    stage_dist_and_time_dists,
-    time_dist_st,
+    st_models_and_probs,
+    st_risk_params,
+    st_stage_dist_and_time_dists,
+    st_time_dist,
 )
 from helpers import are_probabilities
 from hypothesis import HealthCheck, assume, given, settings
@@ -27,6 +28,15 @@ from hypothesis.strategies import (
 )
 
 from lymph import Edge, Node, Unilateral
+
+
+settings.register_profile(
+    "tests",
+    max_examples=10,
+    suppress_health_check=HealthCheck.all(),
+    deadline=None,
+)
+settings.load_profile("tests")
 
 
 @given(graph=graphs())
@@ -160,6 +170,8 @@ def test_graph(graph):
             "Recovered graph has wrong connection list"
         )
 
+    assert graph == recovered_graph, "Recovered graph is not the same as original one."
+
 
 @given(model=models(), newstate=lists(integers(0, 1)))
 def test_state(model, newstate):
@@ -182,13 +194,11 @@ def test_state(model, newstate):
 
 
 @given(
-    model=models(),
-    base_probs=lists(one_of(floats(0., 1.), floats()), min_size=1)
+    model_and_base_probs=st_models_and_probs(gen_prob_type="base"),
 )
-def test_base_probs(model, base_probs):
+def test_base_probs(model_and_base_probs):
     """Test correct behaviour of base probs"""
-    assume(len(model.base_probs) <= len(base_probs))
-    base_probs = base_probs[:len(model.base_probs)]
+    model, base_probs = model_and_base_probs
 
     is_larger_than_0 = np.all(np.greater_equal(base_probs, 0.))
     is_smaller_than_1 = np.all(np.less_equal(base_probs, 1.))
@@ -209,13 +219,11 @@ def test_base_probs(model, base_probs):
             model.base_probs = base_probs
 
 @given(
-    model=models(),
-    trans_probs=lists(one_of(floats(0., 1.), floats()), min_size=1)
+    model_and_trans_probs=st_models_and_probs(gen_prob_type="trans"),
 )
-def test_trans_probs(model, trans_probs):
+def test_trans_probs(model_and_trans_probs):
     """Test correct behaviour of trans probs"""
-    assume(len(model.trans_probs) <= len(trans_probs))
-    trans_probs = trans_probs[:len(model.trans_probs)]
+    model, trans_probs = model_and_trans_probs
 
     is_larger_than_0 = np.all(np.greater_equal(trans_probs, 0.))
     is_smaller_than_1 = np.all(np.less_equal(trans_probs, 1.))
@@ -236,13 +244,11 @@ def test_trans_probs(model, trans_probs):
             model.trans_probs = trans_probs
 
 @given(
-    model=models(),
-    spread_probs=lists(one_of(floats(0., 1.), floats()), min_size=1)
+    model_and_spread_probs=st_models_and_probs(gen_prob_type="all"),
 )
-def test_spread_probs(model, spread_probs):
-    """Test correct behaviour of spread probs"""
-    assume(len(model.spread_probs) < len(spread_probs))
-    spread_probs = spread_probs[:len(model.spread_probs)]
+def test_spread_probs(model_and_spread_probs):
+    """Test correct behaviour of trans probs"""
+    model, spread_probs = model_and_spread_probs
 
     is_larger_than_0 = np.all(np.greater_equal(spread_probs, 0.))
     is_smaller_than_1 = np.all(np.less_equal(spread_probs, 1.))
@@ -306,7 +312,7 @@ def test_comp_transition_prob(model, newstate, acquire):
 
 
 @given(
-    model_diagnose_tuples(
+    st_model_diagnose_tuples(
         models=models(modalities=modalities())
     )
 )
@@ -358,7 +364,6 @@ def test_state_list(model):
     )
 
 @given(model=models(), modalities=modalities(valid=True))
-@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_obs_list(model, modalities):
     assert not hasattr(model, "_obs_list"), (
         "Model should not have obs list after initialization"
@@ -407,7 +412,6 @@ def test_allowed_transitions(model):
 
 
 @given(model=models())
-@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_transition_matrix(model):
     """Verify the properties of the tranistion matrix A"""
     assert not hasattr(model, "_transition_matrix"), (
@@ -477,7 +481,6 @@ def test_modalities(model, modalities):
 
 
 @given(model=models(), modalities=modalities(max_size=2))
-@settings(suppress_health_check=HealthCheck.all())
 def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
@@ -510,7 +513,7 @@ def test_observation_matrix(model, modalities):
 
 
 @given(
-    model_and_table=model_patientdata_tuples(
+    model_and_table=st_model_patientdata_tuples(
         models=models(modalities=modalities())
     ),
     t_stage=one_of(
@@ -519,7 +522,6 @@ def test_observation_matrix(model, modalities):
         text(alphabet=characters(whitelist_categories='L'), min_size=1)
     )
 )
-@settings(suppress_health_check=[HealthCheck.data_too_large])
 def test_diagnose_matrices(model_and_table, t_stage):
     """Test the generation of the diagnose matrix from a dataset of patients"""
     model, table = model_and_table
@@ -553,7 +555,7 @@ def test_diagnose_matrices(model_and_table, t_stage):
 
 
 @given(
-    model_and_table=model_patientdata_tuples(
+    model_and_table=st_model_patientdata_tuples(
         models=models(modalities=modalities()),
         add_t_stages=True,
     )
@@ -662,7 +664,6 @@ def test_are_valid(model, spread_probs):
 
 
 @given(logllh_params=logllh_params())
-@settings(max_examples=50, suppress_health_check=HealthCheck.all())
 def test_log_likelihood(logllh_params):
     """Make sure the log-likelihood function works correctly"""
     model, spread_probs, diag_times, time_dists = logllh_params
@@ -736,8 +737,8 @@ def test_log_likelihood(logllh_params):
 
 
 @given(
-    risk_params=risk_params(),
-    time_dist=time_dist_st(),
+    risk_params=st_risk_params(),
+    time_dist=st_time_dist(),
 )
 def test_risk(risk_params, time_dist):
     """Test the risk function"""
@@ -788,10 +789,10 @@ def test_draw_patient_diagnoses(model, diag_times):
         spread_probs=floats(0., 1.)
     ),
     num_patients=integers(1,100),
-    stage_dist_and_time_dists=stage_dist_and_time_dists()
+    st_stage_dist_and_time_dists=st_stage_dist_and_time_dists()
 )
-def test_generate_dataset(model, num_patients, stage_dist_and_time_dists):
-    stage_dist, time_dists = stage_dist_and_time_dists
+def test_generate_dataset(model, num_patients, st_stage_dist_and_time_dists):
+    stage_dist, time_dists = st_stage_dist_and_time_dists
     assume('' not in time_dists)
     generated_data = model.generate_dataset(
         num_patients=num_patients,

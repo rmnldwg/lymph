@@ -47,7 +47,7 @@ class Unilateral(HDFMixin):
         self.trans_edges = []  # list of edges, connecting LNLs
 
         for key, values in graph.items():
-            for value in set(values):
+            for value in values:
                 self.edges.append(Edge(self.find_node(key[1]),
                                        self.find_node(value)))
 
