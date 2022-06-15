@@ -4,7 +4,7 @@ import pytest
 from custom_strategies import (
     graphs,
     logllh_params,
-    modalities,
+    st_modalities,
     st_model_diagnose_tuples,
     st_model_patientdata_tuples,
     models,
@@ -313,7 +313,7 @@ def test_comp_transition_prob(model, newstate, acquire):
 
 @given(
     st_model_diagnose_tuples(
-        models=models(modalities=modalities())
+        models=models(modalities=st_modalities())
     )
 )
 def test_comp_diagnose_prob(model_and_diagnose):
@@ -363,7 +363,7 @@ def test_state_list(model):
         "Cannot have duplicates in state list"
     )
 
-@given(model=models(), modalities=modalities(valid=True))
+@given(model=models(), modalities=st_modalities())
 def test_obs_list(model, modalities):
     assert not hasattr(model, "_obs_list"), (
         "Model should not have obs list after initialization"
@@ -435,7 +435,7 @@ def test_transition_matrix(model):
     )
 
 
-@given(model=models(), modalities=modalities(valid=False))
+@given(model=models(), modalities=st_modalities())
 def test_modalities(model, modalities):
     assert not hasattr(model, "_spsn_tables"), (
         "Model shoud not have spsn tables after initialization"
@@ -475,12 +475,20 @@ def test_modalities(model, modalities):
             "spsn table must sum to one along columns"
         )
 
-    modalities[0] = [0.7, 0.7]
     with pytest.raises(TypeError):
-        model.modalities = modalities
+        non_str_modalities = {5: [0.76, 0.82]}
+        model.modalities = non_str_modalities
+
+    with pytest.raises(ValueError):
+        too_many_vals_modalities = {"foo": [0.51, 0.52, 0.53]}
+        model.modalities = too_many_vals_modalities
+
+    with pytest.raises(ValueError):
+        out_of_bounds_modalities = {"bar": [-3.7, 42.0]}
+        model.modalities = out_of_bounds_modalities
 
 
-@given(model=models(), modalities=modalities(max_size=2))
+@given(model=models(), modalities=st_modalities(max_size=2))
 def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
@@ -514,7 +522,7 @@ def test_observation_matrix(model, modalities):
 
 @given(
     model_and_table=st_model_patientdata_tuples(
-        models=models(modalities=modalities())
+        models=models(modalities=st_modalities())
     ),
     t_stage=one_of(
         integers(),
@@ -556,7 +564,7 @@ def test_diagnose_matrices(model_and_table, t_stage):
 
 @given(
     model_and_table=st_model_patientdata_tuples(
-        models=models(modalities=modalities()),
+        models=models(modalities=st_modalities()),
         add_t_stages=True,
     )
 )
@@ -764,7 +772,7 @@ def test_risk(risk_params, time_dist):
 
 @given(
     model=models(
-        modalities=modalities(max_size=2),
+        modalities=st_modalities(max_size=2),
         spread_probs=floats(0., 1.)
     ),
     diag_times=lists(integers(0,10), min_size=1, max_size=100),
@@ -785,14 +793,14 @@ def test_draw_patient_diagnoses(model, diag_times):
 
 @given(
     model=models(
-        modalities=modalities(max_size=2),
+        modalities=st_modalities(max_size=2),
         spread_probs=floats(0., 1.)
     ),
     num_patients=integers(1,100),
-    st_stage_dist_and_time_dists=st_stage_dist_and_time_dists()
+    stage_dist_and_time_dists=st_stage_dist_and_time_dists()
 )
-def test_generate_dataset(model, num_patients, st_stage_dist_and_time_dists):
-    stage_dist, time_dists = st_stage_dist_and_time_dists
+def test_generate_dataset(model, num_patients, stage_dist_and_time_dists):
+    stage_dist, time_dists = stage_dist_and_time_dists
     assume('' not in time_dists)
     generated_data = model.generate_dataset(
         num_patients=num_patients,

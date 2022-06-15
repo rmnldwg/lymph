@@ -32,7 +32,7 @@ def nodes(draw, typ=None, generate_valid=False):
 
 
 @st.composite
-def graphs(draw, min_size=2, max_size=10, unique=True):
+def graphs(draw, min_size=2, max_size=6, unique=True):
     """Define hypothesis strategy for generating graphs"""
     # strategy for names of nodes (both tumors and LNLs)
     st_node_names = st.text(
@@ -68,24 +68,21 @@ def graphs(draw, min_size=2, max_size=10, unique=True):
 
 
 @st.composite
-def modalities(draw, valid=True, min_size=1, max_size=3):
+def st_modalities(draw, min_size=1, max_size=3):
     """Create SearchStrategy for (valid) modalities."""
-    if valid:
-        spsn_strategy = st.lists(st.floats(0.5, 1.0), min_size=2, max_size=2)
-    else:
-        spsn_strategy = st.lists(st.one_of(st.floats(0.5, 1.), st.floats()), min_size=1)
+    modality_names = draw(st.lists(
+        elements=st.characters(whitelist_categories='L'),
+        min_size=min_size,
+        max_size=max_size,
+        unique=True
+    ))
 
-    key_strategy = st.text(
-        alphabet=st.characters(whitelist_categories='L'), min_size=1
-    )
+    st_spsn = st.floats(0.5, 1.0)
+    res = {}
+    for mod_name in modality_names:
+        res[mod_name] = [draw(st_spsn), draw(st_spsn)]
 
-    dict_strategy = st.dictionaries(
-        keys=key_strategy,
-        values=spsn_strategy,
-        min_size=min_size if valid else 0,
-        max_size=max_size if valid else 100,
-    )
-    return draw(dict_strategy)
+    return res
 
 
 @st.composite
@@ -260,7 +257,7 @@ def st_stage_dist_and_time_dists(draw):
 def logllh_params(
     draw,
     model_patientdata=st_model_patientdata_tuples(
-        models=models(modalities=modalities(max_size=2)),
+        models=models(modalities=st_modalities(max_size=2)),
         add_t_stages=True,
     )
 ):
@@ -304,7 +301,7 @@ def logllh_params(
 def st_risk_params(
     draw,
     models=models(spread_probs=st.floats(0., 1.)),
-    modalities=modalities(max_size=1)
+    modalities=st_modalities(max_size=1)
 ):
     """Strategy for generating parameters necessary for testing risk function"""
     model = draw(models)
