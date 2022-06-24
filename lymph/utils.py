@@ -35,7 +35,7 @@ def lyprox_to_lymph(
             this dictionary holds a key where the corresponding value is the
             'converted' T-category. For example, if one only wants to
             differentiate between 'early' and 'late', then that dictionary
-            would look like this:
+            would look like this (which is also the default):
 
             .. code-block:: python
 
@@ -54,16 +54,21 @@ def lyprox_to_lymph(
     midline_extension_data = data[("tumor", "1", "extension")]
 
     # Extract modalities
-    top_lvl_headers = data.columns.get_level_values(0)
+    top_lvl_headers = set(data.columns.get_level_values(0))
     modalities = [h for h in top_lvl_headers if h not in ["tumor", "patient"]]
     diagnostic_data = data[modalities].drop(columns=["date"], level=2)
 
-    if convert_t_stage is not None:
-        diagnostic_data[("info", "tumor", "t_stage")] = [
-            convert_t_stage[t] for t in t_stage_data.values
-        ]
-    else:
-        diagnostic_data[("info", "tumor", "t_stage")] = t_stage_data
+    if convert_t_stage is None:
+        convert_t_stage = {
+            0: "early",
+            1: "early",
+            2: "early",
+            3: "late",
+            4: "late"
+        }
+    diagnostic_data[("info", "tumor", "t_stage")] = [
+        convert_t_stage[t] for t in t_stage_data.values
+    ]
 
     if method == "midline":
         diagnostic_data[("info", "tumor", "midline_extension")] = midline_extension_data
