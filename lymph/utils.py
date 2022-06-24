@@ -129,7 +129,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
         verbose: bool = True,
         random_state: Optional[Tuple[Any]] = None,
         **kwargs
-    ) -> np.ndarray:
+    ) -> pd.DataFrame:
         """Extract ``start`` from settings of the sampler and perform sampling
         while monitoring the convergence.
 
@@ -152,8 +152,7 @@ class EnsembleSampler(emcee.EnsembleSampler):
                 method.
 
         Returns:
-            A list of mean autocorrelation times, computed every
-            ``check_interval`` samples.
+            A pandas :class:`DataFrame` with the autocorrelation estimates.
         """
         if verbose:
             print("Starting sampling")
@@ -175,7 +174,8 @@ class EnsembleSampler(emcee.EnsembleSampler):
         )
         start = emcee.State(coords, random_state=np.random.get_state())
 
-        acor_list = []
+        iterations = []
+        acor_times = []
         old_acor = np.inf
         idx = 0
         is_converged = False
@@ -189,7 +189,8 @@ class EnsembleSampler(emcee.EnsembleSampler):
 
             # ...compute the autocorrelation time and store it in an array.
             new_acor = self.get_autocorr_time(tol=0)
-            acor_list.append(np.mean(new_acor))
+            iterations.append(self.iteration)
+            acor_times.append(np.mean(new_acor))
             idx += 1
 
             # check convergence based on three criterions:
@@ -213,11 +214,10 @@ class EnsembleSampler(emcee.EnsembleSampler):
             else:
                 print("Max. number of steps reached")
 
-            acc_frac = 100 * np.mean(self.acceptance_fraction)
-            print(f"Acceptance fraction = {acc_frac:.2f}%")
-            print(f"Mean autocorrelation time = {np.mean(old_acor):.2f}")
-
-        return acor_list
+        return pd.DataFrame(
+            np.array([iterations, acor_times]).T,
+            columns=["iteration", "acor"]
+        )
 
 
 def tupledict_to_jsondict(dict: Dict[Tuple[str], List[str]]) -> Dict[str, List[str]]:
