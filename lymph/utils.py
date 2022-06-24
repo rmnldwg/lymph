@@ -17,7 +17,6 @@ import lymph
 def lyprox_to_lymph(
     data: pd.DataFrame,
     method: str = "unilateral",
-    modalities: List[str] = ["MRI", "PET"],
     convert_t_stage: Optional[Dict[int, Any]] = None
 ) -> pd.DataFrame:
     """Convert LyProX output into pandas :class:`DataFrame` that the lymph
@@ -32,8 +31,6 @@ def lyprox_to_lymph(
         method: Can be ``"unilateral"``, ``"bilateral"`` or ``"midline"``. It
             corresponds to the three lymphatic network classes that are
             implemented in the lymph package.
-        modalities: List of diagnostic modalities that should be extracted from
-            the exported data.
         convert_t_stage: For each of the possible T-categories (0, 1, 2, 3, 4)
             this dictionary holds a key where the corresponding value is the
             'converted' T-category. For example, if one only wants to
@@ -55,6 +52,10 @@ def lyprox_to_lymph(
     """
     t_stage_data = data[("tumor", "1", "t_stage")]
     midline_extension_data = data[("tumor", "1", "extension")]
+
+    # Extract modalities
+    top_lvl_headers = data.columns.get_level_values(0)
+    modalities = [h for h in top_lvl_headers if h not in ["tumor", "patient"]]
     diagnostic_data = data[modalities].drop(columns=["date"], level=2)
 
     if convert_t_stage is not None:
