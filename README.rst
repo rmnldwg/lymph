@@ -8,6 +8,8 @@
     :target: https://doi.org/10.1038/s41598-021-91544-1
 .. image:: https://github.com/rmnldwg/lymph/actions/workflows/tests.yml/badge.svg?style=flat
     :target: https://github.com/rmnldwg/lymph/actions
+.. image:: https://github.com/rmnldwg/lymph/actions/workflows/build.yml/badge.svg?style=flat
+    :target: https://github.com/rmnldwg/lymph/actions
 .. image:: https://codecov.io/gh/rmnldwg/lymph/branch/master/graph/badge.svg?token=LPXQPK5K78
     :target: https://codecov.io/gh/rmnldwg/lymph
 .. image:: https://readthedocs.org/projects/lymph-model/badge

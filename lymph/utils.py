@@ -17,7 +17,6 @@ import lymph
 def lyprox_to_lymph(
     data: pd.DataFrame,
     method: str = "unilateral",
-    modalities: List[str] = ["MRI", "PET"],
     convert_t_stage: Optional[Dict[int, Any]] = None
 ) -> pd.DataFrame:
     """Convert LyProX output into pandas :class:`DataFrame` that the lymph
@@ -32,13 +31,11 @@ def lyprox_to_lymph(
         method: Can be ``"unilateral"``, ``"bilateral"`` or ``"midline"``. It
             corresponds to the three lymphatic network classes that are
             implemented in the lymph package.
-        modalities: List of diagnostic modalities that should be extracted from
-            the exported data.
         convert_t_stage: For each of the possible T-categories (0, 1, 2, 3, 4)
             this dictionary holds a key where the corresponding value is the
             'converted' T-category. For example, if one only wants to
             differentiate between 'early' and 'late', then that dictionary
-            would look like this:
+            would look like this (which is also the default):
 
             .. code-block:: python
 
@@ -55,14 +52,23 @@ def lyprox_to_lymph(
     """
     t_stage_data = data[("tumor", "1", "t_stage")]
     midline_extension_data = data[("tumor", "1", "extension")]
+
+    # Extract modalities
+    top_lvl_headers = set(data.columns.get_level_values(0))
+    modalities = [h for h in top_lvl_headers if h not in ["tumor", "patient"]]
     diagnostic_data = data[modalities].drop(columns=["date"], level=2)
 
-    if convert_t_stage is not None:
-        diagnostic_data[("info", "tumor", "t_stage")] = [
-            convert_t_stage[t] for t in t_stage_data.values
-        ]
-    else:
-        diagnostic_data[("info", "tumor", "t_stage")] = t_stage_data
+    if convert_t_stage is None:
+        convert_t_stage = {
+            0: "early",
+            1: "early",
+            2: "early",
+            3: "late",
+            4: "late"
+        }
+    diagnostic_data[("info", "tumor", "t_stage")] = [
+        convert_t_stage[t] for t in t_stage_data.values
+    ]
 
     if method == "midline":
         diagnostic_data[("info", "tumor", "midline_extension")] = midline_extension_data
@@ -115,17 +121,20 @@ class EnsembleSampler(emcee.EnsembleSampler):
 
     def run_sampling(
         self,
+        min_steps: int = 0,
         max_steps: int = 10000,
         check_interval: int = 100,
         trust_threshold: float = 50.,
         rel_acor_threshold: float = 0.05,
         verbose: bool = True,
+        random_state: Optional[Tuple[Any]] = None,
         **kwargs
-    ) -> np.ndarray:
+    ) -> pd.DataFrame:
         """Extract ``start`` from settings of the sampler and perform sampling
         while monitoring the convergence.
 
         Args:
+            min_steps: Minimum number of sampling steps to perform.
             max_steps: Maximum number of sampling steps to perform.
             check_interval: Number of sampling steps after which to check for
                 convergence.
@@ -135,40 +144,61 @@ class EnsembleSampler(emcee.EnsembleSampler):
             rel_acor_threshold: The relative change of two consequtive trusted
                 autocorrelation estimates must fall below.
             verbose: Show progress during sampling and success at the end.
+            random_state: A state of numpy=s random number generator. This is
+                passed to emcee to make sampling deterministic. Note that due
+                to numerical instabilities (I guess), this will not make any
+                sampling round completely deterministic.
             **kwargs: Any other ``kwargs`` are directly passed to the ``sample``
                 method.
 
         Returns:
-            A list of mean autocorrelation times, computed every
-            ``check_interval`` samples.
+            A pandas :class:`DataFrame` with the autocorrelation estimates.
         """
         if verbose:
             print("Starting sampling")
 
-        start = np.random.uniform(
+        if random_state is not None:
+            np.random.set_state(random_state)
+
+        if max_steps < min_steps:
+            warnings.warn(
+                "Sampling param min_steps is larger than max_steps. Swapping."
+            )
+            tmp = max_steps
+            max_steps = min_steps
+            min_steps = tmp
+
+        coords = np.random.uniform(
             low=0., high=1.,
             size=(self.nwalkers, self.ndim)
         )
+        start = emcee.State(coords, random_state=np.random.get_state())
 
-        acor_list = []
+        iterations = []
+        acor_times = []
         old_acor = np.inf
         idx = 0
         is_converged = False
 
-        for sample in self.sample(start, iterations=max_steps, progress=verbose, **kwargs):
+        for sample in self.sample(
+            start, iterations=max_steps, progress=verbose, **kwargs
+        ):
             # after `check_interval` number of samples...
-            if self.iteration % check_interval:
+            if self.iteration < min_steps or self.iteration % check_interval:
                 continue
 
             # ...compute the autocorrelation time and store it in an array.
             new_acor = self.get_autocorr_time(tol=0)
-            acor_list.append(np.mean(new_acor))
+            iterations.append(self.iteration)
+            acor_times.append(np.mean(new_acor))
             idx += 1
 
-            # check convergence based on two criterions:
+            # check convergence based on three criterions:
+            # - did it run for at least `min_steps`?
             # - has the acor time crossed the N / `trust_theshold` line?
             # - did the acor time stay stable?
-            is_converged = np.all(new_acor * trust_threshold < self.iteration)
+            is_converged = self.iteration >= min_steps
+            is_converged &= np.all(new_acor * trust_threshold < self.iteration)
             rel_acor_diff = np.abs(old_acor - new_acor) / new_acor
             is_converged &= np.all(rel_acor_diff < rel_acor_threshold)
 
@@ -184,11 +214,10 @@ class EnsembleSampler(emcee.EnsembleSampler):
             else:
                 print("Max. number of steps reached")
 
-            acc_frac = 100 * np.mean(self.acceptance_fraction)
-            print(f"Acceptance fraction = {acc_frac:.2f}%")
-            print(f"Mean autocorrelation time = {np.mean(old_acor):.2f}")
-
-        return acor_list
+        return pd.DataFrame(
+            np.array([iterations, acor_times]).T,
+            columns=["iteration", "acor"]
+        )
 
 
 def tupledict_to_jsondict(dict: Dict[Tuple[str], List[str]]) -> Dict[str, List[str]]:
