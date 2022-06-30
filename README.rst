@@ -1,4 +1,4 @@
-.. image:: ./docs/source/_static/github-social-card.png
+.. image:: https://raw.githubusercontent.com/rmnldwg/lymph/master/docs/source/_static/github-social-card.png
 
 .. image:: https://img.shields.io/badge/license-MIT-blue.svg?style=flat
     :target: https://github.com/rmnldwg/lymph/blob/master/LICENSE
