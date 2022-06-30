@@ -18,6 +18,6 @@ formats: []
 python:
    version: 3.8
    install:
-   - requirements: docs/requirements-docs.txt
+   - requirements: docs/requirements.txt
    - method: pip
      path: .
