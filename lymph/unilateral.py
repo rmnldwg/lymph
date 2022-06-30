@@ -7,7 +7,12 @@ from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
 from .node import Node
-from .utils import HDFMixin, change_base, draw_diagnose_times, fast_binomial_pmf
+from .utils import (
+    HDFMixin,
+    change_base,
+    draw_diagnose_times,
+    fast_binomial_pmf,
+)
 
 
 class Unilateral(HDFMixin):

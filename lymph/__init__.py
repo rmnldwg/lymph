@@ -5,6 +5,7 @@ or a hidden Markov model.
 """
 
 from ._version import version
+
 __version__ = version
 __description__ = "Package for statistical modelling of lymphatic metastatic spread."
 __author__ = "Roman Ludwig"

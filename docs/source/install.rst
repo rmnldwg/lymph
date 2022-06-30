@@ -1,7 +1,16 @@
 Installation
 ============
 
-This package is not (yet) on PyPI, so it must be installed from a local directory. To do this, first clone the github repository
+The easiest way to install it is via pip. Note that due to a name clash, on the python packaging index the package isn't called ``lymph``, but ``lymph-model``:
+
+.. code-block:: bash
+
+    pip install lymph-model
+
+From Source
+-----------
+
+To install the package from the source repository, start by cloning it.
 
 .. code-block:: bash
 
