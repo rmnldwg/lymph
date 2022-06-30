@@ -30,7 +30,7 @@ jobs:
       - name: install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install .[tests]
+          python3 -m pip install .[test]
       - name: Run tests
         run: |
           coverage run --omit=tests/*,*/_*.py -m pytest ./tests -vv
