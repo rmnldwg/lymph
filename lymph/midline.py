@@ -485,10 +485,18 @@ class MidlineBilateral(HDFMixin):
         )
 
 
-    def risk(self, *args, midline_extension: bool = True, **kwargs) -> float:
+    def risk(
+        self,
+        *args,
+        spread_probs: Optional[np.ndarray] = None,
+        midline_extension: bool = True,
+        **kwargs
+    ) -> float:
         """Compute the risk of nodal involvement given a specific diagnose.
 
         Args:
+            spread_probs: Set ot new spread parameters. This also contains the
+                mixing parameter alpha in the last position.
             midline_extension: Whether or not the patient's tumor extends over
                 the mid-sagittal line.
 
@@ -497,6 +505,9 @@ class MidlineBilateral(HDFMixin):
             tumor does extend over the midline, the risk function of the
             respective :class:`Bilateral` instance gets called.
         """
+        if spread_probs is not None:
+            self.spread_probs = spread_probs
+
         if midline_extension:
             return self.ext.risk(*args, **kwargs)
         else:

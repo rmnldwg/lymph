@@ -1,9 +1,9 @@
+import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 from hypothesis import assume
 from hypothesis.extra import numpy as hynp
 from hypothesis.extra import pandas as hypd
-import hypothesis.strategies as st
 
 from lymph import Node
 from lymph.unilateral import Unilateral

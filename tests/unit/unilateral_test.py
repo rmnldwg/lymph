@@ -4,10 +4,10 @@ import pytest
 from custom_strategies import (
     graphs,
     logllh_params,
+    models,
     st_modalities,
     st_model_diagnose_tuples,
     st_model_patientdata_tuples,
-    models,
     st_models_and_probs,
     st_risk_params,
     st_stage_dist_and_time_dists,
@@ -28,7 +28,6 @@ from hypothesis.strategies import (
 )
 
 from lymph import Edge, Node, Unilateral
-
 
 settings.register_profile(
     "tests",

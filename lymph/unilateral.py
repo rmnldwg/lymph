@@ -7,7 +7,12 @@ from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
 from .node import Node
-from .utils import HDFMixin, change_base, draw_diagnose_times
+from .utils import (
+    HDFMixin,
+    change_base,
+    draw_diagnose_times,
+    fast_binomial_pmf,
+)
 
 
 class Unilateral(HDFMixin):
@@ -857,6 +862,49 @@ class Unilateral(HDFMixin):
             theta, t_stages,
             diag_times=None, time_dists=time_dists,
             mode="HMM"
+        )
+
+
+    def binom_marg_log_likelihood(
+        self,
+        theta: np.ndarray,
+        t_stages: List[Any],
+        max_t: int = 10
+    ) -> float:
+        """
+        Compute the likelihood of the (already stored) data, given the spread
+        parameters, marginalized over time of diagnosis via binomial
+        distributions.
+
+        Args:
+            theta: Set of parameters, consisting of the base probabilities
+                :math:`b` and the transition probabilities :math:`t`.
+
+            t_stages: List of T-stages that should be included in the learning.
+
+            max_t: Latest possible diagnose time.
+
+        Returns:
+            The log-likelihood of the data, given te spread parameters and binomial
+            time distributions.
+        """
+        # splitting theta into spread parameters and...
+        len_spread_probs = len(theta) - len(t_stages)
+        spread_probs = theta[:len_spread_probs]
+        # ...p-values for the binomial distribution
+        p = theta[len_spread_probs:]
+
+        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
+            return -np.inf
+
+        t = np.arange(max_t + 1)
+        time_dists = {}
+        for i,stage in enumerate(t_stages):
+            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
+
+        return self.marginal_log_likelihood(
+            spread_probs, t_stages,
+            time_dists=time_dists
         )
 
 
