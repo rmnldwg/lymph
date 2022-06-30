@@ -1,4 +1,4 @@
-name: Build & publish python package
+name: Build
 
 on:
   release:
