@@ -23,13 +23,15 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
       - name: Install python 3
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
       - name: install dependencies
         run: |
-          python3 -m pip install --upgrade pip
+          python3 -m pip install -U pip setuptools setuptools-scm wheel
           python3 -m pip install .[test]
       - name: Run tests
         run: |
