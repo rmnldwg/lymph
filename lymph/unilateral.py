@@ -724,59 +724,19 @@ class Unilateral(HDFMixin):
         return True
 
 
-    def log_likelihood(
+    def _log_likelihood(
         self,
-        spread_probs: np.ndarray,
         t_stages: Optional[List[Any]] = None,
         diag_times: Optional[Dict[Any, int]] = None,
         max_t: Optional[int] = 10,
         time_dists: Optional[Dict[Any, np.ndarray]] = None,
-        mode: str = "HMM"
+        mode: str = "HMM",
     ) -> float:
         """
-        Compute log-likelihood of (already stored) data, given the spread
-        probabilities and either a discrete diagnose time or a distribution to
-        use for marginalization over diagnose times.
-
-        Args:
-            spread_probs: Spread probabiltites from the tumor to the LNLs, as
-                well as from (already involved) LNLs to downsream LNLs.
-
-            t_stages: List of T-stages that are also used in the data to denote
-                how advanced the primary tumor of the patient is. This does not
-                need to correspond to the clinical T-stages 'T1', 'T2' and so
-                on, but can also be more abstract like 'early', 'late' etc. If
-                not given, this will be inferred from the loaded data.
-
-            diag_times: For each T-stage, one can specify with what time step
-                the likelihood should be computed. If this is set to `None`,
-                and a distribution over diagnose times `time_dists` is provided,
-                the function marginalizes over diagnose times.
-
-            max_t: Latest possible diagnose time. This is only used to return
-                `-np.inf` in case one of the `diag_times` exceeds this value.
-
-            time_dists: Distribution over diagnose times that can be used to
-                compute the likelihood of the data, given the spread
-                probabilities, but marginalized over the time of diagnosis. If
-                set to `None`, a diagnose time must be explicitly set for each
-                T-stage.
-
-            mode: Compute the likelihood using the Bayesian network (`"BN"`) or
-                the hidden Markv model (`"HMM"`). When using the Bayesian net,
-                the inputs `t_stages`, `diag_times`, `max_t` and `time_dists`
-                are ignored.
-
-        Returns:
-            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
-            is the data and :math:`\\theta` is the tuple of spread probabilities
-            and diagnose times or distributions over diagnose times.
+        Compute the log-likelihood of data, using the stored spread probs.
+        This method mainly exists so that the checking and assigning of the
+        spread probs can be skipped.
         """
-        if not self._are_valid_(spread_probs):
-            return -np.inf
-
-        self.spread_probs = spread_probs
-
         # hidden Markov model
         if mode == "HMM":
             if t_stages is None:
@@ -833,6 +793,67 @@ class Unilateral(HDFMixin):
             llh = np.sum(np.log(p))
 
         return llh
+
+    def log_likelihood(
+        self,
+        spread_probs: np.ndarray,
+        t_stages: Optional[List[Any]] = None,
+        diag_times: Optional[Dict[Any, int]] = None,
+        max_t: Optional[int] = 10,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+        mode: str = "HMM"
+    ) -> float:
+        """
+        Compute log-likelihood of (already stored) data, given the spread
+        probabilities and either a discrete diagnose time or a distribution to
+        use for marginalization over diagnose times.
+
+        Args:
+            spread_probs: Spread probabiltites from the tumor to the LNLs, as
+                well as from (already involved) LNLs to downsream LNLs.
+
+            t_stages: List of T-stages that are also used in the data to denote
+                how advanced the primary tumor of the patient is. This does not
+                need to correspond to the clinical T-stages 'T1', 'T2' and so
+                on, but can also be more abstract like 'early', 'late' etc. If
+                not given, this will be inferred from the loaded data.
+
+            diag_times: For each T-stage, one can specify with what time step
+                the likelihood should be computed. If this is set to `None`,
+                and a distribution over diagnose times `time_dists` is provided,
+                the function marginalizes over diagnose times.
+
+            max_t: Latest possible diagnose time. This is only used to return
+                `-np.inf` in case one of the `diag_times` exceeds this value.
+
+            time_dists: Distribution over diagnose times that can be used to
+                compute the likelihood of the data, given the spread
+                probabilities, but marginalized over the time of diagnosis. If
+                set to `None`, a diagnose time must be explicitly set for each
+                T-stage.
+
+            mode: Compute the likelihood using the Bayesian network (`"BN"`) or
+                the hidden Markv model (`"HMM"`). When using the Bayesian net,
+                the inputs `t_stages`, `diag_times`, `max_t` and `time_dists`
+                are ignored.
+
+        Returns:
+            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
+            is the data and :math:`\\theta` is the tuple of spread probabilities
+            and diagnose times or distributions over diagnose times.
+        """
+        if not self._are_valid_(spread_probs):
+            return -np.inf
+
+        self.spread_probs = spread_probs
+
+        return self._log_likelihood(
+            t_stages=t_stages,
+            diag_times=diag_times,
+            max_t=max_t,
+            time_dists=time_dists,
+            mode=mode,
+        )
 
 
     def marginal_log_likelihood(
