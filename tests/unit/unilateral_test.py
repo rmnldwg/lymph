@@ -3,11 +3,11 @@ import numpy as np
 import pytest
 from custom_strategies import (
     graphs,
-    logllh_params,
-    models,
+    st_models,
     st_modalities,
     st_model_diagnose_tuples,
-    st_model_patientdata_tuples,
+    st_models_and_data,
+    st_models_and_llh_args,
     st_models_and_probs,
     st_risk_params,
     st_stage_dist_and_time_dists,
@@ -172,7 +172,7 @@ def test_graph(graph):
     assert graph == recovered_graph, "Recovered graph is not the same as original one."
 
 
-@given(model=models(), newstate=lists(integers(0, 1)))
+@given(model=st_models(), newstate=lists(integers(0, 1)))
 def test_state(model, newstate):
     """Check the state assignment"""
     num_lnls = len(model.lnls)
@@ -273,7 +273,7 @@ def test_spread_probs(model_and_spread_probs):
 
 
 @given(
-    model=models(states=integers(0,1)),
+    model=st_models(states=integers(0,1)),
     newstate=lists(integers(0,1), min_size=1),
     acquire=booleans()
 )
@@ -312,7 +312,7 @@ def test_comp_transition_prob(model, newstate, acquire):
 
 @given(
     st_model_diagnose_tuples(
-        models=models(modalities=st_modalities())
+        models=st_models(modalities=st_modalities())
     )
 )
 def test_comp_diagnose_prob(model_and_diagnose):
@@ -344,7 +344,7 @@ def test_comp_diagnose_prob(model_and_diagnose):
         model.comp_diagnose_prob(invalid_dict_diagnose)
 
 
-@given(model=models())
+@given(model=st_models())
 def test_state_list(model):
     assert not hasattr(model, "_state_list"), (
         "Model should not have state list after initialization"
@@ -362,7 +362,7 @@ def test_state_list(model):
         "Cannot have duplicates in state list"
     )
 
-@given(model=models(), modalities=st_modalities())
+@given(model=st_models(), modalities=st_modalities())
 def test_obs_list(model, modalities):
     assert not hasattr(model, "_obs_list"), (
         "Model should not have obs list after initialization"
@@ -379,7 +379,7 @@ def test_obs_list(model, modalities):
     )
 
 
-@given(model=models())
+@given(model=st_models())
 def test_allowed_transitions(model):
     """Assert that the mask only allows (the computation of) transitions that
     do not involve self-healing."""
@@ -410,7 +410,7 @@ def test_allowed_transitions(model):
             )
 
 
-@given(model=models())
+@given(model=st_models())
 def test_transition_matrix(model):
     """Verify the properties of the tranistion matrix A"""
     assert not hasattr(model, "_transition_matrix"), (
@@ -434,7 +434,7 @@ def test_transition_matrix(model):
     )
 
 
-@given(model=models(), modalities=st_modalities())
+@given(model=st_models(), modalities=st_modalities())
 def test_modalities(model, modalities):
     assert not hasattr(model, "_spsn_tables"), (
         "Model shoud not have spsn tables after initialization"
@@ -487,7 +487,7 @@ def test_modalities(model, modalities):
         model.modalities = out_of_bounds_modalities
 
 
-@given(model=models(), modalities=st_modalities(max_size=2))
+@given(model=st_models(), modalities=st_modalities(max_size=2))
 def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
@@ -520,8 +520,8 @@ def test_observation_matrix(model, modalities):
 
 
 @given(
-    model_and_table=st_model_patientdata_tuples(
-        models=models(modalities=st_modalities())
+    model_and_table=st_models_and_data(
+        models=st_models(modalities=st_modalities())
     ),
     t_stage=one_of(
         integers(),
@@ -562,8 +562,8 @@ def test_diagnose_matrices(model_and_table, t_stage):
 
 
 @given(
-    model_and_table=st_model_patientdata_tuples(
-        models=models(modalities=st_modalities()),
+    model_and_table=st_models_and_data(
+        models=st_models(modalities=st_modalities()),
         add_t_stages=True,
     )
 )
@@ -603,7 +603,7 @@ def test_patient_data(model_and_table):
 
 
 @given(
-    model=models(),
+    model=st_models(),
     spread_probs=lists(floats(0., 1.), min_size=1),
     t_first=integers(0, 10),
     t_last=one_of(none(), integers(1, 20)),
@@ -641,7 +641,7 @@ def test_evolve(model, spread_probs, t_first, t_last):
 
 
 @given(
-    model=models(),
+    model=st_models(),
     spread_probs=hynp.arrays(
         dtype=float,
         shape=integers(1, 1000)
@@ -670,77 +670,25 @@ def test_are_valid(model, spread_probs):
         )
 
 
-@given(logllh_params=logllh_params())
-def test_log_likelihood(logllh_params):
-    """Make sure the log-likelihood function works correctly"""
-    model, spread_probs, diag_times, time_dists = logllh_params
+@given(models_and_llh_args=st_models_and_llh_args())
+def test_likelihood(models_and_llh_args):
+    """Test the likelihood function."""
+    model, *likelihood_args = models_and_llh_args
+    data, given_params, includes_binom_probs, time_dists, max_t, log = likelihood_args
+    assert data is not None
+    llh = model.likelihood(
+        data=data,
+        given_params=given_params,
+        includes_binom_probs=includes_binom_probs,
+        time_dists=time_dists,
+        max_t=max_t,
+        log=log,
+    )
 
-    invalid_spread_probs = spread_probs.copy()
-    if len(invalid_spread_probs) > 0:
-        invalid_spread_probs[0] = 10.
-        invalid_logllh = model.log_likelihood(
-            invalid_spread_probs,
-            diag_times=diag_times,
-            time_dists=time_dists
-        )
-        assert invalid_logllh == -np.inf, (
-            "Invalid spread probs did not yield -inf"
-        )
-
-    t_stages = model.diagnose_matrices.keys()
-
-    if diag_times is not None:
-        if len(diag_times) != len(t_stages):
-            with pytest.raises(ValueError):
-                logllh = model.log_likelihood(
-                    spread_probs,
-                    diag_times=diag_times,
-                    time_dists=time_dists
-                )
-        else:
-            max_t = np.max(list(diag_times.values()))
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                max_t=max_t,
-                time_dists=time_dists
-            )
-            assert logllh <= 0. or np.isclose(logllh, 0.), (
-                "Log-likelihood must be larger than -inf but smaller or equal 0"
-            )
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                max_t=max_t - 3,
-                time_dists=time_dists
-            )
-            assert logllh == -np.inf, (
-                "Diagnose times later than max_t should give -inf"
-            )
-    elif time_dists is not None:
-        if len(time_dists) != len(t_stages):
-            with pytest.raises(ValueError):
-                logllh = model.log_likelihood(
-                    spread_probs,
-                    diag_times=diag_times,
-                    time_dists=time_dists
-                )
-        else:
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                time_dists=time_dists
-            )
-            assert logllh <= 0. or np.isclose(logllh, 0.), (
-                "Log-likelihood must be larger than -inf but smaller or equal 0"
-            )
+    if log:
+        assert llh <= 0., "log-likelihood must be less-equal 0"
     else:
-        with pytest.raises(ValueError):
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                time_dists=time_dists
-            )
+        assert 0. <= llh <= 1., "likelihood must be between 0 and 1"
 
 
 @given(
@@ -770,7 +718,7 @@ def test_risk(risk_params, time_dist):
 
 
 @given(
-    model=models(
+    model=st_models(
         modalities=st_modalities(max_size=2),
         spread_probs=floats(0., 1.)
     ),
@@ -791,7 +739,7 @@ def test_draw_patient_diagnoses(model, diag_times):
 
 
 @given(
-    model=models(
+    model=st_models(
         modalities=st_modalities(max_size=2),
         spread_probs=floats(0., 1.)
     ),

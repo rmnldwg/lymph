@@ -1,3 +1,4 @@
+from xml.etree.ElementInclude import include
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
@@ -7,13 +8,19 @@ from hypothesis.extra import pandas as hypd
 
 from lymph import Node
 from lymph.unilateral import Unilateral
+from lymph.utils import fast_binomial_pmf
 
+
+ST_CHARACTERS = st.characters(
+    whitelist_categories=('L', 'N'),
+    blacklist_characters=''
+)
 
 @st.composite
 def nodes(draw, typ=None, generate_valid=False):
     """Define SearchStrategy for Nodes"""
     valid_names = st.text(
-        alphabet=st.characters(whitelist_categories='L'),
+        alphabet=ST_CHARACTERS,
         min_size=1
     )
     valid_typs = st.one_of(st.just("tumor"), st.just("lnl"))
@@ -71,7 +78,7 @@ def graphs(draw, min_size=2, max_size=6, unique=True):
 def st_modalities(draw, min_size=1, max_size=3):
     """Create SearchStrategy for (valid) modalities."""
     modality_names = draw(st.lists(
-        elements=st.characters(whitelist_categories='L'),
+        elements=ST_CHARACTERS,
         min_size=min_size,
         max_size=max_size,
         unique=True
@@ -86,7 +93,7 @@ def st_modalities(draw, min_size=1, max_size=3):
 
 
 @st.composite
-def models(draw, states=None, spread_probs=None, modalities=None):
+def st_models(draw, states=None, spread_probs=None, modalities=None):
     """Define search strategy for generating unilateral models"""
     graph = draw(graphs())
     model = Unilateral(graph)
@@ -107,13 +114,29 @@ def models(draw, states=None, spread_probs=None, modalities=None):
     return model
 
 @st.composite
-def st_models_and_probs(draw, models=models(), gen_prob_type="base"):
+def st_spread_probs_for_(draw, model, valid=True):
+    """Strategy for drawing spread probs for a particular model instance."""
+    shape = model.spread_probs.shape
+    if valid:
+        return draw(hynp.arrays(
+            dtype=float,
+            shape=shape,
+            elements=st.floats(min_value=0., max_value=1.)
+        ))
+    else:
+        res = draw(hynp.arrays(dtype=float, shape=shape))
+        res[np.all([0. <= res, res <= 1.], axis=0)] += 1.1
+        return res
+        
+
+@st.composite
+def st_models_and_probs(draw, st_models=st_models(), gen_prob_type="base"):
     """
     Strategy for generating a model and a suitable number of spread probs. The
     argument `gen_prob_type` can be 'base', 'trans' or 'all' and depending on the choice
     the strategy will return the appropriate spread probs.
     """
-    model = draw(models)
+    model = draw(st_models)
 
     if gen_prob_type == "base":
         num_probs = len(model.base_probs)
@@ -137,7 +160,7 @@ def gen_MultiIndex(model: Unilateral) -> pd.Series:
     return pd.MultiIndex.from_product([modalities, lnl_names])
 
 @st.composite
-def st_model_diagnose_tuples(draw, models=models()):
+def st_model_diagnose_tuples(draw, models=st_models()):
     """Define strategy for a model and a corresponding diagnose"""
     model = draw(models)
     multiindex = gen_MultiIndex(model)
@@ -151,41 +174,7 @@ def st_model_diagnose_tuples(draw, models=models()):
 
 
 @st.composite
-def st_model_patientdata_tuples(draw, models=models(), add_t_stages=False):
-    """Define search strategy for a tuple of a model and corresponding patient
-    data."""
-    model = draw(models)
-    multiindex = gen_MultiIndex(model)
-    patient_data = draw(
-        hypd.data_frames(
-            columns=hypd.columns(
-                multiindex,
-                elements=st.one_of(st.none(), st.booleans())
-            )
-        )
-    )
-
-    if add_t_stages:
-        t_stages = draw(st.lists(
-            st.text(alphabet=st.characters(whitelist_categories='L'), min_size=1),
-            min_size=1, max_size=6
-        ))
-        available_t_stages = st.sampled_from(t_stages)
-        t_stage_column = st.lists(
-            elements=available_t_stages,
-            min_size=len(patient_data),
-            max_size=len(patient_data)
-        )
-        patient_data[("info", "t_stage")] = draw(t_stage_column)
-
-    return (model, patient_data)
-
-
-@st.composite
 def st_t_stages(draw, min_size=1, max_size=20):
-    allowed_chars = st.characters(
-        whitelist_categories=('L', 'N'), blacklist_characters=''
-    )
     return draw(
         st.one_of(
             st.lists(
@@ -195,19 +184,53 @@ def st_t_stages(draw, min_size=1, max_size=20):
                 unique=True
             ),
             st.lists(
-                allowed_chars,
+                ST_CHARACTERS,
                 min_size=min_size,
                 max_size=max_size,
                 unique=True
             ),
             st.lists(
-                st.text(alphabet=allowed_chars, min_size=1),
+                st.text(alphabet=ST_CHARACTERS, min_size=1),
                 min_size=min_size,
                 max_size=max_size,
                 unique=True
             ),
         )
     )
+
+@st.composite
+def st_models_and_data(
+    draw,
+    models=st_models(modalities=st_modalities()),
+    add_t_stages=False
+):
+    """Define search strategy for a tuple of a model and corresponding patient
+    data."""
+    model = draw(models)
+    multiindex = gen_MultiIndex(model)
+    patient_data = draw(
+        hypd.data_frames(
+            columns=hypd.columns(
+                multiindex,
+                elements=st.one_of(st.none(), st.booleans())
+            ),
+        )
+    )
+    assume(len(patient_data) > 0)
+
+    if add_t_stages:
+        t_stages = draw(st_t_stages())
+        available_t_stages = st.sampled_from(t_stages)
+        t_stage_column = st.lists(
+            elements=available_t_stages,
+            min_size=len(patient_data),
+            max_size=len(patient_data)
+        )
+        patient_data[("info", "t_stage")] = draw(t_stage_column)
+        return model, patient_data, t_stages
+
+    return model, patient_data
+
 
 @st.composite
 def st_time_dist(draw, min_size=2, max_size=20):
@@ -254,53 +277,35 @@ def st_stage_dist_and_time_dists(draw):
 
 
 @st.composite
-def logllh_params(
-    draw,
-    model_patientdata=st_model_patientdata_tuples(
-        models=models(modalities=st_modalities(max_size=2)),
-        add_t_stages=True,
-    )
-):
-    """Search strategy for the parameters of the log-likelihood function"""
-    model, patient_data = draw(model_patientdata)
-    model.patient_data = patient_data
-    assume(hasattr(model, "_diagnose_matrices"))
+def st_models_and_llh_args(draw, valid=True):
+    """Strategy creating args for the likelihood function."""
+    model, data, t_stages = draw(st_models_and_data(add_t_stages=True))
+    spread_probs = draw(st_spread_probs_for_(model, valid=valid))
+    includes_binom_probs = draw(st.booleans())
+    max_t = draw(st.integers(0, 20))
+    log = draw(st.booleans())
 
-    n = len(model.spread_probs)
-    spread_probs = draw(hynp.arrays(dtype=float, shape=n, elements=st.floats(0., 1.)))
+    times = np.arange(max_t + 1)
+    time_dists = {}
+    binom_probs = np.zeros(shape=len(t_stages))
+    st_floats = st.floats(0., 1.) if valid else st.floats()
+    for i,t in enumerate(t_stages):
+        p = draw(st_floats)
+        p += 1.1 if not valid and 0. <= p <= 1. else 0.
+        binom_probs[i] = p
+        time_dists[t] = fast_binomial_pmf(times, max_t, p)
 
-    t_stages = st.sampled_from(list(model.diagnose_matrices.keys()))
-    len_time_dist = draw(st.integers(1, 20))
+    if includes_binom_probs:
+        given_params = np.concatenate([spread_probs, binom_probs])
+    else:
+        given_params = spread_probs
 
-    diag_times = draw(
-        st.one_of(
-            st.none(),
-            st.dictionaries(
-                keys=t_stages,
-                values=st.integers(0, 20),
-                min_size=1
-            )
-        )
-    )
-    time_dists = draw(
-        st.one_of(
-            st.none(),
-            st.dictionaries(
-                keys=t_stages,
-                values=st_time_dist(
-                    min_size=len_time_dist, max_size=len_time_dist
-                ),
-                min_size=1
-            )
-        )
-    )
-    return (model, spread_probs, diag_times, time_dists)
-
+    return model, data, given_params, includes_binom_probs, time_dists, max_t, log
 
 @st.composite
 def st_risk_params(
     draw,
-    models=models(spread_probs=st.floats(0., 1.)),
+    models=st_models(spread_probs=st.floats(0., 1.)),
     modalities=st_modalities(max_size=1)
 ):
     """Strategy for generating parameters necessary for testing risk function"""
