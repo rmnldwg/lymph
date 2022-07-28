@@ -1,4 +1,3 @@
-from xml.etree.ElementInclude import include
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
@@ -43,7 +42,7 @@ def graphs(draw, min_size=2, max_size=6, unique=True):
     """Define hypothesis strategy for generating graphs"""
     # strategy for names of nodes (both tumors and LNLs)
     st_node_names = st.text(
-        alphabet=st.characters(whitelist_categories=['L']),
+        alphabet=ST_CHARACTERS,
         min_size=1
     )
 
@@ -58,6 +57,7 @@ def graphs(draw, min_size=2, max_size=6, unique=True):
     num_tumors = draw(st.integers(min_value=1, max_value=len(node_names)-1))
 
     graph = {}
+    has_connections = False
     for i,name in enumerate(node_names):
         connections = draw(st.lists(
             elements=st.sampled_from(node_names[num_tumors:]),
@@ -66,11 +66,14 @@ def graphs(draw, min_size=2, max_size=6, unique=True):
         ))
         connections = connections.remove(name) if name in connections else connections
         connections = [] if connections is None else connections
+        if len(connections) > 0:
+            has_connections = True
         if i < num_tumors:
             graph[("tumor", name)] = connections
         else:
             graph[("lnl", name)] = connections
 
+    assume(has_connections)
     return graph
 
 
@@ -114,10 +117,10 @@ def st_models(draw, states=None, spread_probs=None, modalities=None):
     return model
 
 @st.composite
-def st_spread_probs_for_(draw, model, valid=True):
+def st_spread_probs_for_(draw, model, are_values_valid=True, is_shape_valid=True):
     """Strategy for drawing spread probs for a particular model instance."""
-    shape = model.spread_probs.shape
-    if valid:
+    shape = model.spread_probs.shape if is_shape_valid else draw(st.integers(1,100))
+    if are_values_valid:
         return draw(hynp.arrays(
             dtype=float,
             shape=shape,
@@ -277,21 +280,24 @@ def st_stage_dist_and_time_dists(draw):
 
 
 @st.composite
-def st_models_and_llh_args(draw, valid=True):
-    """Strategy creating args for the likelihood function."""
+def st_likelihood_setup(draw):
+    """Strategy setting up everything needed for testing the likelihood function."""
     model, data, t_stages = draw(st_models_and_data(add_t_stages=True))
-    spread_probs = draw(st_spread_probs_for_(model, valid=valid))
+    are_params_valid = draw(st.booleans())
+    spread_probs = draw(
+        st_spread_probs_for_(model, are_values_valid=are_params_valid)
+    )
     includes_binom_probs = draw(st.booleans())
     max_t = draw(st.integers(0, 20))
-    log = draw(st.booleans())
+    return_log = draw(st.booleans())
 
     times = np.arange(max_t + 1)
     time_dists = {}
     binom_probs = np.zeros(shape=len(t_stages))
-    st_floats = st.floats(0., 1.) if valid else st.floats()
+    st_floats = st.floats(0., 1.) if are_params_valid else st.floats(-20., 20)
     for i,t in enumerate(t_stages):
         p = draw(st_floats)
-        p += 1.1 if not valid and 0. <= p <= 1. else 0.
+        p += 1.1 if not are_params_valid and 0. <= p <= 1. else 0.
         binom_probs[i] = p
         time_dists[t] = fast_binomial_pmf(times, max_t, p)
 
@@ -300,7 +306,16 @@ def st_models_and_llh_args(draw, valid=True):
     else:
         given_params = spread_probs
 
-    return model, data, given_params, includes_binom_probs, time_dists, max_t, log
+    return (
+        model,
+        data,
+        given_params,
+        are_params_valid,
+        includes_binom_probs,
+        time_dists,
+        max_t,
+        return_log
+    )
 
 @st.composite
 def st_risk_params(

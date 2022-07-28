@@ -7,9 +7,10 @@ from custom_strategies import (
     st_modalities,
     st_model_diagnose_tuples,
     st_models_and_data,
-    st_models_and_llh_args,
+    st_likelihood_setup,
     st_models_and_probs,
     st_risk_params,
+    st_spread_probs_for_,
     st_stage_dist_and_time_dists,
     st_time_dist,
 )
@@ -28,6 +29,7 @@ from hypothesis.strategies import (
 )
 
 from lymph import Edge, Node, Unilateral
+from lymph.utils import fast_binomial_pmf
 
 settings.register_profile(
     "tests",
@@ -569,7 +571,7 @@ def test_diagnose_matrices(model_and_table, t_stage):
 )
 def test_patient_data(model_and_table):
     """Check the correct handling of the data."""
-    model, patient_data = model_and_table
+    model, patient_data, _ = model_and_table
     t_stages = set(patient_data[("info", "t_stage")].values)
 
     assert not hasattr(model, "_patient_data"), (
@@ -670,25 +672,57 @@ def test_are_valid(model, spread_probs):
         )
 
 
-@given(models_and_llh_args=st_models_and_llh_args())
-def test_likelihood(models_and_llh_args):
+@given(likelihood_setup=st_likelihood_setup())
+def test_likelihood(likelihood_setup):
     """Test the likelihood function."""
-    model, *likelihood_args = models_and_llh_args
-    data, given_params, includes_binom_probs, time_dists, max_t, log = likelihood_args
-    assert data is not None
+    model, *likelihood_args = likelihood_setup
+    (
+        data,
+        given_params,
+        are_params_valid,
+        includes_binom_probs,
+        time_dists,
+        max_t,
+        return_log,
+    ) = likelihood_args
+
     llh = model.likelihood(
         data=data,
         given_params=given_params,
         includes_binom_probs=includes_binom_probs,
         time_dists=time_dists,
         max_t=max_t,
-        log=log,
+        log=return_log,
     )
 
-    if log:
-        assert llh <= 0., "log-likelihood must be less-equal 0"
+    if return_log:
+        assert llh <= 0., (
+            "log-likelihood must be less-equal 0"
+        )
+        if not are_params_valid:
+            assert llh == -np.inf, (
+                "invalid parameters must yield -inf as log-likelihood"
+            )
     else:
-        assert 0. <= llh <= 1., "likelihood must be between 0 and 1"
+        assert 0. <= llh <= 1. or np.isclose(0., llh) or np.isclose(1., llh), (
+            "likelihood must be between 0 and 1 (or at least close)"
+        )
+        if not are_params_valid:
+            assert llh == 0., (
+                "invalid parameters must yield 0 as likelihood"
+            )
+
+    model.patient_data = data
+    llh_no_data = model.likelihood(
+        given_params=given_params,
+        includes_binom_probs=includes_binom_probs,
+        time_dists=time_dists,
+        max_t=max_t,
+        log=return_log,
+    )
+    assert llh == llh_no_data, (
+        """whether data is loaded inside llh func or outside must make no difference"""
+    )
 
 
 @given(
