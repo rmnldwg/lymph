@@ -7,7 +7,6 @@ from hypothesis.extra import pandas as hypd
 
 from lymph import Marginalizor, Node
 from lymph.unilateral import Unilateral
-from lymph.utils import fast_binomial_pmf
 
 ST_CHARACTERS = st.characters(
     whitelist_categories=('L', 'N'),
@@ -156,6 +155,20 @@ def st_spread_probs_for_(draw, model, are_values_valid=True, is_shape_valid=True
         res[np.all([0. <= res, res <= 1.], axis=0)] += 1.1
         return res
 
+@st.composite
+def st_marg_params_for_(draw, model, are_values_valid=True, is_shape_valid=True):
+    """Strategy for drawing parameters of the marginalizors."""
+    shape = model.diag_time_dists.num_parametric if is_shape_valid else draw(st.integers(1,100))
+    if are_values_valid:
+        return draw(hynp.arrays(
+            dtype=float,
+            shape=shape,
+            elements=st.floats(min_value=0., max_value=1.)
+        ))
+    else:
+        res = draw(hynp.arrays(dtype=float, shape=shape))
+        res[np.all([0. <= res, res <= 1.], axis=0)] += 1.1
+        return res
 
 @st.composite
 def st_models_and_probs(draw, models=st_models(), gen_prob_type="base"):
@@ -312,33 +325,17 @@ def st_likelihood_setup(draw):
     spread_probs = draw(
         st_spread_probs_for_(model, are_values_valid=are_params_valid)
     )
-    includes_binom_probs = draw(st.booleans())
-    max_t = draw(st.integers(0, 20))
+    marg_params = draw(
+        st_marg_params_for_(model, are_values_valid=are_params_valid)
+    )
+    given_params = np.concatenate([spread_probs, marg_params])
     return_log = draw(st.booleans())
-
-    times = np.arange(max_t + 1)
-    time_dists = {}
-    binom_probs = np.zeros(shape=len(t_stages))
-    st_floats = st.floats(0., 1.) if are_params_valid else st.floats(-20., 20)
-    for i,t in enumerate(t_stages):
-        p = draw(st_floats)
-        p += 1.1 if not are_params_valid and 0. <= p <= 1. else 0.
-        binom_probs[i] = p
-        time_dists[t] = fast_binomial_pmf(times, max_t, p)
-
-    if includes_binom_probs:
-        given_params = np.concatenate([spread_probs, binom_probs])
-    else:
-        given_params = spread_probs
 
     return (
         model,
         data,
         given_params,
         are_params_valid,
-        includes_binom_probs,
-        time_dists,
-        max_t,
         return_log
     )
 

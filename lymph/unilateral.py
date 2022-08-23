@@ -282,7 +282,7 @@ class Unilateral(HDFMixin):
 
         Args:
             diagnoses: Either a pandas ``Series`` object corresponding to one
-                row of a patient data table, or a dictionry with keys of
+                row of a patient data table, or a dictionary with keys of
                 diagnostic modalities and values of dictionaries holding the
                 observation for each LNL under the respective key.
 
@@ -299,6 +299,10 @@ class Unilateral(HDFMixin):
                         lnl_diagnose = mod_diagnose[lnl.name]
                     except KeyError:
                         continue
+                    except IndexError as idx_err:
+                        raise ValueError(
+                            "diagnoses were not provided in the correct format"
+                        ) from idx_err
 
                     prob *= lnl.obs_prob(lnl_diagnose, spsn)
         return prob

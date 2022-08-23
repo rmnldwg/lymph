@@ -321,9 +321,9 @@ def test_comp_diagnose_prob(model_and_diagnose):
     invalid_dict_diagnose = {}
     none_dict_diagnose = {}
     for mod in model.modalities.keys():
-        dict_diagnose[mod] = pd_diagnose[mod].values
+        dict_diagnose[mod] = pd_diagnose[mod].to_dict()
         invalid_dict_diagnose[mod] = np.append(pd_diagnose[mod].values, True)
-        none_dict_diagnose[mod] = [None] * len(dict_diagnose[mod])
+        none_dict_diagnose[mod] = {lnl.name: None for lnl in model.lnls}
 
     pd_diag_prob = model.comp_diagnose_prob(pd_diagnose)
     dict_diag_prob = model.comp_diagnose_prob(dict_diagnose)
@@ -652,18 +652,12 @@ def test_likelihood(likelihood_setup):
         data,
         given_params,
         are_params_valid,
-        includes_binom_probs,
-        time_dists,
-        max_t,
         return_log,
     ) = likelihood_args
 
     llh = model.likelihood(
         data=data,
         given_params=given_params,
-        includes_binom_probs=includes_binom_probs,
-        time_dists=time_dists,
-        max_t=max_t,
         log=return_log,
     )
 
