@@ -243,12 +243,12 @@ class Bilateral(HDFMixin):
         See Also:
             :class:`MarginalzorDict`, :class:`Marginalizor`.
         """
-        return self.ipsi._diag_time_dists
+        return self.ipsi.diag_time_dists
 
     @diag_time_dists.setter
     def diag_time_dists(self, new_dists: Union[dict, MarginalizorDict]):
         """Assign new :class:`MarginalizorDict` to this property. If it is a normal
-        Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
+        Python dictionary, try to convert it into a :class:`MarginalizorDict`.
         """
         self.ipsi.diag_time_dists = new_dists
         self.contra.diag_time_dists = self.ipsi.diag_time_dists
@@ -409,8 +409,7 @@ class Bilateral(HDFMixin):
         new_marg_params = new_params[k:]
 
         try:
-            self.ipsi.diag_time_dists.update(new_marg_params)
-            self.contra.diag_time_dists = self.ipsi.diag_time_dists
+            self.diag_time_dists.update(new_marg_params)
         except ValueError as val_err:
             raise ValueError(
                 "Parameters for marginalization over diagnose times are invalid"
@@ -499,7 +498,7 @@ class Bilateral(HDFMixin):
             probabilities, of which a lymphatic network has as many as it has
             :class:`Edge` instances (in case no symmetries apply).
 
-            :meth:`Unilateral.log_likelihood`: The log-likelihood function of
+            :meth:`Unilateral.likelihood`: The (log-)likelihood function of
             the unilateral system.
         """
         if data is not None:
@@ -552,7 +551,7 @@ class Bilateral(HDFMixin):
                 over diagnose times stored for this T-stage.
         """
         self.check_and_assign(given_params)
-        
+
         if inv is None:
             inv = {"ipsi": None, "contra": None}
 
