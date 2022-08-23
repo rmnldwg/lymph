@@ -69,6 +69,8 @@ class MidlineBilateral(HDFMixin):
         if self.use_mixing:
             self.alpha_mix = 0.
 
+        self.noext.diag_time_dists = self.ext.diag_time_dists
+
 
     @property
     def graph(self) -> Dict[Tuple[str], List[str]]:

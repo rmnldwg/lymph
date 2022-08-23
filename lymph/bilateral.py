@@ -45,6 +45,8 @@ class Bilateral(HDFMixin):
         self.base_symmetric  = base_symmetric
         self.trans_symmetric = trans_symmetric
 
+        self.contra.diag_time_dists = self.ipsi.diag_time_dists
+
 
     def __str__(self):
         """Print info about the structure and parameters of the bilateral

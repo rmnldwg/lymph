@@ -291,22 +291,13 @@ class Unilateral(HDFMixin):
             diagnoses, given the current state of the system.
         """
         prob = 1.
-        is_pandas = isinstance(diagnoses, pd.Series)
-
         for modality, spsn in self._spsn_tables.items():
             if modality in diagnoses:
                 mod_diagnose = diagnoses[modality]
-                if not is_pandas and len(mod_diagnose) != len(self.lnls):
-                    raise ValueError(
-                        "When providing a dictionary, the length of the "
-                        "individual diagnoses must match the number of LNLs"
-                    )
-                for i,lnl in enumerate(self.lnls):
-                    if is_pandas and lnl.name in mod_diagnose:
+                for lnl in self.lnls:
+                    try:
                         lnl_diagnose = mod_diagnose[lnl.name]
-                    elif not is_pandas:
-                        lnl_diagnose = mod_diagnose[i]
-                    else:
+                    except KeyError:
                         continue
 
                     prob *= lnl.obs_prob(lnl_diagnose, spsn)
@@ -872,9 +863,9 @@ class Unilateral(HDFMixin):
 
     def risk(
         self,
-        involvement: Optional[np.ndarray] = None,
+        involvement: Optional[Union[dict, np.ndarray]] = None,
         given_params: Optional[np.ndarray] = None,
-        given_diagnoses: Dict[str, np.ndarray] = None,
+        given_diagnoses: Optional[Dict[str, dict]] = None,
         t_stage: str = "early",
         mode: str = "HMM"
     ) -> Union[float, np.ndarray]:
