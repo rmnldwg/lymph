@@ -3,7 +3,7 @@ Module that defines helper classes for marginalizing over diagnose times in the
 model classes.
 """
 import warnings
-from typing import Callable, List, Optional, Tuple, Union, Dict
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -146,7 +146,7 @@ class MarginalizorDict(dict):
         """
         Update all marginalizors stored in this instance that are updateable with
         values from the ``parms`` argument.
-        
+
         Use ``stop_quietly`` to avoid raising an error when too few parameters are
         probided to update all distributions.
         """
@@ -167,7 +167,7 @@ class MarginalizorDict(dict):
     ) -> Tuple[List[str], List[int]]:
         """
         Draw first a T-stage and then from that distribution a diagnose time.
-        
+
         Args:
             dist: Distribution over T-stages. For each key, this defines the
                 probability for seeing the respective T-stage. Will be normalized if
@@ -178,7 +178,7 @@ class MarginalizorDict(dict):
         for i, t_stage in enumerate(t_stages):
             stage_dist[i] = dist[t_stage]
         stage_dist = stage_dist / np.sum(stage_dist)
-        
+
         drawn_t_stages = np.choice(a=t_stages, p=stage_dist, size=size).tolist()
         drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
 

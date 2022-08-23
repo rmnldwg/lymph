@@ -7,13 +7,8 @@ from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
 from .node import Node
-from .timemarg import Marginalizor, MarginalizorDict
-from .utils import (
-    HDFMixin,
-    change_base,
-    draw_diagnose_times,
-    fast_binomial_pmf,
-)
+from .timemarg import MarginalizorDict
+from .utils import HDFMixin, change_base
 
 
 class Unilateral(HDFMixin):
@@ -215,7 +210,7 @@ class Unilateral(HDFMixin):
 
         When setting this property, one may also provide a normal Python dict, in
         which case it tries to convert it to a :class:`MarginalizorDict`.
-        
+
         See Also:
             :class:`MarginalzorDict`, :class:`Marginalizor`.
         """
@@ -746,7 +741,7 @@ class Unilateral(HDFMixin):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
         the model.
-        
+
         Args:
             new_params: The set of :attr:`spread_probs` and parameters to provide for
                 updating the parametrized distributions over diagnose times.
@@ -759,7 +754,7 @@ class Unilateral(HDFMixin):
         k = len(self.spread_probs)
         new_spread_probs = new_params[:k]
         new_marg_params = new_params[k:]
-        
+
         try:
             self.diag_time_dists.update(new_marg_params)
         except ValueError as val_err:
@@ -869,7 +864,7 @@ class Unilateral(HDFMixin):
             self.check_and_assign(given_params)
         except ValueError:
             return -np.inf if log else 0.
-        
+
         return self._likelihood(mode, log)
 
 

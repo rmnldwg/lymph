@@ -1,12 +1,12 @@
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
+from .timemarg import MarginalizorDict
 from .unilateral import Unilateral
-from .timemarg import Marginalizor, MarginalizorDict
-from .utils import HDFMixin, draw_diagnose_times, fast_binomial_pmf
+from .utils import HDFMixin
 
 
 class Bilateral(HDFMixin):
@@ -236,10 +236,10 @@ class Bilateral(HDFMixin):
 
         When setting this property, one may also provide a normal Python dict, in
         which case it tries to convert it to a :class:`MarginalizorDict`.
-        
+
         Note that the method will provide the same instance of this
         :class:`MarginalizorDict` to both sides of the network.
-        
+
         See Also:
             :class:`MarginalzorDict`, :class:`Marginalizor`.
         """
@@ -394,7 +394,7 @@ class Bilateral(HDFMixin):
         marginalization over diagnose times are all within limits and assign them to
         the model. Also, make sure the ipsi- and contralateral distributions over
         diagnose times are the same instance of the :class:`MarginalizorDict`.
-        
+
         Args:
             new_params: The set of :attr:`spread_probs` and parameters to provide for
                 updating the parametrized distributions over diagnose times.
@@ -407,7 +407,7 @@ class Bilateral(HDFMixin):
         k = len(self.spread_probs)
         new_spread_probs = new_params[:k]
         new_marg_params = new_params[k:]
-        
+
         try:
             self.ipsi.diag_time_dists.update(new_marg_params)
             self.contra.diag_time_dists = self.ipsi.diag_time_dists
@@ -504,7 +504,7 @@ class Bilateral(HDFMixin):
         """
         if data is not None:
             self.patient_data = data
-            
+
         if given_params is None:
             return self._likelihood(log)
 
@@ -512,7 +512,7 @@ class Bilateral(HDFMixin):
             self.check_and_assign(given_params)
         except ValueError:
             return -np.inf if log else 0.
-        
+
         return self._likelihood(log)
 
 
