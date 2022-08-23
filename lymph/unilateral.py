@@ -657,6 +657,11 @@ class Unilateral(HDFMixin):
         elif self.modalities == {}:
             raise ValueError("No diagnostic modalities have been defined yet!")
 
+        # when first loading data with with different T-stages, and then loading a
+        # dataset with fewer T-stages, the old diagnose matrices should not be preserved
+        if hasattr(self, "_diagnose_matrices"):
+            del self._diagnose_matrices
+
         # For the Hidden Markov Model
         if mode=="HMM":
             t_stages = list(set(data[("info", "t_stage")]))

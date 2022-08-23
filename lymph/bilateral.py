@@ -553,13 +553,6 @@ class Bilateral(HDFMixin):
         if given_params is not None:
             self.check_and_assign(given_params)
 
-        if involvement is None:
-            involvement = {"ipsi": {}, "contra": {}}
-        if "ipsi" not in involvement:
-            involvement["ipsi"] = {}
-        if "contra" not in involvement:
-            involvement["contra"] = {}
-
         if given_diagnoses is None:
             first_modality = list(self.modalities.keys())[0]
             given_diagnoses = {first_modality: {}}
@@ -569,7 +562,6 @@ class Bilateral(HDFMixin):
                 val["ipsi"] = {}
             if "contra" not in val:
                 val["contra"] = {}
-
 
         diagnose_probs = {}   # vectors containing P(Z=z|X) for respective side
         state_probs = {}      # matrices containing P(X|t) for each side
@@ -608,6 +600,10 @@ class Bilateral(HDFMixin):
 
         if involvement is None:
             return post_state_probs
+        if "ipsi" not in involvement:
+            involvement["ipsi"] = {}
+        if "contra" not in involvement:
+            involvement["contra"] = {}
 
         marg_states = {}   # vectors marginalizing over only the states we care about
         for side in ["ipsi", "contra"]:
