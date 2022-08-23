@@ -3,7 +3,7 @@ Module that defines helper classes for marginalizing over diagnose times in the
 model classes.
 """
 import warnings
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional, Union, Dict
 
 import numpy as np
 
@@ -28,7 +28,9 @@ class Marginalizor:
                 parameters to get the PMF for its support and freeze it.
             max_t: Support of the marginalization function runs from 0 to max_t.
         """
+        max_t = len(dist) - 1 if dist is not None else max_t
         self.support = np.arange(max_t + 1)
+
         if dist is not None:
             self.pmf = dist
             self._func = None
@@ -37,6 +39,7 @@ class Marginalizor:
             self._func = func
         else:
             raise ValueError("Either dist or func must be specified")
+
 
     @property
     def pmf(self) -> np.ndarray:
@@ -93,6 +96,12 @@ class Marginalizor:
         else:
             raise RuntimeError("Marginalizor is not updateable.")
 
+    def draw(self) -> np.ndarray:
+        """
+        Draw sample of diagnose times from the PMF.
+        """
+        return np.random.choice(a=self.support, p=self.pmf)
+
 
 class MarginalizorDict(dict):
     """
@@ -102,6 +111,15 @@ class MarginalizorDict(dict):
     def __init__(self, *args, max_t: int = 10, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_t = max_t
+
+    def __getitem__(self, t_stage) -> Marginalizor:
+        try:
+            return super().__getitem__(t_stage)
+        except KeyError as key_err:
+            raise KeyError(
+                f"For T-stage {t_stage}, no distribution to marginalize over "
+                "diagnose times was defined"
+            ) from key_err
 
     def __setitem__(
         self,
@@ -141,3 +159,21 @@ class MarginalizorDict(dict):
                     if not stop_quietly:
                         raise ValueError("Not enough parameters provided")
                     break
+
+    def draw(self, dist: Dict[str, float]) -> int:
+        """
+        Draw first a T-stage and then from that distribution a diagnose time.
+        
+        Args:
+            dist: Distribution over T-stages. For each key, this defines the
+                probability for seeing the respective T-stage. Will be normalized if
+                it isn't already.
+        """
+        stage_dist = np.zeros(shape=len(self))
+        t_stages = list(self.keys())
+        for i, t_stage in enumerate(t_stages):
+            stage_dist[i] = dist[t_stage]
+        stage_dist = stage_dist / np.sum(stage_dist)
+        
+        drawn_t_stage = np.choice(a=t_stages, p=stage_dist)
+        return self[drawn_t_stage].draw()

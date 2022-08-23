@@ -827,6 +827,7 @@ class Unilateral(HDFMixin):
 
         return llh
 
+
     def likelihood(
         self,
         data: Optional[pd.DataFrame] = None,
@@ -877,8 +878,7 @@ class Unilateral(HDFMixin):
         given_params: Optional[np.ndarray] = None,
         inv: Optional[np.ndarray] = None,
         diagnoses: Dict[str, np.ndarray] = {},
-        diag_time: Optional[int] = None,
-        time_dist: Optional[np.ndarray] = None,
+        t_stage: str = "early",
         mode: str = "HMM"
     ) -> Union[float, np.ndarray]:
         """Compute risk(s) of involvement given a specific (but potentially
@@ -900,11 +900,9 @@ class Unilateral(HDFMixin):
                 out available modalities will assume a completely missing
                 diagnosis.
 
-            diag_time: Time of diagnosis. Either this or the ``time_dist`` to
-                marginalize over diagnose times must be given.
-
-            time_dist: Distribution to marginalize over diagnose times. Either
-                this, or the ``diag_time`` must be given.
+            t_stage: The T-stage for which the risk should be computed. The attribute
+                :attr:`diag_time_dists` must have a distribution for marginalizing
+                over diagnose times stored for this T-stage.
 
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires
                 the ``time_dist``) or to ``"BN"`` for the Bayesian network
@@ -928,18 +926,9 @@ class Unilateral(HDFMixin):
         # vector of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            if diag_time is not None:
-                pX = self._evolve(diag_time)
-
-            elif time_dist is not None:
-                max_t = len(time_dist)
-                state_probs = self._evolve(t_last=max_t-1)
-                pX = time_dist @ state_probs
-
-            else:
-                msg = ("Either diagnose time or distribution to marginalize "
-                       "over it must be given.")
-                raise ValueError(msg)
+            max_t = self.diag_time_dists.max_t
+            state_probs = self._evolve(t_last=max_t)
+            pX = self.diag_time_dists[t_stage].pmf @ state_probs
 
         # BN version
         elif mode == "BN":
