@@ -118,8 +118,10 @@ class MidlineBilateral(HDFMixin):
         """
         k = len(self.ext.ipsi.base_probs)
 
+        self.ext.ipsi.base_probs = new_params[:k]
+        self.noext.ipsi.base_probs = new_params[:k]
+
         if self.use_mixing:
-            self.ext.ipsi.base_probs = new_params[:k]
             self.noext.contra.base_probs = new_params[k:2*k]
             self.alpha_mix = new_params[-1]
             # compute linear combination
@@ -128,7 +130,6 @@ class MidlineBilateral(HDFMixin):
                 + (1. - self.alpha_mix) * self.noext.contra.base_probs
             )
         else:
-            self.ext.ipsi.base_probs = new_params[:k]
             self.ext.contra.base_probs = new_params[k:2*k]
             self.noext.contra.base_probs = new_params[2*k:3*k]
 

@@ -1,3 +1,7 @@
+"""
+Define custom strategies to generate random samples of various objects
+used for testing the functionality of the lymph package.
+"""
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
@@ -7,7 +11,6 @@ from hypothesis.extra import pandas as hypd
 
 from lymph import Marginalizor, Node
 from lymph.unilateral import Unilateral
-from lymph.utils import fast_binomial_pmf
 
 ST_CHARACTERS = st.characters(
     whitelist_categories=('L', 'N'),
@@ -156,6 +159,20 @@ def st_spread_probs_for_(draw, model, are_values_valid=True, is_shape_valid=True
         res[np.all([0. <= res, res <= 1.], axis=0)] += 1.1
         return res
 
+@st.composite
+def st_marg_params_for_(draw, model, are_values_valid=True, is_shape_valid=True):
+    """Strategy for drawing parameters of the marginalizors."""
+    shape = model.diag_time_dists.num_parametric if is_shape_valid else draw(st.integers(1,100))
+    if are_values_valid:
+        return draw(hynp.arrays(
+            dtype=float,
+            shape=shape,
+            elements=st.floats(min_value=0., max_value=1.)
+        ))
+    else:
+        res = draw(hynp.arrays(dtype=float, shape=shape))
+        res[np.all([0. <= res, res <= 1.], axis=0)] += 1.1
+        return res
 
 @st.composite
 def st_models_and_probs(draw, models=st_models(), gen_prob_type="base"):
@@ -247,6 +264,7 @@ def st_models_and_data(
     assume(len(patient_data) > 0)
 
     if add_t_stages:
+        max_t = draw(st.integers(1, 50))
         t_stages = draw(st_t_stages())
         available_t_stages = st.sampled_from(t_stages)
         t_stage_column = st.lists(
@@ -255,113 +273,35 @@ def st_models_and_data(
             max_size=len(patient_data)
         )
         patient_data[("info", "t_stage")] = draw(t_stage_column)
-        return model, patient_data, t_stages
+
+        for stage in t_stages:
+            model.diag_time_dists[stage] = np.random.uniform(size=max_t+1)
+
+        return model, patient_data, t_stages, max_t
 
     return model, patient_data
-
-
-@st.composite
-def st_time_dist(draw, min_size=2, max_size=20):
-    """Strategy for distributions over diagnose times"""
-    n = draw(st.integers(min_size, max_size))
-    unnormalized = draw(
-        hynp.arrays(
-            dtype=float,
-            shape=n,
-            elements=st.floats(
-                min_value=0., exclude_min=True,
-                allow_nan=False, allow_infinity=None
-            )
-        )
-    )
-    norm = np.sum(unnormalized)
-    assume(0. < norm < np.inf)
-    return unnormalized / norm
-
-@st.composite
-def st_stage_dist_and_time_dists(draw):
-    """This strategy generates a tuple of a distribution over T-stages, for
-    each of which a time distribution is drawn."""
-    t_stages = draw(st_t_stages())
-
-    stage_dist = draw(hynp.arrays(
-        dtype=float, shape=len(t_stages), elements=st.floats(0.,1.)
-    ))
-    norm = np.sum(stage_dist)
-    assume(0. < norm < np.inf)
-    stage_dist = stage_dist / norm
-
-    max_t = draw(st.integers(0,10))
-    time_dists = {}
-    for t in t_stages:
-        time_dists[t] = draw(hynp.arrays(
-            dtype=float, shape=max_t+1, elements=st.floats(0.,1.)
-        ))
-        norm = np.sum(time_dists[t])
-        assume(0. < norm < np.inf)
-        time_dists[t] = time_dists[t] / norm
-
-    return stage_dist, time_dists
-
 
 @st.composite
 def st_likelihood_setup(draw):
     """Strategy setting up everything needed for testing the likelihood function."""
-    model, data, t_stages = draw(st_models_and_data(add_t_stages=True))
+    model, data, _, max_t = draw(st_models_and_data(add_t_stages=True))
     are_params_valid = draw(st.booleans())
     spread_probs = draw(
         st_spread_probs_for_(model, are_values_valid=are_params_valid)
     )
-    includes_binom_probs = draw(st.booleans())
-    max_t = draw(st.integers(0, 20))
+    marg_params = draw(
+        st_marg_params_for_(model, are_values_valid=are_params_valid)
+    )
+    given_params = np.concatenate([spread_probs, marg_params])
     return_log = draw(st.booleans())
 
-    times = np.arange(max_t + 1)
-    time_dists = {}
-    binom_probs = np.zeros(shape=len(t_stages))
-    st_floats = st.floats(0., 1.) if are_params_valid else st.floats(-20., 20)
-    for i,t in enumerate(t_stages):
-        p = draw(st_floats)
-        p += 1.1 if not are_params_valid and 0. <= p <= 1. else 0.
-        binom_probs[i] = p
-        time_dists[t] = fast_binomial_pmf(times, max_t, p)
-
-    if includes_binom_probs:
-        given_params = np.concatenate([spread_probs, binom_probs])
-    else:
-        given_params = spread_probs
+    if model.diag_time_dists.max_t != max_t:
+        raise RuntimeError("Max t values disagree")
 
     return (
         model,
         data,
         given_params,
         are_params_valid,
-        includes_binom_probs,
-        time_dists,
-        max_t,
         return_log
     )
-
-@st.composite
-def st_risk_params(
-    draw,
-    models=st_models(spread_probs=st.floats(0., 1.)),
-    modalities=st_modalities(max_size=1)
-):
-    """Strategy for generating parameters necessary for testing risk function"""
-    model = draw(models)
-    num_lnls = len(model.lnls)
-
-    modalities = draw(modalities)
-    model.modalities = modalities
-
-    st_true_false_none = st.one_of(st.none(), st.booleans())
-    involvement = draw(hynp.arrays(
-        dtype=object, shape=num_lnls, elements=st_true_false_none
-    ))
-    diagnoses = {}
-    for mod in modalities:
-        diagnoses[mod] = draw(hynp.arrays(
-            dtype=object, shape=num_lnls, elements=st_true_false_none
-        ))
-    return (model, involvement, diagnoses)

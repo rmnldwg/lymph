@@ -2,9 +2,17 @@ import hypothesis.strategies as st
 import numpy as np
 import pytest
 from custom_strategies import nodes
-from hypothesis import assume, given
+from hypothesis import HealthCheck, assume, given, settings
 
 from lymph import Edge, Node
+
+settings.register_profile(
+    "tests",
+    max_examples=10,
+    suppress_health_check=HealthCheck.all(),
+    deadline=None,
+)
+settings.load_profile("tests")
 
 
 @pytest.fixture(scope="session", params=[
