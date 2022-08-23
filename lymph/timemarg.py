@@ -8,6 +8,11 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 
+class SupportError(Exception):
+    """Error that is raised when no support for a distribution is provided."""
+    pass
+
+
 class Marginalizor:
     """
     Class that provides methods for marginalizing over diagnose times.
@@ -69,7 +74,10 @@ class Marginalizor:
                 "Probability mass function does not sum to 1, will be normalized."
             )
         if not dist_arr.shape == self.support.shape:
-            raise ValueError(f"Distribution must be of shape {self.support.shape}")
+            raise ValueError(
+                f"Distribution must be of shape {self.support.shape}, "
+                f"but has shape {dist_arr.shape}"
+            )
         self._pmf = dist_arr / cum_dist
 
     @property
@@ -108,7 +116,7 @@ class MarginalizorDict(dict):
     Class that replicates the behaviour of a dictionary of marginalizors for each
     T-stage, ensuring they all have the same support.
     """
-    def __init__(self, *args, max_t: int = 10, **kwargs):
+    def __init__(self, *args, max_t: Optional[int] = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_t = max_t
 
@@ -132,10 +140,19 @@ class MarginalizorDict(dict):
         PMF will only be frozen after the instance of the Marginalizor is called with
         the parameters of the function (except the first one, which is the support).
         """
+        if self.max_t is None:
+            if callable(dist):
+                raise SupportError(
+                    "Cannot assign parametric distribution without first defining "
+                    "its support"
+                )
+            self.max_t = len(dist) - 1
+
         if callable(dist):
             marg = Marginalizor(func=dist, max_t=self.max_t)
         else:
             marg = Marginalizor(dist=dist, max_t=self.max_t)
+
         super().__setitem__(t_stage, marg)
 
     @property

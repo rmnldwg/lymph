@@ -8,9 +8,6 @@ from custom_strategies import (
     st_models,
     st_models_and_data,
     st_models_and_probs,
-    st_risk_params,
-    st_stage_dist_and_time_dists,
-    st_time_dist,
 )
 from helpers import are_probabilities
 from hypothesis import HealthCheck, assume, given, settings
@@ -567,7 +564,7 @@ def test_diagnose_matrices(model_and_table, t_stage):
 )
 def test_patient_data(model_and_table):
     """Check the correct handling of the data."""
-    model, patient_data, _ = model_and_table
+    model, patient_data, *_ = model_and_table
     t_stages = set(patient_data[("info", "t_stage")].values)
 
     assert not hasattr(model, "_patient_data"), (
@@ -589,9 +586,10 @@ def test_patient_data(model_and_table):
         assert hasattr(model, "_diagnose_matrices"), (
             "Model did not create diagnose matrices"
         )
-        assert model.diagnose_matrices.keys() == t_stages, (
-            "Model did not create the right diagnose matrices for the T-stages"
-        )
+        for stage in t_stages:
+            assert stage in model.diagnose_matrices, (
+                "Model did not create the right diagnose matrices for the T-stages"
+            )
 
     del model._spsn_tables
     del model._patient_data
@@ -679,60 +677,15 @@ def test_likelihood(likelihood_setup):
             )
 
     model.patient_data = data
-    llh_no_data = model.likelihood(
-        given_params=given_params,
-        includes_binom_probs=includes_binom_probs,
-        time_dists=time_dists,
-        max_t=max_t,
-        log=return_log,
-    )
+    llh_no_data = model.likelihood(given_params=given_params, log=return_log)
     assert llh == llh_no_data, (
         "whether data is loaded in- or outside llh must make no difference"
     )
-
-    if are_params_valid and not includes_binom_probs:
-        llh_no_params = model.likelihood(
-            includes_binom_probs=includes_binom_probs,
-            time_dists=time_dists,
-            max_t=max_t,
-            log=return_log,
-        )
+    if are_params_valid:
+        model.check_and_assign(given_params)
+        llh_no_params = model.likelihood(log=return_log)
         assert llh_no_params == llh_no_data, (
             "whether parameters are loaded in- or outside llh must make no difference"
-        )
-    elif includes_binom_probs:
-        with pytest.raises(ValueError):
-            llh_no_params = model.likelihood(
-                includes_binom_probs=includes_binom_probs,
-                time_dists=time_dists,
-                max_t=max_t,
-                log=return_log,
-            )
-
-
-@given(
-    risk_params=st_risk_params(),
-    time_dist=st_time_dist(),
-)
-def test_risk(risk_params, time_dist):
-    """Test the risk function"""
-    model, involvement, diagnoses = risk_params
-    risk = model.risk(inv=involvement, diagnoses=diagnoses, time_dist=time_dist)
-
-    if involvement is None:
-        assert len(risk) == 2**len(model.lnls), (
-            "Risk must predict as many risks as there are distinct states"
-        )
-        are_ge_0 = np.all(np.greater_equal(risk, 0.) | np.isclose(risk, 0.))
-        are_le_1 = np.all(np.less_equal(risk, 1.) | np.isclose(risk, 1.))
-        assert are_ge_0 and are_le_1, (
-            f"Risk = {risk} for some states out of bound"
-        )
-    else:
-        is_ge_0 = np.isclose(0., risk) or 0. < risk
-        is_le_1 = np.isclose(1., risk) or risk < 1.
-        assert is_ge_0 and is_le_1, (
-            "Risk must be between zero and one"
         )
 
 
@@ -754,49 +707,4 @@ def test_draw_patient_diagnoses(model, diag_times):
     )
     assert patient_diagnoses.dtype == bool, (
         "Drawn diagnoses should be bools"
-    )
-
-
-@given(
-    model=st_models(
-        modalities=st_modalities(max_size=2),
-        spread_probs=floats(0., 1.)
-    ),
-    num_patients=integers(1,100),
-    stage_dist_and_time_dists=st_stage_dist_and_time_dists()
-)
-def test_generate_dataset(model, num_patients, stage_dist_and_time_dists):
-    stage_dist, time_dists = stage_dist_and_time_dists
-    assume('' not in time_dists)
-    generated_data = model.generate_dataset(
-        num_patients=num_patients,
-        stage_dist=stage_dist,
-        time_dists=time_dists,
-    )
-
-    modalities = model.modalities.keys()
-    lvl0_header = generated_data.columns.get_level_values(0)
-    assert all([mod in lvl0_header for mod in modalities]), (
-        "Some model modalities are not present in the generated dataset"
-    )
-    assert "info" in lvl0_header, (
-        "No info column in data header"
-    )
-
-    lvl1_header = generated_data.columns.get_level_values(1)
-    assert all([lnl.name in lvl1_header for lnl in model.lnls]), (
-        f"Some LNLs are not present in the dataset columns"
-    )
-    assert "t_stage" in lvl1_header, (
-        "No T-stage information in data header"
-    )
-
-    expected_shape = (num_patients, len(modalities) * len(model.lnls) + 1)
-    assert generated_data.shape == expected_shape, (
-        "Generated dataset has wrong shape"
-    )
-
-    t_stage_list = list(generated_data["info", "t_stage"].values)
-    assert all([t in list(time_dists.keys()) for t in t_stage_list]), (
-        "Some T-stages in the generated data were not in the original list"
     )
