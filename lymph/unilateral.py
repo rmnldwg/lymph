@@ -16,7 +16,7 @@ class Unilateral(HDFMixin):
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], Set[str]], **kwargs):
+    def __init__(self, graph: Dict[Tuple[str], Set[str]], **_kwargs):
         """Initialize the underlying graph:
 
         Args:

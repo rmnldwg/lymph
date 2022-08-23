@@ -24,7 +24,7 @@ class Bilateral(HDFMixin):
         graph: Dict[Tuple[str], List[str]],
         base_symmetric: bool = False,
         trans_symmetric: bool = True,
-        **kwargs
+        **_kwargs
     ):
         """Initialize both sides of the network as a :class:`Unilateral`
         instance:

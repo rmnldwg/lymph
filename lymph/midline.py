@@ -32,10 +32,10 @@ class MidlineBilateral(HDFMixin):
 
     def __init__(
         self,
-        graph: Dict[Tuple[str], List[str]] = {},
+        graph: Dict[Tuple[str], List[str]],
         use_mixing: bool = True,
         trans_symmetric: bool = True,
-        **kwargs
+        **_kwargs
     ):
         """The class is constructed in a similar fashion to the
         :class:`Bilateral`: That class contains one :class:`Unilateral` for
