@@ -6,10 +6,9 @@ import pandas as pd
 
 from .timemarg import MarginalizorDict
 from .unilateral import Unilateral
-from .utils import HDFMixin
 
 
-class Bilateral(HDFMixin):
+class Bilateral:
     """Class that models metastatic progression in a lymphatic system
     bilaterally by creating two :class:`Unilateral` instances that are
     symmetric in their connections. The parameters describing the spread

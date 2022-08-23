@@ -8,10 +8,60 @@ from numpy.linalg import matrix_power as mat_pow
 from .edge import Edge
 from .node import Node
 from .timemarg import MarginalizorDict
-from .utils import HDFMixin, change_base
 
 
-class Unilateral(HDFMixin):
+def change_base(
+    number: int,
+    base: int,
+    reverse: bool = False,
+    length: Optional[int] = None
+) -> str:
+    """Convert an integer into another base.
+
+    Args:
+        number: Number to convert
+        base: Base of the resulting converted number
+        reverse: If true, the converted number will be printed in reverse order.
+        length: Length of the returned string. If longer than would be
+            necessary, the output will be padded.
+
+    Returns:
+        The (padded) string of the converted number.
+    """
+    if number < 0:
+        raise ValueError("Cannot convert negative numbers")
+    if base > 16:
+        raise ValueError("Base must be 16 or smaller!")
+    elif base < 2:
+        raise ValueError("There is no unary number system, base must be > 2")
+
+    convertString = "0123456789ABCDEF"
+    result = ''
+
+    if number == 0:
+        result += '0'
+    else:
+        while number >= base:
+            result += convertString[number % base]
+            number = number//base
+        if number > 0:
+            result += convertString[number]
+
+    if length is None:
+        length = len(result)
+    elif length < len(result):
+        length = len(result)
+        warnings.warn("Length cannot be shorter than converted number.")
+
+    pad = '0' * (length - len(result))
+
+    if reverse:
+        return result + pad
+    else:
+        return pad + result[::-1]
+
+
+class Unilateral:
     """Class that models metastatic progression in a lymphatic system by
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).

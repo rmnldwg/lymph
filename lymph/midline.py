@@ -5,10 +5,9 @@ import pandas as pd
 
 from .bilateral import Bilateral
 from .timemarg import MarginalizorDict
-from .utils import HDFMixin
 
 
-class MidlineBilateral(HDFMixin):
+class MidlineBilateral:
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
     mid-sagittal line.
