@@ -214,6 +214,8 @@ class Unilateral(HDFMixin):
         See Also:
             :class:`MarginalzorDict`, :class:`Marginalizor`.
         """
+        if not hasattr(self, "_diag_time_dist"):
+            self._diag_time_dists = MarginalizorDict()
         return self._diag_time_dists
 
     @diag_time_dists.setter
