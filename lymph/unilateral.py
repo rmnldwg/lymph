@@ -576,10 +576,8 @@ class Unilateral(HDFMixin):
         """
         try:
             return self._patient_data
-        except AttributeError:
-            raise AttributeError(
-                "No patient data has been loaded yet"
-            )
+        except AttributeError as att_err:
+            raise AttributeError("No patient data has been loaded yet") from att_err
 
     @patient_data.setter
     def patient_data(self, patient_data: pd.DataFrame):
@@ -637,8 +635,7 @@ class Unilateral(HDFMixin):
         if modality_spsn is not None:
             self.modalities = modality_spsn
         elif self.modalities == {}:
-            msg = ("No diagnostic modalities have been defined yet!")
-            raise ValueError(msg)
+            raise ValueError("No diagnostic modalities have been defined yet!")
 
         # For the Hidden Markov Model
         if mode=="HMM":
@@ -732,7 +729,7 @@ class Unilateral(HDFMixin):
     ) -> float:
         """
         Compute the (log-)likelihood of stored data, using the stored spread probs.
-        
+
         This is the core method for computing the likelihood. The user-facing API calls
         it after doing some preliminary checks with the passed arguments.
         """
@@ -791,13 +788,14 @@ class Unilateral(HDFMixin):
                 :meth:`load_data` for more details on how this should look like.
 
             given_params: The likelihood is a function of these parameters.
-            
+
             includes_binom_probs: If `True`, `given_params` is expected to contain
                 binomial probabilities that can be used to construct binomial
                 distributions for the marginalization over time.
 
             time_dists: Distribution over diagnose times if the `given_params` don't
-                include parameters for binomial distributions.
+                include parameters for binomial distributions. If `includes_binom_probs`
+                is `True`, this is ignored.
 
             max_t: Maximum number of time steps the HMM is evolved. This is only used
                 when `includes_binom_probs` is set to `True`.
@@ -814,8 +812,13 @@ class Unilateral(HDFMixin):
         """
         if data is not None:
             self.patient_data = data
-        
+
         if given_params is None:
+            if includes_binom_probs:
+                raise ValueError(
+                    "If binomial probs should be included in parameters, they must be "
+                    "provided as arguments."
+                )
             return self._likelihood(time_dists, mode, log)
 
         if includes_binom_probs:
@@ -839,36 +842,6 @@ class Unilateral(HDFMixin):
 
         self.spread_probs = spread_probs
         return self._likelihood(time_dists, mode, log)
-
-
-    def marginal_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        time_dists: Dict[Any, np.ndarray] = {}
-    ) -> float:
-        """
-        Compute the likelihood of the (already stored) data, given the spread
-        parameters, marginalized over time of diagnosis via time distributions.
-
-        Args:
-            theta: Set of parameters, consisting of the base probabilities
-                :math:`b` and the transition probabilities :math:`t`.
-
-            t_stages: List of T-stages that should be included in the learning
-                process.
-
-            time_dists: Distribution over the probability of diagnosis at
-                different times :math:`t` given T-stage.
-
-        Returns:
-            The log-likelihood of the data, given te spread parameters.
-        """
-        return self.log_likelihood(
-            theta, t_stages,
-            diag_times=None, time_dists=time_dists,
-            mode="HMM"
-        )
 
 
     def binom_marg_log_likelihood(

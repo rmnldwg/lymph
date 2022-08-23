@@ -16,9 +16,9 @@ class Edge(object):
             t: Transition probability in case start-Node has state 1 (microscopic
                 involvement).
         """
-        if type(start) is not Node:
+        if not isinstance(start, Node):
             raise TypeError("Start must be instance of Node!")
-        if type(end) is not Node:
+        if not isinstance(end, Node):
             raise TypeError("End must be instance of Node!")
         if start == end:
             raise ValueError("Start and end node must be different")
