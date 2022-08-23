@@ -31,6 +31,7 @@ class Marginalizor:
         self.support = np.arange(max_t + 1)
         if dist is not None:
             self.pmf = dist
+            self._func = None
         elif func is not None:
             self._pmf = None
             self._func = func
@@ -63,12 +64,29 @@ class Marginalizor:
             raise ValueError(f"Distribution must be of shape {self.support.shape}")
         self._pmf = dist_arr / cum_dist
 
-    def __call__(self, *args, **kwargs) -> None:
+    @property
+    def is_frozen(self) -> bool:
         """
-        Freeze the marginalizor by providing the function with its parameters and
+        Return True if the marginalizor is frozen.
+        """
+        return self._pmf is not None
+
+    @property
+    def is_updateable(self) -> bool:
+        """
+        Return True if the marginalizor's PMF can be changed by calling `update`.
+        """
+        return self._func is not None
+
+    def update(self, param: float) -> None:
+        """
+        Update the marginalizor by providing the function with its parameter and
         storing the resulting PMF.
         """
-        self.pmf = self._func(self.support, *args, **kwargs)
+        if self.is_updateable:
+            self.pmf = self._func(self.support, param)
+        else:
+            raise RuntimeError("Marginalizor is not updateable.")
 
 
 class MarginalizorDict(dict):
@@ -96,3 +114,15 @@ class MarginalizorDict(dict):
         else:
             marg = Marginalizor(dist=dist, max_t=self.max_t)
         super().__setitem__(t_stage, marg)
+
+    def update(self, params: Union[List[float], np.ndarray]) -> None:
+        """
+        Update all marginalizors stored in this instance that are updateable.
+        """
+        params_iterator = iter(params)
+        for _, marg in self.items():
+            if marg.is_updateable:
+                try:
+                    marg.update(next(params_iterator))
+                except StopIteration:
+                    raise ValueError("Not enough parameters provided")
