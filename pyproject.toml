@@ -12,10 +12,10 @@ description = "Package for statistical modelling of lymphatic metastatic spread.
 authors = [
     {name = "Roman Ludwig", email = "roman.ludwig@usz.ch"}
 ]
-readme = "README.md"
+readme = "README.rst"
 requires-python = ">=3.8"
 keywords = ["cancer", "metastasis", "lymphatic progression", "model"]
-license = {file = "LICENSE"}
+license = {text = "MIT"}
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
@@ -50,8 +50,8 @@ dev = [
 ]
 
 [project.urls]
-repo = "https://github.com/rmnldwg/lymph"
-docs = "https://lymph-model.readthedocs.io"
+source = "https://github.com/rmnldwg/lymph"
+documentation = "https://lymph-model.readthedocs.io"
 
 
 [tool.setuptools_scm]
