@@ -122,7 +122,7 @@ class Bilateral:
         | base probs ipsi | base probs contra* |
         +-----------------+--------------------+
 
-        *Only when ``base_symmetric = False``, which is the default.
+        \* Only when ``base_symmetric = False``, which is the default.
 
         When setting these parameters, the length of the provided array only
         needs to be half as long if ``base_symmetric`` is ``True``, since both
@@ -161,7 +161,7 @@ class Bilateral:
         | trans probs ipsi | trans probs contra* |
         +------------------+---------------------+
 
-        *Only if ``trans_symmetric = False``.
+        \* Only if ``trans_symmetric = False``.
 
         And correspondingly, if setting these transmission probability one only
         needs half as large an array if ``trans_symmetric`` is ``True``.
@@ -207,8 +207,8 @@ class Bilateral:
         | base probs ipsi | base probs contra* | trans probs ipsi | trans probs contra** |
         +-----------------+--------------------+------------------+----------------------+
 
-        | *Only if ``base_symmetric = False``, which is the default.
-        | **Only if ``trans_symmetric = False``.
+        | \* Only if ``base_symmetric = False``, which is the default.
+        | \*\* Only if ``trans_symmetric = False``.
 
         See Also:
             :attr:`Unilateral.spread_probs`
