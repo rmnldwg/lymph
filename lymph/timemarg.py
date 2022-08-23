@@ -16,7 +16,7 @@ class Marginalizor:
         self,
         dist: Optional[Union[List[float], np.ndarray]] = None,
         func: Optional[Callable] = None,
-        max_t: int = 10,
+        max_t: Optional[int] = None,
     ) -> None:
         """
         Initialize the marginalizor either with a function or with a fixed distribution.
@@ -28,7 +28,7 @@ class Marginalizor:
                 parameters to get the PMF for its support and freeze it.
             max_t: Support of the marginalization function runs from 0 to max_t.
         """
-        max_t = len(dist) - 1 if dist is not None else max_t
+        max_t = len(dist) - 1 if max_t is None else max_t
         self.support = np.arange(max_t + 1)
 
         if dist is not None:
@@ -141,7 +141,7 @@ class MarginalizorDict(dict):
     @property
     def num_parametric(self) -> int:
         """Return the number of parametrized distributions."""
-        return len(dist.is_updateable for dist in self.values())
+        return np.sum([dist.is_updateable for dist in self.values()])
 
     def update(
         self,
@@ -184,7 +184,7 @@ class MarginalizorDict(dict):
             stage_dist[i] = dist[t_stage]
         stage_dist = stage_dist / np.sum(stage_dist)
 
-        drawn_t_stages = np.choice(a=t_stages, p=stage_dist, size=size).tolist()
+        drawn_t_stages = np.random.choice(a=t_stages, p=stage_dist, size=size).tolist()
         drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
 
         return drawn_t_stages, drawn_diag_times

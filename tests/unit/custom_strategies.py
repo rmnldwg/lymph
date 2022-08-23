@@ -5,7 +5,7 @@ from hypothesis import assume
 from hypothesis.extra import numpy as hynp
 from hypothesis.extra import pandas as hypd
 
-from lymph import Node
+from lymph import Marginalizor, Node
 from lymph.unilateral import Unilateral
 from lymph.utils import fast_binomial_pmf
 
@@ -13,6 +13,32 @@ ST_CHARACTERS = st.characters(
     whitelist_categories=('L', 'N'),
     blacklist_characters=''
 )
+
+
+def dummy_dist(t,p):
+    """A simple unnormalized gauss distribtion as a dummy function."""
+    return np.exp(-(t - p)**2)
+
+@st.composite
+def st_marginalizor(draw, is_updateable=False, is_frozen=False):
+    """Strategy for creating Marginalizor instances."""
+    if is_updateable:
+        max_t = draw(st.integers(1, 50))
+        marg = Marginalizor(func=dummy_dist, max_t=max_t)
+        if is_frozen:
+            param = draw(st.floats(-10., 10.))
+            marg.update(param)
+    else:
+        dist = hynp.arrays(
+            dtype=float,
+            shape=draw(st.integers(1,50)),
+            elements=st.floats(0., 100.),
+        )
+        assume(not np.isnan(np.sum(dist)))
+        marg = Marginalizor(dist=dist)
+
+    return marg
+
 
 @st.composite
 def nodes(draw, typ=None, generate_valid=False):
