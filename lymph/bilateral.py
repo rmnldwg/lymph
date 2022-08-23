@@ -561,13 +561,14 @@ class Bilateral(HDFMixin):
             involvement["contra"] = {}
 
         if given_diagnoses is None:
-            given_diagnoses = {}
-        else:
-            for val in given_diagnoses.values():
-                if "ipsi" not in val:
-                    val["ipsi"] = {}
-                if "contra" not in val:
-                    val["contra"] = {}
+            first_modality = list(self.modalities.keys())[0]
+            given_diagnoses = {first_modality: {}}
+
+        for val in given_diagnoses.values():
+            if "ipsi" not in val:
+                val["ipsi"] = {}
+            if "contra" not in val:
+                val["contra"] = {}
 
 
         diagnose_probs = {}   # vectors containing P(Z=z|X) for respective side
