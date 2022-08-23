@@ -69,6 +69,8 @@ class MidlineBilateral(HDFMixin):
         if self.use_mixing:
             self.alpha_mix = 0.
 
+        self.noext.diag_time_dists = self.ext.diag_time_dists
+
 
     @property
     def graph(self) -> Dict[Tuple[str], List[str]]:
@@ -453,7 +455,8 @@ class MidlineBilateral(HDFMixin):
             tumor does extend over the midline, the risk function of the
             respective :class:`Bilateral` instance gets called.
         """
-        self.check_and_assign(given_params)
+        if given_params is not None:
+            self.check_and_assign(given_params)
 
         if midline_extension:
             return self.ext.risk(**kwargs)

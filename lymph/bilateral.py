@@ -45,6 +45,8 @@ class Bilateral(HDFMixin):
         self.base_symmetric  = base_symmetric
         self.trans_symmetric = trans_symmetric
 
+        self.contra.diag_time_dists = self.ipsi.diag_time_dists
+
 
     def __str__(self):
         """Print info about the structure and parameters of the bilateral
@@ -517,114 +519,116 @@ class Bilateral(HDFMixin):
 
     def risk(
         self,
+        involvement: Optional[dict] = None,
         given_params: Optional[np.ndarray] = None,
-        inv: Dict[str, Optional[np.ndarray]] = None,
-        diagnoses: Dict[str, Dict] = None,
+        given_diagnoses: Optional[dict] = None,
         t_stage: str = "early",
+        **_kwargs,
     ) -> float:
         """Compute risk of ipsi- & contralateral involvement given specific (but
         potentially incomplete) diagnoses for each side of the neck.
 
         Args:
+            involvement: Nested dictionary that can have keys ``"ipsi"`` and
+                ``"contra"``, indicating the respective side's involvement patterns
+                that we're interested in. The corresponding values are dictionaries as
+                the :class:`Unilateral` model expects them.
+
             given_params: The risk is a function of these parameters. They mainly
                 consist of the :attr:`spread_probs` of the model. Any excess parameters
                 will be used to update the parametrized distributions used for
                 marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
-            inv: Dictionary that can have the keys ``"ipsi"`` and ``"contra"``
-                with the respective values being the involvements of interest.
-                If (for one side or both) no involvement of interest is given,
-                it'll be marginalized.
-                The array themselves may contain ``True``, ``False`` or ``None``
-                for each LNL corresponding to the risk for involvement, no
-                involvement and "not interested".
-
-            diagnoses: Dictionary that itself may contain two dictionaries. One
-                with key "ipsi" and one with key "contra". The respective value
-                is then a dictionary that can hold a potentially incomplete
-                (mask with ``None``) diagnose for every available modality.
-                Leaving out available modalities will assume a completely
-                missing diagnosis.
+            given_diagnoses: Nested dictionary with keys of diagnostic modalities and
+                the values are dictionaries of the same format as the ``involvement``
+                arguments.
 
             t_stage: The T-stage for which the risk should be computed. The attribute
                 :attr:`diag_time_dists` must have a distribution for marginalizing
                 over diagnose times stored for this T-stage.
+
+        See Also:
+            :meth:`Unilateral.risk`: The risk function for only one-sided models.
         """
-        self.check_and_assign(given_params)
+        if given_params is not None:
+            self.check_and_assign(given_params)
 
-        if inv is None:
-            inv = {"ipsi": None, "contra": None}
+        if involvement is None:
+            involvement = {"ipsi": {}, "contra": {}}
+        if "ipsi" not in involvement:
+            involvement["ipsi"] = {}
+        if "contra" not in involvement:
+            involvement["contra"] = {}
 
-        if diagnoses is None:
-            diagnoses = {"ipsi": {}, "contra": {}}
+        if given_diagnoses is None:
+            first_modality = list(self.modalities.keys())[0]
+            given_diagnoses = {first_modality: {}}
 
-        cX = {}   # marginalize over matching complete involvements.
-        cZ = {}   # marginalize over Z for incomplete diagnoses.
-        pXt = {}  # probability p(X|t) of state X at time t as 2D matrices
-        pD = {}   # probability p(D|X) of a (potentially incomplete) diagnose,
-                  # given an involvement. Should be a 1D vector
+        for val in given_diagnoses.values():
+            if "ipsi" not in val:
+                val["ipsi"] = {}
+            if "contra" not in val:
+                val["contra"] = {}
+
+
+        diagnose_probs = {}   # vectors containing P(Z=z|X) for respective side
+        state_probs = {}      # matrices containing P(X|t) for each side
 
         for side in ["ipsi", "contra"]:
-            involvement = np.array(inv[side])
-            # build vector to marginalize over involvements
-            cX[side] = np.zeros(shape=(len(self.system[side].state_list)),
-                                dtype=bool)
-            for i,state in enumerate(self.system[side].state_list):
-                cX[side][i] = np.all(
-                    np.equal(
-                        involvement, state,
-                        where=(involvement!=None),
-                        out=np.ones_like(involvement, dtype=bool)
-                    )
-                )
+            side_model = getattr(self, side)
+            diagnose_probs[side] = np.zeros(shape=len(side_model.state_list))
+            side_diagnose = {mod: diag[side] for mod,diag in given_diagnoses.items()}
+            for i,state in enumerate(side_model.state_list):
+                side_model.state = state
+                diagnose_probs[side][i] = side_model.comp_diagnose_prob(side_diagnose)
 
-            # create one large diagnose vector from the individual modalitie's
-            # diagnoses
-            obs = np.array([])
-            for mod in self.system[side]._spsn_tables:
-                if mod in diagnoses[side]:
-                    obs = np.append(obs, diagnoses[side][mod])
-                else:
-                    obs = np.append(obs, np.array([None] * len(self.system[side].lnls)))
+            max_t = self.diag_time_dists.max_t
+            state_probs[side] = self.system[side]._evolve(t_last=max_t)
 
-            # build vector to marginalize over diagnoses
-            cZ[side] = np.zeros(shape=(len(self.system[side].obs_list)),
-                                dtype=bool)
-            for i,complete_obs in enumerate(self.system[side].obs_list):
-                cZ[side][i] = np.all(
-                    np.equal(
-                        obs, complete_obs,
-                        where=(obs!=None),
-                        out=np.ones_like(obs, dtype=bool)
-                    )
-                )
-
-            max_t = self.ipsi.diag_time_dists.max_t
-            pXt[side] = self.system[side]._evolve(t_last=max_t)
-            pD[side] = self.system[side].observation_matrix @ cZ[side]
-
-        # joint probability of Xi & Xc (marginalized over time). Acts as prior
-        # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix.
         # time-prior in diagnoal matrix form
-        PT = np.diag(self.ipsi.diag_time_dists[t_stage].pmf)
-        pXX = pXt["ipsi"].T @ PT @ pXt["contra"]
+        time_marg_matrix = np.diag(self.ipsi.diag_time_dists[t_stage].pmf)
 
-        # joint probability of all hidden states and the requested diagnosis
-        pDDXX = np.einsum("i,ij,j->ij", pD["ipsi"], pXX, pD["contra"])
-        # joint probability of the requested involvement and diagnosis
-        pDDII = cX["ipsi"].T @ pDDXX @ cX["contra"]
+        # joint probability P(Xi,Xc) (marginalized over time). Acts as prior
+        # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix.
+        marg_state_probs = (
+            state_probs["ipsi"].T @ time_marg_matrix @ state_probs["contra"]
+        )
 
-        # denominator p(Di, Dc). Joint probability for ipsi- & contralateral
-        # diagnoses. Marginalized over all hidden involvements and over all
-        # matching complete observations that give rise to the specific
-        # diagnose. The result should be just a number
-        pDD = (cZ["ipsi"].T
-               @ self.ipsi.observation_matrix.T
-               @ pXX
-               @ self.contra.observation_matrix
-               @ cZ["contra"])
+        # joint probability P(Di=di,Dc=dc, Xi,Xc) of all hidden states and the
+        # provided diagnoses
+        joint_diag_state = np.einsum(
+            "i,ij,j->ij",
+            diagnose_probs["ipsi"], marg_state_probs, diagnose_probs["contra"],
+        )
+        # marginalized probability P(Di=di, Dc=dc)
+        marg_diagnose_prob = np.sum(joint_diag_state)
 
-        return pDDII / pDD
+        # P(Xi,Xc | Di=di,Dc=dc)
+        post_state_probs = joint_diag_state / marg_diagnose_prob
+
+        if involvement is None:
+            return post_state_probs
+
+        marg_states = {}   # vectors marginalizing over only the states we care about
+        for side in ["ipsi", "contra"]:
+            if isinstance(involvement[side], dict):
+                involvement[side] = np.array(
+                    [involvement[side].get(lnl.name, None) for lnl in side_model.lnls]
+                )
+            else:
+                involvement[side] = np.array(involvement[side])
+
+            side_model = getattr(self, side)
+            marg_states[side] = np.zeros(shape=len(side_model.state_list), dtype=bool)
+            for i,state in enumerate(side_model.state_list):
+                marg_states[side][i] = np.all(np.equal(
+                    involvement[side], state,
+                    where=(involvement[side] != None),
+                    out=np.ones_like(state, dtype=bool)
+                ))
+
+        return marg_states["ipsi"] @ post_state_probs @ marg_states["contra"]
+
 
 
     def generate_dataset(
