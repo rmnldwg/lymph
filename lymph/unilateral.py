@@ -872,9 +872,9 @@ class Unilateral(HDFMixin):
 
     def risk(
         self,
+        involvement: Optional[np.ndarray] = None,
         given_params: Optional[np.ndarray] = None,
-        inv: Optional[np.ndarray] = None,
-        diagnoses: Dict[str, np.ndarray] = None,
+        given_diagnoses: Dict[str, np.ndarray] = None,
         t_stage: str = "early",
         mode: str = "HMM"
     ) -> Union[float, np.ndarray]:
@@ -882,17 +882,17 @@ class Unilateral(HDFMixin):
         incomplete) diagnosis.
 
         Args:
+            involvement: Specific hidden involvement one is interested in. If only parts
+                of the state are of interest, the remainder can be masked with
+                values ``None``. If specified, the functions returns a single
+                risk.
+
             given_params: The risk is a function of these parameters. They mainly
                 consist of the :attr:`spread_probs` of the model. Any excess parameters
                 will be used to update the parametrized distributions used for
                 marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
-            inv: Specific hidden involvement one is interested in. If only parts
-                of the state are of interest, the remainder can be masked with
-                values ``None``. If specified, the functions returns a single
-                risk.
-
-            diagnoses: Dictionary that can hold a potentially incomplete (mask
+            given_diagnoses: Dictionary that can hold a potentially incomplete (mask
                 with ``None``) diagnose for every available modality. Leaving
                 out available modalities will assume a completely missing
                 diagnosis.
@@ -906,20 +906,21 @@ class Unilateral(HDFMixin):
                 version.
 
         Returns:
-            A single probability value if ``inv`` is specified and an array
+            A single probability value if ``involvement`` is specified and an array
             with probabilities for all possible hidden states otherwise.
         """
-        self.check_and_assign(given_params)
+        if given_params is not None:
+            self.check_and_assign(given_params)
 
-        if diagnoses is None:
-            diagnoses = {}
+        if given_diagnoses is None:
+            given_diagnoses = {}
 
         # create one large diagnose vector from the individual modalitie's
         # diagnoses
         obs = np.array([])
         for mod in self._spsn_tables:
-            if mod in diagnoses:
-                obs = np.append(obs, diagnoses[mod])
+            if mod in given_diagnoses:
+                obs = np.append(obs, given_diagnoses[mod])
             else:
                 obs = np.append(obs, np.array([None] * len(self.lnls)))
 
@@ -957,17 +958,21 @@ class Unilateral(HDFMixin):
         # the specified diagnosis
         res =  cZ @ pZX / (cZ @ pZ)
 
-        if inv is None:
+        if involvement is None:
             return res
         else:
             # if a specific involvement of interest is provided, marginalize the
             # resulting vector of hidden states to match that involvement of
             # interest
-            inv = np.array(inv)
+            if isinstance(involvement, dict):
+                involvement = np.array([involvement[lnl.name] for lnl in self.lnls])
+            else:
+                involvement = np.array(involvement)
+
             cX = np.zeros(shape=res.shape, dtype=bool)
             for i,state in enumerate(self.state_list):
-                cX[i] = np.all(np.equal(inv, state,
-                                        where=(inv!=None),
+                cX[i] = np.all(np.equal(involvement, state,
+                                        where=(involvement!=None),
                                         out=np.ones_like(state, dtype=bool)))
             return cX @ res
 

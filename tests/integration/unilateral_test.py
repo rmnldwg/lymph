@@ -62,3 +62,33 @@ def test_integration():
         assert np.all(np.isclose(model.diag_time_dists[stage].pmf, exp_dist[stage]))
     exp_spread_probs = given_params[:-1]
     assert np.all(model.spread_probs == exp_spread_probs)
+
+    synth_data = model.generate_dataset(
+        num_patients=100,
+        stage_dist={"early": 0.3, "late": 0.7}
+    )
+    is_early = synth_data["info", "t_stage"] == "early"
+    is_late = synth_data["info", "t_stage"] == "late"
+    assert len(synth_data) == 100
+    assert np.isclose(np.sum(is_early), 30, atol=50)
+    assert np.isclose(np.sum(is_late), 70, atol=50)
+
+    model.patient_data = synth_data
+    assert np.all(model.patient_data == synth_data)
+    exp_shape_early = (len(model.state_list), np.sum(is_early))
+    exp_shape_late = (len(model.state_list), np.sum(is_late))
+    assert model.diagnose_matrices["early"].shape == exp_shape_early
+    assert model.diagnose_matrices["late"].shape == exp_shape_late
+
+    log_llh = model.likelihood(log=True)
+    llh = model.likelihood(log=False)
+    assert np.isclose(log_llh, np.log(llh))
+
+    involvement = {
+        "a": False,
+        "b": True,
+        "c": True,
+        "d": None,
+    }
+    comp_risk = model.risk(involvement=involvement)
+    assert 0. <= comp_risk <= 1.

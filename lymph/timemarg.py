@@ -184,7 +184,7 @@ class MarginalizorDict(dict):
             stage_dist[i] = dist[t_stage]
         stage_dist = stage_dist / np.sum(stage_dist)
 
-        drawn_t_stages = np.choice(a=t_stages, p=stage_dist, size=size).tolist()
+        drawn_t_stages = np.random.choice(a=t_stages, p=stage_dist, size=size).tolist()
         drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
 
         return drawn_t_stages, drawn_diag_times
