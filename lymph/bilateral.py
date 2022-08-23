@@ -1,15 +1,14 @@
 import warnings
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from .unilateral import Unilateral
+from .timemarg import Marginalizor, MarginalizorDict
 from .utils import HDFMixin, draw_diagnose_times, fast_binomial_pmf
 
 
-# I chose not to make this one a child of System, since it is basically only a
-# container for two System instances
 class Bilateral(HDFMixin):
     """Class that models metastatic progression in a lymphatic system
     bilaterally by creating two :class:`Unilateral` instances that are
@@ -215,7 +214,6 @@ class Bilateral(HDFMixin):
         """
         return np.concatenate([self.base_probs, self.trans_probs])
 
-
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: np.ndarray):
         """Set the spread probabilities of the :class:`Edge` instances in the
@@ -232,6 +230,31 @@ class Bilateral(HDFMixin):
 
 
     @property
+    def diag_time_dists(self) -> MarginalizorDict:
+        """This property holds the probability mass functions for marginalizing over
+        possible diagnose times for each T-stage.
+
+        When setting this property, one may also provide a normal Python dict, in
+        which case it tries to convert it to a :class:`MarginalizorDict`.
+        
+        Note that the method will provide the same instance of this
+        :class:`MarginalizorDict` to both sides of the network.
+        
+        See Also:
+            :class:`MarginalzorDict`, :class:`Marginalizor`.
+        """
+        return self.ipsi._diag_time_dists
+
+    @diag_time_dists.setter
+    def diag_time_dists(self, new_dists: Union[dict, MarginalizorDict]):
+        """Assign new :class:`MarginalizorDict` to this property. If it is a normal
+        Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
+        """
+        self.ipsi.diag_time_dists = new_dists
+        self.contra.diag_time_dists = self.ipsi.diag_time_dists
+
+
+    @property
     def modalities(self):
         """Compute the two system's observation matrices
         :math:`\\mathbf{B}^{\\text{i}}` and :math:`\\mathbf{B}^{\\text{c}}`.
@@ -242,8 +265,9 @@ class Bilateral(HDFMixin):
         """
         ipsi_modality_spsn = self.ipsi.modalities
         if ipsi_modality_spsn != self.contra.modalities:
-            msg = ("Ipsi- & contralaterally stored modalities are not the same")
-            raise RuntimeError(msg)
+            raise RuntimeError(
+                "Ipsi- & contralaterally stored modalities are not the same"
+            )
 
         return ipsi_modality_spsn
 
@@ -303,7 +327,6 @@ class Bilateral(HDFMixin):
     def load_data(
         self,
         data: pd.DataFrame,
-        t_stages: Optional[List[int]] = None,
         modality_spsn: Optional[Dict[str, List[float]]] = None,
         mode: str = "HMM"
     ):
@@ -356,154 +379,115 @@ class Bilateral(HDFMixin):
 
         self.ipsi.load_data(
             ipsi_data,
-            t_stages=t_stages,
             modality_spsn=modality_spsn,
             mode=mode
         )
         self.contra.load_data(
             contra_data,
-            t_stages=t_stages,
             modality_spsn=modality_spsn,
             mode=mode
         )
 
 
-    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
-        """Check that the spread probability (rates) are all within limits.
+    def check_and_assign(self, new_params: np.ndarray):
+        """Check that the spread probability (rates) and the parameters for the
+        marginalization over diagnose times are all within limits and assign them to
+        the model. Also, make sure the ipsi- and contralateral distributions over
+        diagnose times are the same instance of the :class:`MarginalizorDict`.
+        
+        Args:
+            new_params: The set of :attr:`spread_probs` and parameters to provide for
+                updating the parametrized distributions over diagnose times.
+
+        Warning:
+            This method assumes that the parametrized distributions (instances of
+            :class:`Marginalizor`) all raise a ``ValueError`` when provided with
+            invalid parameters.
         """
+        k = len(self.spread_probs)
+        new_spread_probs = new_params[:k]
+        new_marg_params = new_params[k:]
+        
+        try:
+            self.ipsi.diag_time_dists.update(new_marg_params)
+            self.contra.diag_time_dists = self.ipsi.diag_time_dists
+        except ValueError as val_err:
+            raise ValueError(
+                "Parameters for marginalization over diagnose times are invalid"
+            ) from val_err
+
         if new_spread_probs.shape != self.spread_probs.shape:
-            msg = ("Shape of provided spread parameters does not match network")
-            raise ValueError(msg)
-        if np.any(np.greater(0., new_spread_probs)):
-            return False
-        if np.any(np.greater(new_spread_probs, 1.)):
-            return False
+            raise ValueError(
+                "Shape of provided spread parameters does not match network"
+            )
+        if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
+            raise ValueError(
+                "Spread probs must be between 0 and 1"
+            )
 
-        return True
+        self.spread_probs = new_spread_probs
 
 
-    def _log_likelihood(
+    def _likelihood(
         self,
-        t_stages: Optional[List[Any]] = None,
-        diag_times: Optional[Dict[Any, int]] = None,
-        max_t: Optional[int] = 10,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None
-    ):
-        """Compute the log-likelihood of data, using the stored spread probs.
+        log: bool = True
+    ) -> float:
+        """Compute the (log-)likelihood of data, using the stored spread probs and
+        fixed distributions for marginalizing over diagnose times.
+
         This method mainly exists so that the checking and assigning of the
         spread probs can be skipped.
         """
-        llh = 0.
+        stored_t_stages = set(self.ipsi.diagnose_matrices.keys())
+        provided_t_stages = set(self.ipsi.diag_time_dists.keys())
+        t_stages = list(stored_t_stages.intersection(provided_t_stages))
 
-        if diag_times is not None:
-            if len(diag_times) != len(t_stages):
-                msg = ("One diagnose time must be provided for each T-stage.")
-                raise ValueError(msg)
+        max_t = self.diag_time_dists.max_t
+        state_probs = {}
+        state_probs["ipsi"] = self.ipsi._evolve(t_last=max_t)
+        state_probs["contra"] = self.contra._evolve(t_last=max_t)
 
-            for stage in t_stages:
-                diag_time = np.around(diag_times[stage]).astype(int)
-                if diag_time > max_t:
-                    return -np.inf
+        llh = 0. if log else 1.
+        for stage in t_stages:
+            joint_state_probs = (
+                state_probs["ipsi"].T
+                @ np.diag(self.ipsi.diag_time_dists[stage].pmf)
+                @ state_probs["contra"]
+            )
+            p = np.sum(
+                self.ipsi.diagnose_matrices[stage]
+                * (joint_state_probs
+                    @ self.contra.diagnose_matrices[stage]),
+                axis=0
+            )
+            if log:
+                llh += np.sum(np.log(p))
+            else:
+                llh *= np.prod(p)
 
-                # probabilities for any hidden state (ipsi- & contralaterally)
-                state_probs = {}
-                state_probs["ipsi"] = self.ipsi._evolve(diag_time)
-                state_probs["contra"] = self.contra._evolve(diag_time)
-
-                # joint probs for ipsi- & contralateral hidden states
-                joint_state_probs = np.outer(state_probs["ipsi"],
-                                             state_probs["contra"])
-                log_p = np.log(
-                    np.sum(
-                        self.ipsi.diagnose_matrices[stage]
-                        * (joint_state_probs
-                           @ self.contra.diagnose_matrices[stage]),
-                        axis=0
-                    )
-                )
-                llh += np.sum(log_p)
-
-            return llh
-
-        elif time_dists is not None:
-            if len(time_dists) != len(t_stages):
-                msg = ("One distribution over diagnose times must be provided "
-                       "for each T-stage.")
-                raise ValueError(msg)
-
-            # subtract 1, to also consider healthy starting state (t = 0)
-            max_t = len(time_dists[t_stages[0]]) - 1
-
-            state_probs = {}
-            state_probs["ipsi"] = self.ipsi._evolve(t_last=max_t)
-            state_probs["contra"] = self.contra._evolve(t_last=max_t)
-
-            for stage in t_stages:
-                joint_state_probs = (
-                    state_probs["ipsi"].T
-                    @ np.diag(time_dists[stage])
-                    @ state_probs["contra"]
-                )
-                log_p = np.log(
-                    np.sum(
-                        self.ipsi.diagnose_matrices[stage]
-                        * (joint_state_probs
-                           @ self.contra.diagnose_matrices[stage]),
-                        axis=0
-                    )
-                )
-                llh += np.sum(log_p)
-
-            return llh
-
-        else:
-            msg = ("Either provide a list of diagnose times for each T-stage "
-                   "or a distribution over diagnose times for each T-stage.")
-            raise ValueError(msg)
+        return llh
 
 
-    def log_likelihood(
+    def likelihood(
         self,
-        spread_probs: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        diag_times: Optional[Dict[Any, int]] = None,
-        max_t: Optional[int] = 10,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None
+        data: Optional[pd.DataFrame] = None,
+        given_params: Optional[np.ndarray] = None,
+        log: bool = True,
     ):
         """Compute log-likelihood of (already stored) data, given the spread
         probabilities and either a discrete diagnose time or a distribution to
         use for marginalization over diagnose times.
 
         Args:
-            spread_probs: Spread probabiltites from the tumor to the LNLs, as
-                well as from (already involved) LNLs to downsream LNLs. Includes
-                both sides of the neck. The composition of this array is:
+            data: Table with rows of patients and columns of per-LNL involvment. See
+                :meth:`load_data` for more details on how this should look like.
 
-                +----------------------------+-----------------------------+
-                | base probs (ipsi & contra) | trans probs (ipsi & contra) |
-                +----------------------------+-----------------------------+
+            given_params: The likelihood is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
-                If certain symmetries are chosen, only one set of base or
-                transmission probabilities might have to be provided.
-
-            t_stages: List of T-stages that are also used in the data to denote
-                how advanced the primary tumor of the patient is. This does not
-                need to correspond to the clinical T-stages 'T1', 'T2' and so
-                on, but can also be more abstract like 'early', 'late' etc.
-
-            diag_times: For each T-stage, one can specify with what time step
-                the likelihood should be computed. If this is set to `None`,
-                and a distribution over diagnose times `time_dists` is provided,
-                the function marginalizes over diagnose times.
-
-            max_t: Latest possible diagnose time. This is only used to return
-                `-np.inf` in case one of the `diag_times` exceeds this value.
-
-            time_dists: Distribution over diagnose times that can be used to
-                compute the likelihood of the data, given the spread
-                probabilities, but marginalized over the time of diagnosis. If
-                set to `None`, a diagnose time must be explicitly set for each
-                T-stage.
+            log: When ``True``, the log-likelihood is returned.
 
         Returns:
             The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
@@ -518,175 +502,35 @@ class Bilateral(HDFMixin):
             :meth:`Unilateral.log_likelihood`: The log-likelihood function of
             the unilateral system.
         """
-        if not self._are_valid_(spread_probs):
-            return -np.inf
+        if data is not None:
+            self.patient_data = data
+            
+        if given_params is None:
+            return self._likelihood(log)
 
-        self.spread_probs = spread_probs
-
-        if t_stages is None:
-            t_stages = list(self.ipsi.f.keys())
-
-        return self._log_likelihood(
-            t_stages=t_stages,
-            diag_times=diag_times,
-            max_t=max_t,
-            time_dists=time_dists,
-        )
-
-
-    def marginal_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        time_dists: dict = {}
-    ) -> float:
-        """
-        Compute the likelihood of the (already stored) data, given the spread
-        parameters, marginalized over time of diagnosis via time distributions.
-        Wraps the :meth:`log_likelihood` method.
-
-        Args:
-            theta: Spread probabiltites from the tumor to the LNLs, as well as
-                from (already involved) LNLs to downsream LNLs. Includes both
-                sides of the neck. The composition of this array is:
-
-                +----------------------------+-----------------------------+
-                | base probs (ipsi & contra) | trans probs (ipsi & contra) |
-                +----------------------------+-----------------------------+
-
-                If certain symmetries are chosen, only one set of base or
-                transmission probabilities might have to be provided.
-
-            t_stages: List of T-stages that should be included in the learning
-                process.
-
-            time_dists: Distribution over the probability of diagnosis at
-                different times :math:`t` given T-stage.
-
-        Returns:
-            The log-likelihood of a parameter sample.
-
-        See Also:
-            :meth:`log_likelihood`: Simply calls the actual likelihood function
-            where it sets the `diag_times` to `None`.
-        """
-        return self.log_likelihood(
-            theta, t_stages,
-            diag_times=None, time_dists=time_dists
-        )
-
-
-    def time_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """
-        Compute likelihood given the spread parameters and the time of diagnosis
-        for each T-stage. Wraps the :math:`log_likelihood` method.
-
-        Args:
-            theta: Set of parameters, consisting of the spread probabilities
-                and the time of diagnosis for all T-stages. It is therefore
-                made up these parts and in that order:
-
-                +------------+-------------+----------------+
-                | base probs | trans probs | diagnose times |
-                +------------+-------------+----------------+
-
-            t_stages: keywords of T-stages that are present in the dictionary of
-                C matrices and the previously loaded dataset.
-
-            max_t: Latest accepted time-point.
-
-        Returns:
-            The likelihood of the data, given the spread parameters as well as
-            the diagnose time for each T-stage.
-
-        See Also:
-            :meth:`log_likelihood`: The `theta` argument of this function is
-            split into `spread_probs` and `diag_times`, which are then passed
-            to the actual likelihood function.
-        """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...diagnose times for each T-stage
-        tmp = theta[len_spread_probs:]
-        diag_times = {t_stages[t]: tmp[t] for t in range(len(t_stages))}
-
-        return self.log_likelihood(
-            spread_probs, t_stages,
-            diag_times=diag_times, max_t=max_t, time_dists=None
-        )
-
-
-    def binom_marg_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """
-        Compute marginal log-likelihood using binomial distributions to sum
-        over the diagnose times.
-
-        Args:
-            theta: Set of parameters, consisting of the spread probabilities
-                and the binomial distribution's :math:`p` parameters for each
-                T-category. One has to provide a concatenated array of these
-                numbers like this:
-
-                +------------+-------------+--------------------------+
-                | base probs | trans probs | binomial :math`p` params |
-                +------------+-------------+--------------------------+
-
-            t_stages: keywords of T-stages that are present in the dictionary of
-                C matrices and the previously loaded dataset.
-
-            max_t: Latest accepted time-point.
-
-        Returns:
-            The log-likelihood of the (already stored) data, given the spread
-            prbabilities as well as the parameters for binomial distribtions
-            used to marginalize over diagnose times.
-        """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...p-values for the binomial distribution
-        p = theta[len_spread_probs:]
-
-        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
-            return -np.inf
-
-        t = np.arange(max_t + 1)
-        time_dists = {}
-        for i,stage in enumerate(t_stages):
-            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
-
-        return self.marginal_log_likelihood(
-            spread_probs, t_stages,
-            time_dists=time_dists
-        )
+        try:
+            self.check_and_assign(given_params)
+        except ValueError:
+            return -np.inf if log else 0.
+        
+        return self._likelihood(log)
 
 
     def risk(
         self,
-        spread_probs: Optional[np.ndarray] = None,
+        given_params: Optional[np.ndarray] = None,
         inv: Dict[str, Optional[np.ndarray]] = {"ipsi": None, "contra": None},
         diagnoses: Dict[str, Dict] = {"ipsi": {}, "contra": {}},
-        diag_time: Optional[int] = None,
-        time_dist: Optional[np.ndarray] = None,
-        mode: str = "HMM"
+        t_stage: str = "early",
     ) -> float:
         """Compute risk of ipsi- & contralateral involvement given specific (but
         potentially incomplete) diagnoses for each side of the neck.
 
         Args:
-            spread_probs: Set of new spread parameters. If not given (``None``),
-                the currently set parameters will be used.
+            given_params: The risk is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
             inv: Dictionary that can have the keys ``"ipsi"`` and ``"contra"``
                 with the respective values being the involvements of interest.
@@ -703,18 +547,11 @@ class Bilateral(HDFMixin):
                 Leaving out available modalities will assume a completely
                 missing diagnosis.
 
-            diag_time: Time of diagnosis. Either this or the `time_dist` to
-                marginalize over diagnose times must be given.
-
-            time_dist: Distribution to marginalize over diagnose times. Either
-                this, or the `diag_time` must be given.
-
-            mode: Set to ``"HMM"`` for the hidden Markov model risk (requires
-                the ``time_dist``) or to ``"BN"`` for the Bayesian network
-                version.
+            t_stage: The T-stage for which the risk should be computed. The attribute
+                :attr:`diag_time_dists` must have a distribution for marginalizing
+                over diagnose times stored for this T-stage.
         """
-        if spread_probs is not None:
-            self.spread_probs = spread_probs
+        self.check_and_assign(given_params)
 
         cX = {}   # marginalize over matching complete involvements.
         cZ = {}   # marginalize over Z for incomplete diagnoses.
@@ -757,29 +594,15 @@ class Bilateral(HDFMixin):
                     )
                 )
 
-            if diag_time is not None:
-                pXt[side] = self.system[side]._evolve(diag_time)
-
-            elif time_dist is not None:
-                max_t = len(time_dist)
-                pXt[side] = self.system[side]._evolve(t_last=max_t-1)
-
-            else:
-                msg = ("Either diagnose time or distribution to marginalize "
-                       "over it must be given.")
-                raise ValueError(msg)
-
+            max_t = self.ipsi.diag_time_dists.max_t
+            pXt[side] = self.system[side]._evolve(t_last=max_t)
             pD[side] = self.system[side].observation_matrix @ cZ[side]
 
         # joint probability of Xi & Xc (marginalized over time). Acts as prior
-        # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix
-        if diag_time is not None:
-            pXX = np.outer(pXt["ipsi"], pXt["contra"])
-
-        elif time_dist is not None:
-            # time-prior in diagnoal matrix form
-            PT = np.diag(time_dist)
-            pXX = pXt["ipsi"].T @ PT @ pXt["contra"]
+        # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix.
+        # time-prior in diagnoal matrix form
+        PT = np.diag(self.ipsi.diag_time_dists[t_stage].pmf)
+        pXX = pXt["ipsi"].T @ PT @ pXt["contra"]
 
         # joint probability of all hidden states and the requested diagnosis
         pDDXX = np.einsum("i,ij,j->ij", pD["ipsi"], pXX, pD["contra"])
@@ -803,26 +626,15 @@ class Bilateral(HDFMixin):
         self,
         num_patients: int,
         stage_dist: List[float],
-        diag_times: Optional[Dict[Any, int]] = None,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network.
 
         Args:
             num_patients: Number of patients to generate.
             stage_dist: Probability to find a patient in a certain T-stage.
-            diag_times: For each T-stage, one can specify until which time step
-                the corresponding patients should be evolved. If this is set to
-                ``None``, and a distribution over diagnose times ``time_dists``
-                is provided, the diagnose time is drawn from the ``time_dist``.
-            time_dists: Distributions over diagnose times that can be used to
-                draw a diagnose time for the respective T-stage.
         """
-        drawn_t_stages, drawn_diag_times = draw_diagnose_times(
-            num_patients=num_patients,
-            stage_dist=stage_dist,
-            diag_times=diag_times,
-            time_dists=time_dists
+        drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
+            dist=stage_dist, size=num_patients
         )
 
         drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)

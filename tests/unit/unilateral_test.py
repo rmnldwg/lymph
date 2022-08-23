@@ -2,15 +2,14 @@
 import numpy as np
 import pytest
 from custom_strategies import (
-    graphs,
-    st_models,
+    st_graphs,
+    st_likelihood_setup,
     st_modalities,
     st_model_diagnose_tuples,
+    st_models,
     st_models_and_data,
-    st_likelihood_setup,
     st_models_and_probs,
     st_risk_params,
-    st_spread_probs_for_,
     st_stage_dist_and_time_dists,
     st_time_dist,
 )
@@ -29,7 +28,6 @@ from hypothesis.strategies import (
 )
 
 from lymph import Edge, Node, Unilateral
-from lymph.utils import fast_binomial_pmf
 
 settings.register_profile(
     "tests",
@@ -40,7 +38,7 @@ settings.register_profile(
 settings.load_profile("tests")
 
 
-@given(graph=graphs())
+@given(graph=st_graphs())
 def test_constructor(graph):
     """Test constructor of base model."""
     # make sure errors are raised for nodes with same name
@@ -104,7 +102,7 @@ def test_constructor(graph):
             )
 
 
-@given(graph=graphs(unique=True))
+@given(graph=st_graphs(unique=True))
 def test_string(graph):
     """Test the string representation of the class."""
     model = Unilateral(graph)
@@ -124,7 +122,7 @@ def test_string(graph):
         )
 
 
-@given(graph=graphs(unique=True))
+@given(graph=st_graphs(unique=True))
 def test_find_node_and_find_edge(graph):
     model = Unilateral(graph)
 
@@ -158,7 +156,7 @@ def test_find_node_and_find_edge(graph):
             )
 
 
-@given(graph=graphs(unique=True))
+@given(graph=st_graphs(unique=True))
 def test_graph(graph):
     model = Unilateral(graph)
     recovered_graph = model.graph
@@ -297,7 +295,7 @@ def test_comp_transition_prob(model, newstate, acquire):
     )
     if np.any(newstate < model.state):
         assert transition_prob == 0., (
-            f"Probability for transitions involving self-healing must be 0"
+            "Probability for transitions involving self-healing must be 0"
         )
     if acquire:
         assert np.all(model.state == newstate), (
@@ -721,8 +719,27 @@ def test_likelihood(likelihood_setup):
         log=return_log,
     )
     assert llh == llh_no_data, (
-        """whether data is loaded inside llh func or outside must make no difference"""
+        "whether data is loaded in- or outside llh must make no difference"
     )
+
+    if are_params_valid and not includes_binom_probs:
+        llh_no_params = model.likelihood(
+            includes_binom_probs=includes_binom_probs,
+            time_dists=time_dists,
+            max_t=max_t,
+            log=return_log,
+        )
+        assert llh_no_params == llh_no_data, (
+            "whether parameters are loaded in- or outside llh must make no difference"
+        )
+    elif includes_binom_probs:
+        with pytest.raises(ValueError):
+            llh_no_params = model.likelihood(
+                includes_binom_probs=includes_binom_probs,
+                time_dists=time_dists,
+                max_t=max_t,
+                log=return_log,
+            )
 
 
 @given(

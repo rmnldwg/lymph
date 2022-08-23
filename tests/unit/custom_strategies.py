@@ -9,7 +9,6 @@ from lymph import Node
 from lymph.unilateral import Unilateral
 from lymph.utils import fast_binomial_pmf
 
-
 ST_CHARACTERS = st.characters(
     whitelist_categories=('L', 'N'),
     blacklist_characters=''
@@ -38,7 +37,7 @@ def nodes(draw, typ=None, generate_valid=False):
 
 
 @st.composite
-def graphs(draw, min_size=2, max_size=6, unique=True):
+def st_graphs(draw, min_size=2, max_size=6, unique=True):
     """Define hypothesis strategy for generating graphs"""
     # strategy for names of nodes (both tumors and LNLs)
     st_node_names = st.text(
@@ -98,7 +97,7 @@ def st_modalities(draw, min_size=1, max_size=3):
 @st.composite
 def st_models(draw, states=None, spread_probs=None, modalities=None):
     """Define search strategy for generating unilateral models"""
-    graph = draw(graphs())
+    graph = draw(st_graphs())
     model = Unilateral(graph)
 
     if states is not None:
@@ -130,16 +129,16 @@ def st_spread_probs_for_(draw, model, are_values_valid=True, is_shape_valid=True
         res = draw(hynp.arrays(dtype=float, shape=shape))
         res[np.all([0. <= res, res <= 1.], axis=0)] += 1.1
         return res
-        
+
 
 @st.composite
-def st_models_and_probs(draw, st_models=st_models(), gen_prob_type="base"):
+def st_models_and_probs(draw, models=st_models(), gen_prob_type="base"):
     """
     Strategy for generating a model and a suitable number of spread probs. The
     argument `gen_prob_type` can be 'base', 'trans' or 'all' and depending on the choice
     the strategy will return the appropriate spread probs.
     """
-    model = draw(st_models)
+    model = draw(models)
 
     if gen_prob_type == "base":
         num_probs = len(model.base_probs)
@@ -156,7 +155,7 @@ def st_models_and_probs(draw, st_models=st_models(), gen_prob_type="base"):
     return model, spread_probs
 
 
-def gen_MultiIndex(model: Unilateral) -> pd.Series:
+def gen_multi_index(model: Unilateral) -> pd.Series:
     """Generate a pandas Series diagnose from a diagnose dictionary."""
     modalities = list(model.modalities.keys())
     lnl_names = [lnl.name for lnl in model.lnls]
@@ -166,7 +165,7 @@ def gen_MultiIndex(model: Unilateral) -> pd.Series:
 def st_model_diagnose_tuples(draw, models=st_models()):
     """Define strategy for a model and a corresponding diagnose"""
     model = draw(models)
-    multiindex = gen_MultiIndex(model)
+    multiindex = gen_multi_index(model)
     series = draw(
         hypd.series(
             elements=st.one_of(st.booleans(), st.none()),
@@ -210,7 +209,7 @@ def st_models_and_data(
     """Define search strategy for a tuple of a model and corresponding patient
     data."""
     model = draw(models)
-    multiindex = gen_MultiIndex(model)
+    multiindex = gen_multi_index(model)
     patient_data = draw(
         hypd.data_frames(
             columns=hypd.columns(
