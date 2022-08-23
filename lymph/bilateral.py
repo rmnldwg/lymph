@@ -552,7 +552,8 @@ class Bilateral(HDFMixin):
                 :attr:`diag_time_dists` must have a distribution for marginalizing
                 over diagnose times stored for this T-stage.
         """
-        self.check_and_assign(given_params)
+        if given_params is not None:
+            self.check_and_assign(given_params)
 
         if inv is None:
             inv = {"ipsi": None, "contra": None}

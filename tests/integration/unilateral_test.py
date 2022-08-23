@@ -90,5 +90,31 @@ def test_integration():
         "c": True,
         "d": None,
     }
-    comp_risk = model.risk(involvement=involvement)
-    assert 0. <= comp_risk <= 1.
+    bad_diagnosis = {
+        "bad_scanner": {
+            "a": False,
+            "b": True,
+            "c": True,
+            "d": None,
+        }
+    }
+    better_diagnosis = {
+        "fancy_scanner": {
+            "a": False,
+            "b": True,
+            "c": True,
+            "d": None,
+        }
+    }
+    general_risk = model.risk(involvement=involvement)
+    individual_bad_risk = model.risk(
+        involvement=involvement,
+        given_diagnoses=bad_diagnosis
+    )
+    individual_better_risk = model.risk(
+        involvement=involvement,
+        given_diagnoses=better_diagnosis
+    )
+    assert 0. <= general_risk <= 1.
+    assert individual_bad_risk > general_risk
+    assert individual_better_risk > individual_bad_risk

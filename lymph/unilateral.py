@@ -275,7 +275,7 @@ class Unilateral(HDFMixin):
 
     def comp_diagnose_prob(
         self,
-        diagnoses: Union[pd.Series, Dict[str, list]]
+        diagnoses: Union[pd.Series, Dict[str, Dict[str, bool]]]
     ) -> float:
         """Compute the probability to observe a diagnose given the current
         state of the network.
@@ -283,8 +283,8 @@ class Unilateral(HDFMixin):
         Args:
             diagnoses: Either a pandas ``Series`` object corresponding to one
                 row of a patient data table, or a dictionry with keys of
-                diagnostic modalities and values of diagnoses for the respective
-                modality.
+                diagnostic modalities and values of dictionaries holding the
+                observation for each LNL under the respective key.
 
         Returns:
             The probability of observing this particular combination of
@@ -517,7 +517,9 @@ class Unilateral(HDFMixin):
             for j,obs in enumerate(self.obs_list):
                 observations = {}
                 for k,modality in enumerate(self._spsn_tables):
-                    observations[modality] = obs[n_lnl * k : n_lnl * (k+1)]
+                    observations[modality] = {
+                        lnl.name: obs[n_lnl * k + i] for i,lnl in enumerate(self.lnls)
+                    }
                 self._observation_matrix[i,j] = self.comp_diagnose_prob(observations)
 
     @property
@@ -906,51 +908,39 @@ class Unilateral(HDFMixin):
         if given_diagnoses is None:
             given_diagnoses = {}
 
-        # create one large diagnose vector from the individual modalitie's
-        # diagnoses
-        obs = np.array([])
-        for mod in self._spsn_tables:
-            if mod in given_diagnoses:
-                obs = np.append(obs, given_diagnoses[mod])
-            else:
-                obs = np.append(obs, np.array([None] * len(self.lnls)))
+        # vector containing P(Z=z|X)
+        diagnose_probs = np.zeros(shape=len(self.state_list))
+        for i,state in enumerate(self.state_list):
+            self.state = state
+            diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
 
-        # vector of probabilities of arriving in state x, marginalized over time
+        # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
             max_t = self.diag_time_dists.max_t
             state_probs = self._evolve(t_last=max_t)
-            pX = self.diag_time_dists[t_stage].pmf @ state_probs
+            marg_state_probs = self.diag_time_dists[t_stage].pmf @ state_probs
 
         # BN version
         elif mode == "BN":
-            pX = np.ones(shape=(len(self.state_list)), dtype=float)
+            marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
                 self.state = state
                 for node in self.lnls:
-                    pX[i] *= node.bn_prob()
+                    marg_state_probs[i] *= node.bn_prob()
 
-        # compute the probability of observing a diagnose z and being in a
-        # state x which is P(z,x) = P(z|x)P(x). Do that for all combinations of
-        # x and z and put it in a matrix
-        pZX = self.observation_matrix.T * pX
+        # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
+        joint_diag_state = marg_state_probs * diagnose_probs
 
-        # vector of probabilities for seeing a diagnose z
-        pZ = pX @ self.observation_matrix
-
-        # build vector to marginalize over diagnoses
-        cZ = np.zeros(shape=(len(pZ)), dtype=bool)
-        for i,complete_obs in enumerate(self.obs_list):
-            cZ[i] = np.all(np.equal(obs, complete_obs,
-                                    where=(obs!=None),
-                                    out=np.ones_like(obs, dtype=bool)))
+        # get marginal over X from joint
+        marg_diagnose_prob = np.sum(joint_diag_state)
 
         # compute vector of probabilities for all possible involvements given
-        # the specified diagnosis
-        res =  cZ @ pZX / (cZ @ pZ)
+        # the specified diagnosis P(X|Z=z)
+        post_state_probs =  joint_diag_state / marg_diagnose_prob
 
         if involvement is None:
-            return res
+            return post_state_probs
         else:
             # if a specific involvement of interest is provided, marginalize the
             # resulting vector of hidden states to match that involvement of
@@ -960,12 +950,12 @@ class Unilateral(HDFMixin):
             else:
                 involvement = np.array(involvement)
 
-            cX = np.zeros(shape=res.shape, dtype=bool)
+            marg_states = np.zeros(shape=post_state_probs.shape, dtype=bool)
             for i,state in enumerate(self.state_list):
-                cX[i] = np.all(np.equal(involvement, state,
+                marg_states[i] = np.all(np.equal(involvement, state,
                                         where=(involvement!=None),
                                         out=np.ones_like(state, dtype=bool)))
-            return cX @ res
+            return marg_states @ post_state_probs
 
 
     def _draw_patient_diagnoses(
