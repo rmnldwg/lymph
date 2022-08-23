@@ -58,10 +58,11 @@ docs = "https://lymph-model.readthedocs.io"
 write_to = "lymph/_version.py"
 local_scheme = "no-local-version"
 
-[tools.setuptools]
+[tool.setuptools]
+packages = ["lymph"]
 include-package-data = true
 
-[tools.setuptools.dynamic]
+[tool.setuptools.dynamic]
 version = {attr = "lymph._version.version"}
 
 
