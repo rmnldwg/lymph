@@ -724,101 +724,39 @@ class Unilateral(HDFMixin):
         return True
 
 
-    def log_likelihood(
+    def _likelihood(
         self,
-        spread_probs: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        diag_times: Optional[Dict[Any, int]] = None,
-        max_t: Optional[int] = 10,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
-        mode: str = "HMM"
+        time_dists: Dict[Any, np.ndarray],
+        mode: str = "HMM",
+        log: bool = True,
     ) -> float:
         """
-        Compute log-likelihood of (already stored) data, given the spread
-        probabilities and either a discrete diagnose time or a distribution to
-        use for marginalization over diagnose times.
-
-        Args:
-            spread_probs: Spread probabiltites from the tumor to the LNLs, as
-                well as from (already involved) LNLs to downsream LNLs.
-
-            t_stages: List of T-stages that are also used in the data to denote
-                how advanced the primary tumor of the patient is. This does not
-                need to correspond to the clinical T-stages 'T1', 'T2' and so
-                on, but can also be more abstract like 'early', 'late' etc. If
-                not given, this will be inferred from the loaded data.
-
-            diag_times: For each T-stage, one can specify with what time step
-                the likelihood should be computed. If this is set to `None`,
-                and a distribution over diagnose times `time_dists` is provided,
-                the function marginalizes over diagnose times.
-
-            max_t: Latest possible diagnose time. This is only used to return
-                `-np.inf` in case one of the `diag_times` exceeds this value.
-
-            time_dists: Distribution over diagnose times that can be used to
-                compute the likelihood of the data, given the spread
-                probabilities, but marginalized over the time of diagnosis. If
-                set to `None`, a diagnose time must be explicitly set for each
-                T-stage.
-
-            mode: Compute the likelihood using the Bayesian network (`"BN"`) or
-                the hidden Markv model (`"HMM"`). When using the Bayesian net,
-                the inputs `t_stages`, `diag_times`, `max_t` and `time_dists`
-                are ignored.
-
-        Returns:
-            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
-            is the data and :math:`\\theta` is the tuple of spread probabilities
-            and diagnose times or distributions over diagnose times.
+        Compute the (log-)likelihood of stored data, using the stored spread probs.
+        
+        This is the core method for computing the likelihood. The user-facing API calls
+        it after doing some preliminary checks with the passed arguments.
         """
-        if not self._are_valid_(spread_probs):
-            return -np.inf
-
-        self.spread_probs = spread_probs
-
         # hidden Markov model
         if mode == "HMM":
-            if t_stages is None:
-                t_stages = list(self.diagnose_matrices.keys())
+            stored_t_stages = set(self.diagnose_matrices.keys())
+            provided_t_stages = set(time_dists.keys())
+            t_stages = list(stored_t_stages.intersection(provided_t_stages))
 
             state_probs = {}
 
-            if diag_times is not None:
-                if len(diag_times) != len(t_stages):
-                    raise ValueError(
-                        "One diagnose time must be provided for each T-stage."
-                    )
+            # subtract 1, to also consider healthy starting state (t = 0)
+            max_t = len(time_dists[t_stages[0]]) - 1
 
-                for stage in t_stages:
-                    diag_time = np.around(diag_times[stage]).astype(int)
-                    if diag_time > max_t:
-                        return -np.inf
-                    state_probs[stage] = self._evolve(diag_time)
+            for stage in t_stages:
+                state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
 
-            elif time_dists is not None:
-                if len(time_dists) != len(t_stages):
-                    raise ValueError(
-                        "One distribution over diagnose times must be provided "
-                        "for each T-stage."
-                    )
-
-                # subtract 1, to also consider healthy starting state (t = 0)
-                max_t = len(time_dists[t_stages[0]]) - 1
-
-                for stage in t_stages:
-                    state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
-
-            else:
-                raise ValueError(
-                    "Either provide a list of diagnose times for each T-stage "
-                    "or a distribution over diagnose times for each T-stage."
-                )
-
-            llh = 0.
+            llh = 0. if log else 1.
             for stage in t_stages:
                 p = state_probs[stage] @ self.diagnose_matrices[stage]
-                llh += np.sum(np.log(p))
+                if log:
+                    llh += np.sum(np.log(p))
+                else:
+                    llh *= np.prod(p)
 
         # likelihood for the Bayesian network
         elif mode == "BN":
@@ -830,9 +768,77 @@ class Unilateral(HDFMixin):
                     state_probs[i] *= node.bn_prob()
 
             p = state_probs @ self.diagnose_matrices["BN"]
-            llh = np.sum(np.log(p))
+            llh = np.sum(np.log(p)) if log else np.prod(p)
 
         return llh
+
+    def likelihood(
+        self,
+        data: Optional[pd.DataFrame] = None,
+        given_params: Optional[np.ndarray] = None,
+        includes_binom_probs: bool = True,
+        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+        max_t: int = 10,
+        log: bool = True,
+        mode: str = "HMM"
+    ) -> float:
+        """
+        Compute (log-)likelihood of (already stored) data, given parameters and
+        optionally a distribution for marginalization over diagnose times.
+
+        Args:
+            data: Table with rows of patients and columns of per-LNL involvment. See
+                :meth:`load_data` for more details on how this should look like.
+
+            given_params: The likelihood is a function of these parameters.
+            
+            includes_binom_probs: If `True`, `given_params` is expected to contain
+                binomial probabilities that can be used to construct binomial
+                distributions for the marginalization over time.
+
+            time_dists: Distribution over diagnose times if the `given_params` don't
+                include parameters for binomial distributions.
+
+            max_t: Maximum number of time steps the HMM is evolved. This is only used
+                when `includes_binom_probs` is set to `True`.
+
+            log: When `True`, the log-likelihood is returned.
+
+            mode: Compute the likelihood using the Bayesian network (`"BN"`) or
+                the hidden Markv model (`"HMM"`). When using the Bayesian net, no
+                marginalization over diagnose times is performed.
+
+        Returns:
+            The (log-)likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
+            is the data and :math:`\\theta` are the given parameters.
+        """
+        if data is not None:
+            self.patient_data = data
+        
+        if given_params is None:
+            return self._likelihood(time_dists, mode, log)
+
+        if includes_binom_probs:
+            k = len(self.spread_probs)
+            spread_probs = given_params[:k]
+            binom_probs = given_params[k:]
+
+            if np.any(0. > binom_probs) or np.any(binom_probs > 1.):
+                return -np.inf if log else 0.
+
+            stored_t_stages = self.diagnose_matrices.keys()
+            time_dists = {}
+            times = np.arange(max_t+1)
+            for t,bp in zip(stored_t_stages, binom_probs):
+                time_dists[t] = fast_binomial_pmf(times, max_t, bp)
+        else:
+            spread_probs = given_params
+
+        if not self._are_valid_(spread_probs):
+            return -np.inf if log else 0.
+
+        self.spread_probs = spread_probs
+        return self._likelihood(time_dists, mode, log)
 
 
     def marginal_log_likelihood(
