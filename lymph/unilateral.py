@@ -16,7 +16,7 @@ class Unilateral(HDFMixin):
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], Set[str]] = {}, **kwargs):
+    def __init__(self, graph: Dict[Tuple[str], Set[str]], **kwargs):
         """Initialize the underlying graph:
 
         Args:
@@ -289,7 +289,7 @@ class Unilateral(HDFMixin):
             diagnoses, given the current state of the system.
         """
         prob = 1.
-        is_pandas = type(diagnoses) == pd.Series
+        is_pandas = isinstance(diagnoses, pd.Series)
 
         for modality, spsn in self._spsn_tables.items():
             if modality in diagnoses:
@@ -576,11 +576,11 @@ class Unilateral(HDFMixin):
     def diagnose_matrices(self):
         try:
             return self._diagnose_matrices
-        except AttributeError:
+        except AttributeError as att_err:
             raise AttributeError(
                 "No data has been loaded and hence no observation matrix has "
                 "been computed."
-            )
+            ) from att_err
 
 
     @property
@@ -872,7 +872,7 @@ class Unilateral(HDFMixin):
         self,
         given_params: Optional[np.ndarray] = None,
         inv: Optional[np.ndarray] = None,
-        diagnoses: Dict[str, np.ndarray] = {},
+        diagnoses: Dict[str, np.ndarray] = None,
         t_stage: str = "early",
         mode: str = "HMM"
     ) -> Union[float, np.ndarray]:
@@ -908,6 +908,9 @@ class Unilateral(HDFMixin):
             with probabilities for all possible hidden states otherwise.
         """
         self.check_and_assign(given_params)
+
+        if diagnoses is None:
+            diagnoses = {}
 
         # create one large diagnose vector from the individual modalitie's
         # diagnoses

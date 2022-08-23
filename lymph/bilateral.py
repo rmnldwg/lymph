@@ -21,7 +21,7 @@ class Bilateral(HDFMixin):
     """
     def __init__(
         self,
-        graph: Dict[Tuple[str], List[str]] = {},
+        graph: Dict[Tuple[str], List[str]],
         base_symmetric: bool = False,
         trans_symmetric: bool = True,
         **kwargs
@@ -308,10 +308,10 @@ class Bilateral(HDFMixin):
         """
         try:
             return self._patient_data
-        except AttributeError:
+        except AttributeError as att_err:
             raise AttributeError(
                 "No patient data has been loaded yet"
-            )
+            ) from att_err
 
     @patient_data.setter
     def patient_data(self, patient_data: pd.DataFrame):
@@ -519,8 +519,8 @@ class Bilateral(HDFMixin):
     def risk(
         self,
         given_params: Optional[np.ndarray] = None,
-        inv: Dict[str, Optional[np.ndarray]] = {"ipsi": None, "contra": None},
-        diagnoses: Dict[str, Dict] = {"ipsi": {}, "contra": {}},
+        inv: Dict[str, Optional[np.ndarray]] = None,
+        diagnoses: Dict[str, Dict] = None,
         t_stage: str = "early",
     ) -> float:
         """Compute risk of ipsi- & contralateral involvement given specific (but
@@ -552,6 +552,12 @@ class Bilateral(HDFMixin):
                 over diagnose times stored for this T-stage.
         """
         self.check_and_assign(given_params)
+        
+        if inv is None:
+            inv = {"ipsi": None, "contra": None}
+
+        if diagnoses is None:
+            diagnoses = {"ipsi": {}, "contra": {}}
 
         cX = {}   # marginalize over matching complete involvements.
         cZ = {}   # marginalize over Z for incomplete diagnoses.
