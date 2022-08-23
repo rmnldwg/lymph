@@ -523,25 +523,25 @@ class Bilateral(HDFMixin):
         given_params: Optional[np.ndarray] = None,
         given_diagnoses: Optional[dict] = None,
         t_stage: str = "early",
+        **_kwargs,
     ) -> float:
         """Compute risk of ipsi- & contralateral involvement given specific (but
         potentially incomplete) diagnoses for each side of the neck.
 
         Args:
-            given_params: The risk is a function of these parameters. They mainly
-                consist of the :attr:`spread_probs` of the model. Any excess parameters
-                will be used to update the parametrized distributions used for
-                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
-
             involvement: Nested dictionary that can have keys ``"ipsi"`` and
                 ``"contra"``, indicating the respective side's involvement patterns
                 that we're interested in. The corresponding values are dictionaries as
                 the :class:`Unilateral` model expects them.
 
-            given_diagnoses: Nested dictionary that can have keys ``"ipsi"`` and
-                ``"contra"``, giving the respective side's diagnoses. The corresponding
-                values are dictionaries again in the same format as the
-                :class:`Unilateral` risk function expects them.
+            given_params: The risk is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
+
+            given_diagnoses: Nested dictionary with keys of diagnostic modalities and
+                the values are dictionaries of the same format as the ``involvement``
+                arguments.
 
             t_stage: The T-stage for which the risk should be computed. The attribute
                 :attr:`diag_time_dists` must have a distribution for marginalizing
@@ -555,9 +555,20 @@ class Bilateral(HDFMixin):
 
         if involvement is None:
             involvement = {"ipsi": {}, "contra": {}}
+        if "ipsi" not in involvement:
+            involvement["ipsi"] = {}
+        if "contra" not in involvement:
+            involvement["contra"] = {}
 
         if given_diagnoses is None:
-            given_diagnoses = {"ipsi": {}, "contra": {}}
+            given_diagnoses = {}
+        else:
+            for val in given_diagnoses.values():
+                if "ipsi" not in val:
+                    val["ipsi"] = {}
+                if "contra" not in val:
+                    val["contra"] = {}
+
 
         diagnose_probs = {}   # vectors containing P(Z=z|X) for respective side
         state_probs = {}      # matrices containing P(X|t) for each side
@@ -565,9 +576,10 @@ class Bilateral(HDFMixin):
         for side in ["ipsi", "contra"]:
             side_model = getattr(self, side)
             diagnose_probs[side] = np.zeros(shape=len(side_model.state_list))
+            side_diagnose = {mod: diag[side] for mod,diag in given_diagnoses.items()}
             for i,state in enumerate(side_model.state_list):
                 side_model.state = state
-                diagnose_probs[side][i] = side_model.comp_diagnose_prob(given_diagnoses)
+                diagnose_probs[side][i] = side_model.comp_diagnose_prob(side_diagnose)
 
             max_t = self.diag_time_dists.max_t
             state_probs[side] = self.system[side]._evolve(t_last=max_t)
@@ -600,7 +612,7 @@ class Bilateral(HDFMixin):
         for side in ["ipsi", "contra"]:
             if isinstance(involvement[side], dict):
                 involvement[side] = np.array(
-                    [involvement[side][lnl.name] for lnl in side_model.lnls]
+                    [involvement[side].get(lnl.name, None) for lnl in side_model.lnls]
                 )
             else:
                 involvement[side] = np.array(involvement[side])

@@ -869,7 +869,8 @@ class Unilateral(HDFMixin):
         given_params: Optional[np.ndarray] = None,
         given_diagnoses: Optional[Dict[str, dict]] = None,
         t_stage: str = "early",
-        mode: str = "HMM"
+        mode: str = "HMM",
+        **_kwargs,
     ) -> Union[float, np.ndarray]:
         """Compute risk(s) of involvement given a specific (but potentially
         incomplete) diagnosis.
