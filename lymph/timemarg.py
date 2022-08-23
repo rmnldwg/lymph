@@ -3,7 +3,7 @@ Module that defines helper classes for marginalizing over diagnose times in the
 model classes.
 """
 import warnings
-from typing import Callable, List, Optional, Union, Dict
+from typing import Callable, List, Optional, Tuple, Union, Dict
 
 import numpy as np
 
@@ -160,7 +160,11 @@ class MarginalizorDict(dict):
                         raise ValueError("Not enough parameters provided")
                     break
 
-    def draw(self, dist: Dict[str, float]) -> int:
+    def draw(
+        self,
+        dist: Dict[str, float],
+        size: int = 1,
+    ) -> Tuple[List[str], List[int]]:
         """
         Draw first a T-stage and then from that distribution a diagnose time.
         
@@ -175,5 +179,7 @@ class MarginalizorDict(dict):
             stage_dist[i] = dist[t_stage]
         stage_dist = stage_dist / np.sum(stage_dist)
         
-        drawn_t_stage = np.choice(a=t_stages, p=stage_dist)
-        return self[drawn_t_stage].draw()
+        drawn_t_stages = np.choice(a=t_stages, p=stage_dist, size=size).tolist()
+        drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
+
+        return drawn_t_stages, drawn_diag_times

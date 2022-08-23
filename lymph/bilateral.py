@@ -626,26 +626,15 @@ class Bilateral(HDFMixin):
         self,
         num_patients: int,
         stage_dist: List[float],
-        diag_times: Optional[Dict[Any, int]] = None,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network.
 
         Args:
             num_patients: Number of patients to generate.
             stage_dist: Probability to find a patient in a certain T-stage.
-            diag_times: For each T-stage, one can specify until which time step
-                the corresponding patients should be evolved. If this is set to
-                ``None``, and a distribution over diagnose times ``time_dists``
-                is provided, the diagnose time is drawn from the ``time_dist``.
-            time_dists: Distributions over diagnose times that can be used to
-                draw a diagnose time for the respective T-stage.
         """
-        drawn_t_stages, drawn_diag_times = draw_diagnose_times(
-            num_patients=num_patients,
-            stage_dist=stage_dist,
-            diag_times=diag_times,
-            time_dists=time_dists
+        drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
+            dist=stage_dist, size=num_patients
         )
 
         drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)

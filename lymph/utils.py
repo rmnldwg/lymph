@@ -434,65 +434,6 @@ def comp_state_dist(table: np.ndarray) -> Tuple[np.ndarray, List[str]]:
     return state_dist, state_labels
 
 
-def draw_diagnose_times(
-    num_patients: int,
-    stage_dist: Dict[Any, float],
-    diag_times: Optional[Dict[Any, int]] = None,
-    time_dists: Optional[Dict[Any, List[float]]] = None,
-) -> Tuple[List[int], List[Any]]:
-    """Draw T-stages from a distribution over them and determine the
-    corresponding diagnose time or draw a one from a distribution over diagnose
-    times defined for the respective T-stage.
-
-    Args:
-        num_patients: Number of patients to draw diagnose times for.
-        stage_dist: Distribution over T-stages.
-        diag_times: Fixed diagnose time for a given T-stage.
-        time_dists: Holds a distribution over diagnose times for each T-stage
-            from which the diagnose times will be drawn if it is given. If this
-            is ``None``, ``diag_times`` must be provided.
-
-    Returns:
-        The drawn T-stages as well as the drawn diagnose times.
-    """
-    if num_patients < 1:
-        raise ValueError("Number of patients to draw must be 1 or larger")
-    if not np.isclose(np.sum(stage_dist), 1.):
-        raise ValueError("Distribution over T-stages must sum to 1.")
-
-    # draw the diagnose times for each patient
-    if diag_times is not None:
-        t_stages = list(diag_times.keys())
-        drawn_t_stages = np.random.choice(
-            t_stages,
-            p=stage_dist,
-            size=num_patients
-        )
-        drawn_diag_times = [diag_times[t] for t in drawn_t_stages]
-
-    elif time_dists is not None:
-        t_stages = list(time_dists.keys())
-        max_t = len(time_dists[t_stages[0]]) - 1
-        time_steps = np.arange(max_t + 1)
-
-        drawn_t_stages = np.random.choice(
-            t_stages,
-            p=stage_dist,
-            size=num_patients
-        )
-        drawn_diag_times = [
-            np.random.choice(time_steps, p=time_dists[t])
-            for t in drawn_t_stages
-        ]
-
-    else:
-        raise ValueError(
-            "Either `diag_times`or `time_dists` must be provided"
-        )
-
-    return drawn_t_stages, drawn_diag_times
-
-
 def draw_from_simplex(ndim: int, nsample: int = 1) -> np.ndarray:
     """Draw uniformly from an n-dimensional simplex.
 
