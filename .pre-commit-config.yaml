@@ -14,3 +14,10 @@ repos:
   - id: isort
     files: "\\.(py)$"
     args: [--settings-path=pyproject.toml]
+- repo: https://github.com/compilerla/conventional-pre-commit
+  rev: v2.0.0
+  hooks:
+  - id: conventional-pre-commit
+    stages: [commit-msg]
+    # optional: list of Conventional Commits types to allow e.g. [feat, fix, ci, chore, test]
+    args: [build, chore, ci, docs, style, refactor, perf, test]

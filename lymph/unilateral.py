@@ -7,20 +7,66 @@ from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
 from .node import Node
-from .utils import (
-    HDFMixin,
-    change_base,
-    draw_diagnose_times,
-    fast_binomial_pmf,
-)
+from .timemarg import MarginalizorDict
 
 
-class Unilateral(HDFMixin):
+def change_base(
+    number: int,
+    base: int,
+    reverse: bool = False,
+    length: Optional[int] = None
+) -> str:
+    """Convert an integer into another base.
+
+    Args:
+        number: Number to convert
+        base: Base of the resulting converted number
+        reverse: If true, the converted number will be printed in reverse order.
+        length: Length of the returned string. If longer than would be
+            necessary, the output will be padded.
+
+    Returns:
+        The (padded) string of the converted number.
+    """
+    if number < 0:
+        raise ValueError("Cannot convert negative numbers")
+    if base > 16:
+        raise ValueError("Base must be 16 or smaller!")
+    elif base < 2:
+        raise ValueError("There is no unary number system, base must be > 2")
+
+    convertString = "0123456789ABCDEF"
+    result = ''
+
+    if number == 0:
+        result += '0'
+    else:
+        while number >= base:
+            result += convertString[number % base]
+            number = number//base
+        if number > 0:
+            result += convertString[number]
+
+    if length is None:
+        length = len(result)
+    elif length < len(result):
+        length = len(result)
+        warnings.warn("Length cannot be shorter than converted number.")
+
+    pad = '0' * (length - len(result))
+
+    if reverse:
+        return result + pad
+    else:
+        return pad + result[::-1]
+
+
+class Unilateral:
     """Class that models metastatic progression in a lymphatic system by
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], Set[str]] = {}, **kwargs):
+    def __init__(self, graph: Dict[Tuple[str], Set[str]], **_kwargs):
         """Initialize the underlying graph:
 
         Args:
@@ -207,6 +253,41 @@ class Unilateral(HDFMixin):
         self.trans_probs = new_spread_probs[num_base_edges:]
 
 
+    @property
+    def diag_time_dists(self) -> MarginalizorDict:
+        """This property holds the probability mass functions for marginalizing over
+        possible diagnose times for each T-stage.
+
+        When setting this property, one may also provide a normal Python dict, in
+        which case it tries to convert it to a :class:`MarginalizorDict`.
+
+        See Also:
+            :class:`MarginalzorDict`, :class:`Marginalizor`.
+        """
+        if not hasattr(self, "_diag_time_dists"):
+            self._diag_time_dists = MarginalizorDict()
+        return self._diag_time_dists
+
+    @diag_time_dists.setter
+    def diag_time_dists(self, new_dists: Union[dict, MarginalizorDict]):
+        """Assign new :class:`MarginalizorDict` to this property. If it is a normal
+        Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
+        """
+        if isinstance(new_dists, MarginalizorDict):
+            self._diag_time_dists = new_dists
+        elif isinstance(new_dists, dict):
+            warnings.warn("Trying to convert dictionary into MarginalizorDict.")
+            guessed_max_t = len(new_dists.values()[0])
+            self._diag_time_dists = MarginalizorDict(max_t=guessed_max_t)
+            for t_stage, dist in new_dists.items():
+                self._diag_time_dists[t_stage] = dist
+        else:
+            raise TypeError(
+                f"Cannot use type {type(new_dists)} for marginalization over "
+                "diagnose times."
+            )
+
+
     def comp_transition_prob(
         self,
         newstate: List[int],
@@ -244,39 +325,34 @@ class Unilateral(HDFMixin):
 
     def comp_diagnose_prob(
         self,
-        diagnoses: Union[pd.Series, Dict[str, list]]
+        diagnoses: Union[pd.Series, Dict[str, Dict[str, bool]]]
     ) -> float:
         """Compute the probability to observe a diagnose given the current
         state of the network.
 
         Args:
             diagnoses: Either a pandas ``Series`` object corresponding to one
-                row of a patient data table, or a dictionry with keys of
-                diagnostic modalities and values of diagnoses for the respective
-                modality.
+                row of a patient data table, or a dictionary with keys of
+                diagnostic modalities and values of dictionaries holding the
+                observation for each LNL under the respective key.
 
         Returns:
             The probability of observing this particular combination of
             diagnoses, given the current state of the system.
         """
         prob = 1.
-        is_pandas = type(diagnoses) == pd.Series
-
         for modality, spsn in self._spsn_tables.items():
             if modality in diagnoses:
                 mod_diagnose = diagnoses[modality]
-                if not is_pandas and len(mod_diagnose) != len(self.lnls):
-                    raise ValueError(
-                        "When providing a dictionary, the length of the "
-                        "individual diagnoses must match the number of LNLs"
-                    )
-                for i,lnl in enumerate(self.lnls):
-                    if is_pandas and lnl.name in mod_diagnose:
+                for lnl in self.lnls:
+                    try:
                         lnl_diagnose = mod_diagnose[lnl.name]
-                    elif not is_pandas:
-                        lnl_diagnose = mod_diagnose[i]
-                    else:
+                    except KeyError:
                         continue
+                    except IndexError as idx_err:
+                        raise ValueError(
+                            "diagnoses were not provided in the correct format"
+                        ) from idx_err
 
                     prob *= lnl.obs_prob(lnl_diagnose, spsn)
         return prob
@@ -297,7 +373,8 @@ class Unilateral(HDFMixin):
     @property
     def state_list(self):
         """Return list of all possible hidden states. They are arranged in the
-        same order as the lymph node levels in the network/graph."""
+        same order as the lymph node levels in the network/graph.
+        """
         try:
             return self._state_list
         except AttributeError:
@@ -494,7 +571,9 @@ class Unilateral(HDFMixin):
             for j,obs in enumerate(self.obs_list):
                 observations = {}
                 for k,modality in enumerate(self._spsn_tables):
-                    observations[modality] = obs[n_lnl * k : n_lnl * (k+1)]
+                    observations[modality] = {
+                        lnl.name: obs[n_lnl * k + i] for i,lnl in enumerate(self.lnls)
+                    }
                 self._observation_matrix[i,j] = self.comp_diagnose_prob(observations)
 
     @property
@@ -546,11 +625,11 @@ class Unilateral(HDFMixin):
     def diagnose_matrices(self):
         try:
             return self._diagnose_matrices
-        except AttributeError:
+        except AttributeError as att_err:
             raise AttributeError(
                 "No data has been loaded and hence no observation matrix has "
                 "been computed."
-            )
+            ) from att_err
 
 
     @property
@@ -576,10 +655,8 @@ class Unilateral(HDFMixin):
         """
         try:
             return self._patient_data
-        except AttributeError:
-            raise AttributeError(
-                "No patient data has been loaded yet"
-            )
+        except AttributeError as att_err:
+            raise AttributeError("No patient data has been loaded yet") from att_err
 
     @patient_data.setter
     def patient_data(self, patient_data: pd.DataFrame):
@@ -595,7 +672,6 @@ class Unilateral(HDFMixin):
     def load_data(
         self,
         data: pd.DataFrame,
-        t_stages: Optional[List[int]] = None,
         modality_spsn: Optional[Dict[str, List[float]]] = None,
         mode: str = "HMM",
     ):
@@ -624,10 +700,6 @@ class Unilateral(HDFMixin):
                 | early   | ``True`` | ``True``  | ``True``  | ``None``  |
                 +---------+----------+-----------+-----------+-----------+
 
-            t_stages: List of T-stages that should be included in the learning
-                process. If ommitted, the list of T-stages is extracted from
-                the :class:`DataFrame`
-
             modality_spsn: Dictionary of specificity :math:`s_P` and :math:`s_N`
                 (in that order) for each observational/diagnostic modality. Can
                 be ommitted if the modalities where already defined.
@@ -637,13 +709,16 @@ class Unilateral(HDFMixin):
         if modality_spsn is not None:
             self.modalities = modality_spsn
         elif self.modalities == {}:
-            msg = ("No diagnostic modalities have been defined yet!")
-            raise ValueError(msg)
+            raise ValueError("No diagnostic modalities have been defined yet!")
+
+        # when first loading data with with different T-stages, and then loading a
+        # dataset with fewer T-stages, the old diagnose matrices should not be preserved
+        if hasattr(self, "_diagnose_matrices"):
+            del self._diagnose_matrices
 
         # For the Hidden Markov Model
         if mode=="HMM":
-            if t_stages is None:
-                t_stages = list(set(data[("info", "t_stage")]))
+            t_stages = list(set(data[("info", "t_stage")]))
 
             for stage in t_stages:
                 table = data.loc[
@@ -651,6 +726,12 @@ class Unilateral(HDFMixin):
                     self._spsn_tables.keys()
                 ]
                 self._gen_diagnose_matrices(table, stage)
+                if stage not in self.diag_time_dists:
+                    warnings.warn(
+                        "No distribution for marginalizing over diagnose times has "
+                        f"been defined for T-stage {stage}. During inference, all "
+                        "patients in this T-stage will be ignored."
+                    )
 
         # For the Bayesian Network
         elif mode=="BN":
@@ -710,115 +791,76 @@ class Unilateral(HDFMixin):
         return state_probs
 
 
-    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
-        """Check that the spread probability (rates) are all within limits.
-        """
-        if new_spread_probs.shape != self.spread_probs.shape:
-            msg = ("Shape of provided spread parameters does not match network")
-            raise ValueError(msg)
-        if np.any(0. > new_spread_probs):
-            return False
-        if np.any(new_spread_probs > 1.):
-            return False
-
-        return True
-
-
-    def log_likelihood(
-        self,
-        spread_probs: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        diag_times: Optional[Dict[Any, int]] = None,
-        max_t: Optional[int] = 10,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
-        mode: str = "HMM"
-    ) -> float:
-        """
-        Compute log-likelihood of (already stored) data, given the spread
-        probabilities and either a discrete diagnose time or a distribution to
-        use for marginalization over diagnose times.
+    def check_and_assign(self, new_params: np.ndarray):
+        """Check that the spread probability (rates) and the parameters for the
+        marginalization over diagnose times are all within limits and assign them to
+        the model.
 
         Args:
-            spread_probs: Spread probabiltites from the tumor to the LNLs, as
-                well as from (already involved) LNLs to downsream LNLs.
+            new_params: The set of :attr:`spread_probs` and parameters to provide for
+                updating the parametrized distributions over diagnose times.
 
-            t_stages: List of T-stages that are also used in the data to denote
-                how advanced the primary tumor of the patient is. This does not
-                need to correspond to the clinical T-stages 'T1', 'T2' and so
-                on, but can also be more abstract like 'early', 'late' etc. If
-                not given, this will be inferred from the loaded data.
-
-            diag_times: For each T-stage, one can specify with what time step
-                the likelihood should be computed. If this is set to `None`,
-                and a distribution over diagnose times `time_dists` is provided,
-                the function marginalizes over diagnose times.
-
-            max_t: Latest possible diagnose time. This is only used to return
-                `-np.inf` in case one of the `diag_times` exceeds this value.
-
-            time_dists: Distribution over diagnose times that can be used to
-                compute the likelihood of the data, given the spread
-                probabilities, but marginalized over the time of diagnosis. If
-                set to `None`, a diagnose time must be explicitly set for each
-                T-stage.
-
-            mode: Compute the likelihood using the Bayesian network (`"BN"`) or
-                the hidden Markv model (`"HMM"`). When using the Bayesian net,
-                the inputs `t_stages`, `diag_times`, `max_t` and `time_dists`
-                are ignored.
-
-        Returns:
-            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
-            is the data and :math:`\\theta` is the tuple of spread probabilities
-            and diagnose times or distributions over diagnose times.
+        Warning:
+            This method assumes that the parametrized distributions (instances of
+            :class:`Marginalizor`) all raise a ``ValueError`` when provided with
+            invalid parameters.
         """
-        if not self._are_valid_(spread_probs):
-            return -np.inf
+        k = len(self.spread_probs)
+        new_spread_probs = new_params[:k]
+        new_marg_params = new_params[k:]
 
-        self.spread_probs = spread_probs
+        try:
+            self.diag_time_dists.update(new_marg_params)
+        except ValueError as val_err:
+            raise ValueError(
+                "Parameters for marginalization over diagnose times are invalid"
+            ) from val_err
 
+        if new_spread_probs.shape != self.spread_probs.shape:
+            raise ValueError(
+                "Shape of provided spread parameters does not match network"
+            )
+        if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
+            raise ValueError(
+                "Spread probs must be between 0 and 1"
+            )
+
+        self.spread_probs = new_spread_probs
+
+
+    def _likelihood(
+        self,
+        mode: str = "HMM",
+        log: bool = True,
+    ) -> float:
+        """
+        Compute the (log-)likelihood of stored data, using the stored spread probs
+        and parameters for the marginalizations over diagnose times (if the respective
+        distributions are parametrized).
+
+        This is the core method for computing the likelihood. The user-facing API calls
+        it after doing some preliminary checks with the passed arguments.
+        """
         # hidden Markov model
         if mode == "HMM":
-            if t_stages is None:
-                t_stages = list(self.diagnose_matrices.keys())
+            stored_t_stages = set(self.diagnose_matrices.keys())
+            provided_t_stages = set(self.diag_time_dists.keys())
+            t_stages = list(stored_t_stages.intersection(provided_t_stages))
 
-            state_probs = {}
+            max_t = self.diag_time_dists.max_t
+            evolved_model = self._evolve(t_last=max_t)
 
-            if diag_times is not None:
-                if len(diag_times) != len(t_stages):
-                    raise ValueError(
-                        "One diagnose time must be provided for each T-stage."
-                    )
-
-                for stage in t_stages:
-                    diag_time = np.around(diag_times[stage]).astype(int)
-                    if diag_time > max_t:
-                        return -np.inf
-                    state_probs[stage] = self._evolve(diag_time)
-
-            elif time_dists is not None:
-                if len(time_dists) != len(t_stages):
-                    raise ValueError(
-                        "One distribution over diagnose times must be provided "
-                        "for each T-stage."
-                    )
-
-                # subtract 1, to also consider healthy starting state (t = 0)
-                max_t = len(time_dists[t_stages[0]]) - 1
-
-                for stage in t_stages:
-                    state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
-
-            else:
-                raise ValueError(
-                    "Either provide a list of diagnose times for each T-stage "
-                    "or a distribution over diagnose times for each T-stage."
-                )
-
-            llh = 0.
+            llh = 0. if log else 1.
             for stage in t_stages:
-                p = state_probs[stage] @ self.diagnose_matrices[stage]
-                llh += np.sum(np.log(p))
+                p = (
+                    self.diag_time_dists[stage].pmf
+                    @ evolved_model
+                    @ self.diagnose_matrices[stage]
+                )
+                if log:
+                    llh += np.sum(np.log(p))
+                else:
+                    llh *= np.prod(p)
 
         # likelihood for the Bayesian network
         elif mode == "BN":
@@ -830,231 +872,152 @@ class Unilateral(HDFMixin):
                     state_probs[i] *= node.bn_prob()
 
             p = state_probs @ self.diagnose_matrices["BN"]
-            llh = np.sum(np.log(p))
+            llh = np.sum(np.log(p)) if log else np.prod(p)
 
         return llh
 
 
-    def marginal_log_likelihood(
+    def likelihood(
         self,
-        theta: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        time_dists: Dict[Any, np.ndarray] = {}
+        data: Optional[pd.DataFrame] = None,
+        given_params: Optional[np.ndarray] = None,
+        log: bool = True,
+        mode: str = "HMM"
     ) -> float:
         """
-        Compute the likelihood of the (already stored) data, given the spread
-        parameters, marginalized over time of diagnosis via time distributions.
+        Compute (log-)likelihood of (already stored) data, given the probabilities of
+        spread in the network and the parameters for the distributions used to
+        marginalize over the diagnose times.
 
         Args:
-            theta: Set of parameters, consisting of the base probabilities
-                :math:`b` and the transition probabilities :math:`t`.
+            data: Table with rows of patients and columns of per-LNL involvment. See
+                :meth:`load_data` for more details on how this should look like.
 
-            t_stages: List of T-stages that should be included in the learning
-                process.
+            given_params: The likelihood is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
-            time_dists: Distribution over the probability of diagnosis at
-                different times :math:`t` given T-stage.
+            log: When ``True``, the log-likelihood is returned.
 
-        Returns:
-            The log-likelihood of the data, given te spread parameters.
-        """
-        return self.log_likelihood(
-            theta, t_stages,
-            diag_times=None, time_dists=time_dists,
-            mode="HMM"
-        )
-
-
-    def binom_marg_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """
-        Compute the likelihood of the (already stored) data, given the spread
-        parameters, marginalized over time of diagnosis via binomial
-        distributions.
-
-        Args:
-            theta: Set of parameters, consisting of the base probabilities
-                :math:`b` and the transition probabilities :math:`t`.
-
-            t_stages: List of T-stages that should be included in the learning.
-
-            max_t: Latest possible diagnose time.
+            mode: Compute the likelihood using the Bayesian network (``"BN"``) or
+                the hidden Markv model (``"HMM"``). When using the Bayesian net, no
+                marginalization over diagnose times is performed.
 
         Returns:
-            The log-likelihood of the data, given te spread parameters and binomial
-            time distributions.
+            The (log-)likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
+            is the data and :math:`\\theta` are the given parameters.
         """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...p-values for the binomial distribution
-        p = theta[len_spread_probs:]
+        if data is not None:
+            self.patient_data = data
 
-        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
-            return -np.inf
+        if given_params is None:
+            return self._likelihood(mode, log)
 
-        t = np.arange(max_t + 1)
-        time_dists = {}
-        for i,stage in enumerate(t_stages):
-            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
+        try:
+            self.check_and_assign(given_params)
+        except ValueError:
+            return -np.inf if log else 0.
 
-        return self.marginal_log_likelihood(
-            spread_probs, t_stages,
-            time_dists=time_dists
-        )
-
-
-    def time_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """
-        Compute likelihood given the spread parameters and the time of diagnosis
-        for each T-stage.
-
-        Args:
-            theta: Set of parameters, consisting of the spread probabilities
-                (as many as the system has :class:`Edge` instances) and the
-                time of diagnosis for all T-stages.
-
-            t_stages: keywords of T-stages that are present in the dictionary of
-                C matrices and the previously loaded dataset.
-
-            max_t: Largest accepted time-point.
-
-        Returns:
-            The likelihood of the data, given the spread parameters as well as
-            the diagnose time for each T-stage.
-        """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...diagnose times for each T-stage
-        tmp = theta[len_spread_probs:]
-        diag_times = {t_stages[t]: tmp[t] for t in range(len(t_stages))}
-
-        return self.log_likelihood(
-            spread_probs, t_stages,
-            diag_times=diag_times, max_t=max_t, time_dists=None,
-            mode="HMM"
-        )
+        return self._likelihood(mode, log)
 
 
     def risk(
         self,
-        spread_probs: Optional[np.ndarray] = None,
-        inv: Optional[np.ndarray] = None,
-        diagnoses: Dict[str, np.ndarray] = {},
-        diag_time: Optional[int] = None,
-        time_dist: Optional[np.ndarray] = None,
-        mode: str = "HMM"
+        involvement: Optional[Union[dict, np.ndarray]] = None,
+        given_params: Optional[np.ndarray] = None,
+        given_diagnoses: Optional[Dict[str, dict]] = None,
+        t_stage: str = "early",
+        mode: str = "HMM",
+        **_kwargs,
     ) -> Union[float, np.ndarray]:
         """Compute risk(s) of involvement given a specific (but potentially
         incomplete) diagnosis.
 
         Args:
-            spread_probs: Set of new spread parameters. If not given (``None``),
-                the currently set parameters will be used.
-
-            inv: Specific hidden involvement one is interested in. If only parts
+            involvement: Specific hidden involvement one is interested in. If only parts
                 of the state are of interest, the remainder can be masked with
                 values ``None``. If specified, the functions returns a single
                 risk.
 
-            diagnoses: Dictionary that can hold a potentially incomplete (mask
+            given_params: The risk is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
+
+            given_diagnoses: Dictionary that can hold a potentially incomplete (mask
                 with ``None``) diagnose for every available modality. Leaving
                 out available modalities will assume a completely missing
                 diagnosis.
 
-            diag_time: Time of diagnosis. Either this or the ``time_dist`` to
-                marginalize over diagnose times must be given.
-
-            time_dist: Distribution to marginalize over diagnose times. Either
-                this, or the ``diag_time`` must be given.
+            t_stage: The T-stage for which the risk should be computed. The attribute
+                :attr:`diag_time_dists` must have a distribution for marginalizing
+                over diagnose times stored for this T-stage.
 
             mode: Set to ``"HMM"`` for the hidden Markov model risk (requires
                 the ``time_dist``) or to ``"BN"`` for the Bayesian network
                 version.
 
         Returns:
-            A single probability value if ``inv`` is specified and an array
+            A single probability value if ``involvement`` is specified and an array
             with probabilities for all possible hidden states otherwise.
         """
-        # assign spread_probs to system or use the currently set one
-        if spread_probs is not None:
-            self.spread_probs = spread_probs
+        if given_params is not None:
+            self.check_and_assign(given_params)
 
-        # create one large diagnose vector from the individual modalitie's
-        # diagnoses
-        obs = np.array([])
-        for mod in self._spsn_tables:
-            if mod in diagnoses:
-                obs = np.append(obs, diagnoses[mod])
-            else:
-                obs = np.append(obs, np.array([None] * len(self.lnls)))
+        if given_diagnoses is None:
+            given_diagnoses = {}
 
-        # vector of probabilities of arriving in state x, marginalized over time
+        # vector containing P(Z=z|X)
+        diagnose_probs = np.zeros(shape=len(self.state_list))
+        for i,state in enumerate(self.state_list):
+            self.state = state
+            diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
+
+        # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            if diag_time is not None:
-                pX = self._evolve(diag_time)
-
-            elif time_dist is not None:
-                max_t = len(time_dist)
-                state_probs = self._evolve(t_last=max_t-1)
-                pX = time_dist @ state_probs
-
-            else:
-                msg = ("Either diagnose time or distribution to marginalize "
-                       "over it must be given.")
-                raise ValueError(msg)
+            max_t = self.diag_time_dists.max_t
+            state_probs = self._evolve(t_last=max_t)
+            marg_state_probs = self.diag_time_dists[t_stage].pmf @ state_probs
 
         # BN version
         elif mode == "BN":
-            pX = np.ones(shape=(len(self.state_list)), dtype=float)
+            marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
                 self.state = state
                 for node in self.lnls:
-                    pX[i] *= node.bn_prob()
+                    marg_state_probs[i] *= node.bn_prob()
 
-        # compute the probability of observing a diagnose z and being in a
-        # state x which is P(z,x) = P(z|x)P(x). Do that for all combinations of
-        # x and z and put it in a matrix
-        pZX = self.observation_matrix.T * pX
+        # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
+        joint_diag_state = marg_state_probs * diagnose_probs
 
-        # vector of probabilities for seeing a diagnose z
-        pZ = pX @ self.observation_matrix
-
-        # build vector to marginalize over diagnoses
-        cZ = np.zeros(shape=(len(pZ)), dtype=bool)
-        for i,complete_obs in enumerate(self.obs_list):
-            cZ[i] = np.all(np.equal(obs, complete_obs,
-                                    where=(obs!=None),
-                                    out=np.ones_like(obs, dtype=bool)))
+        # get marginal over X from joint
+        marg_diagnose_prob = np.sum(joint_diag_state)
 
         # compute vector of probabilities for all possible involvements given
-        # the specified diagnosis
-        res =  cZ @ pZX / (cZ @ pZ)
+        # the specified diagnosis P(X|Z=z)
+        post_state_probs =  joint_diag_state / marg_diagnose_prob
 
-        if inv is None:
-            return res
+        if involvement is None:
+            return post_state_probs
+
+        # if a specific involvement of interest is provided, marginalize the
+        # resulting vector of hidden states to match that involvement of
+        # interest
+        if isinstance(involvement, dict):
+            involvement = np.array([involvement[lnl.name] for lnl in self.lnls])
         else:
-            # if a specific involvement of interest is provided, marginalize the
-            # resulting vector of hidden states to match that involvement of
-            # interest
-            inv = np.array(inv)
-            cX = np.zeros(shape=res.shape, dtype=bool)
-            for i,state in enumerate(self.state_list):
-                cX[i] = np.all(np.equal(inv, state,
-                                        where=(inv!=None),
-                                        out=np.ones_like(state, dtype=bool)))
-            return cX @ res
+            involvement = np.array(involvement)
+
+        marg_states = np.zeros(shape=post_state_probs.shape, dtype=bool)
+        for i,state in enumerate(self.state_list):
+            marg_states[i] = np.all(np.equal(
+                involvement, state,
+                where=(involvement!=None),
+                out=np.ones_like(state, dtype=bool)
+            ))
+        return marg_states @ post_state_probs
 
 
     def _draw_patient_diagnoses(
@@ -1089,9 +1052,8 @@ class Unilateral(HDFMixin):
     def generate_dataset(
         self,
         num_patients: int,
-        stage_dist: List[float],
-        diag_times: Optional[Dict[Any, int]] = None,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+        stage_dist: Dict[str, float],
+        **_kwargs,
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network
         using the samples and diagnostic modalities that have been set.
@@ -1099,19 +1061,9 @@ class Unilateral(HDFMixin):
         Args:
             num_patients: Number of patients to generate.
             stage_dist: Probability to find a patient in a certain T-stage.
-            diag_times: For each T-stage, one can specify until which time step
-                the corresponding patients should be evolved. If this is set to
-                ``None``, and a distribution over diagnose times ``time_dists``
-                is provided, the diagnose time is drawn from the ``time_dist``.
-            time_dists: Distributions over diagnose times that can be used to
-                draw a diagnose time for the respective T-stage. If ``None``,
-                ``diag_times`` must be provided.
         """
-        drawn_t_stages, drawn_diag_times = draw_diagnose_times(
-            num_patients=num_patients,
-            stage_dist=stage_dist,
-            diag_times=diag_times,
-            time_dists=time_dists
+        drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
+            dist=stage_dist, size=num_patients
         )
 
         drawn_obs = self._draw_patient_diagnoses(drawn_diag_times)

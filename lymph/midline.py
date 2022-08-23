@@ -1,13 +1,13 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from .bilateral import Bilateral
-from .utils import HDFMixin, fast_binomial_pmf
+from .timemarg import MarginalizorDict
 
 
-class MidlineBilateral(HDFMixin):
+class MidlineBilateral:
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
     mid-sagittal line.
@@ -31,10 +31,10 @@ class MidlineBilateral(HDFMixin):
 
     def __init__(
         self,
-        graph: Dict[Tuple[str], List[str]] = {},
-        alpha_mix: float = 0.,
+        graph: Dict[Tuple[str], List[str]],
+        use_mixing: bool = True,
         trans_symmetric: bool = True,
-        **kwargs
+        **_kwargs
     ):
         """The class is constructed in a similar fashion to the
         :class:`Bilateral`: That class contains one :class:`Unilateral` for
@@ -46,9 +46,10 @@ class MidlineBilateral(HDFMixin):
             graph: Dictionary of the same kind as for initialization of
                 :class:`System`. This graph will be passed to the constructors of
                 two :class:`System` attributes of this class.
-            alpha_mix: Initial mixing parameter between ipsi- & contralateral
-                base probabilities that determines the contralateral base
-                probabilities for the patients with mid-sagittal extension.
+            use_mixing: Describe the contralateral base spread probabilities for the
+                case of a midline extension as a linear combination between the base
+                spread probs of the ipsilateral side and the ones of the contralateral
+                side when no midline extension is present.
             trans_symmetric: If ``True``, the spread probabilities among the
                 LNLs will be set symmetrically.
 
@@ -63,7 +64,11 @@ class MidlineBilateral(HDFMixin):
         self.noext = Bilateral(
             graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
         )
-        self.alpha_mix = alpha_mix
+        self.use_mixing = use_mixing
+        if self.use_mixing:
+            self.alpha_mix = 0.
+
+        self.noext.diag_time_dists = self.ext.diag_time_dists
 
 
     @property
@@ -76,37 +81,56 @@ class MidlineBilateral(HDFMixin):
     @property
     def base_probs(self) -> np.ndarray:
         """Base probabilities of metastatic lymphatic spread from the tumor(s)
-        to the lymph node levels. This will return a concatenation of the
-        ipsilateral base probabilities and the contralateral ones without the
-        midline extension, as well as - lastly - the mixing parameter alpha.
-        The returned array has therefore this composition:
+        to the lymph node levels. This will return the following concatenation of
+        base spread probs depending on whether ``use_mixing`` is set to ``True`` or
+        ``False``:
 
-        +-----------------+-------------------+--------------+
-        | base probs ipsi | base probs contra | mixing param |
-        +-----------------+-------------------+--------------+
+        With the use of a mixing parameter:
+        +-----------+-------------------------+--------------+
+        | base ipsi | base contra (no midext) | mixing param |
+        +-----------+-------------------------+--------------+
 
-        When setting these, one also needs to provide this mixing parameter as
-        the last entry in the provided array.
+        Without it:
+        +-----------+----------------------+-------------------------+
+        | base ipsi | base contra (midext) | base contra (no midext) |
+        +-----------+----------------------+-------------------------+
+
+        When setting these, one needs to provide the respective shape.
         """
-        return np.concatenate([self.noext.base_probs, [self.alpha_mix]])
+        if self.use_mixing:
+            return np.concatenate([
+                self.ext.ipsi.base_probs,
+                self.noext.contra.base_probs,
+                [self.alpha_mix],
+            ])
+        else:
+            return np.concatenate([
+                self.ext.ipsi.base_probs,
+                self.ext.contra.base_probs,
+                self.noext.contra.base_probs,
+            ])
 
     @base_probs.setter
     def base_probs(self, new_params: np.ndarray):
         """Set the base probabilities from the tumor(s) to the LNLs, accounting
         for the mixing parameter :math:`\\alpha``.
         """
-        new_base_probs = new_params[:-1]
-        self.alpha_mix = new_params[-1]
+        k = len(self.ext.ipsi.base_probs)
 
-        # base probabilities for lateralized cases
-        self.noext.base_probs = new_base_probs
+        self.ext.ipsi.base_probs = new_params[:k]
+        self.noext.ipsi.base_probs = new_params[:k]
 
-        # base probabilities for cases with tumors extending over the midline
-        self.ext.ipsi.base_probs = self.noext.ipsi.base_probs
-        self.ext.contra.base_probs = (
-            self.alpha_mix * self.noext.ipsi.base_probs
-            + (1 - self.alpha_mix) * self.noext.contra.base_probs
-        )
+        if self.use_mixing:
+            self.noext.contra.base_probs = new_params[k:2*k]
+            self.alpha_mix = new_params[-1]
+            # compute linear combination
+            self.ext.contra.base_probs = (
+                self.alpha_mix * self.ext.ipsi.base_probs
+                + (1. - self.alpha_mix) * self.noext.contra.base_probs
+            )
+        else:
+            self.ext.contra.base_probs = new_params[k:2*k]
+            self.noext.contra.base_probs = new_params[2*k:3*k]
 
         # avoid unnecessary double computation of ipsilateral transition matrix
         self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
@@ -136,32 +160,49 @@ class MidlineBilateral(HDFMixin):
         """These are the probabilities representing the spread of cancer along
         lymphatic drainage pathways per timestep.
 
-        The returned array here contains the probabilities of spread from the
-        tumor(s) to the ipsilateral LNLs, then the same values for the spread
-        to the contralateral LNLs, after this the spread probabilities among
-        the LNLs (which is assumed to be symmetric ipsi- & contralaterally) and
-        finally the mixing parameter :math:`\\alpha`. So, it's form is
+        It is composed of the base spread probs (possible with the mixing parameter)
+        and the probabilities of spread among the LNLs.
 
-        +-----------------+-------------------+-------------+--------------+
-        | base probs ipsi | base probs contra | trans probs | mixing param |
-        +-----------------+-------------------+-------------+--------------+
+        +-------------+-------------+
+        | base probs  | trans probs |
+        +-------------+-------------+
         """
-        spread_probs = self.noext.spread_probs
-        return np.concatenate([spread_probs, [self.alpha_mix]])
+        return np.concatenate([self.base_probs, self.trans_probs])
 
     @spread_probs.setter
     def spread_probs(self, new_params: np.ndarray):
         """Set the new spread probabilities and the mixing parameter
         :math:`\\alpha`.
         """
-        num_base_probs = len(self.noext.ipsi.base_edges)
+        num_base_probs = len(self.base_probs)
 
-        new_base_probs  = new_params[:2*num_base_probs]
-        new_trans_probs = new_params[2*num_base_probs:-1]
-        alpha_mix = new_params[-1]
+        self.base_probs  = new_params[:num_base_probs]
+        self.trans_probs = new_params[num_base_probs:]
 
-        self.base_probs = np.concatenate([new_base_probs, [alpha_mix]])
-        self.trans_probs = new_trans_probs
+
+    @property
+    def diag_time_dists(self) -> MarginalizorDict:
+        """This property holds the probability mass functions for marginalizing over
+        possible diagnose times for each T-stage.
+
+        When setting this property, one may also provide a normal Python dict, in
+        which case it tries to convert it to a :class:`MarginalizorDict`.
+
+        Note that the method will provide the same instance of this
+        :class:`MarginalizorDict` to both sides of the network.
+
+        See Also:
+            :class:`MarginalzorDict`, :class:`Marginalizor`.
+        """
+        return self.ext.diag_time_dists
+
+    @diag_time_dists.setter
+    def diag_time_dists(self, new_dists: Union[dict, MarginalizorDict]):
+        """Assign new :class:`MarginalizorDict` to this property. If it is a normal
+        Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
+        """
+        self.ext.diag_time_dists = new_dists
+        self.noext.diag_time_dists = self.ext.diag_time_dists
 
 
     @property
@@ -237,7 +278,6 @@ class MidlineBilateral(HDFMixin):
     def load_data(
         self,
         data: pd.DataFrame,
-        t_stages: Optional[List[int]] = None,
         modality_spsn: Optional[Dict[str, List[float]]] = None,
         mode = "HMM"
     ):
@@ -270,9 +310,6 @@ class MidlineBilateral(HDFMixin):
                 | early   | ``False``         | ``True`` | ``True`` |
                 +---------+-------------------+----------+----------+
 
-            t_stages: List of T-stages that should be included in the learning
-                process. If ommitted, the list of T-stages is extracted from
-                the :class:`DataFrame`
             modality_spsn: If no diagnostic modalities have been defined yet,
                 this must be provided to build the observation matrix.
 
@@ -291,74 +328,77 @@ class MidlineBilateral(HDFMixin):
 
         self.ext.load_data(
             ext_data,
-            t_stages=t_stages,
             modality_spsn=modality_spsn,
             mode=mode
         )
         self.noext.load_data(
             noext_data,
-            t_stages=t_stages,
             modality_spsn=modality_spsn,
             mode=mode
         )
 
 
-    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
-        """Check that the spread probability (rates) are all within limits.
+    def check_and_assign(self, new_params: np.ndarray):
+        """Check that the spread probability (rates) and the parameters for the
+        marginalization over diagnose times are all within limits and assign them to
+        the model. Also, make sure the ipsi- and contralateral distributions over
+        diagnose times are the same instance of the :class:`MarginalizorDict`.
+
+        Args:
+            new_params: The set of :attr:`spread_probs` and parameters to provide for
+                updating the parametrized distributions over diagnose times.
+
+        Warning:
+            This method assumes that the parametrized distributions (instances of
+            :class:`Marginalizor`) all raise a ``ValueError`` when provided with
+            invalid parameters.
         """
+        k = len(self.spread_probs)
+        new_spread_probs = new_params[:k]
+        new_marg_params = new_params[k:]
+
+        try:
+            self.ext.ipsi.diag_time_dists.update(new_marg_params)
+            self.ext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
+            self.noext.ipsi.diag_time_dists = self.ext.ipsi.diag_time_dists
+            self.noext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
+        except ValueError as val_err:
+            raise ValueError(
+                "Parameters for marginalization over diagnose times are invalid"
+            ) from val_err
+
         if new_spread_probs.shape != self.spread_probs.shape:
-            msg = ("Shape of provided spread parameters does not match network")
-            raise ValueError(msg)
-        if np.any(np.greater(0., new_spread_probs)):
-            return False
-        if np.any(np.greater(new_spread_probs, 1.)):
-            return False
+            raise ValueError(
+                "Shape of provided spread parameters does not match network"
+            )
+        if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
+            raise ValueError(
+                "Spread probs must be between 0 and 1"
+            )
 
-        return True
+        self.spread_probs = new_spread_probs
 
 
-    def log_likelihood(
+    def likelihood(
         self,
-        spread_probs: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        diag_times: Optional[Dict[Any, int]] = None,
-        max_t: Optional[int] = 10,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None
+        data: Optional[pd.DataFrame] = None,
+        given_params: Optional[np.ndarray] = None,
+        log: bool = True,
     ) -> float:
         """Compute log-likelihood of (already stored) data, given the spread
         probabilities and either a discrete diagnose time or a distribution to
         use for marginalization over diagnose times.
 
         Args:
-            spread_probs: Spread probabiltites from the tumor to the LNLs, as
-                well as from (already involved) LNLs to downsream LNLs. This
-                includes both sides of the neck and also different sets of
-                probabilities for patients with tumor that do or do not extend
-                over the mid-sagittal line. Also includes the :math:`\\alpha`
-                mixing parameter. So, this consists of
+            data: Table with rows of patients and columns of per-LNL involvment. See
+                :meth:`load_data` for more details on how this should look like.
 
-                +------------+-------------+--------------+
-                | base probs | trans probs | mixing param |
-                +------------+-------------+--------------+
+            given_params: The likelihood is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
-            t_stages: List of T-stages that are also used in the data to denote
-                how advanced the primary tumor of the patient is. This does not
-                need to correspond to the clinical T-stages 'T1', 'T2' and so
-                on, but can also be more abstract like 'early', 'late' etc.
-
-            diag_times: For each T-stage, one can specify with what time step
-                the likelihood should be computed. If this is set to `None`,
-                and a distribution over diagnose times `time_dists` is provided,
-                the function marginalizes over diagnose times.
-
-            max_t: Latest possible diagnose time. This is only used to return
-                `-np.inf` in case one of the `diag_times` exceeds this value.
-
-            time_dists: Distribution over diagnose times that can be used to
-                compute the likelihood of the data, given the spread
-                probabilities, but marginalized over the time of diagnosis. If
-                set to `None`, a diagnose time must be explicitly set for each
-                T-stage.
+            log: When ``True``, the log-likelihood is returned.
 
         Returns:
             The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
@@ -366,131 +406,41 @@ class MidlineBilateral(HDFMixin):
             and diagnose times or distributions over diagnose times.
 
         See Also:
-            :meth:`Unilateral.log_likelihood`: The log-likelihood function of
+            :attr:`spread_probs`: Property for getting and setting the spread
+            probabilities, of which a lymphatic network has as many as it has
+            :class:`Edge` instances (in case no symmetries apply).
+
+            :meth:`Unilateral.likelihood`: The log-likelihood function of
             the unilateral system.
 
-            :meth:`Bilateral.log_likelihood`: Log-likelihood function of the
-            bilateral system, not concerned with midline extension.
+            :meth:`Bilateral.likelihood`: The (log-)likelihood function of the
+            bilateral system.
         """
-        if not self._are_valid_(spread_probs):
-            return -np.inf
+        if data is not None:
+            self.patient_data = data
 
-        self.spread_probs = spread_probs
+        try:
+            self.check_and_assign(given_params)
+        except ValueError:
+            return -np.inf if log else 0.
 
-        llh = 0.
+        llh = 0. if log else 1.
 
-        llh += self.ext._log_likelihood(
-            t_stages=t_stages,
-            diag_times=diag_times,
-            max_t=max_t,
-            time_dists=time_dists
-        )
-
-        llh += self.noext._log_likelihood(
-            t_stages=t_stages,
-            diag_times=diag_times,
-            max_t=max_t,
-            time_dists=time_dists
-        )
+        if log:
+            llh += self.ext._likelihood(log=log)
+            llh += self.noext._likelihood(log=log)
+        else:
+            llh *= self.ext._likelihood(log=log)
+            llh *= self.noext._likelihood(log=log)
 
         return llh
 
 
-    def marginal_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: Optional[List[Any]] = None,
-        time_dists: dict = {}
-    ) -> float:
-        """
-        Compute the likelihood of the (already stored) data, given the spread
-        parameters, marginalized over time of diagnosis via time distributions.
-        Wraps the :meth:`log_likelihood` method.
-
-        Args:
-            theta: Set of parameters, consisting of the base probabilities
-                :math:`b` and the transition probabilities :math:`t`, as well
-                as the mixing parameter :math:`\\alpha`. So, it consists of
-                these entries:
-
-                +------------+-------------+--------------+
-                | base probs | trans probs | mixing param |
-                +------------+-------------+--------------+
-
-            t_stages: List of T-stages that should be included in the learning
-                process.
-
-            time_dists: Distribution over the probability of diagnosis at
-                different times :math:`t` given T-stage.
-
-        Returns:
-            The log-likelihood of a parameter sample.
-
-        See Also:
-            :meth:`log_likelihood`: Simply calls the actual likelihood function
-            where it sets the `diag_times` to `None`.
-        """
-        return self.log_likelihood(
-            theta, t_stages,
-            diag_times=None, time_dists=time_dists
-        )
-
-
-    def binom_marg_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """Compute marginal log-likelihood using binomial distributions to sum
-        over the diagnose times.
-
-        Args:
-            theta: Set of parameters, consisting of the spread probabilities,
-                the mixing parameter :math:`\\alpha` and the binomial
-                distribution's :math:`p` parameters for each T-category. So,
-                its form is
-
-                +------------+-------------+--------------+-----------------+
-                | base probs | trans probs | mixing param | binomial params |
-                +------------+-------------+--------------+-----------------+
-
-            t_stages: keywords of T-stages that are present in the dictionary of
-                C matrices and the previously loaded dataset.
-
-            max_t: Latest accepted time-point.
-
-        Returns:
-            The log-likelihood of the (already stored) data, given the spread
-            prbabilities as well as the parameters for binomial distribtions
-            used to marginalize over diagnose times.
-        """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...p-values for the binomial distribution
-        p = theta[len_spread_probs:]
-
-        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
-            return -np.inf
-
-        t = np.arange(max_t + 1)
-        time_dists = {}
-        for i,stage in enumerate(t_stages):
-            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
-
-        return self.marginal_log_likelihood(
-            spread_probs, t_stages,
-            time_dists=time_dists
-        )
-
-
     def risk(
         self,
-        *args,
-        spread_probs: Optional[np.ndarray] = None,
+        given_params: Optional[np.ndarray] = None,
         midline_extension: bool = True,
-        **kwargs
+        **kwargs,
     ) -> float:
         """Compute the risk of nodal involvement given a specific diagnose.
 
@@ -505,22 +455,21 @@ class MidlineBilateral(HDFMixin):
             tumor does extend over the midline, the risk function of the
             respective :class:`Bilateral` instance gets called.
         """
-        if spread_probs is not None:
-            self.spread_probs = spread_probs
+        if given_params is not None:
+            self.check_and_assign(given_params)
 
         if midline_extension:
-            return self.ext.risk(*args, **kwargs)
+            return self.ext.risk(**kwargs)
         else:
-            return self.noext.risk(*args, **kwargs)
+            return self.noext.risk(**kwargs)
 
 
     def generate_dataset(
         self,
         num_patients: int,
-        stage_dist: List[float],
+        stage_dist: Dict[str, float],
         ext_prob: float,
-        diag_times: Optional[Dict[Any, int]] = None,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
+        **_kwargs,
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network.
 
@@ -529,12 +478,6 @@ class MidlineBilateral(HDFMixin):
             stage_dist: Probability to find a patient in a certain T-stage.
             ext_prob: Probability that a patient's primary tumor extends over
                 the mid-sagittal line.
-            diag_times: For each T-stage, one can specify until which time step
-                the corresponding patients should be evolved. If this is set to
-                ``None``, and a distribution over diagnose times ``time_dists``
-                is provided, the diagnose time is drawn from the ``time_dist``.
-            time_dists: Distributions over diagnose times that can be used to
-                draw a diagnose time for the respective T-stage.
         """
         drawn_ext = np.random.choice(
             [True, False], p=[ext_prob, 1. - ext_prob], size=num_patients
@@ -542,14 +485,10 @@ class MidlineBilateral(HDFMixin):
         ext_dataset = self.ext.generate_dataset(
             num_patients=num_patients,
             stage_dist=stage_dist,
-            diag_times=diag_times,
-            time_dists=time_dists
         )
         noext_dataset = self.noext.generate_dataset(
             num_patients=num_patients,
             stage_dist=stage_dist,
-            diag_times=diag_times,
-            time_dists=time_dists
         )
 
         dataset = noext_dataset.copy()

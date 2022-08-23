@@ -1,21 +1,16 @@
-
 import numpy as np
 import pytest
 from custom_strategies import (
-    graphs,
-    logllh_params,
-    models,
+    st_graphs,
+    st_likelihood_setup,
     st_modalities,
     st_model_diagnose_tuples,
-    st_model_patientdata_tuples,
+    st_models,
+    st_models_and_data,
     st_models_and_probs,
-    st_risk_params,
-    st_stage_dist_and_time_dists,
-    st_time_dist,
 )
 from helpers import are_probabilities
 from hypothesis import HealthCheck, assume, given, settings
-from hypothesis.extra import numpy as hynp
 from hypothesis.strategies import (
     booleans,
     characters,
@@ -38,7 +33,7 @@ settings.register_profile(
 settings.load_profile("tests")
 
 
-@given(graph=graphs())
+@given(graph=st_graphs())
 def test_constructor(graph):
     """Test constructor of base model."""
     # make sure errors are raised for nodes with same name
@@ -102,7 +97,7 @@ def test_constructor(graph):
             )
 
 
-@given(graph=graphs(unique=True))
+@given(graph=st_graphs(unique=True))
 def test_string(graph):
     """Test the string representation of the class."""
     model = Unilateral(graph)
@@ -122,7 +117,7 @@ def test_string(graph):
         )
 
 
-@given(graph=graphs(unique=True))
+@given(graph=st_graphs(unique=True))
 def test_find_node_and_find_edge(graph):
     model = Unilateral(graph)
 
@@ -156,7 +151,7 @@ def test_find_node_and_find_edge(graph):
             )
 
 
-@given(graph=graphs(unique=True))
+@given(graph=st_graphs(unique=True))
 def test_graph(graph):
     model = Unilateral(graph)
     recovered_graph = model.graph
@@ -172,7 +167,7 @@ def test_graph(graph):
     assert graph == recovered_graph, "Recovered graph is not the same as original one."
 
 
-@given(model=models(), newstate=lists(integers(0, 1)))
+@given(model=st_models(), newstate=lists(integers(0, 1)))
 def test_state(model, newstate):
     """Check the state assignment"""
     num_lnls = len(model.lnls)
@@ -273,7 +268,7 @@ def test_spread_probs(model_and_spread_probs):
 
 
 @given(
-    model=models(states=integers(0,1)),
+    model=st_models(states=integers(0,1)),
     newstate=lists(integers(0,1), min_size=1),
     acquire=booleans()
 )
@@ -295,7 +290,7 @@ def test_comp_transition_prob(model, newstate, acquire):
     )
     if np.any(newstate < model.state):
         assert transition_prob == 0., (
-            f"Probability for transitions involving self-healing must be 0"
+            "Probability for transitions involving self-healing must be 0"
         )
     if acquire:
         assert np.all(model.state == newstate), (
@@ -312,7 +307,7 @@ def test_comp_transition_prob(model, newstate, acquire):
 
 @given(
     st_model_diagnose_tuples(
-        models=models(modalities=st_modalities())
+        models=st_models(modalities=st_modalities())
     )
 )
 def test_comp_diagnose_prob(model_and_diagnose):
@@ -323,9 +318,9 @@ def test_comp_diagnose_prob(model_and_diagnose):
     invalid_dict_diagnose = {}
     none_dict_diagnose = {}
     for mod in model.modalities.keys():
-        dict_diagnose[mod] = pd_diagnose[mod].values
+        dict_diagnose[mod] = pd_diagnose[mod].to_dict()
         invalid_dict_diagnose[mod] = np.append(pd_diagnose[mod].values, True)
-        none_dict_diagnose[mod] = [None] * len(dict_diagnose[mod])
+        none_dict_diagnose[mod] = {lnl.name: None for lnl in model.lnls}
 
     pd_diag_prob = model.comp_diagnose_prob(pd_diagnose)
     dict_diag_prob = model.comp_diagnose_prob(dict_diagnose)
@@ -344,7 +339,7 @@ def test_comp_diagnose_prob(model_and_diagnose):
         model.comp_diagnose_prob(invalid_dict_diagnose)
 
 
-@given(model=models())
+@given(model=st_models())
 def test_state_list(model):
     assert not hasattr(model, "_state_list"), (
         "Model should not have state list after initialization"
@@ -362,7 +357,7 @@ def test_state_list(model):
         "Cannot have duplicates in state list"
     )
 
-@given(model=models(), modalities=st_modalities())
+@given(model=st_models(), modalities=st_modalities())
 def test_obs_list(model, modalities):
     assert not hasattr(model, "_obs_list"), (
         "Model should not have obs list after initialization"
@@ -379,7 +374,7 @@ def test_obs_list(model, modalities):
     )
 
 
-@given(model=models())
+@given(model=st_models())
 def test_allowed_transitions(model):
     """Assert that the mask only allows (the computation of) transitions that
     do not involve self-healing."""
@@ -410,7 +405,7 @@ def test_allowed_transitions(model):
             )
 
 
-@given(model=models())
+@given(model=st_models())
 def test_transition_matrix(model):
     """Verify the properties of the tranistion matrix A"""
     assert not hasattr(model, "_transition_matrix"), (
@@ -434,7 +429,7 @@ def test_transition_matrix(model):
     )
 
 
-@given(model=models(), modalities=st_modalities())
+@given(model=st_models(), modalities=st_modalities())
 def test_modalities(model, modalities):
     assert not hasattr(model, "_spsn_tables"), (
         "Model shoud not have spsn tables after initialization"
@@ -487,7 +482,7 @@ def test_modalities(model, modalities):
         model.modalities = out_of_bounds_modalities
 
 
-@given(model=models(), modalities=st_modalities(max_size=2))
+@given(model=st_models(), modalities=st_modalities(max_size=2))
 def test_observation_matrix(model, modalities):
     """Make sure the observation matrix is correct"""
     assert not hasattr(model, "_observation_matrix"), (
@@ -520,8 +515,8 @@ def test_observation_matrix(model, modalities):
 
 
 @given(
-    model_and_table=st_model_patientdata_tuples(
-        models=models(modalities=st_modalities())
+    model_and_table=st_models_and_data(
+        models=st_models(modalities=st_modalities())
     ),
     t_stage=one_of(
         integers(),
@@ -562,21 +557,21 @@ def test_diagnose_matrices(model_and_table, t_stage):
 
 
 @given(
-    model_and_table=st_model_patientdata_tuples(
-        models=models(modalities=st_modalities()),
+    model_and_table=st_models_and_data(
+        models=st_models(modalities=st_modalities()),
         add_t_stages=True,
     )
 )
 def test_patient_data(model_and_table):
     """Check the correct handling of the data."""
-    model, patient_data = model_and_table
+    model, patient_data, *_ = model_and_table
     t_stages = set(patient_data[("info", "t_stage")].values)
 
     assert not hasattr(model, "_patient_data"), (
         "Initialized model should not have patient data"
     )
     with pytest.raises(AttributeError):
-        pd = model.patient_data
+        _ = model.patient_data
 
     model.patient_data = patient_data
 
@@ -591,9 +586,10 @@ def test_patient_data(model_and_table):
         assert hasattr(model, "_diagnose_matrices"), (
             "Model did not create diagnose matrices"
         )
-        assert model.diagnose_matrices.keys() == t_stages, (
-            "Model did not create the right diagnose matrices for the T-stages"
-        )
+        for stage in t_stages:
+            assert stage in model.diagnose_matrices, (
+                "Model did not create the right diagnose matrices for the T-stages"
+            )
 
     del model._spsn_tables
     del model._patient_data
@@ -602,8 +598,14 @@ def test_patient_data(model_and_table):
         model.patient_data = patient_data
 
 
+def test_check_and_assign():
+    """Test the function that is supposed to ensure that all params are within bounds.
+    """
+    assert True
+
+
 @given(
-    model=models(),
+    model=st_models(),
     spread_probs=lists(floats(0., 1.), min_size=1),
     t_first=integers(0, 10),
     t_last=one_of(none(), integers(1, 20)),
@@ -640,137 +642,55 @@ def test_evolve(model, spread_probs, t_first, t_last):
         )
 
 
-@given(
-    model=models(),
-    spread_probs=hynp.arrays(
-        dtype=float,
-        shape=integers(1, 1000)
-    ),
-)
-def test_are_valid(model, spread_probs):
-    """Check that the check method works correctly"""
-    num_edges = len(model.edges)
+@given(likelihood_setup=st_likelihood_setup())
+def test_likelihood(likelihood_setup):
+    """Test the likelihood function."""
+    model, *likelihood_args = likelihood_setup
+    (
+        data,
+        given_params,
+        are_params_valid,
+        return_log,
+    ) = likelihood_args
 
-    if len(spread_probs) != num_edges:
-        with pytest.raises(ValueError):
-            model._are_valid_(spread_probs)
+    llh = model.likelihood(
+        data=data,
+        given_params=given_params,
+        log=return_log,
+    )
 
-    if len(spread_probs) < num_edges:
-        spread_probs = np.tile(spread_probs, num_edges // len(spread_probs) + 1)
-    if len(spread_probs) > num_edges:
-        spread_probs = spread_probs[:num_edges]
-
-    if np.any(spread_probs > 1.) or np.any(spread_probs < 0.):
-        assert not model._are_valid_(spread_probs), (
-            "Invalid spread probs not rejected"
+    if return_log:
+        assert llh <= 0., (
+            "log-likelihood must be less-equal 0"
         )
-    else:
-        assert model._are_valid_(spread_probs), (
-            "Valid spread probs rejected"
-        )
-
-
-@given(logllh_params=logllh_params())
-def test_log_likelihood(logllh_params):
-    """Make sure the log-likelihood function works correctly"""
-    model, spread_probs, diag_times, time_dists = logllh_params
-
-    invalid_spread_probs = spread_probs.copy()
-    if len(invalid_spread_probs) > 0:
-        invalid_spread_probs[0] = 10.
-        invalid_logllh = model.log_likelihood(
-            invalid_spread_probs,
-            diag_times=diag_times,
-            time_dists=time_dists
-        )
-        assert invalid_logllh == -np.inf, (
-            "Invalid spread probs did not yield -inf"
-        )
-
-    t_stages = model.diagnose_matrices.keys()
-
-    if diag_times is not None:
-        if len(diag_times) != len(t_stages):
-            with pytest.raises(ValueError):
-                logllh = model.log_likelihood(
-                    spread_probs,
-                    diag_times=diag_times,
-                    time_dists=time_dists
-                )
-        else:
-            max_t = np.max(list(diag_times.values()))
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                max_t=max_t,
-                time_dists=time_dists
-            )
-            assert logllh <= 0. or np.isclose(logllh, 0.), (
-                "Log-likelihood must be larger than -inf but smaller or equal 0"
-            )
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                max_t=max_t - 3,
-                time_dists=time_dists
-            )
-            assert logllh == -np.inf, (
-                "Diagnose times later than max_t should give -inf"
-            )
-    elif time_dists is not None:
-        if len(time_dists) != len(t_stages):
-            with pytest.raises(ValueError):
-                logllh = model.log_likelihood(
-                    spread_probs,
-                    diag_times=diag_times,
-                    time_dists=time_dists
-                )
-        else:
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                time_dists=time_dists
-            )
-            assert logllh <= 0. or np.isclose(logllh, 0.), (
-                "Log-likelihood must be larger than -inf but smaller or equal 0"
+        if not are_params_valid:
+            assert llh == -np.inf, (
+                "invalid parameters must yield -inf as log-likelihood"
             )
     else:
-        with pytest.raises(ValueError):
-            logllh = model.log_likelihood(
-                spread_probs,
-                diag_times=diag_times,
-                time_dists=time_dists
+        assert 0. <= llh <= 1. or np.isclose(0., llh) or np.isclose(1., llh), (
+            "likelihood must be between 0 and 1 (or at least close)"
+        )
+        if not are_params_valid:
+            assert llh == 0., (
+                "invalid parameters must yield 0 as likelihood"
             )
 
-
-@given(
-    risk_params=st_risk_params(),
-    time_dist=st_time_dist(),
-)
-def test_risk(risk_params, time_dist):
-    """Test the risk function"""
-    model, involvement, diagnoses = risk_params
-    risk = model.risk(inv=involvement, diagnoses=diagnoses, time_dist=time_dist)
-
-    if involvement is None:
-        assert len(risk) == 2**len(model.lnls), (
-            "Risk must predict as many risks as there are distinct states"
-        )
-        are_ge_0 = np.all(np.greater_equal(risk, 0.) | np.isclose(risk, 0.))
-        are_le_1 = np.all(np.less_equal(risk, 1.) | np.isclose(risk, 1.))
-        assert are_ge_0 and are_le_1, (
-            f"Risk = {risk} for some states out of bound"
-        )
-    else:
-        is_ge_0 = np.isclose(0., risk) or 0. < risk
-        is_le_1 = np.isclose(1., risk) or risk < 1.
-        assert is_ge_0 and is_le_1, (
-            "Risk must be between zero and one"
+    model.patient_data = data
+    llh_no_data = model.likelihood(given_params=given_params, log=return_log)
+    assert llh == llh_no_data, (
+        "whether data is loaded in- or outside llh must make no difference"
+    )
+    if are_params_valid:
+        model.check_and_assign(given_params)
+        llh_no_params = model.likelihood(log=return_log)
+        assert llh_no_params == llh_no_data, (
+            "whether parameters are loaded in- or outside llh must make no difference"
         )
 
 
 @given(
-    model=models(
+    model=st_models(
         modalities=st_modalities(max_size=2),
         spread_probs=floats(0., 1.)
     ),
@@ -787,49 +707,4 @@ def test_draw_patient_diagnoses(model, diag_times):
     )
     assert patient_diagnoses.dtype == bool, (
         "Drawn diagnoses should be bools"
-    )
-
-
-@given(
-    model=models(
-        modalities=st_modalities(max_size=2),
-        spread_probs=floats(0., 1.)
-    ),
-    num_patients=integers(1,100),
-    stage_dist_and_time_dists=st_stage_dist_and_time_dists()
-)
-def test_generate_dataset(model, num_patients, stage_dist_and_time_dists):
-    stage_dist, time_dists = stage_dist_and_time_dists
-    assume('' not in time_dists)
-    generated_data = model.generate_dataset(
-        num_patients=num_patients,
-        stage_dist=stage_dist,
-        time_dists=time_dists,
-    )
-
-    modalities = model.modalities.keys()
-    lvl0_header = generated_data.columns.get_level_values(0)
-    assert all([mod in lvl0_header for mod in modalities]), (
-        "Some model modalities are not present in the generated dataset"
-    )
-    assert "info" in lvl0_header, (
-        "No info column in data header"
-    )
-
-    lvl1_header = generated_data.columns.get_level_values(1)
-    assert all([lnl.name in lvl1_header for lnl in model.lnls]), (
-        f"Some LNLs are not present in the dataset columns"
-    )
-    assert "t_stage" in lvl1_header, (
-        "No T-stage information in data header"
-    )
-
-    expected_shape = (num_patients, len(modalities) * len(model.lnls) + 1)
-    assert generated_data.shape == expected_shape, (
-        "Generated dataset has wrong shape"
-    )
-
-    t_stage_list = list(generated_data["info", "t_stage"].values)
-    assert all([t in list(time_dists.keys()) for t in t_stage_list]), (
-        "Some T-stages in the generated data were not in the original list"
     )
