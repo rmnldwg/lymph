@@ -7,6 +7,7 @@ from numpy.linalg import matrix_power as mat_pow
 
 from .edge import Edge
 from .node import Node
+from .timemarg import Marginalizor, MarginalizorDict
 from .utils import (
     HDFMixin,
     change_base,
@@ -207,6 +208,39 @@ class Unilateral(HDFMixin):
         self.trans_probs = new_spread_probs[num_base_edges:]
 
 
+    @property
+    def diag_time_dists(self) -> MarginalizorDict:
+        """This property holds the probability mass functions for marginalizing over
+        possible diagnose times for each T-stage.
+
+        When setting this property, one may also provide a normal Python dict, in
+        which case it tries to convert it to a :class:`MarginalizorDict`.
+        
+        See Also:
+            :class:`MarginalzorDict`, :class:`Marginalizor`.
+        """
+        return self._diag_time_dists
+
+    @diag_time_dists.setter
+    def diag_time_dists(self, new_dists: Union[dict, MarginalizorDict]):
+        """Assign new :class:`MarginalizorDict` to this property. If it is a normal
+        Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
+        """
+        if isinstance(new_dists, MarginalizorDict):
+            self._diag_time_dists = new_dists
+        elif isinstance(new_dists, dict):
+            warnings.warn("Trying to convert dictionary into MarginalizorDict.")
+            guessed_max_t = len(new_dists.values()[0])
+            self._diag_time_dists = MarginalizorDict(max_t=guessed_max_t)
+            for t_stage, dist in new_dists.items():
+                self._diag_time_dists[t_stage] = dist
+        else:
+            raise TypeError(
+                f"Cannot use type {type(new_dists)} for marginalization over "
+                "diagnose times."
+            )
+
+
     def comp_transition_prob(
         self,
         newstate: List[int],
@@ -297,7 +331,8 @@ class Unilateral(HDFMixin):
     @property
     def state_list(self):
         """Return list of all possible hidden states. They are arranged in the
-        same order as the lymph node levels in the network/graph."""
+        same order as the lymph node levels in the network/graph.
+        """
         try:
             return self._state_list
         except AttributeError:
@@ -593,7 +628,6 @@ class Unilateral(HDFMixin):
     def load_data(
         self,
         data: pd.DataFrame,
-        t_stages: Optional[List[int]] = None,
         modality_spsn: Optional[Dict[str, List[float]]] = None,
         mode: str = "HMM",
     ):
@@ -622,10 +656,6 @@ class Unilateral(HDFMixin):
                 | early   | ``True`` | ``True``  | ``True``  | ``None``  |
                 +---------+----------+-----------+-----------+-----------+
 
-            t_stages: List of T-stages that should be included in the learning
-                process. If ommitted, the list of T-stages is extracted from
-                the :class:`DataFrame`
-
             modality_spsn: Dictionary of specificity :math:`s_P` and :math:`s_N`
                 (in that order) for each observational/diagnostic modality. Can
                 be ommitted if the modalities where already defined.
@@ -639,8 +669,7 @@ class Unilateral(HDFMixin):
 
         # For the Hidden Markov Model
         if mode=="HMM":
-            if t_stages is None:
-                t_stages = list(set(data[("info", "t_stage")]))
+            t_stages = list(set(data[("info", "t_stage")]))
 
             for stage in t_stages:
                 table = data.loc[
@@ -648,6 +677,12 @@ class Unilateral(HDFMixin):
                     self._spsn_tables.keys()
                 ]
                 self._gen_diagnose_matrices(table, stage)
+                if stage not in self.diag_time_dists:
+                    warnings.warn(
+                        "No distribution for marginalizing over diagnose times has "
+                        f"been defined for T-stage {stage}. During inference, all "
+                        "patients in this T-stage will be ignored."
+                    )
 
         # For the Bayesian Network
         elif mode=="BN":
@@ -707,28 +742,52 @@ class Unilateral(HDFMixin):
         return state_probs
 
 
-    def _are_valid_(self, new_spread_probs: np.ndarray) -> bool:
-        """Check that the spread probability (rates) are all within limits.
-        """
-        if new_spread_probs.shape != self.spread_probs.shape:
-            msg = ("Shape of provided spread parameters does not match network")
-            raise ValueError(msg)
-        if np.any(0. > new_spread_probs):
-            return False
-        if np.any(new_spread_probs > 1.):
-            return False
+    def check_and_assign(self, new_params: np.ndarray):
+        """Check that the spread probability (rates) and the parameters for the
+        marginalization over diagnose times are all within limits and assign them to
+        the model.
+        
+        Args:
+            new_params: The set of :attr:`spread_probs` and parameters to provide for
+                updating the parametrized distributions over diagnose times.
 
-        return True
+        Warning:
+            This method assumes that the parametrized distributions (instances of
+            :class:`Marginalizor`) all raise a ``ValueError`` when provided with
+            invalid parameters.
+        """
+        k = len(self.spread_probs)
+        new_spread_probs = new_params[:k]
+        new_marg_params = new_params[k:]
+        
+        try:
+            self.diag_time_dists.update(new_marg_params)
+        except ValueError as val_err:
+            raise ValueError(
+                "Parameters for marginalization over diagnose times are invalid"
+            ) from val_err
+
+        if new_spread_probs.shape != self.spread_probs.shape:
+            raise ValueError(
+                "Shape of provided spread parameters does not match network"
+            )
+        if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
+            raise ValueError(
+                "Spread probs must be between 0 and 1"
+            )
+
+        self.spread_probs = new_spread_probs
 
 
     def _likelihood(
         self,
-        time_dists: Dict[Any, np.ndarray],
         mode: str = "HMM",
         log: bool = True,
     ) -> float:
         """
-        Compute the (log-)likelihood of stored data, using the stored spread probs.
+        Compute the (log-)likelihood of stored data, using the stored spread probs
+        and parameters for the marginalizations over diagnose times (if the respective
+        distributions are parametrized).
 
         This is the core method for computing the likelihood. The user-facing API calls
         it after doing some preliminary checks with the passed arguments.
@@ -736,20 +795,19 @@ class Unilateral(HDFMixin):
         # hidden Markov model
         if mode == "HMM":
             stored_t_stages = set(self.diagnose_matrices.keys())
-            provided_t_stages = set(time_dists.keys())
+            provided_t_stages = set(self.diag_time_dists.keys())
             t_stages = list(stored_t_stages.intersection(provided_t_stages))
 
-            state_probs = {}
-
-            # subtract 1, to also consider healthy starting state (t = 0)
-            max_t = len(time_dists[t_stages[0]]) - 1
-
-            for stage in t_stages:
-                state_probs[stage] = time_dists[stage] @ self._evolve(t_last=max_t)
+            max_t = self.diag_time_dists.max_t
+            evolved_model = self._evolve(t_last=max_t)
 
             llh = 0. if log else 1.
             for stage in t_stages:
-                p = state_probs[stage] @ self.diagnose_matrices[stage]
+                p = (
+                    self.diag_time_dists[stage].pmf
+                    @ evolved_model
+                    @ self.diagnose_matrices[stage]
+                )
                 if log:
                     llh += np.sum(np.log(p))
                 else:
@@ -773,37 +831,27 @@ class Unilateral(HDFMixin):
         self,
         data: Optional[pd.DataFrame] = None,
         given_params: Optional[np.ndarray] = None,
-        includes_binom_probs: bool = True,
-        time_dists: Optional[Dict[Any, np.ndarray]] = None,
-        max_t: int = 10,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
         """
-        Compute (log-)likelihood of (already stored) data, given parameters and
-        optionally a distribution for marginalization over diagnose times.
+        Compute (log-)likelihood of (already stored) data, given the probabilities of
+        spread in the network and the parameters for the distributions used to
+        marginalize over the diagnose times.
 
         Args:
             data: Table with rows of patients and columns of per-LNL involvment. See
                 :meth:`load_data` for more details on how this should look like.
 
-            given_params: The likelihood is a function of these parameters.
+            given_params: The likelihood is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
-            includes_binom_probs: If `True`, `given_params` is expected to contain
-                binomial probabilities that can be used to construct binomial
-                distributions for the marginalization over time.
+            log: When ``True``, the log-likelihood is returned.
 
-            time_dists: Distribution over diagnose times if the `given_params` don't
-                include parameters for binomial distributions. If `includes_binom_probs`
-                is `True`, this is ignored.
-
-            max_t: Maximum number of time steps the HMM is evolved. This is only used
-                when `includes_binom_probs` is set to `True`.
-
-            log: When `True`, the log-likelihood is returned.
-
-            mode: Compute the likelihood using the Bayesian network (`"BN"`) or
-                the hidden Markv model (`"HMM"`). When using the Bayesian net, no
+            mode: Compute the likelihood using the Bayesian network (``"BN"``) or
+                the hidden Markv model (``"HMM"``). When using the Bayesian net, no
                 marginalization over diagnose times is performed.
 
         Returns:
@@ -814,120 +862,19 @@ class Unilateral(HDFMixin):
             self.patient_data = data
 
         if given_params is None:
-            if includes_binom_probs:
-                raise ValueError(
-                    "If binomial probs should be included in parameters, they must be "
-                    "provided as arguments."
-                )
-            return self._likelihood(time_dists, mode, log)
+            return self._likelihood(mode, log)
 
-        if includes_binom_probs:
-            k = len(self.spread_probs)
-            spread_probs = given_params[:k]
-            binom_probs = given_params[k:]
-
-            if np.any(0. > binom_probs) or np.any(binom_probs > 1.):
-                return -np.inf if log else 0.
-
-            stored_t_stages = self.diagnose_matrices.keys()
-            time_dists = {}
-            times = np.arange(max_t+1)
-            for t,bp in zip(stored_t_stages, binom_probs):
-                time_dists[t] = fast_binomial_pmf(times, max_t, bp)
-        else:
-            spread_probs = given_params
-
-        if not self._are_valid_(spread_probs):
+        try:
+            self.check_and_assign(given_params)
+        except ValueError:
             return -np.inf if log else 0.
-
-        self.spread_probs = spread_probs
-        return self._likelihood(time_dists, mode, log)
-
-
-    def binom_marg_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """
-        Compute the likelihood of the (already stored) data, given the spread
-        parameters, marginalized over time of diagnosis via binomial
-        distributions.
-
-        Args:
-            theta: Set of parameters, consisting of the base probabilities
-                :math:`b` and the transition probabilities :math:`t`.
-
-            t_stages: List of T-stages that should be included in the learning.
-
-            max_t: Latest possible diagnose time.
-
-        Returns:
-            The log-likelihood of the data, given te spread parameters and binomial
-            time distributions.
-        """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...p-values for the binomial distribution
-        p = theta[len_spread_probs:]
-
-        if np.any(np.greater(p, 1.)) or np.any(np.less(p, 0.)):
-            return -np.inf
-
-        t = np.arange(max_t + 1)
-        time_dists = {}
-        for i,stage in enumerate(t_stages):
-            time_dists[stage] = fast_binomial_pmf(t, max_t, p[i])
-
-        return self.marginal_log_likelihood(
-            spread_probs, t_stages,
-            time_dists=time_dists
-        )
-
-
-    def time_log_likelihood(
-        self,
-        theta: np.ndarray,
-        t_stages: List[Any],
-        max_t: int = 10
-    ) -> float:
-        """
-        Compute likelihood given the spread parameters and the time of diagnosis
-        for each T-stage.
-
-        Args:
-            theta: Set of parameters, consisting of the spread probabilities
-                (as many as the system has :class:`Edge` instances) and the
-                time of diagnosis for all T-stages.
-
-            t_stages: keywords of T-stages that are present in the dictionary of
-                C matrices and the previously loaded dataset.
-
-            max_t: Largest accepted time-point.
-
-        Returns:
-            The likelihood of the data, given the spread parameters as well as
-            the diagnose time for each T-stage.
-        """
-        # splitting theta into spread parameters and...
-        len_spread_probs = len(theta) - len(t_stages)
-        spread_probs = theta[:len_spread_probs]
-        # ...diagnose times for each T-stage
-        tmp = theta[len_spread_probs:]
-        diag_times = {t_stages[t]: tmp[t] for t in range(len(t_stages))}
-
-        return self.log_likelihood(
-            spread_probs, t_stages,
-            diag_times=diag_times, max_t=max_t, time_dists=None,
-            mode="HMM"
-        )
+        
+        return self._likelihood(mode, log)
 
 
     def risk(
         self,
-        spread_probs: Optional[np.ndarray] = None,
+        given_params: Optional[np.ndarray] = None,
         inv: Optional[np.ndarray] = None,
         diagnoses: Dict[str, np.ndarray] = {},
         diag_time: Optional[int] = None,
@@ -938,8 +885,10 @@ class Unilateral(HDFMixin):
         incomplete) diagnosis.
 
         Args:
-            spread_probs: Set of new spread parameters. If not given (``None``),
-                the currently set parameters will be used.
+            given_params: The risk is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
 
             inv: Specific hidden involvement one is interested in. If only parts
                 of the state are of interest, the remainder can be masked with
@@ -965,9 +914,7 @@ class Unilateral(HDFMixin):
             A single probability value if ``inv`` is specified and an array
             with probabilities for all possible hidden states otherwise.
         """
-        # assign spread_probs to system or use the currently set one
-        if spread_probs is not None:
-            self.spread_probs = spread_probs
+        self.check_and_assign(given_params)
 
         # create one large diagnose vector from the individual modalitie's
         # diagnoses

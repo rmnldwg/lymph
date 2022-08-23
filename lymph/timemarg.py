@@ -1,5 +1,5 @@
 """
-Module that defines a helper class for marginalizing over diagnose times in the
+Module that defines helper classes for marginalizing over diagnose times in the
 model classes.
 """
 import warnings
@@ -54,6 +54,11 @@ class Marginalizor:
         Set the probability mass function of the marginalizor and make sure
         it is normalized.
         """
+        if callable(dist):
+            raise TypeError(
+                "Parametrized distribution can only be provided in the constructor. "
+                "This method can only set a new frozen distribution."
+            )
         dist_arr = np.array(dist)
         cum_dist = np.sum(dist_arr)
         if not np.isclose(cum_dist, 1.):
@@ -91,8 +96,8 @@ class Marginalizor:
 
 class MarginalizorDict(dict):
     """
-    Class that stores a dictionary of marginalizors for each T-stage and ensures
-    they all have the same support.
+    Class that replicates the behaviour of a dictionary of marginalizors for each
+    T-stage, ensuring they all have the same support.
     """
     def __init__(self, *args, max_t: int = 10, **kwargs):
         super().__init__(*args, **kwargs)
@@ -115,9 +120,17 @@ class MarginalizorDict(dict):
             marg = Marginalizor(dist=dist, max_t=self.max_t)
         super().__setitem__(t_stage, marg)
 
-    def update(self, params: Union[List[float], np.ndarray]) -> None:
+    def update(
+        self,
+        params: Union[List[float], np.ndarray],
+        stop_quietly: bool = False,
+    ) -> None:
         """
-        Update all marginalizors stored in this instance that are updateable.
+        Update all marginalizors stored in this instance that are updateable with
+        values from the ``parms`` argument.
+        
+        Use ``stop_quietly`` to avoid raising an error when too few parameters are
+        probided to update all distributions.
         """
         params_iterator = iter(params)
         for _, marg in self.items():
@@ -125,4 +138,6 @@ class MarginalizorDict(dict):
                 try:
                     marg.update(next(params_iterator))
                 except StopIteration:
-                    raise ValueError("Not enough parameters provided")
+                    if not stop_quietly:
+                        raise ValueError("Not enough parameters provided")
+                    break
