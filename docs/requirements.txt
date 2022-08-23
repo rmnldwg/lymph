@@ -1,3 +1,10 @@
+numpy
+scipy
+pandas
+emcee
+h5py
+tables
+tqdm
 sphinx
 sphinx-rtd-theme
 sphinx-autodoc-typehints
