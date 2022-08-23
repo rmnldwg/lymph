@@ -999,6 +999,7 @@ class Unilateral(HDFMixin):
         self,
         num_patients: int,
         stage_dist: Dict[str, float],
+        **_kwargs,
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network
         using the samples and diagnostic modalities that have been set.

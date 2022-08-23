@@ -630,7 +630,7 @@ class Bilateral(HDFMixin):
     def generate_dataset(
         self,
         num_patients: int,
-        stage_dist: List[float],
+        stage_dist: Dict[str, float],
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network.
 
