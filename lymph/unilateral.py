@@ -941,21 +941,23 @@ class Unilateral(HDFMixin):
 
         if involvement is None:
             return post_state_probs
-        else:
-            # if a specific involvement of interest is provided, marginalize the
-            # resulting vector of hidden states to match that involvement of
-            # interest
-            if isinstance(involvement, dict):
-                involvement = np.array([involvement[lnl.name] for lnl in self.lnls])
-            else:
-                involvement = np.array(involvement)
 
-            marg_states = np.zeros(shape=post_state_probs.shape, dtype=bool)
-            for i,state in enumerate(self.state_list):
-                marg_states[i] = np.all(np.equal(involvement, state,
-                                        where=(involvement!=None),
-                                        out=np.ones_like(state, dtype=bool)))
-            return marg_states @ post_state_probs
+        # if a specific involvement of interest is provided, marginalize the
+        # resulting vector of hidden states to match that involvement of
+        # interest
+        if isinstance(involvement, dict):
+            involvement = np.array([involvement[lnl.name] for lnl in self.lnls])
+        else:
+            involvement = np.array(involvement)
+
+        marg_states = np.zeros(shape=post_state_probs.shape, dtype=bool)
+        for i,state in enumerate(self.state_list):
+            marg_states[i] = np.all(np.equal(
+                involvement, state,
+                where=(involvement!=None),
+                out=np.ones_like(state, dtype=bool)
+            ))
+        return marg_states @ post_state_probs
 
 
     def _draw_patient_diagnoses(
