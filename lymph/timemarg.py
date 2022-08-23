@@ -138,6 +138,11 @@ class MarginalizorDict(dict):
             marg = Marginalizor(dist=dist, max_t=self.max_t)
         super().__setitem__(t_stage, marg)
 
+    @property
+    def num_parametric(self) -> int:
+        """Return the number of parametrized distributions."""
+        return len(dist.is_updateable for dist in self.values())
+
     def update(
         self,
         params: Union[List[float], np.ndarray],

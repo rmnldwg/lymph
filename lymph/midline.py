@@ -66,6 +66,8 @@ class MidlineBilateral(HDFMixin):
             graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
         )
         self.use_mixing = use_mixing
+        if self.use_mixing:
+            self.alpha_mix = 0.
 
 
     @property
