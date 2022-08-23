@@ -28,7 +28,11 @@ def test_marginalizor(dist, max_t, param):
     """
     Test the Marginalizor class.
     """
-    fixed_marg = Marginalizor(dist=dist, max_t=max_t)
+    if len(dist) != max_t + 1:
+        with pytest.raises(ValueError):
+            _ = Marginalizor(dist=dist, max_t=max_t)
+
+    fixed_marg = Marginalizor(dist=dist)
 
     assert np.all(fixed_marg.pmf == dist / np.sum(dist)), (
         "Fixed marg was initialized wrongly"
@@ -59,10 +63,3 @@ def test_marginalizor(dist, max_t, param):
 
     with pytest.raises(ValueError):
         _ = Marginalizor(max_t=max_t)
-
-
-def test_marginalizor_dist():
-    """
-    Test the class holding the Marginalizor instances.
-    """
-    assert True

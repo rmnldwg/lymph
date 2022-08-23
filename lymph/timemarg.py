@@ -16,7 +16,7 @@ class Marginalizor:
         self,
         dist: Optional[Union[List[float], np.ndarray]] = None,
         func: Optional[Callable] = None,
-        max_t: int = 10,
+        max_t: Optional[int] = None,
     ) -> None:
         """
         Initialize the marginalizor either with a function or with a fixed distribution.
@@ -28,7 +28,7 @@ class Marginalizor:
                 parameters to get the PMF for its support and freeze it.
             max_t: Support of the marginalization function runs from 0 to max_t.
         """
-        max_t = len(dist) - 1 if dist is not None else max_t
+        max_t = len(dist) - 1 if max_t is None else max_t
         self.support = np.arange(max_t + 1)
 
         if dist is not None:
