@@ -598,12 +598,19 @@ class Bilateral(HDFMixin):
 
         marg_states = {}   # vectors marginalizing over only the states we care about
         for side in ["ipsi", "contra"]:
+            if isinstance(involvement[side], dict):
+                involvement[side] = np.array(
+                    [involvement[side][lnl.name] for lnl in side_model.lnls]
+                )
+            else:
+                involvement[side] = np.array(involvement[side])
+
             side_model = getattr(self, side)
             marg_states[side] = np.zeros(shape=len(side_model.state_list), dtype=bool)
             for i,state in enumerate(side_model.state_list):
                 marg_states[side][i] = np.all(np.equal(
-                    involvement, state,
-                    where=(involvement != None),
+                    involvement[side], state,
+                    where=(involvement[side] != None),
                     out=np.ones_like(state, dtype=bool)
                 ))
 
