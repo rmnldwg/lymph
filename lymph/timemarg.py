@@ -141,7 +141,7 @@ class MarginalizorDict(dict):
     @property
     def num_parametric(self) -> int:
         """Return the number of parametrized distributions."""
-        return len(dist.is_updateable for dist in self.values())
+        return np.sum([dist.is_updateable for dist in self.values()])
 
     def update(
         self,
