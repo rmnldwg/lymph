@@ -33,3 +33,5 @@ repos:
     - remove      # a feature or functionality is removed
     - style       # source code is improved w.r.t. its code quality
     - test        # commits enhance or add to the test suite
+    - merge       # merge one branch into another. Should be ignored by git-chglog
+    - revert      # revert previous commit(s). Should be ignored by git-chglog
