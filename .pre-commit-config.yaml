@@ -19,5 +19,19 @@ repos:
   hooks:
   - id: conventional-pre-commit
     stages: [commit-msg]
-    # optional: list of Conventional Commits types to allow e.g. [feat, fix, ci, chore, test]
-    args: [build, chore, ci, docs, style, refactor, perf, test]
+    args:
+    - build       # changes of the build system or dependencies
+    - change      # commit alters the implementation of an existing feature
+    - chore       # technical or maintenance task not related to feature or user story
+    - ci          # edits to the cintinuous integration scripts/configuration
+    - deprecate   # a feature or functionality will be deprecated
+    - docs        # add, update of revise the documentation
+    - feat        # a new feature was implemented (bump MINOR version)
+    - fix         # an issue or bug has been fixed (bump PATCH version)
+    - perf        # performance improvements that do not alter existing behaviour
+    - refactor    # update shuffles code around but does not alter functionality
+    - remove      # a feature or functionality is removed
+    - style       # source code is improved w.r.t. its code quality
+    - test        # commits enhance or add to the test suite
+    - merge       # merge one branch into another. Should be ignored by git-chglog
+    - revert      # revert previous commit(s). Should be ignored by git-chglog

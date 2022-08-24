@@ -177,7 +177,7 @@ class Unilateral:
         levels. This array is composed of these elements:
 
         +-------------+-------------+-----------------+-------------+
-        | :math:`b_1` | :math:`b_2` | :math:`\\cdots` | :math:`b_n` |
+        | :math:`b_1` | :math:`b_2` | :math:`\\cdots` | :math:`b_n`  |
         +-------------+-------------+-----------------+-------------+
 
         Where :math:`n` is the number of edges between the tumor and the LNLs.

@@ -13,9 +13,14 @@
 import os
 import sys
 
-from lymph import __version__
+from pkg_resources import DistributionNotFound, get_distribution
 
 sys.path.insert(0, os.path.abspath('../..'))
+
+try:
+    __version__ = get_distribution("lymph").version
+except DistributionNotFound:
+    __version__ = "unknown version"
 
 
 # -- Project information -----------------------------------------------------
@@ -46,7 +51,7 @@ extensions = [
 
 # MyST settings
 myst_enable_extensions = ["colon_fence", "dollarmath"]
-jupyter_execute_notebooks = "off"
+nb_execution_mode = "off"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
