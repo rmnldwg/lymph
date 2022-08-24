@@ -48,6 +48,13 @@ dev = [
     "pycln",
     "pylint",
 ]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
+    "myst-nb",
+    "ipython",
+]
 
 [project.urls]
 source = "https://github.com/rmnldwg/lymph"
