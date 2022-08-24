@@ -1,6 +1,9 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+<a name="0.4.2"></a>
+## [0.4.2] - 2022-08-24
+
 ### Documentation
 - fix the issue of docs failing to build
 - remove outdated line in install instructions
@@ -32,5 +35,6 @@
 
 
 [Unreleased]: https://github.com/rmnldwg/lymph/compare/0.4.1...HEAD
+[0.4.2]: https://github.com/rmnldwg/lymph/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
