@@ -1006,7 +1006,7 @@ class Unilateral:
         # resulting vector of hidden states to match that involvement of
         # interest
         if isinstance(involvement, dict):
-            involvement = np.array([involvement[lnl.name] for lnl in self.lnls])
+            involvement = np.array([involvement.get(lnl.name, None) for lnl in self.lnls])
         else:
             involvement = np.array(involvement)
 
