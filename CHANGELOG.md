@@ -1,6 +1,12 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+<a name="0.4.3"></a>
+## [0.4.3] - 2022-09-02
+
+### Bug Fixes
+- incomplete involvement for unilateral risk method does not raise KeyError anymore. Fixes issue [#38]
+
 <a name="0.4.2"></a>
 ## [0.4.2] - 2022-08-24
 
@@ -34,7 +40,10 @@
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/0.4.1...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/0.4.3...HEAD
+[0.4.3]: https://github.com/rmnldwg/lymph/compare/0.4.2...0.4.3
 [0.4.2]: https://github.com/rmnldwg/lymph/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
+
+[#38]: https://github.com/rmnldwg/lymph/issues/38
