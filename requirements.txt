@@ -1,2 +1,9 @@
+numpy
 scipy
-pytest
+pandas
+tqdm
+emcee
+matplotlib
+corner
+jupyter
+.
