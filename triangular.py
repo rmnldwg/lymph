@@ -2,6 +2,9 @@
 In this module, I try to make the matrix multiplication of two recursively upper
 diagonal matrices more efficient.
 """
+from timeit import default_timer
+from typing import Tuple
+
 import numpy as np
 
 from lymph.unilateral import change_base
@@ -61,12 +64,25 @@ class RUTMatrix(np.ndarray):
 
         raise ValueError("Specify one of the quadrants")
 
+    
+def measure_multiplication(
+    method: str,
+    power: int,
+    seed: int = 42
+) -> Tuple[np.ndarray,float]:
+    """
+    Measure the multiplication of two recursively upper triangular matrices of
+    shape (2^power x 2^power). Once using the "numpy" `method`, and once using "mine".
+    """
+    rng = np.random.default_rng(seed)
 
-if __name__ == "__main__":
-    num = 2
-    states = gen_states(num)
-    A = np.random.uniform(size=(2**num,2**num)).view(RUTMatrix)
-    B = np.random.uniform(size=(2**num,2**num)).view(RUTMatrix)
+    states = gen_states(power)
+    A = rng.uniform(size=(2**power,2**power))
+    B = rng.uniform(size=(2**power,2**power))
+
+    if method == "mine":
+        A = A.view(RUTMatrix)
+        B = B.view(RUTMatrix)
 
     for i,i_state in enumerate(states):
         for j,j_state in enumerate(states):
@@ -74,4 +90,17 @@ if __name__ == "__main__":
                 A[i,j] = 0.
                 B[i,j] = 0.
 
-    print(A @ B - A.view(np.ndarray) @ B.view(np.ndarray))
+    start = default_timer()
+    result = A @ B
+    end = default_timer()
+
+    return result, end - start
+
+
+if __name__ == "__main__":
+    numpy_result, numpy_time = measure_multiplication(method="numpy", power=10)
+    mine_result, mine_time = measure_multiplication(method="mine", power=10)
+
+    assert np.all(np.isclose(numpy_result, mine_result))
+    print(f"Numpy took {numpy_time} s")
+    print(f"Mine took {mine_time} s")
