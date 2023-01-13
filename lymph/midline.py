@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from .bilateral import Bilateral
-from .timemarg import MarginalizorDictjd
+from .timemarg import MarginalizorDict
 
 
 class MidlineBilateral:
