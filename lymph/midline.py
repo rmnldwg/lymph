@@ -64,12 +64,19 @@ class MidlineBilateral:
         self.noext = Bilateral(
             graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
         )
+        self.ext_unknown = Bilateral(
+            graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
+        )
+        self.noext_unknown = Bilateral(
+            graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
+        )
         self.use_mixing = use_mixing
         if self.use_mixing:
             self.alpha_mix = 0.
 
         self.noext.diag_time_dists = self.ext.diag_time_dists
-
+        self.ext_unknown.diag_time_dists = self.ext.diag_time_dists
+        self.noext_unknown.diag_time_dists = self.ext.diag_time_dists
 
     @property
     def graph(self) -> Dict[Tuple[str], List[str]]:
