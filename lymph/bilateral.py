@@ -427,6 +427,26 @@ class Bilateral:
 
         self.spread_probs = new_spread_probs
 
+    def t_stages(self):
+        stored_t_stages = set(self.ipsi.diagnose_matrices.keys())
+        provided_t_stages = set(self.ipsi.diag_time_dists.keys())
+        t_stages = list(stored_t_stages.intersection(provided_t_stages))
+
+        return t_stages
+    
+    def state_probs_ipsi(self):
+        max_t = self.diag_time_dists.max_t
+        state_probs = {}
+        state_probs["ipsi"] = self.ipsi._evolve(t_last=max_t)
+
+        return state_probs["ipsi"]
+
+    def state_probs_contra(self):
+        max_t = self.diag_time_dists.max_t
+        state_probs = {}
+        state_probs["contra"] = self.contra._evolve(t_last=max_t)
+
+        return state_probs["contra"]
 
     def _likelihood(
         self,
@@ -467,6 +487,31 @@ class Bilateral:
 
         return llh
 
+    def _likelihood2(
+        self,
+        stage,
+        state_probs,
+    ) -> float:
+        """Compute the (log-)likelihood of data, using the stored spread probs and
+        fixed distributions for marginalizing over diagnose times.
+
+        This method mainly exists so that the checking and assigning of the
+        spread probs can be skipped.
+        """
+        
+        joint_state_probs = (
+            state_probs["ipsi"].T
+             @ np.diag(self.ipsi.diag_time_dists[stage].pmf)
+             @ state_probs["contra"]
+        )
+        p = np.sum(
+            self.ipsi.diagnose_matrices[stage]
+            * (joint_state_probs
+                @ self.contra.diagnose_matrices[stage]),
+            axis=0
+        )
+
+        return p
 
     def likelihood(
         self,

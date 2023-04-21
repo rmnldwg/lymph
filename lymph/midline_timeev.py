@@ -64,19 +64,13 @@ class MidlineBilateral:
         self.noext = Bilateral(
             graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
         )
-        self.ext_unknown = Bilateral(
-            graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
-        )
-        self.noext_unknown = Bilateral(
-            graph=graph, base_symmetric=False, trans_symmetric=trans_symmetric
-        )
+        
         self.use_mixing = use_mixing
         if self.use_mixing:
             self.alpha_mix = 0.
 
         self.noext.diag_time_dists = self.ext.diag_time_dists
-        self.ext_unknown.diag_time_dists = self.ext.diag_time_dists
-        self.noext_unknown.diag_time_dists = self.ext.diag_time_dists
+
 
     @property
     def graph(self) -> Dict[Tuple[str], List[str]]:
@@ -126,32 +120,21 @@ class MidlineBilateral:
 
         self.ext.ipsi.base_probs = new_params[:k]
         self.noext.ipsi.base_probs = new_params[:k]
-        self.ext_unknown.ipsi.base_probs = new_params[:k]
-        self.noext_unknown.ipsi.base_probs = new_params[:k]
 
         if self.use_mixing:
             self.noext.contra.base_probs = new_params[k:2*k]
-            self.noext_unknown.contra.base_probs = new_params[k:2*k]
             self.alpha_mix = new_params[-1]
             # compute linear combination
             self.ext.contra.base_probs = (
                 self.alpha_mix * self.ext.ipsi.base_probs
                 + (1. - self.alpha_mix) * self.noext.contra.base_probs
             )
-            self.ext_unknown.contra.base_probs = (
-                self.alpha_mix * self.ext_unknown.ipsi.base_probs
-                + (1. - self.alpha_mix) * self.noext_unknown.contra.base_probs
-            )
         else:
             self.ext.contra.base_probs = new_params[k:2*k]
             self.noext.contra.base_probs = new_params[2*k:3*k]
-            self.ext_unknown.contra.base_probs = new_params[k:2*k]
-            self.noext_unknown.contra.base_probs = new_params[2*k:3*k]
 
         # avoid unnecessary double computation of ipsilateral transition matrix
         self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
-        self.noext_unknown.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
-        self.ext_unknown.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -168,13 +151,8 @@ class MidlineBilateral:
         """
         self.noext.trans_probs = new_params
         self.ext.trans_probs = new_params
-        self.noext_unknown.trans_probs = new_params
-        self.ext_unknown.trans_probs = new_params
-
         # avoid unnecessary double computation of ipsilateral transition matrix
         self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
-        self.noext_unknown.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
-        self.ext_unknown.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
 
     @property
@@ -225,8 +203,6 @@ class MidlineBilateral:
         """
         self.ext.diag_time_dists = new_dists
         self.noext.diag_time_dists = self.ext.diag_time_dists
-        self.noext_unknown.diag_time_dists = self.ext.diag_time_dists
-        self.ext_unknown.diag_time_dists = self.ext.diag_time_dists
 
 
     @property
@@ -253,8 +229,6 @@ class MidlineBilateral:
         """
         self.noext.modalities = modality_spsn
         self.ext.modalities = modality_spsn
-        self.noext_unknown.modalities = modality_spsn
-        self.ext_unknown.modalities = modality_spsn
 
     @property
     def midext_prob(self):
@@ -271,7 +245,24 @@ class MidlineBilateral:
     def midext_prob(self, new_params):
         """A variable containing the midline extension probability
         """
-        self._midext_prob = new_params[-1]
+        self._midext_prob = new_params[-2]
+
+    @property
+    def midext_trans(self):
+        """Assign the last of the new_params to the midline extension transition probability
+        """
+        try:
+            return self._midext_trans
+        except AttributeError as attr_err:
+            raise AttributeError(
+                "No midline extension transition probability has been assigned"
+            ) from attr_err
+
+    @midext_trans.setter
+    def midext_trans(self, new_params):
+        """A variable containing the midline extension transition probability
+        """
+        self._midext_trans = new_params[-1]
 
     @property
     def patient_data(self):
@@ -365,9 +356,8 @@ class MidlineBilateral:
             :meth:`Unilateral.load_data`: Data loading method of the unilateral
             network.
         """
-        ext_data = data.loc[(data[("info", "tumor", "midline_extension")]==True)]
-        noext_data = data.loc[(data[("info", "tumor", "midline_extension")]==False)]
-        unknown_data = data.loc[(data['info', 'tumor', 'midline_extension']!=False) & (data['info', 'tumor', 'midline_extension']!=True)] 
+        ext_data = data
+        noext_data = data
 
         self.ext.load_data(
             ext_data,
@@ -379,18 +369,7 @@ class MidlineBilateral:
             modality_spsn=modality_spsn,
             mode=mode
         )
-        if len(unknown_data)>0:
-            self.ext_unknown.load_data(
-                unknown_data,
-                modality_spsn=modality_spsn,
-                mode=mode
-            )
 
-            self.noext_unknown.load_data(
-                unknown_data,
-                modality_spsn=modality_spsn,
-                mode=mode
-            )
 
     def check_and_assign(self, new_params: np.ndarray):
         """Check that the spread probability (rates) and the parameters for the
@@ -414,14 +393,11 @@ class MidlineBilateral:
 
         try:
             self.ext.ipsi.diag_time_dists.update(new_marg_params)
-            self.ext_unknown.ipsi.diag_time_dists.update(new_marg_params)
             self.ext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
             self.noext.ipsi.diag_time_dists = self.ext.ipsi.diag_time_dists
             self.noext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
-            self.ext_unknown.contra.diag_time_dists = self.ext_unknown.ipsi.diag_time_dists
-            self.noext_unknown.ipsi.diag_time_dists = self.ext_unknown.ipsi.diag_time_dists
-            self.noext_unknown.contra.diag_time_dists = self.ext_unknown.ipsi.diag_time_dists
             self.midext_prob = new_params
+            self.midext_trans = new_params
         except ValueError as val_err:
             raise ValueError(
                 "Parameters for marginalization over diagnose times are invalid"
@@ -435,9 +411,9 @@ class MidlineBilateral:
             raise ValueError(
                 "Spread probs must be between 0 and 1"
             )
-        if 0. > self.midext_prob or self.midext_prob > 1.:
+        if 0. > np.any(0. > new_params) or np.any(new_params > 1.):
             raise ValueError(
-                "Midline extension probability must be between 0 and 1"
+                "Probabilitiex must be between 0 and 1"
             )
 
         self.spread_probs = new_spread_probs
@@ -490,31 +466,24 @@ class MidlineBilateral:
 
         llh = 0. if log else 1.
 
-        if len(self.patient_data.loc[(self.patient_data['info', 'tumor', 'midline_extension']!=False) & (self.patient_data['info', 'tumor', 'midline_extension']!=True)])>0:
-            state_probs = {}
-            state_probs["ipsi"] = self.ext_unknown.state_probs_ipsi()
-            state_probs["contra"] = self.ext_unknown.state_probs_contra()
-            state_probs2 = {}
-            state_probs2["ipsi"] = self.noext_unknown.state_probs_ipsi()
-            state_probs2["contra"] = self.noext_unknown.state_probs_contra()
-            t_stages = list(set(self.patient_data[("info","tumor","t_stage")]))
-            t_stages = self.ext_unknown.t_stages()
+        
+        state_probs = {}
+        state_probs["ipsi"] = self.ext.state_probs_ipsi()
+        state_probs["contra"] = self.ext.state_probs_contra()
+        state_probs2 = {}
+        state_probs2["ipsi"] = self.noext.state_probs_ipsi()
+        state_probs2["contra"] = self.noext.state_probs_contra()
+        t_stages = list(set(self.patient_data[("info","tumor","t_stage")]))
+        t_stages = self.ext.t_stages()
         
 
-            for stage in t_stages:
-                p = self.ext_unknown._likelihood2(stage=stage, state_probs=state_probs)*self.midext_prob
-                p2 = self.noext_unknown._likelihood2(stage=stage, state_probs=state_probs2)*(1-self.midext_prob)
-                llh += np.sum(np.log(p+p2))
-
-        if len(self.patient_data.loc[(self.patient_data['info', 'tumor', 'midline_extension']==False) | (self.patient_data['info', 'tumor', 'midline_extension']==True)])>0:
-            if log:
-                llh += self.ext._likelihood(log=log) + np.log(self.midext_prob)*len(self.patient_data.loc[(self.patient_data['info', 'tumor', 'midline_extension']==True)])
-                llh += self.noext._likelihood(log=log) + np.log(1-self.midext_prob)*len(self.patient_data.loc[(self.patient_data['info', 'tumor', 'midline_extension']==False)])
-            else:
-                llh *= self.ext._likelihood(log=log)*self.midext_prob**len(self.patient_data.loc[(self.patient_data['info', 'tumor', 'midline_extension']==True)])
-                llh *= self.noext._likelihood(log=log)*(1-self.midext_prob)**len(self.patient_data.loc[(self.patient_data['info', 'tumor', 'midline_extension']==False)])
-
+        for stage in t_stages:
+            p = self.ext._likelihood2(stage=stage, state_probs=state_probs)*(self.midext_prob)
+            p2 = self.noext._likelihood2(stage=stage, state_probs=state_probs2)*(1-self.midext_prob)
+            llh += np.sum(np.log(p+p2))
+            
         return llh
+
 
 
     def risk(
