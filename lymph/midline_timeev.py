@@ -7,7 +7,7 @@ from .bilateral import Bilateral
 from .timemarg import MarginalizorDict
 
 
-class MidlineBilateral:
+class MidlineBilateraltime:
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
     mid-sagittal line.
@@ -230,10 +230,11 @@ class MidlineBilateral:
         self.noext.modalities = modality_spsn
         self.ext.modalities = modality_spsn
 
+    """
     @property
     def midext_prob(self):
-        """Assign the last of the new_params to the midline extension probability
-        """
+        Assign the last of the new_params to the midline extension probability
+        
         try:
             return self._midext_prob
         except AttributeError as attr_err:
@@ -243,10 +244,11 @@ class MidlineBilateral:
 
     @midext_prob.setter
     def midext_prob(self, new_params):
-        """A variable containing the midline extension probability
-        """
+        A variable containing the midline extension probability
+        
         self._midext_prob = new_params[-2]
-
+    """
+        
     @property
     def midext_trans(self):
         """Assign the last of the new_params to the midline extension transition probability
@@ -396,7 +398,7 @@ class MidlineBilateral:
             self.ext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
             self.noext.ipsi.diag_time_dists = self.ext.ipsi.diag_time_dists
             self.noext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
-            self.midext_prob = new_params
+            #self.midext_prob = new_params
             self.midext_trans = new_params
         except ValueError as val_err:
             raise ValueError(
@@ -413,7 +415,7 @@ class MidlineBilateral:
             )
         if 0. > np.any(0. > new_params) or np.any(new_params > 1.):
             raise ValueError(
-                "Probabilitiex must be between 0 and 1"
+                "Probabilities must be between 0 and 1"
             )
 
         self.spread_probs = new_spread_probs
@@ -478,8 +480,8 @@ class MidlineBilateral:
         
 
         for stage in t_stages:
-            p = self.ext._likelihood2(stage=stage, state_probs=state_probs)*(self.midext_prob)
-            p2 = self.noext._likelihood2(stage=stage, state_probs=state_probs2)*(1-self.midext_prob)
+            p = self.ext._likelihood2(stage=stage, state_probs=state_probs)*(1-(1-self.midext_trans)**10)
+            p2 = self.noext._likelihood2(stage=stage, state_probs=state_probs2)*(1-self.midext_trans)**10
             llh += np.sum(np.log(p+p2))
             
         return llh
