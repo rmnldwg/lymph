@@ -480,8 +480,8 @@ class MidlineBilateraltime:
         
 
         for stage in t_stages:
-            p = self.ext._likelihood2(stage=stage, state_probs=state_probs)*(1-(1-self.midext_trans)**10)
-            p2 = self.noext._likelihood2(stage=stage, state_probs=state_probs2)*(1-self.midext_trans)**10
+            p = self.ext._likelihood2(stage=stage, state_probs=state_probs) * (1-((1-self.midext_trans) ** 10))
+            p2 = self.noext._likelihood2(stage=stage, state_probs=state_probs2) * ((1-self.midext_trans) ** 10)
             llh += np.sum(np.log(p+p2))
             
         return llh

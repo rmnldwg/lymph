@@ -369,17 +369,20 @@ class MidlineBilateral:
         noext_data = data.loc[(data[("info", "tumor", "midline_extension")]==False)]
         unknown_data = data.loc[(data['info', 'tumor', 'midline_extension']!=False) & (data['info', 'tumor', 'midline_extension']!=True)] 
 
-        self.ext.load_data(
-            ext_data,
-            modality_spsn=modality_spsn,
-            mode=mode
-        )
-        self.noext.load_data(
-            noext_data,
-            modality_spsn=modality_spsn,
-            mode=mode
-        )
-        if len(unknown_data)>0:
+        if len(ext_data) > 0:
+            self.ext.load_data(
+                ext_data,
+                modality_spsn=modality_spsn,
+                mode=mode
+            )
+        
+        if len(noext_data) > 0:
+            self.noext.load_data(
+                noext_data,
+                modality_spsn=modality_spsn,
+                mode=mode
+            )
+        if len(unknown_data) > 0 & len(ext_data) + len(noext_data) > 0:
             self.ext_unknown.load_data(
                 unknown_data,
                 modality_spsn=modality_spsn,
@@ -387,6 +390,19 @@ class MidlineBilateral:
             )
 
             self.noext_unknown.load_data(
+                unknown_data,
+                modality_spsn=modality_spsn,
+                mode=mode
+            )
+
+        if len(unknown_data) > 0 & len(ext_data) + len(noext_data) == 0:
+            self.ext.load_data(
+                unknown_data,
+                modality_spsn=modality_spsn,
+                mode=mode
+            )
+
+            self.noext.load_data(
                 unknown_data,
                 modality_spsn=modality_spsn,
                 mode=mode
