@@ -13,13 +13,13 @@ class Node(object):
         """
         Args:
             name: Name of the node.
-            state: Current state this LNL is in. Can be in {0, 1}.
+            state: Current state this LNL is in. Can be in {0, 1, 2}.
             typ: Can be either ``"lnl"``, ``"tumor"``.
         """
         if type(name) is not str:
             raise TypeError("Name of node must be a string")
-        if int(state) not in [0,1]:
-            raise ValueError("State must be castable to 0 or 1")
+        if int(state) not in [0,1,2]:
+            raise ValueError("State must be castable to 0, 1 or 2")
         if typ not in ["lnl", "tumor"]:
             raise ValueError("Typ of node must be either `lnl` or `tumor`")
 
@@ -49,12 +49,12 @@ class Node(object):
         """Set the state of the node and make sure the state of a tumor node
         cannot be changed."""
         if self.typ == "lnl":
-            if int(newstate) not in [0,1]:
-                raise ValueError("State of node must be either 0 or 1")
+            if int(newstate) not in [0,1,2]:
+                raise ValueError("State of node must be either 0, 1 or 2")
             self._state = int(newstate)
 
         elif self.typ == "tumor":
-            self._state = 1
+            self._state = 2
 
 
     @property
@@ -81,7 +81,7 @@ class Node(object):
     @staticmethod
     @lru_cache
     def trans_prob(
-        in_states: Tuple[int], in_weights: Tuple[float]
+        in_states: Tuple[int], in_weights: Tuple[float], microscopic_parameter: int
     ) -> List[float]:
         """Compute probability of a random variable to remain in its state (0)
         or switch to be involved (1) based on its parent's states and the
@@ -104,7 +104,10 @@ class Node(object):
         """
         healthy_prob = 1.
         for state, weight in zip(in_states, in_weights):
-            healthy_prob *= (1. - weight) ** state
+            if state == 1:
+                healthy_prob *= (1. - weight*microscopic_parameter)
+            elif state == 2:
+                healthy_prob *= (1. - weight)
         return [healthy_prob, 1. - healthy_prob]
 
 
@@ -117,7 +120,7 @@ class Node(object):
 
         Args:
             obs: Diagnose/observation for the node.
-            obstable: 2x2 matrix containing info about sensitivity and
+            obstable: 2x3 matrix containing info about sensitivity and
                 specificty of the observational/diagnostic modality from which
                 `obs` was obtained.
 
