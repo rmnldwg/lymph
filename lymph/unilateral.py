@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from .edge import Edge
-from .node import Node
-from .timemarg import MarginalizorDict
+from edge import Edge
+from node import Node
+from timemarg import MarginalizorDict
 
 
 def change_base(
@@ -80,9 +80,11 @@ class Unilateral:
         if len(name_list) != len(name_set):
             raise ValueError("No tumor and LNL can have the same name")
 
-        self.nodes = []        # list of all nodes in the graph
-        self.tumors = []       # list of nodes with type tumour
-        self.lnls = []         # list of all lymph node levels
+        self.nodes = []                     # list of all nodes in the graph
+        self.tumors = []                    # list of nodes with type tumour
+        self.lnls = []                      # list of all lymph node levels
+        self.microscopic_parameter = []     # holds the micrscropic spread scaling parameter
+        self.growth_parameter = []          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
 
         for key in graph:
             self.nodes.append(Node(name=key[1], typ=key[0]))
@@ -117,7 +119,10 @@ class Unilateral:
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
+            f"the microscopic scaling parameter is {self.microscopic_parameter}. \n"
+            f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_parameter}.\n"
             + " ".join([f"{e}" for e in self.edges])
+            
         )
         return string
 
@@ -309,11 +314,15 @@ class Unilateral:
         """
         res = 1.
         for i, lnl in enumerate(self.lnls):
-            if not lnl.state:
+            if lnl.state < 1:
                 in_states = tuple(edge.start.state for edge in lnl.inc)
                 in_weights = tuple(edge.t for edge in lnl.inc)
-                res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
-            elif not newstate[i]:
+                res *= Node.trans_prob(in_states, in_weights, self.microscopic_parameter)[newstate[i]]
+            elif lnl.state == 1 and newstate[i] ==2:
+                res *= self.growth_parameter
+            elif lnl.state == 1 and newstate[i] ==1:
+                res *= 1 - self.growth_parameter
+            elif not newstate[i]:  #this might lead to a problem
                 res = 0.
                 break
 
@@ -363,11 +372,11 @@ class Unilateral:
         """
         if not hasattr(self, "_state_list"):
             self._state_list = np.zeros(
-                shape=(2**len(self.lnls), len(self.lnls)), dtype=int
+                shape=(3**len(self.lnls), len(self.lnls)), dtype=int
             )
-        for i in range(2**len(self.lnls)):
+        for i in range(3**len(self.lnls)):
             self._state_list[i] = [
-                int(digit) for digit in change_base(i, 2, length=len(self.lnls))
+                int(digit) for digit in change_base(i, 3, length=len(self.lnls))
             ]
 
     @property
@@ -417,8 +426,7 @@ class Unilateral:
         for i in range(len(self.state_list)):
             self._allowed_transitions[i] = []
             for j in range(len(self.state_list)):
-                if not np.any(np.greater(self.state_list[i,:],
-                                         self.state_list[j,:])):
+                if not np.any(np.greater(self.state_list[i,:],self.state_list[j,:])) and not np.any(self.state_list[j,:] - self.state_list[i,:] > 1): # here we only allow a transition that increases by 1
                     self._allowed_transitions[i].append(j)
 
     @property
@@ -448,7 +456,7 @@ class Unilateral:
         zero.
         """
         if not hasattr(self, "_transition_matrix"):
-            shape = (2**len(self.lnls), 2**len(self.lnls))
+            shape = (3**len(self.lnls), 3**len(self.lnls))
             self._transition_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
@@ -506,7 +514,7 @@ class Unilateral:
         try:
             modality_spsn = {}
             for mod, table in self._spsn_tables.items():
-                modality_spsn[mod] = [table[0,0], table[1,1]]
+                modality_spsn[mod] = [table[0,0], table[1,2]]
             return modality_spsn
 
         except AttributeError:
@@ -534,24 +542,63 @@ class Unilateral:
             del self._obs_list
 
         self._spsn_tables = {}
-        for mod, spsn in modality_spsn.items():
-            if not isinstance(mod, str):
-                msg = ("Modality names must be strings.")
-                raise TypeError(msg)
+        #Here i can make this more sleek by making a method for the repeating sequence
+        if 'clinical' in list(modality_spsn.keys()):
+            for mod, spsn in modality_spsn['clinical'].items():
+                if not isinstance(mod, str):
+                    msg = ("Modality names must be strings.")
+                    raise TypeError(msg)
+                
+                has_len_2 = len(spsn) == 2
+                is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+                is_below_ub = np.all(np.less_equal(spsn, 1.))
+                if not has_len_2 or not is_above_lb or not is_below_ub:
+                    msg = ("For each modality provide a list of two decimals "
+                        "between 0.5 and 1.0 as specificity & sensitivity "
+                        "respectively.")
+                    raise ValueError(msg)
 
-            has_len_2 = len(spsn) == 2
-            is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-            is_below_ub = np.all(np.less_equal(spsn, 1.))
-            if not has_len_2 or not is_above_lb or not is_below_ub:
-                msg = ("For each modality provide a list of two decimals "
-                       "between 0.5 and 1.0 as specificity & sensitivity "
-                       "respectively.")
-                raise ValueError(msg)
+                sp, sn = spsn
+                self._spsn_tables[mod] = np.array([[sp     , sp     , 1. - sn],
+                                                [1. - sp, 1. - sp, sn     ]])
+        if 'pathological' in list(modality_spsn.keys()):
+            for mod, spsn in modality_spsn['pathological'].items():
+                if not isinstance(mod, str):
+                    msg = ("Modality names must be strings.")
+                    raise TypeError(msg)
 
-            sp, sn = spsn
-            self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
-                                               [1. - sp, sn     ]])
+                has_len_2 = len(spsn) == 2
+                is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+                is_below_ub = np.all(np.less_equal(spsn, 1.))
+                if not has_len_2 or not is_above_lb or not is_below_ub:
+                    msg = ("For each modality provide a list of two decimals "
+                        "between 0.5 and 1.0 as specificity & sensitivity "
+                        "respectively.")
+                    raise ValueError(msg)
 
+                sp, sn = spsn
+                self._spsn_tables[mod] = np.array([[sp     , 1. - sn, 1. - sn],
+                                                [1. - sp, sn     , sn     ]])
+                
+        # if 'true_state' in list(modality_spsn.keys()): #this is not complete yet. I do not know how the specificity and sensitivity of a true_state diagnostics would work (a modality that can diagnose microscopic and macroscopic)
+        #     for mod, spsn in modality_spsn['true_state'].items():
+        #         if not isinstance(mod, str):
+        #             msg = ("Modality names must be strings.")
+        #             raise TypeError(msg)
+
+        #         has_len_2 = len(spsn) == 2
+        #         is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+        #         is_below_ub = np.all(np.less_equal(spsn, 1.))
+        #         if not has_len_2 or not is_above_lb or not is_below_ub:
+        #             msg = ("For each modality provide a list of two decimals "
+        #                 "between 0.5 and 1.0 as specificity & sensitivity "
+        #                 "respectively.")
+        #             raise ValueError(msg)
+
+        #         sp1, sn1, sp2, sn2 = spsn
+        #         self._spsn_tables[mod] = np.array([[1, 0, 0],
+        #                                            [0, 1, 0],
+        #                                            [0, 0, 1]])
 
     def _gen_observation_matrix(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains
@@ -806,9 +853,10 @@ class Unilateral:
             invalid parameters.
         """
         k = len(self.spread_probs)
-        new_spread_probs = new_params[:k]
-        new_marg_params = new_params[k:]
-
+        new_microscopic_parameter = new_params[0]
+        new_growth_parameter = new_params[1]
+        new_spread_probs = new_params[2:k+2]
+        new_marg_params = new_params[k+2:]
         try:
             self.diag_time_dists.update(new_marg_params)
         except ValueError as val_err:
@@ -826,6 +874,18 @@ class Unilateral:
             )
 
         self.spread_probs = new_spread_probs
+
+        if new_microscopic_parameter < 0. or new_microscopic_parameter > 4.:
+            raise ValueError(
+                "microscopic scaling parameter must be above 0 and below 4"
+            )
+        self.microscopic_parameter = new_microscopic_parameter
+
+        if new_growth_parameter < 0. or new_growth_parameter > 1.:
+            raise ValueError(
+                "growth probability must be between 0 and 1"
+            )
+        self.growth_parameter = new_growth_parameter
 
 
     def _likelihood(
@@ -873,7 +933,8 @@ class Unilateral:
 
             p = state_probs @ self.diagnose_matrices["BN"]
             llh = np.sum(np.log(p)) if log else np.prod(p)
-
+        if np.isnan(llh):
+            print(self)
         return llh
 
 
@@ -973,7 +1034,6 @@ class Unilateral:
         for i,state in enumerate(self.state_list):
             self.state = state
             diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
-
         # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
@@ -991,14 +1051,11 @@ class Unilateral:
 
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
         joint_diag_state = marg_state_probs * diagnose_probs
-
         # get marginal over X from joint
         marg_diagnose_prob = np.sum(joint_diag_state)
-
         # compute vector of probabilities for all possible involvements given
         # the specified diagnosis P(X|Z=z)
         post_state_probs =  joint_diag_state / marg_diagnose_prob
-
         if involvement is None:
             return post_state_probs
 
@@ -1083,7 +1140,7 @@ class Unilateral:
 class System(Unilateral):
     """Class kept for compatibility after renaming to :class:`Unilateral`.
 
-    See Also:
+    See Also: 
         :class:`Unilateral`
     """
     def __init__(self, *args, **kwargs):
