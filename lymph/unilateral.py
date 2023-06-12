@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from edge import Edge
-from node import Node
-from timemarg import MarginalizorDict
+from .edge import Edge
+from .node import Node
+from .timemarg import MarginalizorDict
 
 
 def change_base(
@@ -83,12 +83,13 @@ class Unilateral:
         self.nodes = []                     # list of all nodes in the graph
         self.tumors = []                    # list of nodes with type tumour
         self.lnls = []                      # list of all lymph node levels
+        self.states = states
         if states == 3:
             self.microscopic_parameter = []     # holds the micrscropic spread scaling parameter
             self.growth_parameter = []          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
 
         for key in graph:
-            self.nodes.append(Node(name=key[1], typ=key[0], states = self.states))
+            self.nodes.append(Node(name=key[1], typ=key[0], allowed_states = self.states))
 
         for node in self.nodes:
             if node.typ == "tumor":
@@ -128,8 +129,6 @@ class Unilateral:
                 f"the microscopic scaling parameter is {self.microscopic_parameter}. \n"
                 f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_parameter}.\n"
             )
-
-        print(string)
         return string
 
 
@@ -324,7 +323,7 @@ class Unilateral:
                 if lnl.state < 1:
                     in_states = tuple(edge.start.state for edge in lnl.inc)
                     in_weights = tuple(edge.t for edge in lnl.inc)
-                    res *= Node.trans_prob(in_states, in_weights, self.microscopic_parameter)[newstate[i]]
+                    res *= Node.trans_prob_trinary(in_states, in_weights, self.microscopic_parameter)[newstate[i]]
                 elif lnl.state == 1 and newstate[i] ==2:
                     res *= self.growth_parameter
                 elif lnl.state == 1 and newstate[i] ==1:
@@ -337,7 +336,7 @@ class Unilateral:
                 if not lnl.state:
                     in_states = tuple(edge.start.state for edge in lnl.inc)
                     in_weights = tuple(edge.t for edge in lnl.inc)
-                    res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
+                    res *= Node.trans_prob_binary(in_states, in_weights)[newstate[i]]
                 elif not newstate[i]:
                     res = 0.
                     break
@@ -603,9 +602,9 @@ class Unilateral:
         self._spsn_tables = {}
         
         if self.states == 2:
-            self.binary_modality(self, modality_spsn)
+            self.binary_modality(modality_spsn)
         if self.states == 3:
-            self.trinary_modality(self, modality_spsn)
+            self.trinary_modality(modality_spsn)
                 
         # here one could add more modalities which could be applied for more states or for matrices with more than one specificity and sensitivity. 
         # Important: modalities would need to be adapted if we change the the number of states or produce matrices with more than one specificity and sensitivity.

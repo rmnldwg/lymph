@@ -16,9 +16,10 @@ class Node(object):
             state: Current state this LNL is in. Can be in any allowed state e.g. for 3: {0, 1, 2}.
             typ: Can be either ``"lnl"``, ``"tumor"``.
         """
+        self.allowed_states = allowed_states
         if type(name) is not str:
             raise TypeError("Name of node must be a string")
-        if int(state) not in list(range(self.allowed_states)):
+        if int(state) not in list(range(allowed_states)):
             raise ValueError("State must be castable to the allowed states")
         if typ not in ["lnl", "tumor"]:
             raise ValueError("Typ of node must be either `lnl` or `tumor`")
@@ -26,6 +27,7 @@ class Node(object):
         self.name = name
         self.typ = typ
         self.state = int(state)
+        
 
         self.inc = []
         self.out = []
@@ -49,7 +51,7 @@ class Node(object):
         """Set the state of the node and make sure the state of a tumor node
         cannot be changed."""
         if self.typ == "lnl":
-            if int(newstate) not in range(list(self.allowed_states)):
+            if int(newstate) not in list(range(self.allowed_states)):
                 raise ValueError("State of node must be either 0, 1,... allowed_states - 1")
             self._state = int(newstate)
 
