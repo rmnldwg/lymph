@@ -66,7 +66,7 @@ class Unilateral:
     representing it as a directed graph. The progression itself can be modelled
     via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], Set[str]], **_kwargs):
+    def __init__(self, graph: Dict[Tuple[str], Set[str]], states: int = 3, **_kwargs):
         """Initialize the underlying graph:
 
         Args:
@@ -83,11 +83,12 @@ class Unilateral:
         self.nodes = []                     # list of all nodes in the graph
         self.tumors = []                    # list of nodes with type tumour
         self.lnls = []                      # list of all lymph node levels
-        self.microscopic_parameter = []     # holds the micrscropic spread scaling parameter
-        self.growth_parameter = []          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
+        if states == 3:
+            self.microscopic_parameter = []     # holds the micrscropic spread scaling parameter
+            self.growth_parameter = []          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
 
         for key in graph:
-            self.nodes.append(Node(name=key[1], typ=key[0]))
+            self.nodes.append(Node(name=key[1], typ=key[0], states = self.states))
 
         for node in self.nodes:
             if node.typ == "tumor":
@@ -119,11 +120,16 @@ class Unilateral:
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            f"the microscopic scaling parameter is {self.microscopic_parameter}. \n"
-            f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_parameter}.\n"
             + " ".join([f"{e}" for e in self.edges])
-            
         )
+
+        if self.states == 3:
+            string += (
+                f"the microscopic scaling parameter is {self.microscopic_parameter}. \n"
+                f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_parameter}.\n"
+            )
+
+        print(string)
         return string
 
 
@@ -313,18 +319,28 @@ class Unilateral:
             Transition probability :math:`t`.
         """
         res = 1.
-        for i, lnl in enumerate(self.lnls):
-            if lnl.state < 1:
-                in_states = tuple(edge.start.state for edge in lnl.inc)
-                in_weights = tuple(edge.t for edge in lnl.inc)
-                res *= Node.trans_prob(in_states, in_weights, self.microscopic_parameter)[newstate[i]]
-            elif lnl.state == 1 and newstate[i] ==2:
-                res *= self.growth_parameter
-            elif lnl.state == 1 and newstate[i] ==1:
-                res *= 1 - self.growth_parameter
-            elif not newstate[i]:  #this might lead to a problem
-                res = 0.
-                break
+        if self.states == 3:
+            for i, lnl in enumerate(self.lnls):
+                if lnl.state < 1:
+                    in_states = tuple(edge.start.state for edge in lnl.inc)
+                    in_weights = tuple(edge.t for edge in lnl.inc)
+                    res *= Node.trans_prob(in_states, in_weights, self.microscopic_parameter)[newstate[i]]
+                elif lnl.state == 1 and newstate[i] ==2:
+                    res *= self.growth_parameter
+                elif lnl.state == 1 and newstate[i] ==1:
+                    res *= 1 - self.growth_parameter
+                elif not newstate[i]:  #this might lead to a problem
+                    res = 0.
+                    break
+        elif self.states == 2:
+            for i, lnl in enumerate(self.lnls):
+                if not lnl.state:
+                    in_states = tuple(edge.start.state for edge in lnl.inc)
+                    in_weights = tuple(edge.t for edge in lnl.inc)
+                    res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
+                elif not newstate[i]:
+                    res = 0.
+                    break
 
         if acquire:
             self.state = newstate
@@ -372,11 +388,11 @@ class Unilateral:
         """
         if not hasattr(self, "_state_list"):
             self._state_list = np.zeros(
-                shape=(3**len(self.lnls), len(self.lnls)), dtype=int
+                shape=(self.states**len(self.lnls), len(self.lnls)), dtype=int
             )
-        for i in range(3**len(self.lnls)):
+        for i in range(self.states**len(self.lnls)):
             self._state_list[i] = [
-                int(digit) for digit in change_base(i, 3, length=len(self.lnls))
+                int(digit) for digit in change_base(i, self.states, length=len(self.lnls))
             ]
 
     @property
@@ -456,7 +472,7 @@ class Unilateral:
         zero.
         """
         if not hasattr(self, "_transition_matrix"):
-            shape = (3**len(self.lnls), 3**len(self.lnls))
+            shape = (self.states**len(self.lnls), self.states**len(self.lnls))
             self._transition_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
@@ -514,7 +530,7 @@ class Unilateral:
         try:
             modality_spsn = {}
             for mod, table in self._spsn_tables.items():
-                modality_spsn[mod] = [table[0,0], table[1,2]]
+                modality_spsn[mod] = [table[0,0], table[1,self.states-1]]
             return modality_spsn
 
         except AttributeError:
@@ -523,12 +539,55 @@ class Unilateral:
             return {}
 
 
+    def binary_modality(self, modality_spsn: Dict[Any, List[float]]):
+        for mod, spsn in modality_spsn.items():
+            if not isinstance(mod, str):
+                msg = ("Modality names must be strings.")
+                raise TypeError(msg)
+            has_len_2 = len(spsn) == 2
+            is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+            is_below_ub = np.all(np.less_equal(spsn, 1.))
+            if not has_len_2 or not is_above_lb or not is_below_ub:
+                msg = ("For each modality provide a list of two decimals "
+                       "between 0.5 and 1.0 as specificity & sensitivity "
+                       "respectively.")
+                raise ValueError(msg)
+            sp, sn = spsn
+            self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
+                                               [1. - sp, sn     ]])
+
+    def trinary_modality(self, modality_spsn: Dict[Any, List[float]]):
+        keys = ['clinical','pathological','pathologic']
+        for key in keys:
+            if key in list(modality_spsn.keys()):
+                for mod, spsn in modality_spsn[key].items():
+                    if not isinstance(mod, str):
+                        msg = ("Modality names must be strings.")
+                        raise TypeError(msg)
+                    
+                    has_len_2 = len(spsn) == 2
+                    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+                    is_below_ub = np.all(np.less_equal(spsn, 1.))
+                    if not has_len_2 or not is_above_lb or not is_below_ub:
+                        msg = ("For each modality provide a list of two decimals "
+                            "between 0.5 and 1.0 as specificity & sensitivity "
+                            "respectively.")
+                        raise ValueError(msg)
+
+                    sp, sn = spsn
+                    if key == 'clinical':
+                        self._spsn_tables[mod] = np.array([[sp     , sp     , 1. - sn],
+                                                        [1. - sp, 1. - sp, sn     ]])
+                    elif key == 'pathological' or 'pathologic':
+                        self._spsn_tables[mod] = np.array([[sp     , 1. - sn, 1. - sn],
+                                                        [1. - sp, sn     , sn     ]])
+
     @modalities.setter
     def modalities(self, modality_spsn: Dict[Any, List[float]]):
         """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different
-        diagnostic modalities, create a 2x2 matrix for every disgnostic
+        diagnostic modalities, create a 2xstates matrix for every disgnostic
         modality that stores
-
+        e.g. 2x2
         .. math::
             \\begin{pmatrix}
             s_P & 1 - s_N \\\\
@@ -542,63 +601,14 @@ class Unilateral:
             del self._obs_list
 
         self._spsn_tables = {}
-        #Here i can make this more sleek by making a method for the repeating sequence
-        if 'clinical' in list(modality_spsn.keys()):
-            for mod, spsn in modality_spsn['clinical'].items():
-                if not isinstance(mod, str):
-                    msg = ("Modality names must be strings.")
-                    raise TypeError(msg)
+        
+        if self.states == 2:
+            self.binary_modality(self, modality_spsn)
+        if self.states == 3:
+            self.trinary_modality(self, modality_spsn)
                 
-                has_len_2 = len(spsn) == 2
-                is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-                is_below_ub = np.all(np.less_equal(spsn, 1.))
-                if not has_len_2 or not is_above_lb or not is_below_ub:
-                    msg = ("For each modality provide a list of two decimals "
-                        "between 0.5 and 1.0 as specificity & sensitivity "
-                        "respectively.")
-                    raise ValueError(msg)
-
-                sp, sn = spsn
-                self._spsn_tables[mod] = np.array([[sp     , sp     , 1. - sn],
-                                                [1. - sp, 1. - sp, sn     ]])
-        if 'pathological' in list(modality_spsn.keys()):
-            for mod, spsn in modality_spsn['pathological'].items():
-                if not isinstance(mod, str):
-                    msg = ("Modality names must be strings.")
-                    raise TypeError(msg)
-
-                has_len_2 = len(spsn) == 2
-                is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-                is_below_ub = np.all(np.less_equal(spsn, 1.))
-                if not has_len_2 or not is_above_lb or not is_below_ub:
-                    msg = ("For each modality provide a list of two decimals "
-                        "between 0.5 and 1.0 as specificity & sensitivity "
-                        "respectively.")
-                    raise ValueError(msg)
-
-                sp, sn = spsn
-                self._spsn_tables[mod] = np.array([[sp     , 1. - sn, 1. - sn],
-                                                [1. - sp, sn     , sn     ]])
-                
-        # if 'true_state' in list(modality_spsn.keys()): #this is not complete yet. I do not know how the specificity and sensitivity of a true_state diagnostics would work (a modality that can diagnose microscopic and macroscopic)
-        #     for mod, spsn in modality_spsn['true_state'].items():
-        #         if not isinstance(mod, str):
-        #             msg = ("Modality names must be strings.")
-        #             raise TypeError(msg)
-
-        #         has_len_2 = len(spsn) == 2
-        #         is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-        #         is_below_ub = np.all(np.less_equal(spsn, 1.))
-        #         if not has_len_2 or not is_above_lb or not is_below_ub:
-        #             msg = ("For each modality provide a list of two decimals "
-        #                 "between 0.5 and 1.0 as specificity & sensitivity "
-        #                 "respectively.")
-        #             raise ValueError(msg)
-
-        #         sp1, sn1, sp2, sn2 = spsn
-        #         self._spsn_tables[mod] = np.array([[1, 0, 0],
-        #                                            [0, 1, 0],
-        #                                            [0, 0, 1]])
+        # here one could add more modalities which could be applied for more states or for matrices with more than one specificity and sensitivity. 
+        # Important: modalities would need to be adapted if we change the the number of states or produce matrices with more than one specificity and sensitivity.
 
     def _gen_observation_matrix(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains
@@ -853,10 +863,26 @@ class Unilateral:
             invalid parameters.
         """
         k = len(self.spread_probs)
-        new_microscopic_parameter = new_params[0]
-        new_growth_parameter = new_params[1]
-        new_spread_probs = new_params[2:k+2]
-        new_marg_params = new_params[k+2:]
+        if self.states == 2:
+            new_spread_probs = new_params[:k]
+            new_marg_params = new_params[k:]
+        if self.states == 3:
+            new_microscopic_parameter = new_params[0]
+            new_growth_parameter = new_params[1]
+            new_spread_probs = new_params[2:k+2]
+            new_marg_params = new_params[k+2:]
+            if new_microscopic_parameter < 0. or new_microscopic_parameter > 4.:
+                raise ValueError(
+                    "microscopic scaling parameter must be above 0 and below 4"
+                )
+            self.microscopic_parameter = new_microscopic_parameter
+
+            if new_growth_parameter < 0. or new_growth_parameter > 1.:
+                raise ValueError(
+                    "growth probability must be between 0 and 1"
+                )
+            self.growth_parameter = new_growth_parameter
+
         try:
             self.diag_time_dists.update(new_marg_params)
         except ValueError as val_err:
@@ -875,17 +901,6 @@ class Unilateral:
 
         self.spread_probs = new_spread_probs
 
-        if new_microscopic_parameter < 0. or new_microscopic_parameter > 4.:
-            raise ValueError(
-                "microscopic scaling parameter must be above 0 and below 4"
-            )
-        self.microscopic_parameter = new_microscopic_parameter
-
-        if new_growth_parameter < 0. or new_growth_parameter > 1.:
-            raise ValueError(
-                "growth probability must be between 0 and 1"
-            )
-        self.growth_parameter = new_growth_parameter
 
 
     def _likelihood(
@@ -933,8 +948,6 @@ class Unilateral:
 
             p = state_probs @ self.diagnose_matrices["BN"]
             llh = np.sum(np.log(p)) if log else np.prod(p)
-        if np.isnan(llh):
-            print(self)
         return llh
 
 

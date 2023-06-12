@@ -9,17 +9,17 @@ class Node(object):
     system. This serves as one part of a lightweight network setup (the other
     one is the :class:`Edge` class).
     """
-    def __init__(self, name: str, state: int = 0, typ: str = "lnl"):
+    def __init__(self, name: str, state: int = 0, typ: str = "lnl", allowed_states: int = 3):
         """
         Args:
             name: Name of the node.
-            state: Current state this LNL is in. Can be in {0, 1, 2}.
+            state: Current state this LNL is in. Can be in any allowed state e.g. for 3: {0, 1, 2}.
             typ: Can be either ``"lnl"``, ``"tumor"``.
         """
         if type(name) is not str:
             raise TypeError("Name of node must be a string")
-        if int(state) not in [0,1,2]:
-            raise ValueError("State must be castable to 0, 1 or 2")
+        if int(state) not in list(range(self.allowed_states)):
+            raise ValueError("State must be castable to the allowed states")
         if typ not in ["lnl", "tumor"]:
             raise ValueError("Typ of node must be either `lnl` or `tumor`")
 
@@ -49,12 +49,12 @@ class Node(object):
         """Set the state of the node and make sure the state of a tumor node
         cannot be changed."""
         if self.typ == "lnl":
-            if int(newstate) not in [0,1,2]:
-                raise ValueError("State of node must be either 0, 1 or 2")
+            if int(newstate) not in range(list(self.allowed_states)):
+                raise ValueError("State of node must be either 0, 1,... allowed_states - 1")
             self._state = int(newstate)
 
         elif self.typ == "tumor":
-            self._state = 2
+            self._state = self.allowed_states - 1
 
 
     @property
@@ -71,7 +71,7 @@ class Node(object):
         """Set the type of the node (either ``"tumor"`` or ``"lnl"``)."""
         if newtyp == "tumor":
             self._typ = newtyp
-            self.state = 1
+            self.state = self.allowed_states - 1
         elif newtyp == "lnl":
             self._typ = newtyp
         else:
@@ -80,7 +80,7 @@ class Node(object):
 
     @staticmethod
     @lru_cache
-    def trans_prob(
+    def trans_prob_trinary(
         in_states: Tuple[int], in_weights: Tuple[float], microscopic_parameter: int
     ) -> List[float]:
         """Compute probability of a random variable to remain in its state (0)
@@ -109,6 +109,31 @@ class Node(object):
             elif state == 2:
                 healthy_prob *= (1. - weight)
         return [healthy_prob, 1. - healthy_prob]
+    
+    @staticmethod
+    @lru_cache
+    def trans_prob_binary(
+        in_states: Tuple[int], in_weights: Tuple[float]
+    ) -> List[float]:
+        """Compute probability of a random variable to remain in its state (0)
+        or switch to be involved (1) based on its parent's states and the
+        weights of the connecting arcs. This is a static, cached method for
+        better performance.
+        Args:
+            in_states: States of the parent nodes.
+            in_weights: Weights of the incoming arcs.
+        Returns:
+            Probability to remain healthy and probability to become metastatic
+            as a list of length 2.
+        Note:
+            This function should only be called when the :class:`Node`, to
+            which the incoming weights and states refer to, is in state ``0``.
+            Otherwise, meaning it is already involved/metastatic, it must stay
+            in this state no matter what, because self-healing is forbidden.
+        """
+        healthy_prob = 1.
+        for state, weight in zip(in_states, in_weights):
+            healthy_prob *= (1. - weight) ** state
 
 
     def obs_prob(
@@ -120,7 +145,7 @@ class Node(object):
 
         Args:
             obs: Diagnose/observation for the node.
-            obstable: 2x3 matrix containing info about sensitivity and
+            obstable: 2xallowed_states matrix containing info about sensitivity and
                 specificty of the observational/diagnostic modality from which
                 `obs` was obtained.
 
