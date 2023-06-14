@@ -126,7 +126,7 @@ class Unilateral:
 
         if self.states == 3:
             string += (
-                f"the microscopic scaling parameter is {self.microscopic_parameter}. \n"
+                f" the microscopic scaling parameter is {self.microscopic_parameter}. \n"
                 f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_parameter}.\n"
             )
         return string
@@ -870,9 +870,9 @@ class Unilateral:
             new_growth_parameter = new_params[1]
             new_spread_probs = new_params[2:k+2]
             new_marg_params = new_params[k+2:]
-            if new_microscopic_parameter < 0. or new_microscopic_parameter > 4.:
+            if new_microscopic_parameter < 0. or new_microscopic_parameter > 1.1:
                 raise ValueError(
-                    "microscopic scaling parameter must be above 0 and below 4"
+                    "microscopic scaling parameter must be above 0 and below 1.1"
                 )
             self.microscopic_parameter = new_microscopic_parameter
 
