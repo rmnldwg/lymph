@@ -136,7 +136,7 @@ class Node(object):
         healthy_prob = 1.
         for state, weight in zip(in_states, in_weights):
             healthy_prob *= (1. - weight) ** state
-
+        return [healthy_prob, 1. - healthy_prob]
 
     def obs_prob(
         self, obs: Union[float, int], obstable: np.ndarray = np.eye(2)
