@@ -8,7 +8,7 @@ class Edge(object):
     represented by the :class:`Node` class. It only holds its start and end
     node, as well as the transition probability.
     """
-    def __init__(self, start: Node, end: Node, t: float = 0.):
+    def __init__(self, start: Node, end: Node, t: float = 0.,states: int = 3, microscopic_spread: float = 0.):
         """
         Args:
             start: Parent node
@@ -28,7 +28,8 @@ class Edge(object):
         self.end = end
         self.end.inc.append(self)
         self.t = t
-
+        self.states = states
+        self.microscopic_spread = microscopic_spread
 
     def __str__(self):
         """Print basic info"""
@@ -40,6 +41,7 @@ class Edge(object):
 
     @t.setter
     def t(self, new_t: float):
+        new_t *= self.microscopic_spread if self.start.state == 1 and self.states == 3 else 1
         if new_t <= 1. and new_t >= 0.:
             self._t = new_t
         else:
