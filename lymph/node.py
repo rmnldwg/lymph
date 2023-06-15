@@ -9,14 +9,14 @@ class Node(object):
     system. This serves as one part of a lightweight network setup (the other
     one is the :class:`Edge` class).
     """
-    def __init__(self, name: str, state: int = 0, typ: str = "lnl", allowed_states: int = 3):
+    def __init__(self, name: str, state: int = 0, typ: str = "lnl", allowed_states: int = 3, growth_parameter: float = 0):
         """
         Args:
             name: Name of the node.
             state: Current state this LNL is in. Can be in any allowed state e.g. for 3: {0, 1, 2}.
             typ: Can be either ``"lnl"``, ``"tumor"``.
         """
-        self.allowed_states = allowed_states
+        self.allowed_states = int(allowed_states)
         if type(name) is not str:
             raise TypeError("Name of node must be a string")
         if int(state) not in list(range(allowed_states)):
@@ -27,7 +27,7 @@ class Node(object):
         self.name = name
         self.typ = typ
         self.state = int(state)
-        
+        self.growth_parameter = float(growth_parameter)
 
         self.inc = []
         self.out = []
@@ -78,65 +78,39 @@ class Node(object):
             self._typ = newtyp
         else:
             raise ValueError("Only types 'tumor' and 'lnl' are available.")
-
-
-    @staticmethod
-    @lru_cache
-    def trans_prob_trinary(
-        in_states: Tuple[int], in_weights: Tuple[float], microscopic_parameter: int
-    ) -> List[float]:
-        """Compute probability of a random variable to remain in its state (0)
-        or switch to be involved (1) based on its parent's states and the
-        weights of the connecting arcs. This is a static, cached method for
-        better performance.
-
-        Args:
-            in_states: States of the parent nodes.
-            in_weights: Weights of the incoming arcs.
-
-        Returns:
-            Probability to remain healthy and probability to become metastatic
-            as a list of length 2.
-
-        Note:
-            This function should only be called when the :class:`Node`, to
-            which the incoming weights and states refer to, is in state ``0``.
-            Otherwise, meaning it is already involved/metastatic, it must stay
-            in this state no matter what, because self-healing is forbidden.
-        """
-        healthy_prob = 1.
-        for state, weight in zip(in_states, in_weights):
-            if state == 1:
-                healthy_prob *= (1. - weight*microscopic_parameter)
-            elif state == 2:
-                healthy_prob *= (1. - weight)
-        return [healthy_prob, 1. - healthy_prob]
     
-    @staticmethod
     @lru_cache
-    def trans_prob_binary(
-        in_states: Tuple[int], in_weights: Tuple[float]
-    ) -> List[float]:
-        """Compute probability of a random variable to remain in its state (0)
-        or switch to be involved (1) based on its parent's states and the
-        weights of the connecting arcs. This is a static, cached method for
-        better performance.
+    def trans_prob(self, new_state) -> float:
+        """Compute probability of a random variable to transition into new_state, 
+        cached method for better performance.
+
         Args:
-            in_states: States of the parent nodes.
-            in_weights: Weights of the incoming arcs.
+            new_state: new state of node
+
         Returns:
-            Probability to remain healthy and probability to become metastatic
-            as a list of length 2.
-        Note:
-            This function should only be called when the :class:`Node`, to
-            which the incoming weights and states refer to, is in state ``0``.
-            Otherwise, meaning it is already involved/metastatic, it must stay
-            in this state no matter what, because self-healing is forbidden.
+            Probability to transition to the new_state
         """
-        healthy_prob = 1.
-        for state, weight in zip(in_states, in_weights):
-            healthy_prob *= (1. - weight) ** state
-        return [healthy_prob, 1. - healthy_prob]
+        print(self.inc)
+        if new_state < self.state:
+            return 0
+        else:
+            healthy_prob = 1
+            in_weights = tuple(edge.t for edge in self.inc)
+            for weight in in_weights:
+                healthy_prob *= (1. - weight)
+            
+            transition_list = [healthy_prob, 1 - healthy_prob, 1 - self.growth_parameter, self.growth_parameter]
+            #in theory we do not need to calculate the whole list. we could do some optimizations here, but I think we should go in this direction of using a function that only takes new state as input.
+            if new_state == 0:
+                return transition_list[0]
+            elif new_state == 1 and self.state == 0:
+                return transition_list[1]
+            elif new_state == 1 and self.state == 1:
+                return transition_list[2] if self.allowed_states == 2 else 1
+            elif new_state == 2 and self.state == 1:
+                return transition_list[3]
+            elif new_state == 2 and self.state == 2:
+                return 1
 
     def obs_prob(
         self, obs: Union[float, int], obstable: np.ndarray = np.eye(2)

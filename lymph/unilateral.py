@@ -85,11 +85,11 @@ class Unilateral:
         self.lnls = []                      # list of all lymph node levels
         self.states = states
         if states == 3:
-            self.microscopic_parameter = []     # holds the micrscropic spread scaling parameter
-            self.growth_parameter = []          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
+            self.microscopic_parameter = 0     # holds the micrscropic spread scaling parameter
+            self.growth_parameter = 0          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
 
         for key in graph:
-            self.nodes.append(Node(name=key[1], typ=key[0], allowed_states = self.states))
+            self.nodes.append(Node(name=key[1], typ=key[0], allowed_states = self.states, growth_parameter = self.growth_parameter))
 
         for node in self.nodes:
             if node.typ == "tumor":
@@ -296,6 +296,14 @@ class Unilateral:
                 f"Cannot use type {type(new_dists)} for marginalization over "
                 "diagnose times."
             )
+        
+    def microscopic_parameter_setter(self, microscopic_parameter):
+        """Set the microscopic spread probabilities for the connections among the LNLs.
+        """
+        for i, edge in enumerate(self.trans_edges):
+            edge.microscopic_spread = microscopic_parameter
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
 
 
     def comp_transition_prob(
@@ -317,33 +325,13 @@ class Unilateral:
         Returns:
             Transition probability :math:`t`.
         """
-        res = 1.
-        if self.states == 3:
-            for i, lnl in enumerate(self.lnls):
-                if lnl.state < 1:
-                    in_states = tuple(edge.start.state for edge in lnl.inc)
-                    in_weights = tuple(edge.t for edge in lnl.inc)
-                    res *= Node.trans_prob_trinary(in_states, in_weights, self.microscopic_parameter)[newstate[i]]
-                elif lnl.state == 1 and newstate[i] ==2:
-                    res *= self.growth_parameter
-                elif lnl.state == 1 and newstate[i] ==1:
-                    res *= 1 - self.growth_parameter
-                elif not newstate[i]:  #this might lead to a problem
-                    res = 0.
-                    break
-        elif self.states == 2:
-            for i, lnl in enumerate(self.lnls):
-                if not lnl.state:
-                    in_states = tuple(edge.start.state for edge in lnl.inc)
-                    in_weights = tuple(edge.t for edge in lnl.inc)
-                    res *= Node.trans_prob_binary(in_states, in_weights)[newstate[i]]
-                elif not newstate[i]:
-                    res = 0.
-                    break
-
+        res = 1
+        for i, lnl in enumerate(self.lnls):
+            res *= lnl.trans_prob(new_state = newstate[i])
+            if res == 0:
+                break
         if acquire:
             self.state = newstate
-
         return res
 
 
