@@ -84,12 +84,9 @@ class Unilateral:
         self.tumors = []                    # list of nodes with type tumour
         self.lnls = []                      # list of all lymph node levels
         self.states = states
-        if states == 3:
-            self.microscopic_parameter = 0     # holds the micrscropic spread scaling parameter
-            self.growth_parameter = 0          # holds the growth probability parameter for a LNL to change from micrscopic to macroscopic involvement
 
         for key in graph:
-            self.nodes.append(Node(name=key[1], typ=key[0], allowed_states = self.states, growth_parameter = self.growth_parameter))
+            self.nodes.append(Node(name=key[1], typ=key[0], allowed_states = self.states))
 
         for node in self.nodes:
             if node.typ == "tumor":
@@ -100,17 +97,22 @@ class Unilateral:
         self.edges = []        # list of all edges connecting nodes in the graph
         self.base_edges = []   # list of edges, going out from tumors
         self.trans_edges = []  # list of edges, connecting LNLs
+        self.growth_edges = [] # list of edges, connecting LNLs to themselves --> growth edges
 
         for key, values in graph.items():
+            if key[0] != 'tumor':
+                    self.edges.append(Edge(self.find_node(key[1]), self.find_node(key[1])))
             for value in values:
                 self.edges.append(Edge(self.find_node(key[1]),
                                        self.find_node(value)))
 
         for edge in self.edges:
-            if edge.start.typ == "tumor":
+            if edge.start.typ == "tumor" and not edge.is_growth:
                 self.base_edges.append(edge)
+            elif edge.is_growth:
+                self.growth_edges.append(edge)
             else:
-                self.trans_edges.append(edge)
+                self.trans_edges.append(edge) 
 
 
     def __str__(self):
@@ -121,13 +123,13 @@ class Unilateral:
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e}" for e in self.edges])
+            + " ".join([f"{e}" for e in self.base_edges]) + "\n" + " ".join([f"{e}" for e in self.trans_edges])
         )
 
         if self.states == 3:
             string += (
-                f" the microscopic scaling parameter is {self.microscopic_parameter}. \n"
-                f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_parameter}.\n"
+                f" the microscopic scaling parameter is {self.trans_edges[-1].microscopic_parameter}. \n"
+                f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_edges[0].growth_probability}.\n"
             )
         return string
 
@@ -177,7 +179,17 @@ class Unilateral:
             raise ValueError("length of newstate must match # of LNLs")
 
         for i, node in enumerate(self.lnls):  # only set lnl's states
-            node.state = newstate[i]
+            if node.state != newstate[i]:
+                node.state = newstate[i]
+                for edge in node.out:
+                    edge.base_t = edge.base_t #updates the transmission probability. here we could define an 'update' method in edge
+            
+        
+
+        #here we need to reload all edges, as a change in state also leads to a change in transmission probability (inc and out)
+
+        # if hasattr(self, "_transition_matrix"):
+        #     del self._transition_matrix 
 
 
     @property
@@ -197,7 +209,7 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge.t for edge in self.base_edges], dtype=float)
+        return np.array([edge.base_t for edge in self.base_edges], dtype=float)
 
     @base_probs.setter
     def base_probs(self, new_base_probs):
@@ -205,7 +217,7 @@ class Unilateral:
         the LNLs.
         """
         for i, edge in enumerate(self.base_edges):
-            edge.t = new_base_probs[i]
+            edge.base_t = new_base_probs[i]
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -213,7 +225,7 @@ class Unilateral:
 
     @property
     def trans_probs(self):
-        """Return the spread probablities of the connections between the lymph
+        """Return the 'base' spread probablities of the connections between the lymph
         node levels. Here, "trans" stands for "transmission" (among the LNLs),
         not "transition" as in the transition to another state.
 
@@ -226,15 +238,48 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge.t for edge in self.trans_edges], dtype=float)
+        return np.array([edge.base_t for edge in self.trans_edges], dtype=float)
 
     @trans_probs.setter
     def trans_probs(self, new_trans_probs):
         """Set the spread probabilities for the connections among the LNLs.
         """
         for i, edge in enumerate(self.trans_edges):
-            edge.t = new_trans_probs[i]
+            edge.base_t = new_trans_probs[i]
 
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
+
+    @property
+    def growth_probability(self):
+        """Return the growth probablities of the lymph
+        node levels.
+        """
+        return self.growth_edges[0].base_t
+
+    @growth_probability.setter
+    def growth_probability(self, new_growth_probability):
+        """Set the the growth probablities of the lymph node levels.
+        """
+        for i, edge in enumerate(self.growth_edges):
+            edge.base_t = new_growth_probability
+
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
+
+    @property
+    def microscopic_parameter(self) -> float:
+        """Return the microscopic spread parameter of the connections between the lymph
+        node levels.
+        """
+        return self.trans_edges[-1].microscopic_parameter
+    
+    @microscopic_parameter.setter
+    def microscopic_parameter(self, microscopic_parameter):
+        """Set the microscopic spread probabilities for the connections among the LNLs.
+        """
+        for i, edge in enumerate(self.trans_edges):
+            edge.microscopic_parameter = microscopic_parameter
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
@@ -294,18 +339,8 @@ class Unilateral:
         else:
             raise TypeError(
                 f"Cannot use type {type(new_dists)} for marginalization over "
-                "diagnose times."
-            )
+                "diagnose times.")
         
-    def microscopic_parameter_setter(self, microscopic_parameter):
-        """Set the microscopic spread probabilities for the connections among the LNLs.
-        """
-        for i, edge in enumerate(self.trans_edges):
-            edge.microscopic_spread = microscopic_parameter
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
-
-
     def comp_transition_prob(
         self,
         newstate: List[int],
@@ -855,20 +890,20 @@ class Unilateral:
             new_marg_params = new_params[k:]
         if self.states == 3:
             new_microscopic_parameter = new_params[0]
-            new_growth_parameter = new_params[1]
+            new_growth_probability = new_params[1]
             new_spread_probs = new_params[2:k+2]
             new_marg_params = new_params[k+2:]
-            if new_microscopic_parameter < 0. or new_microscopic_parameter > 1.1:
+            if new_microscopic_parameter < 0. or new_microscopic_parameter > 1:
                 raise ValueError(
-                    "microscopic scaling parameter must be above 0 and below 1.1"
+                    "microscopic scaling parameter must be above 0 and below 1"
                 )
             self.microscopic_parameter = new_microscopic_parameter
 
-            if new_growth_parameter < 0. or new_growth_parameter > 1.:
+            if new_growth_probability < 0. or new_growth_probability > 1.:
                 raise ValueError(
                     "growth probability must be between 0 and 1"
                 )
-            self.growth_parameter = new_growth_parameter
+            self.growth_probability = new_growth_probability
 
         try:
             self.diag_time_dists.update(new_marg_params)

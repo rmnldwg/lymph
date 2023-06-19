@@ -9,7 +9,7 @@ class Node(object):
     system. This serves as one part of a lightweight network setup (the other
     one is the :class:`Edge` class).
     """
-    def __init__(self, name: str, state: int = 0, typ: str = "lnl", allowed_states: int = 3, growth_parameter: float = 0):
+    def __init__(self, name: str, state: int = 0, typ: str = "lnl", allowed_states: int = 3):
         """
         Args:
             name: Name of the node.
@@ -27,8 +27,6 @@ class Node(object):
         self.name = name
         self.typ = typ
         self.state = int(state)
-        self.growth_parameter = float(growth_parameter)
-
         self.inc = []
         self.out = []
 
@@ -78,8 +76,8 @@ class Node(object):
             self._typ = newtyp
         else:
             raise ValueError("Only types 'tumor' and 'lnl' are available.")
-    
-    @lru_cache
+
+    # caching does not work anymore here
     def trans_prob(self, new_state) -> float:
         """Compute probability of a random variable to transition into new_state, 
         cached method for better performance.
@@ -90,27 +88,31 @@ class Node(object):
         Returns:
             Probability to transition to the new_state
         """
-        print(self.inc)
         if new_state < self.state:
             return 0
         else:
             healthy_prob = 1
-            in_weights = tuple(edge.t for edge in self.inc)
-            for weight in in_weights:
-                healthy_prob *= (1. - weight)
-            
-            transition_list = [healthy_prob, 1 - healthy_prob, 1 - self.growth_parameter, self.growth_parameter]
+            growth_prob = 1
+            for edge in self.inc:
+                if edge.is_growth:
+                    growth_prob = edge.t
+                else:
+                    healthy_prob *= (1. - edge.t)
+
+            transition_list = [healthy_prob, 1 - healthy_prob, 1 - growth_prob, growth_prob]
             #in theory we do not need to calculate the whole list. we could do some optimizations here, but I think we should go in this direction of using a function that only takes new state as input.
             if new_state == 0:
                 return transition_list[0]
             elif new_state == 1 and self.state == 0:
                 return transition_list[1]
             elif new_state == 1 and self.state == 1:
-                return transition_list[2] if self.allowed_states == 2 else 1
+                return transition_list[2] if self.allowed_states == 3 else 1
             elif new_state == 2 and self.state == 1:
                 return transition_list[3]
             elif new_state == 2 and self.state == 2:
                 return 1
+            elif new_state == 2 and self.state == 0:
+                return 0
 
     def obs_prob(
         self, obs: Union[float, int], obstable: np.ndarray = np.eye(2)
