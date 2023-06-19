@@ -43,6 +43,7 @@ class Node(object):
             return self._state
         except AttributeError:
             raise AttributeError("State has not been set yet.")
+        
 
     @state.setter
     def state(self, newstate: int):
@@ -65,6 +66,7 @@ class Node(object):
             return self._typ
         except AttributeError:
             raise AttributeError("Type of node has not been set yet.")
+        
 
     @typ.setter
     def typ(self, newtyp: str):
@@ -76,6 +78,7 @@ class Node(object):
             self._typ = newtyp
         else:
             raise ValueError("Only types 'tumor' and 'lnl' are available.")
+        
 
     # caching does not work anymore here
     def trans_prob(self, new_state) -> float:
@@ -113,6 +116,7 @@ class Node(object):
                 return 1
             elif new_state == 2 and self.state == 0:
                 return 0
+
 
     def obs_prob(
         self, obs: Union[float, int], obstable: np.ndarray = np.eye(2)

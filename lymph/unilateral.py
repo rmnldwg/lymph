@@ -101,10 +101,9 @@ class Unilateral:
 
         for key, values in graph.items():
             if key[0] != 'tumor':
-                    self.edges.append(Edge(self.find_node(key[1]), self.find_node(key[1])))
+                self.edges.append(Edge(self.find_node(key[1]), self.find_node(key[1])))
             for value in values:
-                self.edges.append(Edge(self.find_node(key[1]),
-                                       self.find_node(value)))
+                self.edges.append(Edge(self.find_node(key[1]), self.find_node(value)))
 
         for edge in self.edges:
             if edge.start.typ == "tumor" and not edge.is_growth:
@@ -183,13 +182,8 @@ class Unilateral:
                 node.state = newstate[i]
                 for edge in node.out:
                     edge.base_t = edge.base_t #updates the transmission probability. here we could define an 'update' method in edge
-            
-        
-
+   
         #here we need to reload all edges, as a change in state also leads to a change in transmission probability (inc and out)
-
-        # if hasattr(self, "_transition_matrix"):
-        #     del self._transition_matrix 
 
 
     @property
@@ -250,6 +244,7 @@ class Unilateral:
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
+
     @property
     def growth_probability(self):
         """Return the growth probablities of the lymph
@@ -266,6 +261,7 @@ class Unilateral:
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
+
 
     @property
     def microscopic_parameter(self) -> float:
@@ -341,6 +337,7 @@ class Unilateral:
                 f"Cannot use type {type(new_dists)} for marginalization over "
                 "diagnose times.")
         
+
     def comp_transition_prob(
         self,
         newstate: List[int],
@@ -578,6 +575,7 @@ class Unilateral:
             self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
                                                [1. - sp, sn     ]])
 
+
     def trinary_modality(self, modality_spsn: Dict[Any, List[float]]):
         keys = ['clinical','pathological','pathologic']
         for key in keys:
@@ -603,6 +601,7 @@ class Unilateral:
                     elif key == 'pathological' or 'pathologic':
                         self._spsn_tables[mod] = np.array([[sp     , 1. - sn, 1. - sn],
                                                         [1. - sp, sn     , sn     ]])
+
 
     @modalities.setter
     def modalities(self, modality_spsn: Dict[Any, List[float]]):
@@ -922,7 +921,6 @@ class Unilateral:
             )
 
         self.spread_probs = new_spread_probs
-
 
 
     def _likelihood(

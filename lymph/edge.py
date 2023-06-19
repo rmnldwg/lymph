@@ -30,10 +30,10 @@ class Edge(object):
         self.base_t = base_t
         
         
-
     def __str__(self):
         """Print basic info"""
         return f"{self.start}-{100 * self.t:.1f}%->{self.end}"
+    
     
     @property
     def microscopic_parameter(self):
@@ -53,10 +53,12 @@ class Edge(object):
         else:
             raise ValueError("microscopic spread parameter must be between 0 and 1")
         
+        
     @property
     def is_growth(self) -> bool:
         """Check if this edge represents a node's growth."""
         return self.start == self.end
+    
     
     @property
     def base_t(self):
@@ -83,6 +85,7 @@ class Edge(object):
             self._t = self._base_t * self.microscopic_parameter if self.start.state == 1 and self.start.allowed_states == 3 else self._base_t
         else:
             raise ValueError("Transmission probability must be between 0 and 1")
+        
 
     @property
     def t(self):
