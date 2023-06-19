@@ -37,10 +37,15 @@ class Edge(object):
     
     @property
     def microscopic_parameter(self):
+        """Return the microscopic spread parameter that is multiplied with the
+        base transition probabilities in case of a microscopic spread
+        """
         return self._microscopic_parameter
     
     @microscopic_parameter.setter
     def microscopic_parameter(self, new_microscopic_parameter: float):
+        """Set the microscopic spread parameter for LNLs
+        """
         if new_microscopic_parameter <= 1. and new_microscopic_parameter >= 0.:
             self._microscopic_parameter = new_microscopic_parameter
             if hasattr(self, "_t"):
@@ -49,33 +54,29 @@ class Edge(object):
             raise ValueError("microscopic spread parameter must be between 0 and 1")
         
     @property
-    def growth_probability(self):
-        return self._growth_probability
-    
-    @growth_probability.setter
-    def growth_probability(self, new_growth_probability: float):
-        if new_growth_probability <= 1. and new_growth_probability >= 0.:
-            self._growth_probability = new_growth_probability
-            if hasattr(self, "_t"):
-                del self._t
-        else:
-            raise ValueError("growth probability must be between 0 and 1")
-        
-    @property
     def is_growth(self) -> bool:
         """Check if this edge represents a node's growth."""
         return self.start == self.end
     
     @property
     def base_t(self):
+        """Holds the base transition probability for transition to the next state.
+        For growth edges the base transition probability is the growth probability.
+        For edges between LNLs the base transition probability holds the transition
+        probability for a macroscopic parent node/a involved node in the binary model.
+        The base_t is multiplied with the macroscopic parameter if needed.      
+        """
         return self._base_t
 
     @base_t.setter
     def base_t(self, new_base_t: float):
+        """ Sets the base_t parameter and the transition _t parameter.
+        This method checks the edge type and parent node to compute the final 
+        transition probability.
+        """
         self._base_t = new_base_t 
         if self.start.state == 0:
             self._t = 0.
-            # To check for binary or trinary the edge class could just ask for node.allowed_states
         elif self.is_growth:
             self._t = self._base_t
         elif new_base_t <= 1. and new_base_t >= 0.:
@@ -85,6 +86,9 @@ class Edge(object):
 
     @property
     def t(self):
+        """Returns the transition probability applied by an edge after considering
+        whether it is a growth/microscopic/macroscopic edge.
+        """
         try:
             return self._t
         except AttributeError:
