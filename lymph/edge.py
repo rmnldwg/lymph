@@ -72,15 +72,13 @@ class Edge(object):
 
     @base_t.setter
     def base_t(self, new_base_t: float):
+        self._base_t = new_base_t 
         if self.start.state == 0:
             self._t = 0.
-            self._base_t = 0.
             # To check for binary or trinary the edge class could just ask for node.allowed_states
         elif self.is_growth:
-            self._base_t = new_base_t 
             self._t = self._base_t
         elif new_base_t <= 1. and new_base_t >= 0.:
-            self._base_t = new_base_t
             self._t = self._base_t * self.microscopic_parameter if self.start.state == 1 and self.start.allowed_states == 3 else self._base_t
         else:
             raise ValueError("Transmission probability must be between 0 and 1")
