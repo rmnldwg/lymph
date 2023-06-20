@@ -1,3 +1,12 @@
+"""
+The main module of this package.
+
+It implements the lymphatic system as a graph of `Tumor` and `LymphNodeLevel` nodes,
+connected by instances of `Edge`.
+
+The resulting class can compute all kinds of conditional probabilities with respect to
+the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a tumor.
+"""
 import warnings
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -5,9 +14,10 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from .edge import Edge
-from .node import Node
-from .timemarg import MarginalizorDict
+from lymph.edge import Edge
+from lymph.node import LymphNodeLevel, Tumor
+from lymph.timemarg import MarginalizorDict
+from tests.unit.custom_strategies import nodes
 
 
 def change_base(
@@ -35,17 +45,17 @@ def change_base(
     elif base < 2:
         raise ValueError("There is no unary number system, base must be > 2")
 
-    convertString = "0123456789ABCDEF"
+    convert_string = "0123456789ABCDEF"
     result = ''
 
     if number == 0:
         result += '0'
     else:
         while number >= base:
-            result += convertString[number % base]
+            result += convert_string[number % base]
             number = number//base
         if number > 0:
-            result += convertString[number]
+            result += convert_string[number]
 
     if length is None:
         length = len(result)
@@ -62,128 +72,159 @@ def change_base(
 
 
 class Unilateral:
-    """Class that models metastatic progression in a lymphatic system by
-    representing it as a directed graph. The progression itself can be modelled
-    via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], Set[str]], states: int = 3, **_kwargs):
-        """Initialize the underlying graph:
+    Class that models metastatic progression in a lymphatic system.
 
-        Args:
-            graph: Every key in this dictionary is a 2-tuple containing the
-                type of the :class:`Node` ("tumor" or "lnl") and its name
-                (arbitrary string). The corresponding value is a list of names
-                this node should be connected to via an :class:`Edge`.
+    It does this by representing it as a directed graph. The progression itself can be
+    modelled via hidden Markov models (HMM) or Bayesian networks (BN).
+    """
+    def __init__(
+        self,
+        graph: Dict[Tuple[str], Set[str]],
+        tumor_state: int,
+        allowed_lnl_states: Optional[List[int]] = None,
+        **_kwargs,
+    ) -> None:
+        """Create a new instance of the `Unilateral` class.
+
+        The graph that represents the lymphatic system is given as a dictionary. Its
+        keys are tuples of the form `("tumor", "<tumor_name>")` or
+        `("lnl", "<lnl_name>")`. The values are sets of strings that represent the
+        names of the nodes that are connected to the node given by the key.
         """
-        name_list = [tpl[1] for tpl in graph.keys()]
-        name_set = {tpl[1] for tpl in graph.keys()}
-        if len(name_list) != len(name_set):
-            raise ValueError("No tumor and LNL can have the same name")
-
-        self.nodes = []                     # list of all nodes in the graph
-        self.tumors = []                    # list of nodes with type tumour
-        self.lnls = []                      # list of all lymph node levels
-        self.states = states
-
-        for key in graph:
-            self.nodes.append(Node(name=key[1], typ=key[0], allowed_states = self.states))
-
-        for node in self.nodes:
-            if node.typ == "tumor":
-                self.tumors.append(node)
-            else:
-                self.lnls.append(node)
-
-        self.edges = []        # list of all edges connecting nodes in the graph
-        self.base_edges = []   # list of edges, going out from tumors
-        self.trans_edges = []  # list of edges, connecting LNLs
-        self.growth_edges = [] # list of edges, connecting LNLs to themselves --> growth edges
-
-        for key, values in graph.items():
-            if key[0] != 'tumor':
-                self.edges.append(Edge(self.find_node(key[1]), self.find_node(key[1])))
-            for value in values:
-                self.edges.append(Edge(self.find_node(key[1]), self.find_node(value)))
-
-        for edge in self.edges:
-            if edge.start.typ == "tumor" and not edge.is_growth:
-                self.base_edges.append(edge)
-            elif edge.is_growth:
-                self.growth_edges.append(edge)
-            else:
-                self.trans_edges.append(edge) 
+        self.check_unique_names(graph)
+        self.init_nodes(graph, tumor_state, allowed_lnl_states)
+        self.init_edges(graph)
 
 
-    def __str__(self):
-        """Print info about the structure and parameters of the graph.
-        """
-        num_tumors = len(self.tumors)
-        num_lnls   = len(self.lnls)
-        string = (
-            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
-            f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e}" for e in self.base_edges]) + "\n" + " ".join([f"{e}" for e in self.trans_edges])
-        )
+    def check_unique_names(self, graph):
+        """Check if all nodes have unique names."""
+        node_names = [name for name, _ in graph]
+        unique_node_names = set(node_names)
 
-        if self.states == 3:
-            string += (
-                f" the microscopic scaling parameter is {self.trans_edges[-1].microscopic_parameter}. \n"
-                f"the probability of growing from microscopic to macroscopic in one time step is {self.growth_edges[0].growth_probability}.\n"
+        if len(node_names) != len(unique_node_names):
+            raise ValueError("No two nodes (tumor or LNL) can have the same name!")
+
+
+    def init_nodes(self, graph, tumor_state, allowed_lnl_states):
+        """Initialize the nodes of the graph."""
+        self.tumors = []
+        self.lnls = []
+
+        for node_type, node_name in graph:
+            if node_type == "tumor":
+                self.tumors.append(
+                    Tumor(name=node_name, state=tumor_state)
+                )
+            elif node_type == "lnl":
+                self.lnls.append(
+                    LymphNodeLevel(name=node_name, allowed_states=allowed_lnl_states)
+                )
+
+
+    def init_edges(self, graph):
+        """Initialize the edges of the graph."""
+        self.tumor_edges = []
+        self.lnl_edges = []
+        self.growth_edges = []
+
+        for (_, start_name), end_name in graph.items():
+            new_edge = Edge(
+                start=self.find_node(start_name),
+                end=self.find_node(end_name),
             )
-        return string
+            if new_edge.is_tumor_spread:
+                self.tumor_edges.append(new_edge)
+            elif new_edge.is_growth:
+                self.growth_edges.append(new_edge)
+            else:
+                self.lnl_edges.append(new_edge)
 
 
-    def find_node(self, name: str) -> Union[Node, None]:
-        """Finds and returns a node with name ``name``.
-        """
+    def __str__(self) -> str:
+        """Print info about the instance."""
+        return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
+
+    def print_info(self):
+        """Print detailed information about the instance."""
+        raise NotImplementedError("Not yet implemented!")
+
+
+    @property
+    def is_binary(self) -> bool:
+        """Returns True if the graph is binary, False otherwise."""
+        res = {node.is_binary for node in self.nodes}
+
+        if len(res) != 1:
+            raise RuntimeError("Not all nodes have the same number of states")
+
+        return res.pop()
+
+
+    @property
+    def is_trinary(self) -> bool:
+        """Returns True if the graph is trinary, False otherwise."""
+        res = {node.is_trinary for node in self.nodes}
+
+        if len(res) != 1:
+            raise RuntimeError("Not all nodes have the same number of states")
+
+        return res.pop()
+
+
+    @property
+    def nodes(self) -> List[Union[Tumor, LymphNodeLevel]]:
+        """List of all nodes in the graph."""
+        return self.tumors + self.lnls
+
+    @property
+    def edges(self) -> List[Edge]:
+        """List of all edges in the graph."""
+        return self.tumor_edges + self.lnl_edges + self.growth_edges
+
+
+    def find_node(self, name: str) -> Union[Tumor, LymphNodeLevel, None]:
+        """Finds and returns a node with name `name`."""
         for node in self.nodes:
             if node.name == name:
                 return node
         return None
 
 
-    def find_edge(self, startname: str, endname: str) -> Union[Edge, None]:
-        """Finds and returns the edge instance which has a parent node named
-        ``startname`` and ends with node ``endname``.
-        """
-        for node in self.nodes:
-            if node.name == startname:
-                for o in node.out:
-                    if o.end.name == endname:
-                        return o
-        return None
-
-
     @property
     def graph(self) -> Dict[Tuple[str, str], Set[str]]:
-        """Lists the graph as it was provided when the system was created.
-        """
+        """Returns the graph representing this instance's nodes and egdes."""
         res = {}
         for node in self.nodes:
-            res[(node.typ, node.name)] = [o.end.name for o in node.out]
+            node_type = "tumor" if isinstance(node, Tumor) else "lnl"
+            res[(node_type, node.name)] = {o.end.name for o in node.out}
         return res
 
 
-    @property
-    def state(self):
-        """Return the currently set state of the system.
-        """
-        return np.array([lnl.state for lnl in self.lnls], dtype=int)
+    def get_state(self) -> np.ndarray:
+        """Returns the state of the system as a numpy array."""
+        return np.array([node.state for node in self.nodes])
 
-    @state.setter
-    def state(self, newstate: np.ndarray):
-        """Sets the state of the system to ``newstate``.
-        """
-        if len(newstate) < len(self.lnls):
-            raise ValueError("length of newstate must match # of LNLs")
+    def set_state(self, state: np.ndarray) -> None:
+        """Sets the state of the system to `state`."""
+        if len(state) != len(self.nodes):
+            raise ValueError(
+                f"Length of state vector {len(state)} does not match "
+                f"number of nodes {len(self.nodes)}"
+            )
 
-        for i, node in enumerate(self.lnls):  # only set lnl's states
-            if node.state != newstate[i]:
-                node.state = newstate[i]
-                for edge in node.out:
-                    edge.base_t = edge.base_t #updates the transmission probability. here we could define an 'update' method in edge
-   
-        #here we need to reload all edges, as a change in state also leads to a change in transmission probability (inc and out)
+        for node, state in zip(self.nodes, state):
+            node.state = state
+
+
+    def get_state_by_lnl(self) -> Dict[str, int]:
+        """Returns the state of the system as a dictionary with LNL names as keys."""
+        return {lnl.name: lnl.state for lnl in self.lnls}
+
+    def set_state_by_lnl(self, **states) -> None:
+        """Sets the state of the system to `state`."""
+        for lnl in self.lnls:
+            lnl.state = states[lnl.name]
 
 
     @property
@@ -203,14 +244,14 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge.base_t for edge in self.base_edges], dtype=float)
+        return np.array([edge.base_t for edge in self.tumor_edges], dtype=float)
 
     @base_probs.setter
     def base_probs(self, new_base_probs):
         """Set the spread probabilities for the connections from the tumor to
         the LNLs.
         """
-        for i, edge in enumerate(self.base_edges):
+        for i, edge in enumerate(self.tumor_edges):
             edge.base_t = new_base_probs[i]
 
         if hasattr(self, "_transition_matrix"):
@@ -232,13 +273,13 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge.base_t for edge in self.trans_edges], dtype=float)
+        return np.array([edge.base_t for edge in self.lnl_edges], dtype=float)
 
     @trans_probs.setter
     def trans_probs(self, new_trans_probs):
         """Set the spread probabilities for the connections among the LNLs.
         """
-        for i, edge in enumerate(self.trans_edges):
+        for i, edge in enumerate(self.lnl_edges):
             edge.base_t = new_trans_probs[i]
 
         if hasattr(self, "_transition_matrix"):
@@ -268,13 +309,13 @@ class Unilateral:
         """Return the microscopic spread parameter of the connections between the lymph
         node levels.
         """
-        return self.trans_edges[-1].microscopic_parameter
+        return self.lnl_edges[-1].microscopic_parameter
     
     @microscopic_parameter.setter
     def microscopic_parameter(self, microscopic_parameter):
         """Set the microscopic spread probabilities for the connections among the LNLs.
         """
-        for i, edge in enumerate(self.trans_edges):
+        for i, edge in enumerate(self.lnl_edges):
             edge.microscopic_parameter = microscopic_parameter
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -298,7 +339,7 @@ class Unilateral:
         """Set the spread probabilities of the :class:`Edge` instances in the
         the network in the order they were created from the graph.
         """
-        num_base_edges = len(self.base_edges)
+        num_base_edges = len(self.tumor_edges)
 
         self.base_probs = new_spread_probs[:num_base_edges]
         self.trans_probs = new_spread_probs[num_base_edges:]
