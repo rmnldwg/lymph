@@ -2,6 +2,7 @@
 Module defining the nodes of the graph representing the lymphatic system.
 """
 from __future__ import annotations
+
 from typing import List, Optional
 
 import numpy as np
@@ -14,7 +15,7 @@ class AbstractNode:
     def __init__(
         self,
         name: str,
-        state: int,
+        state: int = 0,
         allowed_states: Optional[List[int]] = None,
     ) -> None:
         """
@@ -26,19 +27,19 @@ class AbstractNode:
         is provided.
         """
         self.name = name
-        self.state = state
 
         if allowed_states is None:
             allowed_states = [0, 1]
 
         _allowed_states = []
-        for state in allowed_states:
+        for state1 in allowed_states:
             try:
-                _allowed_states.append(int(state))
+                _allowed_states.append(int(state1))
             except ValueError as val_err:
                 raise ValueError("Allowed states must be castable to int") from val_err
 
         self.allowed_states = _allowed_states
+        self.state = state
 
         # nodes can have outgoing edge connections
         self.out = []
@@ -123,19 +124,13 @@ class Tumor(AbstractNode):
 
         A tumor can only ever be in one state, and it cannot change its state.
         """
-        allowed_states = [state]
-        super().__init__(name, state, allowed_states)
+        self.allowed_states = [state]
+        super().__init__(name, state, self.allowed_states)
 
 
     def __str__(self):
         """Print basic info"""
         return f"Tumor {super().__str__()}"
-
-
-    @state.setter
-    def state(self, new_state: int) -> None:
-        """Set the state of the node."""
-        raise ValueError("Tumor state cannot be changed")
 
 
 class LymphNodeLevel(AbstractNode):
@@ -147,6 +142,7 @@ class LymphNodeLevel(AbstractNode):
         allowed_states: Optional[List[int]] = None,
     ) -> None:
         """Create a new lymph node level."""
+        self.allowed_states = allowed_states
         super().__init__(name, state, allowed_states)
 
         # LNLs can also have incoming edge connections
@@ -186,11 +182,15 @@ class LymphNodeLevel(AbstractNode):
     def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
         """Compute the hidden Markov model's transition probability to a new state."""
         res = super().comp_trans_prob(new_state, log)
+        if new_state == self.state == self.allowed_states[-1]:
+            return res
+        if new_state - self.state > 1:
+            return -np.inf if log else 0
 
         for edge in self.inc:
             if log:
-                res += edge.comp_spread_prob(new_state=new_state, log=True)
+                res += log(edge.comp_spread_prob(new_state=new_state))
             else:
-                res *= edge.comp_spread_prob(new_state=new_state, log=False)
+                res *= edge.comp_spread_prob(new_state=new_state)
 
         return res
