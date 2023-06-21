@@ -17,7 +17,8 @@ from numpy.linalg import matrix_power as mat_pow
 from lymph.edge import Edge
 from lymph.node import LymphNodeLevel, Tumor
 from lymph.timemarg import MarginalizorDict
-from tests.unit.custom_strategies import nodes
+
+# from tests.unit.custom_strategies import nodes
 
 
 def change_base(
@@ -99,7 +100,7 @@ class Unilateral:
 
     def check_unique_names(self, graph):
         """Check if all nodes have unique names."""
-        node_names = [name for name, _ in graph]
+        node_names = [name for _, name in graph]
         unique_node_names = set(node_names)
 
         if len(node_names) != len(unique_node_names):
@@ -127,27 +128,40 @@ class Unilateral:
         self.tumor_edges = []
         self.lnl_edges = []
         self.growth_edges = []
-
-        for (_, start_name), end_name in graph.items():
-            new_edge = Edge(
-                start=self.find_node(start_name),
-                end=self.find_node(end_name),
-            )
-            if new_edge.is_tumor_spread:
-                self.tumor_edges.append(new_edge)
-            elif new_edge.is_growth:
+        for (typ, start_name), end_names in graph.items():
+            if typ == 'lnl':
+                new_edge = Edge(
+                    start=self.find_node(start_name),
+                    end=self.find_node(start_name),
+                )
                 self.growth_edges.append(new_edge)
-            else:
-                self.lnl_edges.append(new_edge)
+            for end_name in end_names:
+                new_edge = Edge(
+                    start=self.find_node(start_name),
+                    end=self.find_node(end_name),
+                )
+                if new_edge.is_tumor_spread:
+                    self.tumor_edges.append(new_edge)
+                else:
+                    self.lnl_edges.append(new_edge)
 
 
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
 
+
     def print_info(self):
         """Print detailed information about the instance."""
-        raise NotImplementedError("Not yet implemented!")
+        num_tumors = len(self.tumors)
+        num_lnls   = len(self.lnls)
+        string = (
+            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
+            f"and {num_lnls} LNL(s).\n"
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
+            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
+        )
+        print(string)
 
 
     @property
@@ -310,7 +324,7 @@ class Unilateral:
         node levels.
         """
         return self.lnl_edges[-1].microscopic_parameter
-    
+
     @microscopic_parameter.setter
     def microscopic_parameter(self, microscopic_parameter):
         """Set the microscopic spread probabilities for the connections among the LNLs.
@@ -377,7 +391,7 @@ class Unilateral:
             raise TypeError(
                 f"Cannot use type {type(new_dists)} for marginalization over "
                 "diagnose times.")
-        
+
 
     def comp_transition_prob(
         self,
@@ -625,7 +639,7 @@ class Unilateral:
                     if not isinstance(mod, str):
                         msg = ("Modality names must be strings.")
                         raise TypeError(msg)
-                    
+
                     has_len_2 = len(spsn) == 2
                     is_above_lb = np.all(np.greater_equal(spsn, 0.5))
                     is_below_ub = np.all(np.less_equal(spsn, 1.))
@@ -663,13 +677,13 @@ class Unilateral:
             del self._obs_list
 
         self._spsn_tables = {}
-        
+
         if self.states == 2:
             self.binary_modality(modality_spsn)
         if self.states == 3:
             self.trinary_modality(modality_spsn)
-                
-        # here one could add more modalities which could be applied for more states or for matrices with more than one specificity and sensitivity. 
+
+        # here one could add more modalities which could be applied for more states or for matrices with more than one specificity and sensitivity.
         # Important: modalities would need to be adapted if we change the the number of states or produce matrices with more than one specificity and sensitivity.
 
     def _gen_observation_matrix(self):
@@ -1214,7 +1228,7 @@ class Unilateral:
 class System(Unilateral):
     """Class kept for compatibility after renaming to :class:`Unilateral`.
 
-    See Also: 
+    See Also:
         :class:`Unilateral`
     """
     def __init__(self, *args, **kwargs):
