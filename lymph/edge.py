@@ -2,9 +2,10 @@
 This module implements the edges of the graph representation of the lymphatic system.
 """
 from __future__ import annotations
+
 from typing import Union
 
-from lymph.node import AbstractNode, Tumor, LymphNodeLevel
+from lymph.node import AbstractNode, LymphNodeLevel, Tumor
 
 
 class Edge:
@@ -33,7 +34,7 @@ class Edge:
         self.micro_mod = micro_mod
         self.spread_prob = spread_prob
 
-
+    # here I would add the spread_probability
     def __str__(self):
         """Print basic info."""
         return f"{self.start}-->{self.end}"
@@ -47,7 +48,7 @@ class Edge:
     @start.setter
     def start(self, new_start: Union[Tumor, LymphNodeLevel]) -> None:
         """Set the start (parent) node of the edge."""
-        if not issubclass(new_start, AbstractNode):
+        if not issubclass(new_start.__class__, AbstractNode):
             raise TypeError("Start must be instance of Node!")
 
         self._start = new_start
@@ -130,17 +131,43 @@ class Edge:
         raise NotImplementedError("Not implemented yet!")
 
 
-    def comp_spread_prob(self, new_state: int, log: bool = False) -> float:
+    def comp_spread_prob(self, new_state: int) -> float:
         """Compute the probability of spread per time-step in the hidden Markov model.
 
         This function dynamically computes the probability of spread per time-step that
         the child node will transition to `new_state`, given its current state, that
         of its parent node, and the parameters of the edge.
         """
+        if self.end.is_binary:
+            if self.end.state == 0:
+                if new_state == 1:
+                    return self.spread_prob
+                else:
+                    return 1 - self.spread_prob
 
-        # I was thinking that here you could make use of the properties `is_growth`
-        # and `is_tumor_spread` to compute the value. It also needs to take into
-        # account the `start.state` and `end.state`.
-        # Note that you do not need to cover the case where `new_state < end.state`,
-        # because that is already covered in the implementation of the `AbstractNode`.
-        raise NotImplementedError("TODO: Implement this!")
+        if self.start.state == 1:
+            if self.end.state == 0:
+                if new_state == 1:
+                    if not self.is_growth:
+                        return self.spread_prob * self.micro_mod
+                else:
+                    if not self.is_growth:
+                        return 1 - self.spread_prob * self.micro_mod
+            elif self.end.state == 1:
+                if new_state == 2:
+                    if self.is_growth:
+                        return self.spread_prob
+                else:
+                    if self.is_growth:
+                        return 1 - self.spread_prob
+        if self.end.state == 0:
+            if new_state == 1:
+                if not self.is_growth:
+                    return self.spread_prob
+            else:
+                if not self.is_growth:
+                    return 1 - self.spread_prob
+
+        return 1
+
+
