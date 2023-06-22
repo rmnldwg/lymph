@@ -17,7 +17,6 @@ __uri__ = "https://github.com/rmnldwg/lymph"
 from .bilateral import Bilateral, BilateralSystem
 from .edge import Edge
 from .midline import MidlineBilateral
-from .midline_timeev import MidlineBilateraltime
 from .node import Node
 from .timemarg import Marginalizor, MarginalizorDict
 from .unilateral import System, Unilateral
