@@ -96,6 +96,7 @@ class Unilateral:
         self.check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_lnl_states)
         self.init_edges(graph)
+        self.allowed_lnl_states = allowed_lnl_states #could be changed to len(allowed_states), as mostly the length is needed and not the states.
 
 
     def check_unique_names(self, graph):
@@ -124,22 +125,24 @@ class Unilateral:
 
 
     def init_edges(self, graph):
-        """Initialize the edges of the graph."""
+        """Initialize the edges of the graph.
+
+        When a `LymphNodeLevel` is trinary, it is connected to itself via a growth edge.
+        """
         self.tumor_edges = []
         self.lnl_edges = []
         self.growth_edges = []
-        for (typ, start_name), end_names in graph.items():
-            if typ == 'lnl':
-                new_edge = Edge(
-                    start=self.find_node(start_name),
-                    end=self.find_node(start_name),
-                )
-                self.growth_edges.append(new_edge)
+
+        for (_, start_name), end_names in graph.items():
+            start = self.find_node(start_name)
+            if isinstance(start, LymphNodeLevel) and start.is_trinary:
+                growth_edge = Edge(start=start, end=start)
+                self.growth_edges.append(growth_edge)
+
             for end_name in end_names:
-                new_edge = Edge(
-                    start=self.find_node(start_name),
-                    end=self.find_node(end_name),
-                )
+                end = self.find_node(end_name)
+                new_edge = Edge(start=start, end=end)
+
                 if new_edge.is_tumor_spread:
                     self.tumor_edges.append(new_edge)
                 else:
@@ -219,16 +222,16 @@ class Unilateral:
         """Returns the state of the system as a numpy array."""
         return np.array([node.state for node in self.nodes])
 
-    def set_state(self, state: np.ndarray) -> None:
+    def set_state(self, state: list) -> None:
         """Sets the state of the system to `state`."""
-        if len(state) != len(self.nodes):
+        if len(state) != len(self.lnls):
             raise ValueError(
                 f"Length of state vector {len(state)} does not match "
                 f"number of nodes {len(self.nodes)}"
             )
 
-        for node, state in zip(self.nodes, state):
-            node.state = state
+        for node, s in zip(self.lnls, state):
+            node.state = s
 
 
     def get_state_by_lnl(self) -> Dict[str, int]:
@@ -242,7 +245,7 @@ class Unilateral:
 
 
     @property
-    def base_probs(self):
+    def tumor_spread_probs(self):
         """The spread probablities parametrizing the edges that represent the
         lymphatic drainage from the tumor(s) to the individual lymph node
         levels. This array is composed of these elements:
@@ -258,27 +261,27 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge.base_t for edge in self.tumor_edges], dtype=float)
+        return np.array([edge.spread_prob for edge in self.tumor_edges], dtype=float)
 
-    @base_probs.setter
-    def base_probs(self, new_base_probs):
+    @tumor_spread_probs.setter
+    def tumor_spread_probs(self, new_tumor_probs):
         """Set the spread probabilities for the connections from the tumor to
         the LNLs.
         """
         for i, edge in enumerate(self.tumor_edges):
-            edge.base_t = new_base_probs[i]
+            edge.spread_prob = new_tumor_probs[i]
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
 
     @property
-    def trans_probs(self):
+    def lnl_spread_prob(self):
         """Return the 'base' spread probablities of the connections between the lymph
         node levels. Here, "trans" stands for "transmission" (among the LNLs),
         not "transition" as in the transition to another state.
 
-        Its shape is similar to the one of the :attr:`base_probs` but it lists
+        Its shape is similar to the one of the :attr:`tumor_spread_probs` but it lists
         the transmission probabilities :math:`t_{a \\rightarrow b}` in the
         order they were defined in the initial graph.
 
@@ -287,14 +290,14 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge.base_t for edge in self.lnl_edges], dtype=float)
+        return np.array([edge.spread_prob for edge in self.lnl_edges], dtype=float)
 
-    @trans_probs.setter
-    def trans_probs(self, new_trans_probs):
+    @lnl_spread_prob.setter
+    def lnl_spread_prob(self, new_lnl_probs):
         """Set the spread probabilities for the connections among the LNLs.
         """
         for i, edge in enumerate(self.lnl_edges):
-            edge.base_t = new_trans_probs[i]
+            edge.spread_prob = new_lnl_probs[i]
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -305,32 +308,35 @@ class Unilateral:
         """Return the growth probablities of the lymph
         node levels.
         """
-        return self.growth_edges[0].base_t
+        return self.growth_edges[0].spread_prob
 
     @growth_probability.setter
     def growth_probability(self, new_growth_probability):
         """Set the the growth probablities of the lymph node levels.
         """
         for i, edge in enumerate(self.growth_edges):
-            edge.base_t = new_growth_probability
+            edge.spread_prob = new_growth_probability
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
-
+    # here we could allow for different microscopic parameters for each LNL, but then we would need to
+    # adapt how the microscopic parameter is set and read out. For generality allowing to set a specific
+    # microscopic spread parameter for each LNL would be better. To keep calculation time reasonable,
+    # prohibiting this option would be optimal. What do you think, Roman? (same applies to growth probability)
     @property
     def microscopic_parameter(self) -> float:
         """Return the microscopic spread parameter of the connections between the lymph
-        node levels.
+        node levels which modifies the sprea on edges where the starting node is microscopic
         """
-        return self.lnl_edges[-1].microscopic_parameter
+        return self.lnl_edges[-1].micro_mod
 
     @microscopic_parameter.setter
     def microscopic_parameter(self, microscopic_parameter):
         """Set the microscopic spread probabilities for the connections among the LNLs.
         """
         for i, edge in enumerate(self.lnl_edges):
-            edge.microscopic_parameter = microscopic_parameter
+            edge.micro_mod = microscopic_parameter
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
@@ -344,9 +350,9 @@ class Unilateral:
 
         Setting these requires an array with a length equal to the number of
         edges in the network. It's essentially a concatenation of the
-        :attr:`base_probs` and the :attr:`trans_probs`.
+        :attr:`tumor_spread_probs` and the :attr:`lnl_spread_probs`.
         """
-        return np.concatenate([self.base_probs, self.trans_probs])
+        return np.concatenate([self.tumor_spread_probs, self.lnl_spread_prob])
 
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: np.ndarray):
@@ -355,8 +361,8 @@ class Unilateral:
         """
         num_base_edges = len(self.tumor_edges)
 
-        self.base_probs = new_spread_probs[:num_base_edges]
-        self.trans_probs = new_spread_probs[num_base_edges:]
+        self.tumor_spread_probs = new_spread_probs[:num_base_edges]
+        self.lnl_spread_prob = new_spread_probs[num_base_edges:]
 
 
     @property
@@ -414,11 +420,11 @@ class Unilateral:
         """
         res = 1
         for i, lnl in enumerate(self.lnls):
-            res *= lnl.trans_prob(new_state = newstate[i])
+            res *= lnl.comp_trans_prob(new_state = newstate[i])
             if res == 0:
                 break
         if acquire:
-            self.state = newstate
+            self.set_state(newstate)
         return res
 
 
@@ -452,8 +458,7 @@ class Unilateral:
                         raise ValueError(
                             "diagnoses were not provided in the correct format"
                         ) from idx_err
-
-                    prob *= lnl.obs_prob(lnl_diagnose, spsn)
+                    prob *= lnl.comp_obs_prob(lnl_diagnose, spsn)
         return prob
 
 
@@ -462,11 +467,11 @@ class Unilateral:
         """
         if not hasattr(self, "_state_list"):
             self._state_list = np.zeros(
-                shape=(self.states**len(self.lnls), len(self.lnls)), dtype=int
+                shape=(len(self.allowed_lnl_states)**len(self.lnls), len(self.lnls)), dtype=int
             )
-        for i in range(self.states**len(self.lnls)):
+        for i in range(len(self.allowed_lnl_states)**len(self.lnls)):
             self._state_list[i] = [
-                int(digit) for digit in change_base(i, self.states, length=len(self.lnls))
+                int(digit) for digit in change_base(i, len(self.allowed_lnl_states), length=len(self.lnls))
             ]
 
     @property
@@ -546,11 +551,11 @@ class Unilateral:
         zero.
         """
         if not hasattr(self, "_transition_matrix"):
-            shape = (self.states**len(self.lnls), self.states**len(self.lnls))
+            shape = (len(self.allowed_lnl_states)**len(self.lnls), len(self.allowed_lnl_states)**len(self.lnls))
             self._transition_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
             for j in self.allowed_transitions[i]:
                 transition_prob = self.comp_transition_prob(self.state_list[j])
                 self._transition_matrix[i,j] = transition_prob
@@ -604,7 +609,7 @@ class Unilateral:
         try:
             modality_spsn = {}
             for mod, table in self._spsn_tables.items():
-                modality_spsn[mod] = [table[0,0], table[1,self.states-1]]
+                modality_spsn[mod] = [table[0,0], table[len(self.allowed_lnl_states)-1],1]
             return modality_spsn
 
         except AttributeError:
@@ -628,7 +633,7 @@ class Unilateral:
                 raise ValueError(msg)
             sp, sn = spsn
             self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
-                                               [1. - sp, sn     ]])
+                                               [1. - sp, sn     ]]).T
 
 
     def trinary_modality(self, modality_spsn: Dict[Any, List[float]]):
@@ -652,10 +657,10 @@ class Unilateral:
                     sp, sn = spsn
                     if key == 'clinical':
                         self._spsn_tables[mod] = np.array([[sp     , sp     , 1. - sn],
-                                                        [1. - sp, 1. - sp, sn     ]])
+                                                        [1. - sp, 1. - sp, sn     ]]).T
                     elif key == 'pathological' or 'pathologic':
                         self._spsn_tables[mod] = np.array([[sp     , 1. - sn, 1. - sn],
-                                                        [1. - sp, sn     , sn     ]])
+                                                        [1. - sp, sn     , sn     ]]).T
 
 
     @modalities.setter
@@ -678,9 +683,9 @@ class Unilateral:
 
         self._spsn_tables = {}
 
-        if self.states == 2:
+        if len(self.allowed_lnl_states) == 2:
             self.binary_modality(modality_spsn)
-        if self.states == 3:
+        if len(self.allowed_lnl_states) == 3:
             self.trinary_modality(modality_spsn)
 
         # here one could add more modalities which could be applied for more states or for matrices with more than one specificity and sensitivity.
@@ -700,7 +705,7 @@ class Unilateral:
             self._observation_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
             for j,obs in enumerate(self.obs_list):
                 observations = {}
                 for k,modality in enumerate(self._spsn_tables):
@@ -747,7 +752,7 @@ class Unilateral:
         self._diagnose_matrices[t_stage] = np.ones(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
 
             for j, (_, patient) in enumerate(table.iterrows()):
                 patient_obs_prob = self.comp_diagnose_prob(patient)
@@ -939,10 +944,10 @@ class Unilateral:
             invalid parameters.
         """
         k = len(self.spread_probs)
-        if self.states == 2:
+        if len(self.allowed_lnl_states) == 2:
             new_spread_probs = new_params[:k]
             new_marg_params = new_params[k:]
-        if self.states == 3:
+        if len(self.allowed_lnl_states) == 3:
             new_microscopic_parameter = new_params[0]
             new_growth_probability = new_params[1]
             new_spread_probs = new_params[2:k+2]
@@ -1017,7 +1022,7 @@ class Unilateral:
             state_probs = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.state = state
+                self.set_state(state)
                 for node in self.lnls:
                     state_probs[i] *= node.bn_prob()
 
@@ -1120,7 +1125,7 @@ class Unilateral:
         # vector containing P(Z=z|X)
         diagnose_probs = np.zeros(shape=len(self.state_list))
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
             diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
         # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
@@ -1133,7 +1138,7 @@ class Unilateral:
         elif mode == "BN":
             marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
-                self.state = state
+                elf.set_state(state)
                 for node in self.lnls:
                     marg_state_probs[i] *= node.bn_prob()
 
