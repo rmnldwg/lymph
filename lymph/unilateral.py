@@ -124,22 +124,24 @@ class Unilateral:
 
 
     def init_edges(self, graph):
-        """Initialize the edges of the graph."""
+        """Initialize the edges of the graph.
+
+        When a `LymphNodeLevel` is trinary, it is connected to itself via a growth edge.
+        """
         self.tumor_edges = []
         self.lnl_edges = []
         self.growth_edges = []
-        for (typ, start_name), end_names in graph.items():
-            if typ == 'lnl':
-                new_edge = Edge(
-                    start=self.find_node(start_name),
-                    end=self.find_node(start_name),
-                )
-                self.growth_edges.append(new_edge)
+
+        for (_, start_name), end_names in graph.items():
+            start = self.find_node(start_name)
+            if isinstance(start, LymphNodeLevel) and start.is_trinary:
+                growth_edge = Edge(start=start, end=start)
+                self.growth_edges.append(growth_edge)
+
             for end_name in end_names:
-                new_edge = Edge(
-                    start=self.find_node(start_name),
-                    end=self.find_node(end_name),
-                )
+                end = self.find_node(end_name)
+                new_edge = Edge(start=start, end=end)
+
                 if new_edge.is_tumor_spread:
                     self.tumor_edges.append(new_edge)
                 else:
