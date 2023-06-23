@@ -113,7 +113,9 @@ class AbstractNode:
         the columns corresponding to the observations. It encodes for each state and
         diagnosis the corresponding probability.
         """
-        obs_prob = obs_table[self.state, obs]
+        if obs is None or np.isnan(obs):
+            return 0 if log else 1.
+        obs_prob = obs_table[self.state, int(obs)]
         return np.log(obs_prob) if log else obs_prob
 
 
@@ -188,9 +190,7 @@ class LymphNodeLevel(AbstractNode):
             return -np.inf if log else 0
 
         for edge in self.inc:
-            if log:
-                res += log(edge.comp_spread_prob(new_state=new_state))
-            else:
-                res *= edge.comp_spread_prob(new_state=new_state)
-
-        return res
+            res *= edge.comp_spread_prob()
+        if self.state == new_state:
+            return log(res) if log else res
+        return log(1-res) if log else 1-res
