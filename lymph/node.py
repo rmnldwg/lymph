@@ -15,7 +15,7 @@ class AbstractNode:
     def __init__(
         self,
         name: str,
-        state: int = 0,
+        state: int,
         allowed_states: Optional[List[int]] = None,
     ) -> None:
         """
@@ -32,9 +32,9 @@ class AbstractNode:
             allowed_states = [0, 1]
 
         _allowed_states = []
-        for state1 in allowed_states:
+        for s in allowed_states:
             try:
-                _allowed_states.append(int(state1))
+                _allowed_states.append(int(s))
             except ValueError as val_err:
                 raise ValueError("Allowed states must be castable to int") from val_err
 
@@ -124,8 +124,8 @@ class Tumor(AbstractNode):
 
         A tumor can only ever be in one state, and it cannot change its state.
         """
-        self.allowed_states = [state]
-        super().__init__(name, state, self.allowed_states)
+        allowed_states = [state]
+        super().__init__(name, state, allowed_states)
 
 
     def __str__(self):
@@ -142,7 +142,7 @@ class LymphNodeLevel(AbstractNode):
         allowed_states: Optional[List[int]] = None,
     ) -> None:
         """Create a new lymph node level."""
-        self.allowed_states = allowed_states
+
         super().__init__(name, state, allowed_states)
 
         # LNLs can also have incoming edge connections
