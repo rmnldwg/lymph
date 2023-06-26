@@ -96,6 +96,7 @@ class Unilateral:
         self.check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_lnl_states)
         self.init_edges(graph)
+        self.init_parameters()
         self.allowed_lnl_states = allowed_lnl_states #could be changed to len(allowed_states), as mostly the length is needed and not the states.
 
 
@@ -149,6 +150,19 @@ class Unilateral:
                     self.lnl_edges.append(new_edge)
 
 
+    def init_parameters(self):
+        """Initializes the paramaters dictionary including all edges.
+        """
+        self.parameters = {}
+        for edge in self.tumor_edges:
+            self.parameters['tumor' + '_to_' + edge.end.name] = edge #we could rename this to spread as well.
+        for edge in self.lnl_edges:
+            self.parameters['spread_' + edge.start.name + '_to_' + edge.end.name] = edge
+            self.parameters['micro_' + edge.start.name + '_to_' + edge.end.name] = edge
+        for edge in self.growth_edges:
+            self.parameters['growth_' + edge.start.name] = edge
+
+
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
@@ -193,6 +207,7 @@ class Unilateral:
     def nodes(self) -> List[Union[Tumor, LymphNodeLevel]]:
         """List of all nodes in the graph."""
         return self.tumors + self.lnls
+
 
     @property
     def edges(self) -> List[Edge]:
@@ -339,7 +354,7 @@ class Unilateral:
             edge.micro_mod = microscopic_parameter
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
-
+    # the sampling now takes longer because check and assign assigns to spread parameters and microscopic spread. hence we loop through the lnl edges twice. we could optimize that by setting them together! (time increase by 50%!!)
 
     @property
     def spread_probs(self) -> np.ndarray:
@@ -929,7 +944,7 @@ class Unilateral:
         return state_probs
 
 
-    def check_and_assign(self, new_params: np.ndarray):
+    def assign_parameters(self, **kwargs):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
         the model.
@@ -943,44 +958,13 @@ class Unilateral:
             :class:`Marginalizor`) all raise a ``ValueError`` when provided with
             invalid parameters.
         """
-        k = len(self.spread_probs)
-        if len(self.allowed_lnl_states) == 2:
-            new_spread_probs = new_params[:k]
-            new_marg_params = new_params[k:]
-        if len(self.allowed_lnl_states) == 3:
-            new_microscopic_parameter = new_params[0]
-            new_growth_probability = new_params[1]
-            new_spread_probs = new_params[2:k+2]
-            new_marg_params = new_params[k+2:]
-            if new_microscopic_parameter < 0. or new_microscopic_parameter > 1:
-                raise ValueError(
-                    "microscopic scaling parameter must be above 0 and below 1"
-                )
-            self.microscopic_parameter = new_microscopic_parameter
 
-            if new_growth_probability < 0. or new_growth_probability > 1.:
-                raise ValueError(
-                    "growth probability must be between 0 and 1"
-                )
-            self.growth_probability = new_growth_probability
+        for key, value in kwargs.items():
+            if key[:5] == 'micro':
+                self.parameters[key].micro_mod = value
+            else:
+                self.parameters[key].spread_prob = value
 
-        try:
-            self.diag_time_dists.update(new_marg_params)
-        except ValueError as val_err:
-            raise ValueError(
-                "Parameters for marginalization over diagnose times are invalid"
-            ) from val_err
-
-        if new_spread_probs.shape != self.spread_probs.shape:
-            raise ValueError(
-                "Shape of provided spread parameters does not match network"
-            )
-        if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
-            raise ValueError(
-                "Spread probs must be between 0 and 1"
-            )
-
-        self.spread_probs = new_spread_probs
 
 
     def _likelihood(
@@ -1034,7 +1018,7 @@ class Unilateral:
     def likelihood(
         self,
         data: Optional[pd.DataFrame] = None,
-        given_params: Optional[np.ndarray] = None,
+        given_params: Optional[dict] = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
@@ -1069,7 +1053,7 @@ class Unilateral:
             return self._likelihood(mode, log)
 
         try:
-            self.check_and_assign(given_params)
+            self.assign_parameters(**given_params)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -1079,7 +1063,7 @@ class Unilateral:
     def risk(
         self,
         involvement: Optional[Union[dict, np.ndarray]] = None,
-        given_params: Optional[np.ndarray] = None,
+        given_params: Optional[dict] = None,
         given_diagnoses: Optional[Dict[str, dict]] = None,
         t_stage: str = "early",
         mode: str = "HMM",
@@ -1117,7 +1101,7 @@ class Unilateral:
             with probabilities for all possible hidden states otherwise.
         """
         if given_params is not None:
-            self.check_and_assign(given_params)
+            self.assign_parameters(**given_params)
 
         if given_diagnoses is None:
             given_diagnoses = {}
