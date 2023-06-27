@@ -183,14 +183,14 @@ class LymphNodeLevel(AbstractNode):
 
     def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
         """Compute the hidden Markov model's transition probability to a new state."""
-        res = super().comp_trans_prob(new_state, log)
+        stay_prob = super().comp_trans_prob(new_state, log)
         if new_state == self.state == self.allowed_states[-1]:
-            return res
+            return stay_prob
         if new_state - self.state > 1:
             return -np.inf if log else 0
 
         for edge in self.inc:
-            res *= edge.comp_spread_prob()
+            stay_prob *= edge.comp_stay_prob()
         if self.state == new_state:
-            return log(res) if log else res
-        return log(1-res) if log else 1-res
+            return log(stay_prob) if log else stay_prob
+        return log(1-stay_prob) if log else 1-stay_prob
