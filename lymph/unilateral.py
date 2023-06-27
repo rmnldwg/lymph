@@ -96,7 +96,7 @@ class Unilateral:
         self.check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_lnl_states)
         self.init_edges(graph)
-        self.init_parameters()
+        self._edge_lookup()
         self.allowed_lnl_states = allowed_lnl_states #could be changed to len(allowed_states), as mostly the length is needed and not the states.
 
 
@@ -150,19 +150,20 @@ class Unilateral:
                     self.lnl_edges.append(new_edge)
 
 
-    def init_parameters(self):
-        """Initializes the paramaters dictionary including all edges.
+    def _edge_lookup(self):
+        """Initializes the a lookup dictionary including all edge relatetd parameters as keys.
+        the values are the setter methods to assign their values
         """
-        self.parameters = {}
+        self._setter_lookup = {}
         for edge in self.tumor_edges:
-            self.parameters['tumor' + '_to_' + edge.end.name] = edge #we could rename this to spread as well.
+            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
         for edge in self.lnl_edges:
-            self.parameters['spread_' + edge.start.name + '_to_' + edge.end.name] = edge
-            self.parameters['micro_' + edge.start.name + '_to_' + edge.end.name] = edge
+            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+            self._setter_lookup['micro_' + edge.name] = edge.set_micro_mod
         for edge in self.growth_edges:
-            self.parameters['growth_' + edge.start.name] = edge
-
-
+            self._setter_lookup['growth_' + edge.start.name] = edge.set_spread_prob
+            
+            
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
@@ -237,16 +238,16 @@ class Unilateral:
         """Returns the state of the system as a numpy array."""
         return np.array([node.state for node in self.nodes])
 
-    def set_state(self, state: list) -> None:
+    def set_state(self, system_state: list) -> None:
         """Sets the state of the system to `state`."""
-        if len(state) != len(self.lnls):
+        if len(system_state) != len(self.lnls):
             raise ValueError(
-                f"Length of state vector {len(state)} does not match "
+                f"Length of state vector {len(system_state)} does not match "
                 f"number of nodes {len(self.nodes)}"
             )
 
-        for node, s in zip(self.lnls, state):
-            node.state = s
+        for node, state in zip(self.lnls, system_state):
+            node.state = state
 
 
     def get_state_by_lnl(self) -> Dict[str, int]:
@@ -943,15 +944,17 @@ class Unilateral:
 
         return state_probs
 
-
+    #right now the micro_mod and the growth parameter can be set differently for each edge
+    #If we want only 1 micro_mod and growth_parameter to be available, we need to set them together
+    #Or add an option to treat them separately or not (important for sampling)
     def assign_parameters(self, **kwargs):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
         the model.
 
         Args:
-            new_params: The set of :attr:`spread_probs` and parameters to provide for
-                updating the parametrized distributions over diagnose times.
+            **kwargs: The keyword - value pairs to set spread, microscopic, growth
+            and time_dist parameters.
 
         Warning:
             This method assumes that the parametrized distributions (instances of
@@ -960,10 +963,15 @@ class Unilateral:
         """
 
         for key, value in kwargs.items():
-            if key[:5] == 'micro':
-                self.parameters[key].micro_mod = value
+            if key in self.diag_time_dists:
+                try:
+                    self.diag_time_dists[key].update(value)
+                except ValueError as val_err:
+                    raise ValueError(
+                        "Parameters for marginalization over diagnose times are invalid"
+                        ) from val_err
             else:
-                self.parameters[key].spread_prob = value
+                self._setter_lookup[key](value)
 
 
 
@@ -1122,7 +1130,7 @@ class Unilateral:
         elif mode == "BN":
             marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
-                elf.set_state(state)
+                self.set_state(state)
                 for node in self.lnls:
                     marg_state_probs[i] *= node.bn_prob()
 
