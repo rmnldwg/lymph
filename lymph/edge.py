@@ -33,6 +33,7 @@ class Edge:
 
         self.micro_mod = micro_mod
         self.spread_prob = spread_prob
+        self.name = self.start.name + '_to_' + self.end.name
 
     # here I would add the spread_probability
     def __str__(self):
@@ -82,41 +83,23 @@ class Edge:
         return isinstance(self.start, Tumor)
 
 
-    @property
-    def micro_mod(self):
-        """Return the spread modifier for LNLs with microscopic involvement."""
-        return self._micro_mod
-
-    @micro_mod.setter
-    def micro_mod(self, new_micro_mod: float) -> None:
+    def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
         new_micro_mod = float(new_micro_mod)
 
         if not (0. <= new_micro_mod <= 1.):
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
 
-        self._micro_mod = new_micro_mod
-
-
-    @property
-    def spread_prob(self):
-        """Return the spread probability of the edge.
-
-        This is the probability of a tumor or involved LNL to spread to the next LNL.
-        Its value may be modified by the `micro_mod` parameter, when an LNL has only
-        microscopic involvement.
-        """
-        return self._spread_prob
-
-    @spread_prob.setter
-    def spread_prob(self, new_spread_prob: float) -> None:
+        self.micro_mod = new_micro_mod
+    
+    def set_spread_prob(self, new_spread_prob: float) -> None:
         """Set the spread probability of the edge."""
         new_spread_prob = float(new_spread_prob)
 
         if not (0. <= new_spread_prob <= 1.):
             raise ValueError("Spread probability must be between 0 and 1!")
 
-        self._spread_prob = new_spread_prob
+        self.spread_prob = new_spread_prob
 
 
     def comp_bayes_net_prob(self, log: bool = False) -> float:
@@ -131,11 +114,11 @@ class Edge:
         raise NotImplementedError("Not implemented yet!")
 
 
-    def comp_spread_prob(self) -> float:
+    def comp_stay_prob(self) -> float:
         """Compute the probability of spread per time-step in the hidden Markov model.
 
-        This function dynamically computes the probability of spread per time-step that
-        the child node will stay in the same state given the states of its parent nodes,
+        This function dynamically computes the probability of no spread per time-step i.e. 
+        that the child node will stay in the same state given the states of its parent nodes,
         and the parameters of the edge.
         """
         if self.end.is_binary:
