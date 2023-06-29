@@ -96,8 +96,7 @@ class Unilateral:
         self.check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_lnl_states)
         self.init_edges(graph)
-        self.init_parameters()
-        self.allowed_lnl_states = allowed_lnl_states #could be changed to len(allowed_states), as mostly the length is needed and not the states.
+        self._edge_lookup()
 
 
     def check_unique_names(self, graph):
@@ -150,17 +149,23 @@ class Unilateral:
                     self.lnl_edges.append(new_edge)
 
 
-    def init_parameters(self):
-        """Initializes the paramaters dictionary including all edges.
+    def _edge_lookup(self):
+        """Initializes the a lookup dictionary including all edge relatetd parameters as keys.
+        the values are the setter methods to assign their values
         """
-        self.parameters = {}
+        self._setter_lookup = {}
         for edge in self.tumor_edges:
-            self.parameters['tumor' + '_to_' + edge.end.name] = edge #we could rename this to spread as well.
+            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
         for edge in self.lnl_edges:
-            self.parameters['spread_' + edge.start.name + '_to_' + edge.end.name] = edge
-            self.parameters['micro_' + edge.start.name + '_to_' + edge.end.name] = edge
+            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+            self._setter_lookup['micro_' + edge.name] = edge.set_micro_mod
         for edge in self.growth_edges:
-            self.parameters['growth_' + edge.start.name] = edge
+            self._setter_lookup['growth_' + edge.start.name] = edge.set_spread_prob
+
+    @property
+    def allowed_lnl_states(self) -> List[int]:
+        """Return the list of allowed states for the LNLs."""
+        return self. lnls[0].allowed_states
 
 
     def __str__(self) -> str:
@@ -175,7 +180,7 @@ class Unilateral:
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
+            + " ".join([f"{e} {e._spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e._spread_prob}%" for e in self.lnl_edges])
             + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
         )
         print(string)
@@ -237,16 +242,16 @@ class Unilateral:
         """Returns the state of the system as a numpy array."""
         return np.array([node.state for node in self.nodes])
 
-    def set_state(self, state: list) -> None:
+    def set_state(self, system_state: list) -> None:
         """Sets the state of the system to `state`."""
-        if len(state) != len(self.lnls):
+        if len(system_state) != len(self.lnls):
             raise ValueError(
-                f"Length of state vector {len(state)} does not match "
+                f"Length of state vector {len(system_state)} does not match "
                 f"number of nodes {len(self.nodes)}"
             )
 
-        for node, s in zip(self.lnls, state):
-            node.state = s
+        for node, state in zip(self.lnls, system_state):
+            node.state = state
 
 
     def get_state_by_lnl(self) -> Dict[str, int]:
@@ -276,15 +281,15 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge.spread_prob for edge in self.tumor_edges], dtype=float)
+        return np.array([edge._spread_prob for edge in self.tumor_edges], dtype=float)
 
     @tumor_spread_probs.setter
     def tumor_spread_probs(self, new_tumor_probs):
         """Set the spread probabilities for the connections from the tumor to
         the LNLs.
         """
-        for i, edge in enumerate(self.tumor_edges):
-            edge.spread_prob = new_tumor_probs[i]
+        for edge, spread_prob in zip(self.tumor_edges, new_tumor_probs):
+            edge.set_spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -305,14 +310,14 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge.spread_prob for edge in self.lnl_edges], dtype=float)
+        return np.array([edge._spread_prob for edge in self.lnl_edges], dtype=float)
 
     @lnl_spread_prob.setter
     def lnl_spread_prob(self, new_lnl_probs):
         """Set the spread probabilities for the connections among the LNLs.
         """
-        for i, edge in enumerate(self.lnl_edges):
-            edge.spread_prob = new_lnl_probs[i]
+        for edge, spread_prob in zip(self.lnl_edges, new_lnl_probs):
+            edge.set_spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -323,14 +328,14 @@ class Unilateral:
         """Return the growth probablities of the lymph
         node levels.
         """
-        return self.growth_edges[0].spread_prob
+        return self.growth_edges[0]._spread_prob
 
     @growth_probability.setter
     def growth_probability(self, new_growth_probability):
         """Set the the growth probablities of the lymph node levels.
         """
-        for i, edge in enumerate(self.growth_edges):
-            edge.spread_prob = new_growth_probability
+        for edge, spread_prob in zip(self.growth_edges, new_growth_probability):
+            edge.set_spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -350,8 +355,8 @@ class Unilateral:
     def microscopic_parameter(self, microscopic_parameter):
         """Set the microscopic spread probabilities for the connections among the LNLs.
         """
-        for i, edge in enumerate(self.lnl_edges):
-            edge.micro_mod = microscopic_parameter
+        for edge, spread_prob in zip(self.tumor_edges, microscopic_parameter):
+            edge.micro_mod = spread_prob
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
     # the sampling now takes longer because check and assign assigns to spread parameters and microscopic spread. hence we loop through the lnl edges twice. we could optimize that by setting them together! (time increase by 50%!!)
@@ -943,15 +948,17 @@ class Unilateral:
 
         return state_probs
 
-
+    #right now the micro_mod and the growth parameter can be set differently for each edge
+    #If we want only 1 micro_mod and growth_parameter to be available, we need to set them together
+    #Or add an option to treat them separately or not (important for sampling)
     def assign_parameters(self, **kwargs):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
         the model.
 
         Args:
-            new_params: The set of :attr:`spread_probs` and parameters to provide for
-                updating the parametrized distributions over diagnose times.
+            **kwargs: The keyword - value pairs to set spread, microscopic, growth
+            and time_dist parameters.
 
         Warning:
             This method assumes that the parametrized distributions (instances of
@@ -960,10 +967,23 @@ class Unilateral:
         """
 
         for key, value in kwargs.items():
-            if key[:5] == 'micro':
-                self.parameters[key].micro_mod = value
+            if key in self.diag_time_dists:
+                try:
+                    self.diag_time_dists[key].update(value)
+                except ValueError as val_err:
+                    raise ValueError(
+                        "Parameters for marginalization over diagnose times are invalid"
+                        ) from val_err
+
+            elif key == 'growth':
+                for edge in self.growth_edges:
+                    edge.set_spread_prob = value
+            elif key == 'micro_mod':
+                for edge in self.lnl_edges:
+                    edge.micro_mod = value
+
             else:
-                self.parameters[key].spread_prob = value
+                self._setter_lookup[key](value)
 
 
 
@@ -1122,7 +1142,7 @@ class Unilateral:
         elif mode == "BN":
             marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
-                elf.set_state(state)
+                self.set_state(state)
                 for node in self.lnls:
                     marg_state_probs[i] *= node.bn_prob()
 
