@@ -180,8 +180,8 @@ class Unilateral:
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e._spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e._spread_prob}%" for e in self.lnl_edges])
-            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
+            + " ".join([f"{e} {e.get_spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.get_spread_prob}%" for e in self.lnl_edges])
+            + f"\n the growth probability is: {self.growth_edges[0].get_spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
         )
         print(string)
 
@@ -281,7 +281,7 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge._spread_prob for edge in self.tumor_edges], dtype=float)
+        return np.array([edge.get_spread_prob for edge in self.tumor_edges], dtype=float)
 
     @tumor_spread_probs.setter
     def tumor_spread_probs(self, new_tumor_probs):
@@ -310,7 +310,7 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge._spread_prob for edge in self.lnl_edges], dtype=float)
+        return np.array([edge.get_spread_prob for edge in self.lnl_edges], dtype=float)
 
     @lnl_spread_prob.setter
     def lnl_spread_prob(self, new_lnl_probs):
@@ -328,7 +328,7 @@ class Unilateral:
         """Return the growth probablities of the lymph
         node levels.
         """
-        return self.growth_edges[0]._spread_prob
+        return self.growth_edges[0].get_spread_prob
 
     @growth_probability.setter
     def growth_probability(self, new_growth_probability):
@@ -355,8 +355,8 @@ class Unilateral:
     def microscopic_parameter(self, microscopic_parameter):
         """Set the microscopic spread probabilities for the connections among the LNLs.
         """
-        for edge, spread_prob in zip(self.tumor_edges, microscopic_parameter):
-            edge.micro_mod = spread_prob
+        for edge, micro_mod in zip(self.tumor_edges, microscopic_parameter):
+            edge.micro_mod = micro_mod
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
     # the sampling now takes longer because check and assign assigns to spread parameters and microscopic spread. hence we loop through the lnl edges twice. we could optimize that by setting them together! (time increase by 50%!!)
