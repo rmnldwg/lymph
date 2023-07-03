@@ -180,7 +180,10 @@ class LymphNodeLevel(AbstractNode):
 
         return res
 
-
+    # note: here we gained extra computation time. the former version used to save
+    # transition probabilities that were computed before with an @lru_cache decorator
+    # since the computation is not done in node anymore, this will not work now.
+    # thus we will need to implement a function that checks and caches results
     def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
         """Compute the hidden Markov model's transition probability to a new state."""
         stay_prob = super().comp_trans_prob(new_state, log)
