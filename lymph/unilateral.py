@@ -7,11 +7,13 @@ connected by instances of `Edge`.
 The resulting class can compute all kinds of conditional probabilities with respect to
 the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a tumor.
 """
+import base64
 import warnings
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
+from IPython.display import Image, display
 from numpy.linalg import matrix_power as mat_pow
 
 from lymph.edge import Edge
@@ -165,12 +167,26 @@ class Unilateral:
     @property
     def allowed_lnl_states(self) -> List[int]:
         """Return the list of allowed states for the LNLs."""
-        return self. lnls[0].allowed_states
+        return self.lnls[0].allowed_states
 
 
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
+
+    #here you might want to change the type of output
+    def print_graph(self):
+        'produces a mermaid graph of the given model'
+        graph = ('flowchart TD\n')
+        for index, node in enumerate(self.nodes):
+            for edge in self.nodes[index].out:
+                line = f"{node.name} -->|{edge.spread_prob}| {edge.end.name} \n"
+                graph += line
+        graphbytes = graph.encode("ascii")
+        base64_bytes = base64.b64encode(graphbytes)
+        base64_string = base64_bytes.decode("ascii")
+        display(Image(url="https://mermaid.ink/img/" + base64_string))
+
 
 
     def print_info(self):
@@ -180,8 +196,8 @@ class Unilateral:
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.get_spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.get_spread_prob}%" for e in self.lnl_edges])
-            + f"\n the growth probability is: {self.growth_edges[0].get_spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
+            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
         )
         print(string)
 
@@ -281,7 +297,7 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge.get_spread_prob for edge in self.tumor_edges], dtype=float)
+        return np.array([edge.spread_prob for edge in self.tumor_edges], dtype=float)
 
     @tumor_spread_probs.setter
     def tumor_spread_probs(self, new_tumor_probs):
@@ -289,7 +305,7 @@ class Unilateral:
         the LNLs.
         """
         for edge, spread_prob in zip(self.tumor_edges, new_tumor_probs):
-            edge.set_spread_prob = spread_prob
+            edge.spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -310,14 +326,14 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge.get_spread_prob for edge in self.lnl_edges], dtype=float)
+        return np.array([edge.spread_prob for edge in self.lnl_edges], dtype=float)
 
     @lnl_spread_prob.setter
     def lnl_spread_prob(self, new_lnl_probs):
         """Set the spread probabilities for the connections among the LNLs.
         """
         for edge, spread_prob in zip(self.lnl_edges, new_lnl_probs):
-            edge.set_spread_prob = spread_prob
+            edge.spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -328,22 +344,19 @@ class Unilateral:
         """Return the growth probablities of the lymph
         node levels.
         """
-        return self.growth_edges[0].get_spread_prob
+        return self.growth_edges[0].spread_prob
 
     @growth_probability.setter
     def growth_probability(self, new_growth_probability):
         """Set the the growth probablities of the lymph node levels.
         """
         for edge, spread_prob in zip(self.growth_edges, new_growth_probability):
-            edge.set_spread_prob = spread_prob
+            edge.spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
-    # here we could allow for different microscopic parameters for each LNL, but then we would need to
-    # adapt how the microscopic parameter is set and read out. For generality allowing to set a specific
-    # microscopic spread parameter for each LNL would be better. To keep calculation time reasonable,
-    # prohibiting this option would be optimal. What do you think, Roman? (same applies to growth probability)
+
     @property
     def microscopic_parameter(self) -> float:
         """Return the microscopic spread parameter of the connections between the lymph
@@ -359,7 +372,7 @@ class Unilateral:
             edge.micro_mod = micro_mod
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
-    # the sampling now takes longer because check and assign assigns to spread parameters and microscopic spread. hence we loop through the lnl edges twice. we could optimize that by setting them together! (time increase by 50%!!)
+
 
     @property
     def spread_probs(self) -> np.ndarray:
@@ -948,9 +961,8 @@ class Unilateral:
 
         return state_probs
 
-    #right now the micro_mod and the growth parameter can be set differently for each edge
-    #If we want only 1 micro_mod and growth_parameter to be available, we need to set them together
-    #Or add an option to treat them separately or not (important for sampling)
+    # Not sure whether we want to keep the option here to assign parameters as an array
+    # if so, I would implement the function to handle dictionary inputs and array inputs.
     def assign_parameters(self, **kwargs):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
@@ -965,7 +977,6 @@ class Unilateral:
             :class:`Marginalizor`) all raise a ``ValueError`` when provided with
             invalid parameters.
         """
-
         for key, value in kwargs.items():
             if key in self.diag_time_dists:
                 try:
@@ -977,13 +988,14 @@ class Unilateral:
 
             elif key == 'growth':
                 for edge in self.growth_edges:
-                    edge.set_spread_prob = value
+                    edge.spread_prob = value
             elif key == 'micro_mod':
                 for edge in self.lnl_edges:
                     edge.micro_mod = value
-
             else:
                 self._setter_lookup[key](value)
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
 
 
 
