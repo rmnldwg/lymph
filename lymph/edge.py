@@ -93,15 +93,17 @@ class Edge:
         self.micro_mod = new_micro_mod
 
 
-    def set_spread_prob(self, new_spread_prob: float) -> None:
+    def get_spread_prob(self) -> float:
+        """Return the spread probability."""
+        return self._spread_prob
+
+    def set_spread_prob(self, new_spread_prob):
         """Set the spread probability of the edge."""
         if not (0. <= new_spread_prob <= 1.):
             raise ValueError("Spread probability must be between 0 and 1!")
         self._spread_prob = new_spread_prob
 
-    def spread_prob(self, new_spread_prob) -> float:
-        self.set_spread_prob(new_spread_prob)
-
+    spread_probs = property(get_spread_prob, set_spread_prob, doc="The spread probability")
 
     def comp_bayes_net_prob(self, log: bool = False) -> float:
         """Compute the conditional probability of this edge's child node's state.
