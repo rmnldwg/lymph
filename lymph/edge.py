@@ -35,7 +35,7 @@ class Edge:
         self.spread_prob = spread_prob
         self.name = self.start.name + '_to_' + self.end.name
 
-    # here I would add the spread_probability
+
     def __str__(self):
         """Print basic info."""
         return f"{self.start}-->{self.end}"
@@ -83,18 +83,25 @@ class Edge:
         return isinstance(self.start, Tumor)
 
 
+    def get_micro_mod(self) -> float:
+        """Return the spread probability."""
+        if not hasattr(self, "_micro_mod"):
+            self._micro_mod = 1.
+        return self._micro_mod
+
     def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
-        new_micro_mod = float(new_micro_mod)
-
         if not (0. <= new_micro_mod <= 1.):
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
+        self._micro_mod = new_micro_mod
 
-        self.micro_mod = new_micro_mod
+    micro_mod = property(get_micro_mod, set_micro_mod, doc = "The microscopic involvement parameter")
 
 
     def get_spread_prob(self) -> float:
         """Return the spread probability."""
+        if not hasattr(self, "_spread_prob"):
+            self._spread_prob = 0.
         return self._spread_prob
 
     def set_spread_prob(self, new_spread_prob):
@@ -103,7 +110,8 @@ class Edge:
             raise ValueError("Spread probability must be between 0 and 1!")
         self._spread_prob = new_spread_prob
 
-    spread_probs = property(get_spread_prob, set_spread_prob, doc="The spread probability")
+    spread_prob = property(get_spread_prob, set_spread_prob, doc="The spread probability")
+
 
     def comp_bayes_net_prob(self, log: bool = False) -> float:
         """Compute the conditional probability of this edge's child node's state.
@@ -126,17 +134,17 @@ class Edge:
         """
         if self.end.is_binary:
             if self.end.state == 0:
-                return 1 - self._spread_prob
+                return 1 - self.spread_prob
 
         if self.start.state == 1:
             if self.end.state == 0:
-                return 1 - self._spread_prob * self.micro_mod
+                return 1 - self.spread_prob * self.micro_mod
             elif self.end.state == 1:
                 if self.is_growth:
-                    return 1 - self._spread_prob
+                    return 1 - self.spread_prob
         if self.start.state == 2:
             if self.end.state == 0:
-                return 1 - self._spread_prob
+                return 1 - self.spread_prob
         return 1
 
 
