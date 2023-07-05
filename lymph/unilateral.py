@@ -642,59 +642,13 @@ class Unilateral:
         try:
             modality_spsn = {}
             for mod, table in self._spsn_tables.items():
-                modality_spsn[mod] = [table[0,0], table[len(self.allowed_lnl_states)-1],1]
+                modality_spsn[mod] = [table[0,0], table[len(self.allowed_lnl_states)-1,1]]
             return modality_spsn
 
         except AttributeError:
             msg = ("No modality defined yet with specificity & sensitivity.")
             warnings.warn(msg)
             return {}
-
-
-    def binary_modality(self, modality_spsn: Dict[Any, List[float]]):
-        for mod, spsn in modality_spsn.items():
-            if not isinstance(mod, str):
-                msg = ("Modality names must be strings.")
-                raise TypeError(msg)
-            has_len_2 = len(spsn) == 2
-            is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-            is_below_ub = np.all(np.less_equal(spsn, 1.))
-            if not has_len_2 or not is_above_lb or not is_below_ub:
-                msg = ("For each modality provide a list of two decimals "
-                       "between 0.5 and 1.0 as specificity & sensitivity "
-                       "respectively.")
-                raise ValueError(msg)
-            sp, sn = spsn
-            self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
-                                               [1. - sp, sn     ]]).T
-
-
-    def trinary_modality(self, modality_spsn: Dict[Any, List[float]]):
-        keys = ['clinical','pathological','pathologic']
-        for key in keys:
-            if key in list(modality_spsn.keys()):
-                for mod, spsn in modality_spsn[key].items():
-                    if not isinstance(mod, str):
-                        msg = ("Modality names must be strings.")
-                        raise TypeError(msg)
-
-                    has_len_2 = len(spsn) == 2
-                    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-                    is_below_ub = np.all(np.less_equal(spsn, 1.))
-                    if not has_len_2 or not is_above_lb or not is_below_ub:
-                        msg = ("For each modality provide a list of two decimals "
-                            "between 0.5 and 1.0 as specificity & sensitivity "
-                            "respectively.")
-                        raise ValueError(msg)
-
-                    sp, sn = spsn
-                    if key == 'clinical':
-                        self._spsn_tables[mod] = np.array([[sp     , sp     , 1. - sn],
-                                                        [1. - sp, 1. - sp, sn     ]]).T
-                    elif key == 'pathological' or 'pathologic':
-                        self._spsn_tables[mod] = np.array([[sp     , 1. - sn, 1. - sn],
-                                                        [1. - sp, sn     , sn     ]]).T
-
 
     @modalities.setter
     def modalities(self, modality_spsn: Dict[Any, List[float]]):
@@ -708,21 +662,142 @@ class Unilateral:
             1 - s_P & s_N
             \\end{pmatrix}
         """
-
         if hasattr(self, "_observation_matrix"):
             del self._observation_matrix
         if hasattr(self, "_obs_list"):
             del self._obs_list
+        if not hasattr(self, "_spsn_tables"):
+            self._spsn_tables = {}
 
-        self._spsn_tables = {}
+        dictionary = modality_spsn
+        for mod,matrix in dictionary.items():
+            self._spsn_tables[mod] = matrix
 
-        if len(self.allowed_lnl_states) == 2:
-            self.binary_modality(modality_spsn)
-        if len(self.allowed_lnl_states) == 3:
-            self.trinary_modality(modality_spsn)
 
-        # here one could add more modalities which could be applied for more states or for matrices with more than one specificity and sensitivity.
-        # Important: modalities would need to be adapted if we change the the number of states or produce matrices with more than one specificity and sensitivity.
+    def _check_modality(self, modality: str, spsn: list):
+        """Private method that checks whether all inserted values
+        are valid for a confusion matrix.
+
+        Args:
+            modality (str): name of the modality
+            spsn (list): list with specificity and sensiticity
+
+        Raises:
+            TypeError: returns a type error if the modality is not a string
+            ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+        """
+        if not isinstance(modality, str):
+                msg = ("Modality names must be strings.")
+                raise TypeError(msg)
+        has_len_2 = len(spsn) == 2
+        is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+        is_below_ub = np.all(np.less_equal(spsn, 1.))
+        if not has_len_2 or not is_above_lb or not is_below_ub:
+            msg = ("For each modality provide a list of two decimals "
+                "between 0.5 and 1.0 as specificity & sensitivity "
+                "respectively.")
+            raise ValueError(msg)
+
+    def clinical(self, modality_spsn: Dict[Any, List[float]]) -> Dict:
+        """produces the confusion matrix of a clinical modality, i.e. a modality
+        that can not detect microscopic metastases
+
+        Args:
+            modality_spsn (Dict[Any, List[float]]): dictionary with modality name and [sp,sn] list
+
+        Returns:
+            Dict[str,np.ndarray]: returns a dictionary with modality name and clinical confusion matrices
+        """
+        modality_dictionary = {}
+        for mod, spsn in modality_spsn.items():
+            try:
+                self._check_modality(mod,spsn)
+            except TypeError:
+                raise
+            except ValueError:
+                raise
+
+            sp, sn = spsn
+            modality_dictionary[mod] = np.array([[sp, 1. - sp],
+                                               [sp, 1. - sp],
+                                               [1. - sn, sn]])
+        return modality_dictionary
+
+
+    def pathological(self, modality_spsn: Dict[Any, List[float]]) -> Dict:
+        """produces the confusion matrix of a pathological modality, i.e. a modality
+        that can detect microscopic metastases
+
+        Args:
+            modality_spsn (Dict[Any, List[float]]):  dictionary with modality name and [sp,sn] list
+
+        Returns:
+            Dict[str,np.ndarray]: returns a dictionary with modality name and pathological confusion matrices
+        """
+        modality_dictionary = {}
+        for mod, spsn in modality_spsn.items():
+            try:
+                self._check_modality(mod,spsn)
+            except TypeError:
+                raise
+            except ValueError:
+                raise
+
+            sp, sn = spsn
+            modality_dictionary[mod] = np.array([[sp, 1. - sp],
+                                               [1. - sn, sn],
+                                               [1. - sn, sn]])
+        return modality_dictionary
+
+
+    def confusion_matrix(self,modality: str, matrix: np.ndarray):
+        """checks a manually inserted confusion matrix.
+
+        Args:
+            modality (str): name of the modality
+            matrix (np.ndarray): confusion matrix with number of allowed lnl states x 2 dimensionality
+
+        Raises:
+            ValueError: returns a type error if the modality is not a string
+            ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+
+        Returns:
+            Dict[str, np.ndarray]: returns a dictionary with modality as name and the accepted confusion matrix
+        """
+        if matrix.shape != (len(self.allowed_lnl_states), 2):
+            msg = (f'the shape of the confusion matrix does not match the model '
+                   f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+            raise ValueError(msg)
+        elif not (np.all(0 <= matrix) and np.all(matrix <= 1)):
+            msg = ("All values need to be between 0 and 1")
+            raise ValueError(msg)
+        else:
+            return {modality: matrix}
+
+
+    def binary_modality(self, modality_spsn: Dict[Any, List[float]]):
+        """Produces the confusion matrix for a binary model.
+
+        Args:
+            modality_spsn (Dict[Any, List[float]]): dictionary with modality name and [sp,sn] list
+
+        Returns:
+            Dict[str,np.ndarray]: returns a dictionary with modality name and confusion matrices
+        """
+        modality_dictionary = {}
+        for mod, spsn in modality_spsn.items():
+            try:
+                self._check_modality(mod,spsn)
+            except TypeError:
+                raise
+            except ValueError:
+                raise
+
+            sp, sn = spsn
+            modality_dictionary[mod] = np.array([[sp     , 1. - sp],
+                                               [1. - sn, sn     ]])
+        return modality_dictionary
+
 
     def _gen_observation_matrix(self):
         """Generates the observation matrix :math:`\\mathbf{B}`, which contains
