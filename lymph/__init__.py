@@ -19,7 +19,7 @@ from lymph.edge import Edge
 from lymph.midline import MidlineBilateral
 from lymph.node import LymphNodeLevel, Tumor
 from lymph.timemarg import Marginalizor, MarginalizorDict
-from lymph.unilateral import System, Unilateral
+from lymph.unilateral import System, Unilateral, clinical, pathological
 
 __all__ = [
     "LymphNodeLevel",
