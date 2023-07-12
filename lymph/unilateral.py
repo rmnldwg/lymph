@@ -358,27 +358,38 @@ class Unilateral:
         return prob
 
 
-    def _gen_state_list(self):
+    def _gen_state_list(self, midline):
         """Generates the list of (hidden) states.
         """
         if not hasattr(self, "_state_list"):
-            self._state_list = np.zeros(
-                shape=(2**len(self.lnls), len(self.lnls)), dtype=int
-            )
-        for i in range(2**len(self.lnls)):
-            self._state_list[i] = [
-                int(digit) for digit in change_base(i, 2, length=len(self.lnls))
-            ]
+            if midline == False:
+                self._state_list = np.zeros(
+                    shape=(2**len(self.lnls), len(self.lnls)), dtype=int
+                )
+            if midline == True:
+                self._state_list = np.zeros(
+                    shape=(2**1, 1), dtype=int
+                )
+        if midline == False:
+            for i in range(2**len(self.lnls)):
+                self._state_list[i] = [
+                    int(digit) for digit in change_base(i, 2, length=len(self.lnls))
+                ]
+        if midline == True:
+            for i in range(2**1):
+                self._state_list[i] = [
+                    int(digit) for digit in change_base(i, 2, length=1)
+                ]
 
     @property
-    def state_list(self):
+    def state_list(self, midline = False):
         """Return list of all possible hidden states. They are arranged in the
         same order as the lymph node levels in the network/graph.
         """
         try:
             return self._state_list
         except AttributeError:
-            self._gen_state_list()
+            self._gen_state_list(midline)
             return self._state_list
 
 
@@ -496,7 +507,6 @@ class Unilateral:
         except AttributeError:
             self._gen_transition_matrix()
             return self._transition_matrix
-
 
     @property
     def modalities(self):
@@ -789,7 +799,6 @@ class Unilateral:
         state_probs[-1] = state
 
         return state_probs
-
 
     def check_and_assign(self, new_params: np.ndarray):
         """Check that the spread probability (rates) and the parameters for the
