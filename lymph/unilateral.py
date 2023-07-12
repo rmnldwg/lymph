@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from IPython.display import Image, display
 from numpy.linalg import matrix_power as mat_pow
 
 from lymph.edge import Edge
@@ -72,6 +71,81 @@ def change_base(
         return result + pad
     else:
         return pad + result[::-1]
+
+def check_modality(modality: str, spsn: list):
+    """Private method that checks whether all inserted values
+    are valid for a confusion matrix.
+
+    Args:
+        modality (str): name of the modality
+        spsn (list): list with specificity and sensiticity
+
+    Raises:
+        TypeError: returns a type error if the modality is not a string
+        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+    """
+    if not isinstance(modality, str):
+            msg = ("Modality names must be strings.")
+            raise TypeError(msg)
+    has_len_2 = len(spsn) == 2
+    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+    is_below_ub = np.all(np.less_equal(spsn, 1.))
+    if not has_len_2 or not is_above_lb or not is_below_ub:
+        msg = ("For each modality provide a list of two decimals "
+            "between 0.5 and 1.0 as specificity & sensitivity "
+            "respectively.")
+        raise ValueError(msg)
+
+def clinical(modality_spsn: Dict[Any, List[float]]) -> Dict:
+    """produces the confusion matrix of a clinical modality, i.e. a modality
+    that can not detect microscopic metastases
+
+    Args:
+        modality_spsn (Dict[Any, List[float]]): dictionary with modality name and [sp,sn] list
+
+    Returns:
+        Dict[str,np.ndarray]: returns a dictionary with modality name and clinical confusion matrices
+    """
+    modality_dictionary = {}
+    for mod, spsn in modality_spsn.items():
+        try:
+            check_modality(mod,spsn)
+        except TypeError:
+            raise
+        except ValueError:
+            raise
+
+        sp, sn = spsn
+        modality_dictionary[mod] = np.array([[sp, 1. - sp],
+                                            [sp, 1. - sp],
+                                            [1. - sn, sn]])
+    return modality_dictionary
+
+
+def pathological(modality_spsn: Dict[Any, List[float]]) -> Dict:
+    """produces the confusion matrix of a pathological modality, i.e. a modality
+    that can detect microscopic metastases
+
+    Args:
+        modality_spsn (Dict[Any, List[float]]):  dictionary with modality name and [sp,sn] list
+
+    Returns:
+        Dict[str,np.ndarray]: returns a dictionary with modality name and pathological confusion matrices
+    """
+    modality_dictionary = {}
+    for mod, spsn in modality_spsn.items():
+        try:
+            check_modality(mod,spsn)
+        except TypeError:
+            raise
+        except ValueError:
+            raise
+
+        sp, sn = spsn
+        modality_dictionary[mod] = np.array([[sp, 1. - sp],
+                                            [1. - sn, sn],
+                                            [1. - sn, sn]])
+    return modality_dictionary
 
 
 class Unilateral:
@@ -152,7 +226,7 @@ class Unilateral:
 
 
     def _edge_lookup(self):
-        """Initializes the a lookup dictionary including all edge relatetd parameters as keys.
+        """Initializes the a lookup dictionary including all edge related parameters as keys.
         the values are the setter methods to assign their values
         """
         self._setter_lookup = {}
@@ -174,9 +248,12 @@ class Unilateral:
         """Print info about the instance."""
         return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
 
-    #here you might want to change the type of output
     def print_graph(self):
-        'produces a mermaid graph of the given model'
+        """generates the a a visual chart of the spread model based on mermaid graph
+
+        Returns:
+            list: list with the string to create the mermaid graph and an url that directly leads to the graph
+        """
         graph = ('flowchart TD\n')
         for index, node in enumerate(self.nodes):
             for edge in self.nodes[index].out:
@@ -185,8 +262,8 @@ class Unilateral:
         graphbytes = graph.encode("ascii")
         base64_bytes = base64.b64encode(graphbytes)
         base64_string = base64_bytes.decode("ascii")
-        display(Image(url="https://mermaid.ink/img/" + base64_string))
-
+        url="https://mermaid.ink/img/" + base64_string
+        return graph, url
 
 
     def print_info(self):
@@ -669,134 +746,22 @@ class Unilateral:
         if not hasattr(self, "_spsn_tables"):
             self._spsn_tables = {}
 
-        dictionary = modality_spsn
-        for mod,matrix in dictionary.items():
-            self._spsn_tables[mod] = matrix
-
-
-    def _check_modality(self, modality: str, spsn: list):
-        """Private method that checks whether all inserted values
-        are valid for a confusion matrix.
-
-        Args:
-            modality (str): name of the modality
-            spsn (list): list with specificity and sensiticity
-
-        Raises:
-            TypeError: returns a type error if the modality is not a string
-            ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-        """
-        if not isinstance(modality, str):
-                msg = ("Modality names must be strings.")
-                raise TypeError(msg)
-        has_len_2 = len(spsn) == 2
-        is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-        is_below_ub = np.all(np.less_equal(spsn, 1.))
-        if not has_len_2 or not is_above_lb or not is_below_ub:
-            msg = ("For each modality provide a list of two decimals "
-                "between 0.5 and 1.0 as specificity & sensitivity "
-                "respectively.")
-            raise ValueError(msg)
-
-    def clinical(self, modality_spsn: Dict[Any, List[float]]) -> Dict:
-        """produces the confusion matrix of a clinical modality, i.e. a modality
-        that can not detect microscopic metastases
-
-        Args:
-            modality_spsn (Dict[Any, List[float]]): dictionary with modality name and [sp,sn] list
-
-        Returns:
-            Dict[str,np.ndarray]: returns a dictionary with modality name and clinical confusion matrices
-        """
-        modality_dictionary = {}
-        for mod, spsn in modality_spsn.items():
-            try:
-                self._check_modality(mod,spsn)
-            except TypeError:
-                raise
-            except ValueError:
-                raise
-
-            sp, sn = spsn
-            modality_dictionary[mod] = np.array([[sp, 1. - sp],
-                                               [sp, 1. - sp],
-                                               [1. - sn, sn]])
-        return modality_dictionary
-
-
-    def pathological(self, modality_spsn: Dict[Any, List[float]]) -> Dict:
-        """produces the confusion matrix of a pathological modality, i.e. a modality
-        that can detect microscopic metastases
-
-        Args:
-            modality_spsn (Dict[Any, List[float]]):  dictionary with modality name and [sp,sn] list
-
-        Returns:
-            Dict[str,np.ndarray]: returns a dictionary with modality name and pathological confusion matrices
-        """
-        modality_dictionary = {}
-        for mod, spsn in modality_spsn.items():
-            try:
-                self._check_modality(mod,spsn)
-            except TypeError:
-                raise
-            except ValueError:
-                raise
-
-            sp, sn = spsn
-            modality_dictionary[mod] = np.array([[sp, 1. - sp],
-                                               [1. - sn, sn],
-                                               [1. - sn, sn]])
-        return modality_dictionary
-
-
-    def confusion_matrix(self,modality: str, matrix: np.ndarray):
-        """checks a manually inserted confusion matrix.
-
-        Args:
-            modality (str): name of the modality
-            matrix (np.ndarray): confusion matrix with number of allowed lnl states x 2 dimensionality
-
-        Raises:
-            ValueError: returns a type error if the modality is not a string
-            ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-
-        Returns:
-            Dict[str, np.ndarray]: returns a dictionary with modality as name and the accepted confusion matrix
-        """
-        if matrix.shape != (len(self.allowed_lnl_states), 2):
-            msg = (f'the shape of the confusion matrix does not match the model '
-                   f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
-            raise ValueError(msg)
-        elif not (np.all(0 <= matrix) and np.all(matrix <= 1)):
-            msg = ("All values need to be between 0 and 1")
-            raise ValueError(msg)
-        else:
-            return {modality: matrix}
-
-
-    def binary_modality(self, modality_spsn: Dict[Any, List[float]]):
-        """Produces the confusion matrix for a binary model.
-
-        Args:
-            modality_spsn (Dict[Any, List[float]]): dictionary with modality name and [sp,sn] list
-
-        Returns:
-            Dict[str,np.ndarray]: returns a dictionary with modality name and confusion matrices
-        """
-        modality_dictionary = {}
-        for mod, spsn in modality_spsn.items():
-            try:
-                self._check_modality(mod,spsn)
-            except TypeError:
-                raise
-            except ValueError:
-                raise
-
-            sp, sn = spsn
-            modality_dictionary[mod] = np.array([[sp     , 1. - sp],
-                                               [1. - sn, sn     ]])
-        return modality_dictionary
+        for mod,matrix in modality_spsn.items():
+            if not np.all(matrix.sum(axis = 1) == 1):
+                msg = ("All values need to be between 0 and 1 and rows add up to 1")
+                raise ValueError(msg)
+            if len(self.allowed_lnl_states) == 3:
+                if matrix.shape != (len(self.allowed_lnl_states), 2):
+                    msg = (f'the shape of the confusion matrix does not match the model '
+                    f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+                    raise ValueError(msg)
+                self._spsn_tables[mod] = matrix
+            elif len(self.allowed_lnl_states) == 2 and matrix.shape[0] == 3:
+                if matrix.shape != (len(self.allowed_lnl_states), 2):
+                    msg = (f'the shape of the confusion matrix does not match the model '
+                    f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+                    raise ValueError(msg)
+                self._spsn_tables[mod] = np.delete(matrix, 1, axis = 0)
 
 
     def _gen_observation_matrix(self):
@@ -1036,9 +1001,8 @@ class Unilateral:
 
         return state_probs
 
-    # Not sure whether we want to keep the option here to assign parameters as an array
-    # if so, I would implement the function to handle dictionary inputs and array inputs.
-    def assign_parameters(self, **kwargs):
+
+    def assign_parameters(self, new_params_list = None, **new_params_kwargs):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
         the model.
@@ -1052,23 +1016,31 @@ class Unilateral:
             :class:`Marginalizor`) all raise a ``ValueError`` when provided with
             invalid parameters.
         """
-        for key, value in kwargs.items():
-            if key in self.diag_time_dists:
-                try:
-                    self.diag_time_dists[key].update(value)
-                except ValueError as val_err:
-                    raise ValueError(
-                        "Parameters for marginalization over diagnose times are invalid"
-                        ) from val_err
+        if new_params_list is not None:
+            # here it depends how we want to provide the new_params_list.
+            # there are a lot of options. e.g. one needs to specifically define each base, each transmission, each growth and each micro_mod parameter
+            # Or one only defines each base, each transmission and one growth and one micro_mod parameter
+            # I am not sure what exactly you prefer Roman.
+            # But it kind of needs to be well defined, also how the function handles incomplete parameter lists...
+            pass
+        else:
+            for key, value in new_params_kwargs.items():
+                if key in self.diag_time_dists:
+                    try:
+                        self.diag_time_dists[key].update(value)
+                    except ValueError as val_err:
+                        raise ValueError(
+                            "Parameters for marginalization over diagnose times are invalid"
+                            ) from val_err
 
-            elif key == 'growth':
-                for edge in self.growth_edges:
-                    edge.spread_prob = value
-            elif key == 'micro_mod':
-                for edge in self.lnl_edges:
-                    edge.micro_mod = value
-            else:
-                self._setter_lookup[key](value)
+                elif key == 'growth':
+                    for edge in self.growth_edges:
+                        edge.spread_prob = value
+                elif key == 'micro_mod':
+                    for edge in self.lnl_edges:
+                        edge.micro_mod = value
+                else:
+                    self._setter_lookup[key](value)
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
