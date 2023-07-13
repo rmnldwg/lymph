@@ -362,24 +362,13 @@ class Unilateral:
         """Generates the list of (hidden) states.
         """
         if not hasattr(self, "_state_list"):
-            if midline == False:
-                self._state_list = np.zeros(
-                    shape=(2**len(self.lnls), len(self.lnls)), dtype=int
-                )
-            if midline == True:
-                self._state_list = np.zeros(
-                    shape=(2**1, 1), dtype=int
-                )
-        if midline == False:
-            for i in range(2**len(self.lnls)):
-                self._state_list[i] = [
-                    int(digit) for digit in change_base(i, 2, length=len(self.lnls))
-                ]
-        if midline == True:
-            for i in range(2**1):
-                self._state_list[i] = [
-                    int(digit) for digit in change_base(i, 2, length=1)
-                ]
+            self._state_list = np.zeros(
+                shape=(2**len(self.lnls), len(self.lnls)), dtype=int
+            )
+        for i in range(2**len(self.lnls)):
+            self._state_list[i] = [
+                int(digit) for digit in change_base(i, 2, length=len(self.lnls))
+            ]
 
     @property
     def state_list(self, midline = False):
