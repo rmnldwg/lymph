@@ -399,6 +399,45 @@ class MidlineBilateral:
         """
         self._midext_prob = new_params[-1]
 
+    def _gen_diagnose_matrices_midext(self, table: pd.DataFrame, t_stage: str):
+        """Generate the matrix containing the probabilities to see the provided
+        diagnose, given any possible hidden state. The resulting matrix has
+        size :math:`2^N \\times M` where :math:`N` is the number of nodes in
+        the graph and :math:`M` the number of patients.
+
+        Args:
+            table: pandas ``DataFrame`` containing rows of patients. Must have
+                ``MultiIndex`` columns with two levels: First, the modalities
+                and second, the LNLs.
+            t_stage: The T-stage all the patients in ``table`` belong to.
+        """
+        if not hasattr(self, "_diagnose_matrices_midext"):
+            self._diagnose_matrices_midext = {}
+
+        self.patient_data['info', 'tumor', 'midline_extension']
+        self.patient_data['info', 'tumor', 't_stage'].unique()
+
+        shape = (len(self.midexstate_list), len(table))
+        self._diagnose_matrices_midext[t_stage] = np.ones(shape=shape)
+
+        for i,state in enumerate(self.midexstate_list):
+            self.state = state
+
+            for j, (_, patient) in enumerate(table.iterrows()):
+                patient_obs_prob = self.comp_diagnose_prob(patient)
+                self._diagnose_matrices_midext[t_stage][i,j] = patient_obs_prob
+
+
+    @property
+    def diagnose_matrices_midext(self):
+        try:
+            return self._diagnose_matrices_midext
+        except AttributeError as att_err:
+            raise AttributeError(
+                "No data has been loaded and hence no observation matrix has "
+                "been computed."
+            ) from att_err
+
     @property
     def patient_data(self):
         """A pandas :class:`DataFrame` with rows of patients and columns of
