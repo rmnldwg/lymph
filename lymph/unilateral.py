@@ -358,7 +358,7 @@ class Unilateral:
         return prob
 
 
-    def _gen_state_list(self, midline):
+    def _gen_state_list(self):
         """Generates the list of (hidden) states.
         """
         if not hasattr(self, "_state_list"):
@@ -371,14 +371,14 @@ class Unilateral:
             ]
 
     @property
-    def state_list(self, midline = False):
+    def state_list(self):
         """Return list of all possible hidden states. They are arranged in the
         same order as the lymph node levels in the network/graph.
         """
         try:
             return self._state_list
         except AttributeError:
-            self._gen_state_list(midline)
+            self._gen_state_list()
             return self._state_list
 
 
