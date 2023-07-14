@@ -190,7 +190,6 @@ class MidlineBilateral:
         """
         self.noext.trans_probs = new_params
         self.ext.trans_probs = new_params
-    
         # avoid unnecessary double computation of ipsilateral transition matrix
         self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
 
@@ -658,10 +657,14 @@ class MidlineBilateral:
         t_stages = list(stored_t_stages.intersection(provided_t_stages))
         
         max_t = self.diag_time_dists.max_t
-        state_probs_ex = np.zeros(shape=len(self.state_list), dtype=float)
-        state_probs_ex[0] = 1.
-        state_probs_nox = np.zeros(shape=len(self.state_list), dtype=float)
-        state_probs_nox[0] = 1.
+        state_probs_ipsi_ex = np.zeros(shape=len(self.state_list), dtype=float)
+        state_probs_ipsi_ex[0] = 1.
+        state_probs_ipsi_nox = np.zeros(shape=len(self.state_list), dtype=float)
+        state_probs_ipsi_nox[0] = 1.
+        state_probs_contra_ex = np.zeros(shape=len(self.state_list), dtype=float)
+        state_probs_contra_ex[0] = 1.
+        state_probs_contra_nox = np.zeros(shape=len(self.state_list), dtype=float)
+        state_probs_contra_nox[0] = 1.
         state_probs_midext = np.zeros(shape=len(self.midexstate_list), dtype=float)
         state_probs_midext[0] = 1.
 
@@ -673,21 +676,21 @@ class MidlineBilateral:
 
         for i in range(max_t):
             for stage in t_stages:
-                state_probs_nox["ipsi"] = self.noext.ipsi._evolve_onestep(start_state = state_probs_nox["ipsi"])
-                state_probs_nox["contra"] = self.noext.contra._evolve_onestep(start_state = state_probs_nox["contra"])
-                state_probs_ex["ipsi"] = state_probs_midext[1] * self.ext.ipsi._evolve_onestep(start_state = state_probs_ex["ipsi"]) + state_probs_midext[0] * state_probs_nox["ipsi"]
-                state_probs_ex["contra"] = state_probs_midext[1] * self.ext.contra._evolve_onestep(start_state = state_probs_ex["contra"]) + state_probs_midext[0] * state_probs_nox["contra"]
+                state_probs_ipsi_nox = self.noext.ipsi._evolve_onestep(start_state = state_probs_ipsi_nox)
+                state_probs_contra_nox = self.noext.contra._evolve_onestep(start_state = state_probs_contra_nox)
+                state_probs_ipsi_ex = state_probs_midext[1] * self.ext.ipsi._evolve_onestep(start_state = state_probs_ipsi_ex) + state_probs_midext[0] * state_probs_ipsi_nox
+                state_probs_contra_ex = state_probs_midext[1] * self.ext.contra._evolve_onestep(start_state = state_probs_contra_ex) + state_probs_midext[0] * state_probs_contra_nox
                 state_probs_midext = self._evolve_midext(start_midextstate = state_probs_midext)
 
                 joint_state_probs_nox = (
-                    state_probs_nox["ipsi"].T
+                    state_probs_ipsi_nox.T
                     @ np.diag(self.ipsi.diag_time_dists[stage].pmf)
-                    @ state_probs_nox["contra"]
+                    @ state_probs_contra_nox
                 )
                 joint_state_probs_ex = (
-                    state_probs_ex["ipsi"].T
+                    state_probs_ipsi_ex.T
                     @ np.diag(self.ipsi.diag_time_dists[stage].pmf)
-                    @ state_probs_ex["contra"]
+                    @ state_probs_contra_ex
                 )
                 p_ex = np.sum(
                     self.ext.ipsi.diagnose_matrices[stage]
