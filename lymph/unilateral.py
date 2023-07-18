@@ -181,7 +181,7 @@ class Unilateral:
         self.check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_lnl_states)
         self.init_edges(graph)
-        self._edge_lookup()
+        self._init_setter_lookup()
 
 
     def check_unique_names(self, graph):
@@ -234,18 +234,24 @@ class Unilateral:
                     self.lnl_edges.append(new_edge)
 
 
-    def _edge_lookup(self):
-        """Initializes the a lookup dictionary including all edge related parameters as keys.
-        the values are the setter methods to assign their values
-        """
+    def _init_setter_lookup(self):
+        """Initialize a dictionary of setter methods for the edges of the graph."""
         self._setter_lookup = {}
+
         for edge in self.tumor_edges:
             self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+
         for edge in self.lnl_edges:
             self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
-            self._setter_lookup['micro_' + edge.name] = edge.set_micro_mod
+
+            if self.is_trinary:
+                self._setter_lookup['micro_' + edge.name] = edge.set_micro_mod
+
+        # here we don't need to check if the model is trinary, because the growth edges
+        # are only present in trinary models
         for edge in self.growth_edges:
             self._setter_lookup['growth_' + edge.start.name] = edge.set_spread_prob
+
 
     @property
     def allowed_lnl_states(self) -> List[int]:
@@ -366,122 +372,49 @@ class Unilateral:
             lnl.state = states[lnl.name]
 
 
-    @property
-    def tumor_spread_probs(self):
-        """The spread probablities parametrizing the edges that represent the
-        lymphatic drainage from the tumor(s) to the individual lymph node
-        levels. This array is composed of these elements:
+    def assign_parameters(self, *new_params_args, **new_params_kwargs):
+        """Assign new parameters to the model.
 
-        +-------------+-------------+-----------------+-------------+
-        | :math:`b_1` | :math:`b_2` | :math:`\\cdots` | :math:`b_n`  |
-        +-------------+-------------+-----------------+-------------+
+        The parameters can either be provided with positional arguments or as
+        keyword arguments. The positional arguments must be in the following order:
 
-        Where :math:`n` is the number of edges between the tumor and the LNLs.
+        1. All spread probs from tumor to the LNLs
+        2. The spread probs from LNL to LNL. If the model is trinary, the microscopic
+            parameter is set right after the corresponding LNL's spread prob.
+        3. The growth parameters for each trinary LNL. For a binary model,
+            this is skipped.
+        4. The parameters for the marginalizing distributions over diagnose times
 
-        Setting these requires an array with a length equal to the number of
-        edges in the graph that start with a tumor node. After setting these
-        values, the transition matrix - if it was precomputed - is deleted
-        so it can be recomputed with the new parameters.
+        The order of the keyword arguments obviously does not matter. Also, if one
+        wants to set the microscopic or growth parameters globally for all LNLs, the
+        keyword arguments ``micro_mod`` and ``growth`` should be used.
+
+        The keyword arguments override the positional arguments.
         """
-        return np.array([edge.spread_prob for edge in self.tumor_edges], dtype=float)
+        setter_functions = [
+            *self._setter_lookup.values(),
+            *[getattr(dist, "update") for dist in self.diag_time_dists.values()]
+        ]
+        for setter, new_param in zip(setter_functions, new_params_args):
+            setter(new_param)
 
-    @tumor_spread_probs.setter
-    def tumor_spread_probs(self, new_tumor_probs):
-        """Set the spread probabilities for the connections from the tumor to
-        the LNLs.
-        """
-        for edge, spread_prob in zip(self.tumor_edges, new_tumor_probs):
-            edge.spread_prob = spread_prob
+        for key, value in new_params_kwargs.items():
+            if key in self.diag_time_dists:
+                self.diag_time_dists[key].update(value)
+
+            elif key == "growth":
+                for edge in self.growth_edges:
+                    edge.spread_prob = value
+
+            elif key == "micro_mod":
+                for edge in self.lnl_edges:
+                    edge.micro_mod = value
+
+            else:
+                self._setter_lookup[key](value)
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
-
-
-    @property
-    def lnl_spread_prob(self):
-        """Return the 'base' spread probablities of the connections between the lymph
-        node levels. Here, "trans" stands for "transmission" (among the LNLs),
-        not "transition" as in the transition to another state.
-
-        Its shape is similar to the one of the :attr:`tumor_spread_probs` but it lists
-        the transmission probabilities :math:`t_{a \\rightarrow b}` in the
-        order they were defined in the initial graph.
-
-        When setting an array of length equal to the number of connections
-        among the LNL is required. After setting the new values, the transition
-        matrix - if previously computed - is deleted again, so that it will be
-        recomputed with the new parameters.
-        """
-        return np.array([edge.spread_prob for edge in self.lnl_edges], dtype=float)
-
-    @lnl_spread_prob.setter
-    def lnl_spread_prob(self, new_lnl_probs):
-        """Set the spread probabilities for the connections among the LNLs.
-        """
-        for edge, spread_prob in zip(self.lnl_edges, new_lnl_probs):
-            edge.spread_prob = spread_prob
-
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
-
-
-    @property
-    def growth_probability(self):
-        """Return the growth probablities of the lymph
-        node levels.
-        """
-        return self.growth_edges[0].spread_prob
-
-    @growth_probability.setter
-    def growth_probability(self, new_growth_probability):
-        """Set the the growth probablities of the lymph node levels.
-        """
-        for edge, spread_prob in zip(self.growth_edges, new_growth_probability):
-            edge.spread_prob = spread_prob
-
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
-
-
-    @property
-    def microscopic_parameter(self) -> float:
-        """Return the microscopic spread parameter of the connections between the lymph
-        node levels which modifies the sprea on edges where the starting node is microscopic
-        """
-        return self.lnl_edges[-1].micro_mod
-
-    @microscopic_parameter.setter
-    def microscopic_parameter(self, microscopic_parameter):
-        """Set the microscopic spread probabilities for the connections among the LNLs.
-        """
-        for edge, micro_mod in zip(self.tumor_edges, microscopic_parameter):
-            edge.micro_mod = micro_mod
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
-
-
-    @property
-    def spread_probs(self) -> np.ndarray:
-        """These are the probabilities of metastatic spread. They indicate how
-        probable it is that a tumor or already cancerous lymph node level
-        spreads further along a certain edge of the graph representing the
-        lymphatic network.
-
-        Setting these requires an array with a length equal to the number of
-        edges in the network. It's essentially a concatenation of the
-        :attr:`tumor_spread_probs` and the :attr:`lnl_spread_probs`.
-        """
-        return np.concatenate([self.tumor_spread_probs, self.lnl_spread_prob])
-
-    @spread_probs.setter
-    def spread_probs(self, new_spread_probs: np.ndarray):
-        """Set the spread probabilities of the :class:`Edge` instances in the
-        the network in the order they were created from the graph.
-        """
-        num_base_edges = len(self.tumor_edges)
-
-        self.tumor_spread_probs = new_spread_probs[:num_base_edges]
-        self.lnl_spread_prob = new_spread_probs[num_base_edges:]
 
 
     @property
@@ -537,14 +470,16 @@ class Unilateral:
         Returns:
             Transition probability :math:`t`.
         """
-        res = 1
+        trans_prob = 1
         for i, lnl in enumerate(self.lnls):
-            res *= lnl.comp_trans_prob(new_state = newstate[i])
-            if res == 0:
+            trans_prob *= lnl.comp_trans_prob(new_state = newstate[i])
+            if trans_prob == 0:
                 break
+
         if acquire:
             self.set_state(newstate)
-        return res
+
+        return trans_prob
 
 
     def comp_diagnose_prob(
@@ -1011,50 +946,6 @@ class Unilateral:
         state_probs[-1] = state
 
         return state_probs
-
-
-    def assign_parameters(self, new_params_list = None, **new_params_kwargs):
-        """Check that the spread probability (rates) and the parameters for the
-        marginalization over diagnose times are all within limits and assign them to
-        the model.
-
-        Args:
-            **kwargs: The keyword - value pairs to set spread, microscopic, growth
-            and time_dist parameters.
-
-        Warning:
-            This method assumes that the parametrized distributions (instances of
-            :class:`Marginalizor`) all raise a ``ValueError`` when provided with
-            invalid parameters.
-        """
-        if new_params_list is not None:
-            # here it depends how we want to provide the new_params_list.
-            # there are a lot of options. e.g. one needs to specifically define each base, each transmission, each growth and each micro_mod parameter
-            # Or one only defines each base, each transmission and one growth and one micro_mod parameter
-            # I am not sure what exactly you prefer Roman.
-            # But it kind of needs to be well defined, also how the function handles incomplete parameter lists...
-            pass
-        else:
-            for key, value in new_params_kwargs.items():
-                if key in self.diag_time_dists:
-                    try:
-                        self.diag_time_dists[key].update(value)
-                    except ValueError as val_err:
-                        raise ValueError(
-                            "Parameters for marginalization over diagnose times are invalid"
-                            ) from val_err
-
-                elif key == 'growth':
-                    for edge in self.growth_edges:
-                        edge.spread_prob = value
-                elif key == 'micro_mod':
-                    for edge in self.lnl_edges:
-                        edge.micro_mod = value
-                else:
-                    self._setter_lookup[key](value)
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
-
 
 
     def _likelihood(
