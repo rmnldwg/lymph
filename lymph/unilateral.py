@@ -18,8 +18,8 @@ from lymph.helper import change_base
 
 from lymph.edge import Edge
 from lymph.node import LymphNodeLevel, Tumor
+from lymph.params_lookup import ParamsLookup
 from lymph.timemarg import MarginalizorDict
-from lymph.helper import Param, change_base
 
 
 class Unilateral:
@@ -29,6 +29,8 @@ class Unilateral:
     It does this by representing it as a directed graph. The progression itself can be
     modelled via hidden Markov models (HMM) or Bayesian networks (BN).
     """
+    _params = ParamsLookup()
+
     def __init__(
         self,
         graph: Dict[Tuple[str], Set[str]],
@@ -52,7 +54,6 @@ class Unilateral:
         self.check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_states)
         self.init_edges(graph)
-        self._init_params_lookup()
 
 
     def __str__(self) -> str:
@@ -108,41 +109,6 @@ class Unilateral:
                     self.tumor_edges.append(new_edge)
                 else:
                     self.lnl_edges.append(new_edge)
-
-
-    def _init_params_lookup(self):
-        """Initialize a dictionary of `Param` instances for the edges of the graph.
-
-        This allows one to quickly access the getter and setter methods related to the
-        parameters of the edges.
-        """
-        self._params_lookup = {}
-
-        for edge in self.tumor_edges:
-            self._params_lookup['spread_' + edge.name] = Param(
-                getter=edge.get_spread_prob,
-                setter=edge.set_spread_prob,
-            )
-
-        for edge in self.lnl_edges:
-            self._params_lookup['spread_' + edge.name] = Param(
-                getter=edge.get_spread_prob,
-                setter=edge.set_spread_prob,
-            )
-
-            if self.is_trinary:
-                self._params_lookup['micro_' + edge.name] = Param(
-                    getter=edge.get_micro_mod,
-                    setter=edge.set_micro_mod,
-                )
-
-        # here we don't need to check if the model is trinary, because the growth edges
-        # are only present in trinary models
-        for edge in self.growth_edges:
-            self._params_lookup['growth_' + edge.start.name] = Param(
-                getter=edge.get_spread_prob,
-                setter=edge.set_spread_prob,
-            )
 
 
     @property
@@ -280,7 +246,7 @@ class Unilateral:
         The keyword arguments override the positional arguments.
         """
         params_access = [
-            *[param.set for param in self._params_lookup.values()],
+            *[param.set for param in self._params.values()],
             *[getattr(dist, "update") for dist in self.diag_time_dists.values()]
         ]
         for setter, new_param_value in zip(params_access, new_params_args):
@@ -299,16 +265,16 @@ class Unilateral:
                     edge.micro_mod = value
 
             else:
-                self._params_lookup[key].set(value)
+                self._params[key].set(value)
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
 
     def get_parameters(self) -> Dict[str, Union[float, str]]:
-        """Returns a generator of all parameter names in the order they can be set."""
+        """Returns a dictionary of all parameters and their currently set values."""
         result = {}
-        for name, param in self._params_lookup.items():
+        for name, param in self._params.items():
             result[name] = param.get()
 
         for name, marginalizor in self.diag_time_dists.items():

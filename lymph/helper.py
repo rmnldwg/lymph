@@ -6,13 +6,6 @@ from typing import Optional, List
 import numpy as np
 
 
-class Param:
-    """Stores getter and setter functions for a parameter."""
-    def __init__(self, getter, setter):
-        self.get = getter
-        self.set = setter
-
-
 def check_spsn(spsn: List[float]):
     """Private method that checks whether specificity and sensitvity
     are valid.
