@@ -180,6 +180,7 @@ class LymphNodeLevel(AbstractNode):
 
         return res
 
+
     # note: here we gained extra computation time. the former version used to save
     # transition probabilities that were computed before with an @lru_cache decorator
     # since the computation is not done in node anymore, this will not work now.
