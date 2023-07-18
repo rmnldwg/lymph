@@ -96,57 +96,66 @@ def check_modality(modality: str, spsn: list):
             "respectively.")
         raise ValueError(msg)
 
-def clinical(modality_spsn: Dict[Any, List[float]]) -> Dict:
+def check_spsn(spsn: list):
+    """Private method that checks whether specificity and sensitvity
+    are valid.
+
+    Args:
+        spsn (list): list with specificity and sensiticity
+
+    Raises:
+        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+    """
+    has_len_2 = len(spsn) == 2
+    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+    is_below_ub = np.all(np.less_equal(spsn, 1.))
+    if not has_len_2 or not is_above_lb or not is_below_ub:
+        msg = ("For each modality provide a list of two decimals "
+            "between 0.5 and 1.0 as specificity & sensitivity "
+            "respectively.")
+        raise ValueError(msg)
+
+
+def clinical(spsn: list) -> np.ndarray:
     """produces the confusion matrix of a clinical modality, i.e. a modality
     that can not detect microscopic metastases
 
     Args:
-        modality_spsn (Dict[Any, List[float]]): dictionary with modality name and [sp,sn] list
+        spsn (list): list with specificity and sensitivity of modality
 
     Returns:
-        Dict[str,np.ndarray]: returns a dictionary with modality name and clinical confusion matrices
+        np.ndarray: confusion matrix of modality
     """
-    modality_dictionary = {}
-    for mod, spsn in modality_spsn.items():
-        try:
-            check_modality(mod,spsn)
-        except TypeError:
-            raise
-        except ValueError:
-            raise
-
-        sp, sn = spsn
-        modality_dictionary[mod] = np.array([[sp, 1. - sp],
-                                            [sp, 1. - sp],
-                                            [1. - sn, sn]])
-    return modality_dictionary
+    try:
+        check_spsn(spsn)
+    except ValueError:
+        raise
+    sp, sn = spsn
+    confusion_matrix = np.array([[sp, 1. - sp],
+                                 [sp, 1. - sp],
+                                 [1. - sn, sn]])
+    return confusion_matrix
 
 
-def pathological(modality_spsn: Dict[Any, List[float]]) -> Dict:
+def pathological(spsn: list) -> np.ndarray:
     """produces the confusion matrix of a pathological modality, i.e. a modality
     that can detect microscopic metastases
 
     Args:
-        modality_spsn (Dict[Any, List[float]]):  dictionary with modality name and [sp,sn] list
+        spsn (list): list with specificity and sensitivity of modality
 
     Returns:
-        Dict[str,np.ndarray]: returns a dictionary with modality name and pathological confusion matrices
+        np.ndarray: confusion matrix of modality
     """
-    modality_dictionary = {}
-    for mod, spsn in modality_spsn.items():
-        try:
-            check_modality(mod,spsn)
-        except TypeError:
-            raise
-        except ValueError:
-            raise
-
-        sp, sn = spsn
-        modality_dictionary[mod] = np.array([[sp, 1. - sp],
-                                            [1. - sn, sn],
-                                            [1. - sn, sn]])
-    return modality_dictionary
-
+    try:
+        check_spsn(spsn)
+    except ValueError:
+        raise
+    sp, sn = spsn
+    confusion_matrix = np.array([[sp, 1. - sp],
+                                 [1. - sn, sn],
+                                 [1. - sn, sn]])
+    return confusion_matrix
 
 class Unilateral:
     """
@@ -556,7 +565,7 @@ class Unilateral:
             diagnoses, given the current state of the system.
         """
         prob = 1.
-        for modality, spsn in self._spsn_tables.items():
+        for modality, spsn in self._confusion_matrices.items():
             if modality in diagnoses:
                 mod_diagnose = diagnoses[modality]
                 for lnl in self.lnls:
@@ -599,7 +608,7 @@ class Unilateral:
     def _gen_obs_list(self):
         """Generates the list of possible observations.
         """
-        n_obs = len(self._spsn_tables)
+        n_obs = len(self._confusion_matrices)
 
         if not hasattr(self, "_obs_list"):
             self._obs_list = np.zeros(
@@ -718,7 +727,7 @@ class Unilateral:
         """
         try:
             modality_spsn = {}
-            for mod, table in self._spsn_tables.items():
+            for mod, table in self._confusion_matrices.items():
                 modality_spsn[mod] = [table[0,0], table[len(self.allowed_lnl_states)-1,1]]
             return modality_spsn
 
@@ -743,10 +752,12 @@ class Unilateral:
             del self._observation_matrix
         if hasattr(self, "_obs_list"):
             del self._obs_list
-        if not hasattr(self, "_spsn_tables"):
-            self._spsn_tables = {}
 
+        self._confusion_matrices = {}
         for mod,matrix in modality_spsn.items():
+            if not isinstance(mod, str):
+                msg = ("Modality names must be strings.")
+                raise TypeError(msg)
             if not np.all(matrix.sum(axis = 1) == 1):
                 msg = ("All values need to be between 0 and 1 and rows add up to 1")
                 raise ValueError(msg)
@@ -755,13 +766,13 @@ class Unilateral:
                     msg = (f'the shape of the confusion matrix does not match the model '
                     f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
                     raise ValueError(msg)
-                self._spsn_tables[mod] = matrix
+                self._confusion_matrices[mod] = matrix
             elif len(self.allowed_lnl_states) == 2 and matrix.shape[0] == 3:
                 if matrix.shape != (len(self.allowed_lnl_states), 2):
                     msg = (f'the shape of the confusion matrix does not match the model '
                     f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
                     raise ValueError(msg)
-                self._spsn_tables[mod] = np.delete(matrix, 1, axis = 0)
+                self._confusion_matrices[mod] = np.delete(matrix, 1, axis = 0)
 
 
     def _gen_observation_matrix(self):
@@ -781,7 +792,7 @@ class Unilateral:
             self.set_state(state)
             for j,obs in enumerate(self.obs_list):
                 observations = {}
-                for k,modality in enumerate(self._spsn_tables):
+                for k,modality in enumerate(self._confusion_matrices):
                     observations[modality] = {
                         lnl.name: obs[n_lnl * k + i] for i,lnl in enumerate(self.lnls)
                     }
@@ -934,7 +945,7 @@ class Unilateral:
             for stage in t_stages:
                 table = data.loc[
                     data[('info', 't_stage')] == stage,
-                    self._spsn_tables.keys()
+                    self._confusion_matrices.keys()
                 ]
                 self._gen_diagnose_matrices(table, stage)
                 if stage not in self.diag_time_dists:
@@ -946,7 +957,7 @@ class Unilateral:
 
         # For the Bayesian Network
         elif mode=="BN":
-            table = data[self._spsn_tables.keys()]
+            table = data[self._confusion_matrices.keys()]
             stage = "BN"
             self._gen_diagnose_matrices(table, stage)
 
