@@ -19,7 +19,7 @@ from lymph.helper import change_base
 from lymph.edge import Edge
 from lymph.node import LymphNodeLevel, Tumor
 from lymph.params_lookup import ParamsLookup
-from lymph.timemarg import MarginalizorDict
+from lymph.diag_time_distribution import DiagnoseTimeDistributionDict
 
 
 class Unilateral:
@@ -284,7 +284,7 @@ class Unilateral:
 
 
     @property
-    def diag_time_dists(self) -> MarginalizorDict:
+    def diag_time_dists(self) -> DiagnoseTimeDistributionDict:
         """This property holds the probability mass functions for marginalizing over
         possible diagnose times for each T-stage.
 
@@ -295,20 +295,20 @@ class Unilateral:
             :class:`MarginalzorDict`, :class:`Marginalizor`.
         """
         if not hasattr(self, "_diag_time_dists"):
-            self._diag_time_dists = MarginalizorDict()
+            self._diag_time_dists = DiagnoseTimeDistributionDict()
         return self._diag_time_dists
 
     @diag_time_dists.setter
-    def diag_time_dists(self, new_dists: Union[dict, MarginalizorDict]):
+    def diag_time_dists(self, new_dists: Union[dict, DiagnoseTimeDistributionDict]):
         """Assign new :class:`MarginalizorDict` to this property. If it is a normal
         Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
         """
-        if isinstance(new_dists, MarginalizorDict):
+        if isinstance(new_dists, DiagnoseTimeDistributionDict):
             self._diag_time_dists = new_dists
         elif isinstance(new_dists, dict):
             warnings.warn("Trying to convert dictionary into MarginalizorDict.")
             guessed_max_t = len(new_dists.values()[0])
-            self._diag_time_dists = MarginalizorDict(max_t=guessed_max_t)
+            self._diag_time_dists = DiagnoseTimeDistributionDict(max_t=guessed_max_t)
             for t_stage, dist in new_dists.items():
                 self._diag_time_dists[t_stage] = dist
         else:
