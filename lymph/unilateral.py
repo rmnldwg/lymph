@@ -9,7 +9,7 @@ the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a
 """
 import base64
 import warnings
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -415,6 +415,15 @@ class Unilateral:
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
+
+
+    def get_param_names(self) -> Generator[str, None, None]:
+        """Returns a generator of all parameter names in the order they can be set."""
+        for name in self._setter_lookup.keys():
+            yield name
+
+        for name in self.diag_time_dists.keys():
+            yield name
 
 
     @property
