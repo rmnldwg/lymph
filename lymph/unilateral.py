@@ -9,153 +9,18 @@ the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a
 """
 import base64
 import warnings
-from typing import Any, Dict, Generator, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
+from lymph.helper import change_base
 
 from lymph.edge import Edge
 from lymph.node import LymphNodeLevel, Tumor
 from lymph.timemarg import MarginalizorDict
+from lymph.helper import Param, change_base
 
-# from tests.unit.custom_strategies import nodes
-
-
-def change_base(
-    number: int,
-    base: int,
-    reverse: bool = False,
-    length: Optional[int] = None
-) -> str:
-    """Convert an integer into another base.
-
-    Args:
-        number: Number to convert
-        base: Base of the resulting converted number
-        reverse: If true, the converted number will be printed in reverse order.
-        length: Length of the returned string. If longer than would be
-            necessary, the output will be padded.
-
-    Returns:
-        The (padded) string of the converted number.
-    """
-    if number < 0:
-        raise ValueError("Cannot convert negative numbers")
-    if base > 16:
-        raise ValueError("Base must be 16 or smaller!")
-    elif base < 2:
-        raise ValueError("There is no unary number system, base must be > 2")
-
-    convert_string = "0123456789ABCDEF"
-    result = ''
-
-    if number == 0:
-        result += '0'
-    else:
-        while number >= base:
-            result += convert_string[number % base]
-            number = number//base
-        if number > 0:
-            result += convert_string[number]
-
-    if length is None:
-        length = len(result)
-    elif length < len(result):
-        length = len(result)
-        warnings.warn("Length cannot be shorter than converted number.")
-
-    pad = '0' * (length - len(result))
-
-    if reverse:
-        return result + pad
-    else:
-        return pad + result[::-1]
-
-def check_modality(modality: str, spsn: list):
-    """Private method that checks whether all inserted values
-    are valid for a confusion matrix.
-
-    Args:
-        modality (str): name of the modality
-        spsn (list): list with specificity and sensiticity
-
-    Raises:
-        TypeError: returns a type error if the modality is not a string
-        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-    """
-    if not isinstance(modality, str):
-            msg = ("Modality names must be strings.")
-            raise TypeError(msg)
-    has_len_2 = len(spsn) == 2
-    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-    is_below_ub = np.all(np.less_equal(spsn, 1.))
-    if not has_len_2 or not is_above_lb or not is_below_ub:
-        msg = ("For each modality provide a list of two decimals "
-            "between 0.5 and 1.0 as specificity & sensitivity "
-            "respectively.")
-        raise ValueError(msg)
-
-def check_spsn(spsn: list):
-    """Private method that checks whether specificity and sensitvity
-    are valid.
-
-    Args:
-        spsn (list): list with specificity and sensiticity
-
-    Raises:
-        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-    """
-    has_len_2 = len(spsn) == 2
-    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-    is_below_ub = np.all(np.less_equal(spsn, 1.))
-    if not has_len_2 or not is_above_lb or not is_below_ub:
-        msg = ("For each modality provide a list of two decimals "
-            "between 0.5 and 1.0 as specificity & sensitivity "
-            "respectively.")
-        raise ValueError(msg)
-
-
-def clinical(spsn: list) -> np.ndarray:
-    """produces the confusion matrix of a clinical modality, i.e. a modality
-    that can not detect microscopic metastases
-
-    Args:
-        spsn (list): list with specificity and sensitivity of modality
-
-    Returns:
-        np.ndarray: confusion matrix of modality
-    """
-    try:
-        check_spsn(spsn)
-    except ValueError:
-        raise
-    sp, sn = spsn
-    confusion_matrix = np.array([[sp, 1. - sp],
-                                 [sp, 1. - sp],
-                                 [1. - sn, sn]])
-    return confusion_matrix
-
-
-def pathological(spsn: list) -> np.ndarray:
-    """produces the confusion matrix of a pathological modality, i.e. a modality
-    that can detect microscopic metastases
-
-    Args:
-        spsn (list): list with specificity and sensitivity of modality
-
-    Returns:
-        np.ndarray: confusion matrix of modality
-    """
-    try:
-        check_spsn(spsn)
-    except ValueError:
-        raise
-    sp, sn = spsn
-    confusion_matrix = np.array([[sp, 1. - sp],
-                                 [1. - sn, sn],
-                                 [1. - sn, sn]])
-    return confusion_matrix
 
 class Unilateral:
     """
@@ -167,8 +32,8 @@ class Unilateral:
     def __init__(
         self,
         graph: Dict[Tuple[str], Set[str]],
-        tumor_state: int,
-        allowed_lnl_states: Optional[List[int]] = None,
+        tumor_state: Optional[int] = None,
+        allowed_states: Optional[List[int]] = None,
         **_kwargs,
     ) -> None:
         """Create a new instance of the `Unilateral` class.
@@ -178,10 +43,16 @@ class Unilateral:
         `("lnl", "<lnl_name>")`. The values are sets of strings that represent the
         names of the nodes that are connected to the node given by the key.
         """
+        if allowed_states is None:
+            allowed_states = [0, 1]
+
+        if tumor_state is None:
+            tumor_state = allowed_states[-1]
+
         self.check_unique_names(graph)
-        self.init_nodes(graph, tumor_state, allowed_lnl_states)
+        self.init_nodes(graph, tumor_state, allowed_states)
         self.init_edges(graph)
-        self._init_setter_lookup()
+        self._init_params_lookup()
 
 
     def check_unique_names(self, graph):
@@ -234,23 +105,35 @@ class Unilateral:
                     self.lnl_edges.append(new_edge)
 
 
-    def _init_setter_lookup(self):
+    def _init_params_lookup(self):
         """Initialize a dictionary of setter methods for the edges of the graph."""
-        self._setter_lookup = {}
+        self._params_lookup = {}
 
         for edge in self.tumor_edges:
-            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+            self._params_lookup['spread_' + edge.name] = Param(
+                getter=edge.get_spread_prob,
+                setter=edge.set_spread_prob,
+            )
 
         for edge in self.lnl_edges:
-            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+            self._params_lookup['spread_' + edge.name] = Param(
+                getter=edge.get_spread_prob,
+                setter=edge.set_spread_prob,
+            )
 
             if self.is_trinary:
-                self._setter_lookup['micro_' + edge.name] = edge.set_micro_mod
+                self._params_lookup['micro_' + edge.name] = Param(
+                    getter=edge.get_micro_mod,
+                    setter=edge.set_micro_mod,
+                )
 
         # here we don't need to check if the model is trinary, because the growth edges
         # are only present in trinary models
         for edge in self.growth_edges:
-            self._setter_lookup['growth_' + edge.start.name] = edge.set_spread_prob
+            self._params_lookup['growth_' + edge.start.name] = Param(
+                getter=edge.get_spread_prob,
+                setter=edge.set_spread_prob,
+            )
 
 
     @property
@@ -297,10 +180,10 @@ class Unilateral:
     @property
     def is_binary(self) -> bool:
         """Returns True if the graph is binary, False otherwise."""
-        res = {node.is_binary for node in self.nodes}
+        res = {node.is_binary for node in self.lnls}
 
         if len(res) != 1:
-            raise RuntimeError("Not all nodes have the same number of states")
+            raise RuntimeError("Not all lnls have the same number of states")
 
         return res.pop()
 
@@ -308,10 +191,10 @@ class Unilateral:
     @property
     def is_trinary(self) -> bool:
         """Returns True if the graph is trinary, False otherwise."""
-        res = {node.is_trinary for node in self.nodes}
+        res = {node.is_trinary for node in self.lnls}
 
         if len(res) != 1:
-            raise RuntimeError("Not all nodes have the same number of states")
+            raise RuntimeError("Not all lnls have the same number of states")
 
         return res.pop()
 
@@ -391,12 +274,12 @@ class Unilateral:
 
         The keyword arguments override the positional arguments.
         """
-        setter_functions = [
-            *self._setter_lookup.values(),
+        params_access = [
+            *[param.set for param in self._params_lookup.values()],
             *[getattr(dist, "update") for dist in self.diag_time_dists.values()]
         ]
-        for setter, new_param in zip(setter_functions, new_params_args):
-            setter(new_param)
+        for setter, new_param_value in zip(params_access, new_params_args):
+            setter(new_param_value)
 
         for key, value in new_params_kwargs.items():
             if key in self.diag_time_dists:
@@ -411,19 +294,22 @@ class Unilateral:
                     edge.micro_mod = value
 
             else:
-                self._setter_lookup[key](value)
+                self._params_lookup[key].set(value)
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
 
-    def get_param_names(self) -> Generator[str, None, None]:
+    def get_param_names(self) -> Dict[str, Union[float, str]]:
         """Returns a generator of all parameter names in the order they can be set."""
-        for name in self._setter_lookup.keys():
-            yield name
+        result = {}
+        for name, param in self._params_lookup.items():
+            result[name] = param.get()
 
-        for name in self.diag_time_dists.keys():
-            yield name
+        for name, marginalizor in self.diag_time_dists.items():
+            result[name] = marginalizor.get_param()
+
+        return result
 
 
     @property
@@ -1202,18 +1088,3 @@ class Unilateral:
         dataset[('info', 't_stage')] = drawn_t_stages
 
         return dataset
-
-
-class System(Unilateral):
-    """Class kept for compatibility after renaming to :class:`Unilateral`.
-
-    See Also:
-        :class:`Unilateral`
-    """
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "This class has been renamed to `Unilateral`.",
-            DeprecationWarning
-        )
-
-        super().__init__(*args, **kwargs)

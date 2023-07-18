@@ -10,7 +10,6 @@ import numpy as np
 
 class SupportError(Exception):
     """Error that is raised when no support for a distribution is provided."""
-    pass
 
 
 class Marginalizor:
@@ -40,6 +39,7 @@ class Marginalizor:
             self.pmf = dist
             self._func = None
         elif func is not None:
+            self._param = None
             self._pmf = None
             self._func = func
         else:
@@ -94,12 +94,20 @@ class Marginalizor:
         """
         return self._func is not None
 
+
+    def get_param(self) -> Union[float, str]:
+        """If the marginalizor is updateable, return the current parameter."""
+        if self.is_updateable:
+            return self._param or "not set"
+        return "not parametrized"
+
     def update(self, param: float) -> None:
         """
         Update the marginalizor by providing the function with its parameter and
         storing the resulting PMF.
         """
         if self.is_updateable:
+            self._param = param
             self.pmf = self._func(self.support, param)
         else:
             raise RuntimeError("Marginalizor is not updateable.")
