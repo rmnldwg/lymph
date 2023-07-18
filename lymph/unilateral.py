@@ -1,3 +1,13 @@
+"""
+The main module of this package.
+
+It implements the lymphatic system as a graph of `Tumor` and `LymphNodeLevel` nodes,
+connected by instances of `Edge`.
+
+The resulting class can compute all kinds of conditional probabilities with respect to
+the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a tumor.
+"""
+import base64
 import warnings
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -5,9 +15,11 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from .edge import Edge
-from .node import Node
-from .timemarg import MarginalizorDict
+from lymph.edge import Edge
+from lymph.node import LymphNodeLevel, Tumor
+from lymph.timemarg import MarginalizorDict
+
+# from tests.unit.custom_strategies import nodes
 
 
 def change_base(
@@ -35,17 +47,17 @@ def change_base(
     elif base < 2:
         raise ValueError("There is no unary number system, base must be > 2")
 
-    convertString = "0123456789ABCDEF"
+    convert_string = "0123456789ABCDEF"
     result = ''
 
     if number == 0:
         result += '0'
     else:
         while number >= base:
-            result += convertString[number % base]
+            result += convert_string[number % base]
             number = number//base
         if number > 0:
-            result += convertString[number]
+            result += convert_string[number]
 
     if length is None:
         length = len(result)
@@ -60,118 +72,302 @@ def change_base(
     else:
         return pad + result[::-1]
 
+def check_modality(modality: str, spsn: list):
+    """Private method that checks whether all inserted values
+    are valid for a confusion matrix.
+
+    Args:
+        modality (str): name of the modality
+        spsn (list): list with specificity and sensiticity
+
+    Raises:
+        TypeError: returns a type error if the modality is not a string
+        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+    """
+    if not isinstance(modality, str):
+            msg = ("Modality names must be strings.")
+            raise TypeError(msg)
+    has_len_2 = len(spsn) == 2
+    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+    is_below_ub = np.all(np.less_equal(spsn, 1.))
+    if not has_len_2 or not is_above_lb or not is_below_ub:
+        msg = ("For each modality provide a list of two decimals "
+            "between 0.5 and 1.0 as specificity & sensitivity "
+            "respectively.")
+        raise ValueError(msg)
+
+def check_spsn(spsn: list):
+    """Private method that checks whether specificity and sensitvity
+    are valid.
+
+    Args:
+        spsn (list): list with specificity and sensiticity
+
+    Raises:
+        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+    """
+    has_len_2 = len(spsn) == 2
+    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+    is_below_ub = np.all(np.less_equal(spsn, 1.))
+    if not has_len_2 or not is_above_lb or not is_below_ub:
+        msg = ("For each modality provide a list of two decimals "
+            "between 0.5 and 1.0 as specificity & sensitivity "
+            "respectively.")
+        raise ValueError(msg)
+
+
+def clinical(spsn: list) -> np.ndarray:
+    """produces the confusion matrix of a clinical modality, i.e. a modality
+    that can not detect microscopic metastases
+
+    Args:
+        spsn (list): list with specificity and sensitivity of modality
+
+    Returns:
+        np.ndarray: confusion matrix of modality
+    """
+    try:
+        check_spsn(spsn)
+    except ValueError:
+        raise
+    sp, sn = spsn
+    confusion_matrix = np.array([[sp, 1. - sp],
+                                 [sp, 1. - sp],
+                                 [1. - sn, sn]])
+    return confusion_matrix
+
+
+def pathological(spsn: list) -> np.ndarray:
+    """produces the confusion matrix of a pathological modality, i.e. a modality
+    that can detect microscopic metastases
+
+    Args:
+        spsn (list): list with specificity and sensitivity of modality
+
+    Returns:
+        np.ndarray: confusion matrix of modality
+    """
+    try:
+        check_spsn(spsn)
+    except ValueError:
+        raise
+    sp, sn = spsn
+    confusion_matrix = np.array([[sp, 1. - sp],
+                                 [1. - sn, sn],
+                                 [1. - sn, sn]])
+    return confusion_matrix
 
 class Unilateral:
-    """Class that models metastatic progression in a lymphatic system by
-    representing it as a directed graph. The progression itself can be modelled
-    via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    def __init__(self, graph: Dict[Tuple[str], Set[str]], **_kwargs):
-        """Initialize the underlying graph:
+    Class that models metastatic progression in a lymphatic system.
 
-        Args:
-            graph: Every key in this dictionary is a 2-tuple containing the
-                type of the :class:`Node` ("tumor" or "lnl") and its name
-                (arbitrary string). The corresponding value is a list of names
-                this node should be connected to via an :class:`Edge`.
+    It does this by representing it as a directed graph. The progression itself can be
+    modelled via hidden Markov models (HMM) or Bayesian networks (BN).
+    """
+    def __init__(
+        self,
+        graph: Dict[Tuple[str], Set[str]],
+        tumor_state: int,
+        allowed_lnl_states: Optional[List[int]] = None,
+        **_kwargs,
+    ) -> None:
+        """Create a new instance of the `Unilateral` class.
+
+        The graph that represents the lymphatic system is given as a dictionary. Its
+        keys are tuples of the form `("tumor", "<tumor_name>")` or
+        `("lnl", "<lnl_name>")`. The values are sets of strings that represent the
+        names of the nodes that are connected to the node given by the key.
         """
-        name_list = [tpl[1] for tpl in graph.keys()]
-        name_set = {tpl[1] for tpl in graph.keys()}
-        if len(name_list) != len(name_set):
-            raise ValueError("No tumor and LNL can have the same name")
-
-        self.nodes = []        # list of all nodes in the graph
-        self.tumors = []       # list of nodes with type tumour
-        self.lnls = []         # list of all lymph node levels
-
-        for key in graph:
-            self.nodes.append(Node(name=key[1], typ=key[0]))
-
-        for node in self.nodes:
-            if node.typ == "tumor":
-                self.tumors.append(node)
-            else:
-                self.lnls.append(node)
-
-        self.edges = []        # list of all edges connecting nodes in the graph
-        self.base_edges = []   # list of edges, going out from tumors
-        self.trans_edges = []  # list of edges, connecting LNLs
-
-        for key, values in graph.items():
-            for value in values:
-                self.edges.append(Edge(self.find_node(key[1]),
-                                       self.find_node(value)))
-
-        for edge in self.edges:
-            if edge.start.typ == "tumor":
-                self.base_edges.append(edge)
-            else:
-                self.trans_edges.append(edge)
+        self.check_unique_names(graph)
+        self.init_nodes(graph, tumor_state, allowed_lnl_states)
+        self.init_edges(graph)
+        self._edge_lookup()
 
 
-    def __str__(self):
-        """Print info about the structure and parameters of the graph.
+    def check_unique_names(self, graph):
+        """Check if all nodes have unique names."""
+        node_names = [name for _, name in graph]
+        unique_node_names = set(node_names)
+
+        if len(node_names) != len(unique_node_names):
+            raise ValueError("No two nodes (tumor or LNL) can have the same name!")
+
+
+    def init_nodes(self, graph, tumor_state, allowed_lnl_states):
+        """Initialize the nodes of the graph."""
+        self.tumors = []
+        self.lnls = []
+
+        for node_type, node_name in graph:
+            if node_type == "tumor":
+                self.tumors.append(
+                    Tumor(name=node_name, state=tumor_state)
+                )
+            elif node_type == "lnl":
+                self.lnls.append(
+                    LymphNodeLevel(name=node_name, allowed_states=allowed_lnl_states)
+                )
+
+
+    def init_edges(self, graph):
+        """Initialize the edges of the graph.
+
+        When a `LymphNodeLevel` is trinary, it is connected to itself via a growth edge.
         """
+        self.tumor_edges = []
+        self.lnl_edges = []
+        self.growth_edges = []
+
+        for (_, start_name), end_names in graph.items():
+            start = self.find_node(start_name)
+            if isinstance(start, LymphNodeLevel) and start.is_trinary:
+                growth_edge = Edge(start=start, end=start)
+                self.growth_edges.append(growth_edge)
+
+            for end_name in end_names:
+                end = self.find_node(end_name)
+                new_edge = Edge(start=start, end=end)
+
+                if new_edge.is_tumor_spread:
+                    self.tumor_edges.append(new_edge)
+                else:
+                    self.lnl_edges.append(new_edge)
+
+
+    def _edge_lookup(self):
+        """Initializes the a lookup dictionary including all edge related parameters as keys.
+        the values are the setter methods to assign their values
+        """
+        self._setter_lookup = {}
+        for edge in self.tumor_edges:
+            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+        for edge in self.lnl_edges:
+            self._setter_lookup['spread_' + edge.name] = edge.set_spread_prob
+            self._setter_lookup['micro_' + edge.name] = edge.set_micro_mod
+        for edge in self.growth_edges:
+            self._setter_lookup['growth_' + edge.start.name] = edge.set_spread_prob
+
+    @property
+    def allowed_lnl_states(self) -> List[int]:
+        """Return the list of allowed states for the LNLs."""
+        return self.lnls[0].allowed_states
+
+
+    def __str__(self) -> str:
+        """Print info about the instance."""
+        return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
+
+    def print_graph(self):
+        """generates the a a visual chart of the spread model based on mermaid graph
+
+        Returns:
+            list: list with the string to create the mermaid graph and an url that directly leads to the graph
+        """
+        graph = ('flowchart TD\n')
+        for index, node in enumerate(self.nodes):
+            for edge in self.nodes[index].out:
+                line = f"{node.name} -->|{edge.spread_prob}| {edge.end.name} \n"
+                graph += line
+        graphbytes = graph.encode("ascii")
+        base64_bytes = base64.b64encode(graphbytes)
+        base64_string = base64_bytes.decode("ascii")
+        url="https://mermaid.ink/img/" + base64_string
+        return graph, url
+
+
+    def print_info(self):
+        """Print detailed information about the instance."""
         num_tumors = len(self.tumors)
         num_lnls   = len(self.lnls)
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e}" for e in self.edges])
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
+            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
         )
-        return string
+        print(string)
 
 
-    def find_node(self, name: str) -> Union[Node, None]:
-        """Finds and returns a node with name ``name``.
-        """
+    @property
+    def is_binary(self) -> bool:
+        """Returns True if the graph is binary, False otherwise."""
+        res = {node.is_binary for node in self.nodes}
+
+        if len(res) != 1:
+            raise RuntimeError("Not all nodes have the same number of states")
+
+        return res.pop()
+
+
+    @property
+    def is_trinary(self) -> bool:
+        """Returns True if the graph is trinary, False otherwise."""
+        res = {node.is_trinary for node in self.nodes}
+
+        if len(res) != 1:
+            raise RuntimeError("Not all nodes have the same number of states")
+
+        return res.pop()
+
+
+    @property
+    def nodes(self) -> List[Union[Tumor, LymphNodeLevel]]:
+        """List of all nodes in the graph."""
+        return self.tumors + self.lnls
+
+
+    @property
+    def edges(self) -> List[Edge]:
+        """List of all edges in the graph."""
+        return self.tumor_edges + self.lnl_edges + self.growth_edges
+
+
+    def find_node(self, name: str) -> Union[Tumor, LymphNodeLevel, None]:
+        """Finds and returns a node with name `name`."""
         for node in self.nodes:
             if node.name == name:
                 return node
         return None
 
 
-    def find_edge(self, startname: str, endname: str) -> Union[Edge, None]:
-        """Finds and returns the edge instance which has a parent node named
-        ``startname`` and ends with node ``endname``.
-        """
-        for node in self.nodes:
-            if node.name == startname:
-                for o in node.out:
-                    if o.end.name == endname:
-                        return o
-        return None
-
-
     @property
     def graph(self) -> Dict[Tuple[str, str], Set[str]]:
-        """Lists the graph as it was provided when the system was created.
-        """
+        """Returns the graph representing this instance's nodes and egdes."""
         res = {}
         for node in self.nodes:
-            res[(node.typ, node.name)] = [o.end.name for o in node.out]
+            node_type = "tumor" if isinstance(node, Tumor) else "lnl"
+            res[(node_type, node.name)] = {o.end.name for o in node.out}
         return res
 
 
+    def get_state(self) -> np.ndarray:
+        """Returns the state of the system as a numpy array."""
+        return np.array([node.state for node in self.nodes])
+
+    def set_state(self, system_state: list) -> None:
+        """Sets the state of the system to `state`."""
+        if len(system_state) != len(self.lnls):
+            raise ValueError(
+                f"Length of state vector {len(system_state)} does not match "
+                f"number of nodes {len(self.nodes)}"
+            )
+
+        for node, state in zip(self.lnls, system_state):
+            node.state = state
+
+
+    def get_state_by_lnl(self) -> Dict[str, int]:
+        """Returns the state of the system as a dictionary with LNL names as keys."""
+        return {lnl.name: lnl.state for lnl in self.lnls}
+
+    def set_state_by_lnl(self, **states) -> None:
+        """Sets the state of the system to `state`."""
+        for lnl in self.lnls:
+            lnl.state = states[lnl.name]
+
+
     @property
-    def state(self):
-        """Return the currently set state of the system.
-        """
-        return np.array([lnl.state for lnl in self.lnls], dtype=int)
-
-    @state.setter
-    def state(self, newstate: np.ndarray):
-        """Sets the state of the system to ``newstate``.
-        """
-        if len(newstate) < len(self.lnls):
-            raise ValueError("length of newstate must match # of LNLs")
-
-        for i, node in enumerate(self.lnls):  # only set lnl's states
-            node.state = newstate[i]
-
-
-    @property
-    def base_probs(self):
+    def tumor_spread_probs(self):
         """The spread probablities parametrizing the edges that represent the
         lymphatic drainage from the tumor(s) to the individual lymph node
         levels. This array is composed of these elements:
@@ -187,27 +383,27 @@ class Unilateral:
         values, the transition matrix - if it was precomputed - is deleted
         so it can be recomputed with the new parameters.
         """
-        return np.array([edge.t for edge in self.base_edges], dtype=float)
+        return np.array([edge.spread_prob for edge in self.tumor_edges], dtype=float)
 
-    @base_probs.setter
-    def base_probs(self, new_base_probs):
+    @tumor_spread_probs.setter
+    def tumor_spread_probs(self, new_tumor_probs):
         """Set the spread probabilities for the connections from the tumor to
         the LNLs.
         """
-        for i, edge in enumerate(self.base_edges):
-            edge.t = new_base_probs[i]
+        for edge, spread_prob in zip(self.tumor_edges, new_tumor_probs):
+            edge.spread_prob = spread_prob
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
 
     @property
-    def trans_probs(self):
-        """Return the spread probablities of the connections between the lymph
+    def lnl_spread_prob(self):
+        """Return the 'base' spread probablities of the connections between the lymph
         node levels. Here, "trans" stands for "transmission" (among the LNLs),
         not "transition" as in the transition to another state.
 
-        Its shape is similar to the one of the :attr:`base_probs` but it lists
+        Its shape is similar to the one of the :attr:`tumor_spread_probs` but it lists
         the transmission probabilities :math:`t_{a \\rightarrow b}` in the
         order they were defined in the initial graph.
 
@@ -216,15 +412,50 @@ class Unilateral:
         matrix - if previously computed - is deleted again, so that it will be
         recomputed with the new parameters.
         """
-        return np.array([edge.t for edge in self.trans_edges], dtype=float)
+        return np.array([edge.spread_prob for edge in self.lnl_edges], dtype=float)
 
-    @trans_probs.setter
-    def trans_probs(self, new_trans_probs):
+    @lnl_spread_prob.setter
+    def lnl_spread_prob(self, new_lnl_probs):
         """Set the spread probabilities for the connections among the LNLs.
         """
-        for i, edge in enumerate(self.trans_edges):
-            edge.t = new_trans_probs[i]
+        for edge, spread_prob in zip(self.lnl_edges, new_lnl_probs):
+            edge.spread_prob = spread_prob
 
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
+
+
+    @property
+    def growth_probability(self):
+        """Return the growth probablities of the lymph
+        node levels.
+        """
+        return self.growth_edges[0].spread_prob
+
+    @growth_probability.setter
+    def growth_probability(self, new_growth_probability):
+        """Set the the growth probablities of the lymph node levels.
+        """
+        for edge, spread_prob in zip(self.growth_edges, new_growth_probability):
+            edge.spread_prob = spread_prob
+
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
+
+
+    @property
+    def microscopic_parameter(self) -> float:
+        """Return the microscopic spread parameter of the connections between the lymph
+        node levels which modifies the sprea on edges where the starting node is microscopic
+        """
+        return self.lnl_edges[-1].micro_mod
+
+    @microscopic_parameter.setter
+    def microscopic_parameter(self, microscopic_parameter):
+        """Set the microscopic spread probabilities for the connections among the LNLs.
+        """
+        for edge, micro_mod in zip(self.tumor_edges, microscopic_parameter):
+            edge.micro_mod = micro_mod
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
 
@@ -238,19 +469,19 @@ class Unilateral:
 
         Setting these requires an array with a length equal to the number of
         edges in the network. It's essentially a concatenation of the
-        :attr:`base_probs` and the :attr:`trans_probs`.
+        :attr:`tumor_spread_probs` and the :attr:`lnl_spread_probs`.
         """
-        return np.concatenate([self.base_probs, self.trans_probs])
+        return np.concatenate([self.tumor_spread_probs, self.lnl_spread_prob])
 
     @spread_probs.setter
     def spread_probs(self, new_spread_probs: np.ndarray):
         """Set the spread probabilities of the :class:`Edge` instances in the
         the network in the order they were created from the graph.
         """
-        num_base_edges = len(self.base_edges)
+        num_base_edges = len(self.tumor_edges)
 
-        self.base_probs = new_spread_probs[:num_base_edges]
-        self.trans_probs = new_spread_probs[num_base_edges:]
+        self.tumor_spread_probs = new_spread_probs[:num_base_edges]
+        self.lnl_spread_prob = new_spread_probs[num_base_edges:]
 
 
     @property
@@ -284,8 +515,7 @@ class Unilateral:
         else:
             raise TypeError(
                 f"Cannot use type {type(new_dists)} for marginalization over "
-                "diagnose times."
-            )
+                "diagnose times.")
 
 
     def comp_transition_prob(
@@ -307,19 +537,13 @@ class Unilateral:
         Returns:
             Transition probability :math:`t`.
         """
-        res = 1.
+        res = 1
         for i, lnl in enumerate(self.lnls):
-            if not lnl.state:
-                in_states = tuple(edge.start.state for edge in lnl.inc)
-                in_weights = tuple(edge.t for edge in lnl.inc)
-                res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
-            elif not newstate[i]:
-                res = 0.
+            res *= lnl.comp_trans_prob(new_state = newstate[i])
+            if res == 0:
                 break
-
         if acquire:
-            self.state = newstate
-
+            self.set_state(newstate)
         return res
 
 
@@ -341,7 +565,7 @@ class Unilateral:
             diagnoses, given the current state of the system.
         """
         prob = 1.
-        for modality, spsn in self._spsn_tables.items():
+        for modality, spsn in self._confusion_matrices.items():
             if modality in diagnoses:
                 mod_diagnose = diagnoses[modality]
                 for lnl in self.lnls:
@@ -353,8 +577,7 @@ class Unilateral:
                         raise ValueError(
                             "diagnoses were not provided in the correct format"
                         ) from idx_err
-
-                    prob *= lnl.obs_prob(lnl_diagnose, spsn)
+                    prob *= lnl.comp_obs_prob(lnl_diagnose, spsn)
         return prob
 
 
@@ -363,11 +586,11 @@ class Unilateral:
         """
         if not hasattr(self, "_state_list"):
             self._state_list = np.zeros(
-                shape=(2**len(self.lnls), len(self.lnls)), dtype=int
+                shape=(len(self.allowed_lnl_states)**len(self.lnls), len(self.lnls)), dtype=int
             )
-        for i in range(2**len(self.lnls)):
+        for i in range(len(self.allowed_lnl_states)**len(self.lnls)):
             self._state_list[i] = [
-                int(digit) for digit in change_base(i, 2, length=len(self.lnls))
+                int(digit) for digit in change_base(i, len(self.allowed_lnl_states), length=len(self.lnls))
             ]
 
     @property
@@ -385,7 +608,7 @@ class Unilateral:
     def _gen_obs_list(self):
         """Generates the list of possible observations.
         """
-        n_obs = len(self._spsn_tables)
+        n_obs = len(self._confusion_matrices)
 
         if not hasattr(self, "_obs_list"):
             self._obs_list = np.zeros(
@@ -417,8 +640,7 @@ class Unilateral:
         for i in range(len(self.state_list)):
             self._allowed_transitions[i] = []
             for j in range(len(self.state_list)):
-                if not np.any(np.greater(self.state_list[i,:],
-                                         self.state_list[j,:])):
+                if not np.any(np.greater(self.state_list[i,:],self.state_list[j,:])) and not np.any(self.state_list[j,:] - self.state_list[i,:] > 1): # here we only allow a transition that increases by 1
                     self._allowed_transitions[i].append(j)
 
     @property
@@ -448,11 +670,11 @@ class Unilateral:
         zero.
         """
         if not hasattr(self, "_transition_matrix"):
-            shape = (2**len(self.lnls), 2**len(self.lnls))
+            shape = (len(self.allowed_lnl_states)**len(self.lnls), len(self.allowed_lnl_states)**len(self.lnls))
             self._transition_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
             for j in self.allowed_transitions[i]:
                 transition_prob = self.comp_transition_prob(self.state_list[j])
                 self._transition_matrix[i,j] = transition_prob
@@ -505,8 +727,8 @@ class Unilateral:
         """
         try:
             modality_spsn = {}
-            for mod, table in self._spsn_tables.items():
-                modality_spsn[mod] = [table[0,0], table[1,1]]
+            for mod, table in self._confusion_matrices.items():
+                modality_spsn[mod] = [table[0,0], table[len(self.allowed_lnl_states)-1,1]]
             return modality_spsn
 
         except AttributeError:
@@ -514,43 +736,43 @@ class Unilateral:
             warnings.warn(msg)
             return {}
 
-
     @modalities.setter
     def modalities(self, modality_spsn: Dict[Any, List[float]]):
         """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different
-        diagnostic modalities, create a 2x2 matrix for every disgnostic
+        diagnostic modalities, create a 2xstates matrix for every disgnostic
         modality that stores
-
+        e.g. 2x2
         .. math::
             \\begin{pmatrix}
             s_P & 1 - s_N \\\\
             1 - s_P & s_N
             \\end{pmatrix}
         """
-
         if hasattr(self, "_observation_matrix"):
             del self._observation_matrix
         if hasattr(self, "_obs_list"):
             del self._obs_list
 
-        self._spsn_tables = {}
-        for mod, spsn in modality_spsn.items():
+        self._confusion_matrices = {}
+        for mod,matrix in modality_spsn.items():
             if not isinstance(mod, str):
                 msg = ("Modality names must be strings.")
                 raise TypeError(msg)
-
-            has_len_2 = len(spsn) == 2
-            is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-            is_below_ub = np.all(np.less_equal(spsn, 1.))
-            if not has_len_2 or not is_above_lb or not is_below_ub:
-                msg = ("For each modality provide a list of two decimals "
-                       "between 0.5 and 1.0 as specificity & sensitivity "
-                       "respectively.")
+            if not np.all(matrix.sum(axis = 1) == 1):
+                msg = ("All values need to be between 0 and 1 and rows add up to 1")
                 raise ValueError(msg)
-
-            sp, sn = spsn
-            self._spsn_tables[mod] = np.array([[sp     , 1. - sn],
-                                               [1. - sp, sn     ]])
+            if len(self.allowed_lnl_states) == 3:
+                if matrix.shape != (len(self.allowed_lnl_states), 2):
+                    msg = (f'the shape of the confusion matrix does not match the model '
+                    f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+                    raise ValueError(msg)
+                self._confusion_matrices[mod] = matrix
+            elif len(self.allowed_lnl_states) == 2 and matrix.shape[0] == 3:
+                if matrix.shape != (len(self.allowed_lnl_states), 2):
+                    msg = (f'the shape of the confusion matrix does not match the model '
+                    f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+                    raise ValueError(msg)
+                self._confusion_matrices[mod] = np.delete(matrix, 1, axis = 0)
 
 
     def _gen_observation_matrix(self):
@@ -567,10 +789,10 @@ class Unilateral:
             self._observation_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
             for j,obs in enumerate(self.obs_list):
                 observations = {}
-                for k,modality in enumerate(self._spsn_tables):
+                for k,modality in enumerate(self._confusion_matrices):
                     observations[modality] = {
                         lnl.name: obs[n_lnl * k + i] for i,lnl in enumerate(self.lnls)
                     }
@@ -614,7 +836,7 @@ class Unilateral:
         self._diagnose_matrices[t_stage] = np.ones(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
 
             for j, (_, patient) in enumerate(table.iterrows()):
                 patient_obs_prob = self.comp_diagnose_prob(patient)
@@ -723,7 +945,7 @@ class Unilateral:
             for stage in t_stages:
                 table = data.loc[
                     data[('info', 't_stage')] == stage,
-                    self._spsn_tables.keys()
+                    self._confusion_matrices.keys()
                 ]
                 self._gen_diagnose_matrices(table, stage)
                 if stage not in self.diag_time_dists:
@@ -735,7 +957,7 @@ class Unilateral:
 
         # For the Bayesian Network
         elif mode=="BN":
-            table = data[self._spsn_tables.keys()]
+            table = data[self._confusion_matrices.keys()]
             stage = "BN"
             self._gen_diagnose_matrices(table, stage)
 
@@ -791,41 +1013,48 @@ class Unilateral:
         return state_probs
 
 
-    def check_and_assign(self, new_params: np.ndarray):
+    def assign_parameters(self, new_params_list = None, **new_params_kwargs):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
         the model.
 
         Args:
-            new_params: The set of :attr:`spread_probs` and parameters to provide for
-                updating the parametrized distributions over diagnose times.
+            **kwargs: The keyword - value pairs to set spread, microscopic, growth
+            and time_dist parameters.
 
         Warning:
             This method assumes that the parametrized distributions (instances of
             :class:`Marginalizor`) all raise a ``ValueError`` when provided with
             invalid parameters.
         """
-        k = len(self.spread_probs)
-        new_spread_probs = new_params[:k]
-        new_marg_params = new_params[k:]
+        if new_params_list is not None:
+            # here it depends how we want to provide the new_params_list.
+            # there are a lot of options. e.g. one needs to specifically define each base, each transmission, each growth and each micro_mod parameter
+            # Or one only defines each base, each transmission and one growth and one micro_mod parameter
+            # I am not sure what exactly you prefer Roman.
+            # But it kind of needs to be well defined, also how the function handles incomplete parameter lists...
+            pass
+        else:
+            for key, value in new_params_kwargs.items():
+                if key in self.diag_time_dists:
+                    try:
+                        self.diag_time_dists[key].update(value)
+                    except ValueError as val_err:
+                        raise ValueError(
+                            "Parameters for marginalization over diagnose times are invalid"
+                            ) from val_err
 
-        try:
-            self.diag_time_dists.update(new_marg_params)
-        except ValueError as val_err:
-            raise ValueError(
-                "Parameters for marginalization over diagnose times are invalid"
-            ) from val_err
+                elif key == 'growth':
+                    for edge in self.growth_edges:
+                        edge.spread_prob = value
+                elif key == 'micro_mod':
+                    for edge in self.lnl_edges:
+                        edge.micro_mod = value
+                else:
+                    self._setter_lookup[key](value)
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
 
-        if new_spread_probs.shape != self.spread_probs.shape:
-            raise ValueError(
-                "Shape of provided spread parameters does not match network"
-            )
-        if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
-            raise ValueError(
-                "Spread probs must be between 0 and 1"
-            )
-
-        self.spread_probs = new_spread_probs
 
 
     def _likelihood(
@@ -867,20 +1096,19 @@ class Unilateral:
             state_probs = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.state = state
+                self.set_state(state)
                 for node in self.lnls:
                     state_probs[i] *= node.bn_prob()
 
             p = state_probs @ self.diagnose_matrices["BN"]
             llh = np.sum(np.log(p)) if log else np.prod(p)
-
         return llh
 
 
     def likelihood(
         self,
         data: Optional[pd.DataFrame] = None,
-        given_params: Optional[np.ndarray] = None,
+        given_params: Optional[dict] = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
@@ -915,7 +1143,7 @@ class Unilateral:
             return self._likelihood(mode, log)
 
         try:
-            self.check_and_assign(given_params)
+            self.assign_parameters(**given_params)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -925,7 +1153,7 @@ class Unilateral:
     def risk(
         self,
         involvement: Optional[Union[dict, np.ndarray]] = None,
-        given_params: Optional[np.ndarray] = None,
+        given_params: Optional[dict] = None,
         given_diagnoses: Optional[Dict[str, dict]] = None,
         t_stage: str = "early",
         mode: str = "HMM",
@@ -963,7 +1191,7 @@ class Unilateral:
             with probabilities for all possible hidden states otherwise.
         """
         if given_params is not None:
-            self.check_and_assign(given_params)
+            self.assign_parameters(**given_params)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -971,9 +1199,8 @@ class Unilateral:
         # vector containing P(Z=z|X)
         diagnose_probs = np.zeros(shape=len(self.state_list))
         for i,state in enumerate(self.state_list):
-            self.state = state
+            self.set_state(state)
             diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
-
         # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
@@ -985,20 +1212,17 @@ class Unilateral:
         elif mode == "BN":
             marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
-                self.state = state
+                self.set_state(state)
                 for node in self.lnls:
                     marg_state_probs[i] *= node.bn_prob()
 
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
         joint_diag_state = marg_state_probs * diagnose_probs
-
         # get marginal over X from joint
         marg_diagnose_prob = np.sum(joint_diag_state)
-
         # compute vector of probabilities for all possible involvements given
         # the specified diagnosis P(X|Z=z)
         post_state_probs =  joint_diag_state / marg_diagnose_prob
-
         if involvement is None:
             return post_state_probs
 

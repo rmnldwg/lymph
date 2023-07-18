@@ -1,151 +1,199 @@
-from functools import lru_cache
-from typing import List, Tuple, Union
+"""
+Module defining the nodes of the graph representing the lymphatic system.
+"""
+from __future__ import annotations
+
+from typing import List, Optional
 
 import numpy as np
 
 
-class Node(object):
-    """Very basic class for tumors and lymph node levels (LNLs) in a lymphatic
-    system. This serves as one part of a lightweight network setup (the other
-    one is the :class:`Edge` class).
+class AbstractNode:
     """
-    def __init__(self, name: str, state: int = 0, typ: str = "lnl"):
+    Abstract base class for nodes in the graph reprsenting the lymphatic system.
+    """
+    def __init__(
+        self,
+        name: str,
+        state: int,
+        allowed_states: Optional[List[int]] = None,
+    ) -> None:
         """
-        Args:
-            name: Name of the node.
-            state: Current state this LNL is in. Can be in {0, 1}.
-            typ: Can be either ``"lnl"``, ``"tumor"``.
-        """
-        if type(name) is not str:
-            raise TypeError("Name of node must be a string")
-        if int(state) not in [0,1]:
-            raise ValueError("State must be castable to 0 or 1")
-        if typ not in ["lnl", "tumor"]:
-            raise ValueError("Typ of node must be either `lnl` or `tumor`")
+        Make a new node.
 
+        Upon initialization, the `name` and `state` of the node must be provided. The
+        `state` must be one of the `allowed_states`. The constructor makes sure that
+        the `allowed_states` are a list of ints, even when, e.g., a tuple of floats
+        is provided.
+        """
         self.name = name
-        self.typ = typ
-        self.state = int(state)
 
-        self.inc = []
+        if allowed_states is None:
+            allowed_states = [0, 1]
+
+        _allowed_states = []
+        for s in allowed_states:
+            try:
+                _allowed_states.append(int(s))
+            except ValueError as val_err:
+                raise ValueError("Allowed states must be castable to int") from val_err
+
+        self.allowed_states = _allowed_states
+        self.state = state
+
+        # nodes can have outgoing edge connections
         self.out = []
 
 
-    def __str__(self):
-        """Print basic info"""
+    def __str__(self) -> str:
+        """Return a string representation of the node."""
         return self.name
+
+
+    @property
+    def name(self) -> str:
+        """Return the name of the node."""
+        return self._name
+
+    @name.setter
+    def name(self, new_name: str) -> None:
+        """Set the name of the node."""
+        try:
+            new_name = str(new_name)
+        except ValueError as val_err:
+            raise ValueError("Name of node must be castable to string") from val_err
+
+        self._name = new_name
 
 
     @property
     def state(self) -> int:
         """Return the state of the node."""
-        try:
-            return self._state
-        except AttributeError:
-            raise AttributeError("State has not been set yet.")
+        return self._state
 
     @state.setter
-    def state(self, newstate: int):
-        """Set the state of the node and make sure the state of a tumor node
-        cannot be changed."""
-        if self.typ == "lnl":
-            if int(newstate) not in [0,1]:
-                raise ValueError("State of node must be either 0 or 1")
-            self._state = int(newstate)
+    def state(self, new_state: int) -> None:
+        """Set the state of the node."""
+        try:
+            new_state = int(new_state)
+        except ValueError as val_err:
+            raise ValueError("State of node must be castable to int") from val_err
 
-        elif self.typ == "tumor":
-            self._state = 1
+        if new_state not in self.allowed_states:
+            raise ValueError("State of node must be one of the allowed states")
+
+        self._state = new_state
+
+
+    def comp_bayes_net_prob(self, log: bool = False) -> float:
+        """Compute the Bayesian network's probability for the current state."""
+        return 0. if log else 1.
+
+
+    def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
+        """Compute the hidden Markov model's transition probability to a new state."""
+        if new_state not in self.allowed_states:
+            raise ValueError("New state must be one of the allowed states")
+
+        if new_state < self.state:
+            return -np.inf if log else 0.
+
+        return 0. if log else 1.
+
+
+    def comp_obs_prob(
+        self,
+        obs: int,
+        obs_table: np.ndarray,
+        log: bool = False,
+    ) -> float:
+        """Compute the probability of the diagnosis `obs`, given the current state.
+
+        The `obs_table` is a 2D array with the rows corresponding to the states and
+        the columns corresponding to the observations. It encodes for each state and
+        diagnosis the corresponding probability.
+        """
+        if obs is None or np.isnan(obs):
+            return 0 if log else 1.
+        obs_prob = obs_table[self.state, int(obs)]
+        return np.log(obs_prob) if log else obs_prob
+
+
+class Tumor(AbstractNode):
+    """A tumor in the graph representation of the lymphatic system."""
+    def __init__(self, name: str, state: int) -> None:
+        """Create a new tumor.
+
+        A tumor can only ever be in one state, and it cannot change its state.
+        """
+        allowed_states = [state]
+        super().__init__(name, state, allowed_states)
+
+
+    def __str__(self):
+        """Print basic info"""
+        return f"Tumor {super().__str__()}"
+
+
+class LymphNodeLevel(AbstractNode):
+    """A lymph node level (LNL) in the graph representation of the lymphatic system."""
+    def __init__(
+        self,
+        name: str,
+        state: int = 0,
+        allowed_states: Optional[List[int]] = None,
+    ) -> None:
+        """Create a new lymph node level."""
+
+        super().__init__(name, state, allowed_states)
+
+        # LNLs can also have incoming edge connections
+        self.inc = []
+
+
+    def __str__(self):
+        """Print basic info"""
+        return f"LNL {super().__str__()}"
 
 
     @property
-    def typ(self) -> str:
-        """Return the type of the node, which can be ``"tumor"`` or ``"lnl"``.
-        """
-        try:
-            return self._typ
-        except AttributeError:
-            raise AttributeError("Type of node has not been set yet.")
-
-    @typ.setter
-    def typ(self, newtyp: str):
-        """Set the type of the node (either ``"tumor"`` or ``"lnl"``)."""
-        if newtyp == "tumor":
-            self._typ = newtyp
-            self.state = 1
-        elif newtyp == "lnl":
-            self._typ = newtyp
-        else:
-            raise ValueError("Only types 'tumor' and 'lnl' are available.")
+    def is_binary(self) -> bool:
+        """Return whether the node is binary."""
+        return len(self.allowed_states) == 2
 
 
-    @staticmethod
-    @lru_cache
-    def trans_prob(
-        in_states: Tuple[int], in_weights: Tuple[float]
-    ) -> List[float]:
-        """Compute probability of a random variable to remain in its state (0)
-        or switch to be involved (1) based on its parent's states and the
-        weights of the connecting arcs. This is a static, cached method for
-        better performance.
-
-        Args:
-            in_states: States of the parent nodes.
-            in_weights: Weights of the incoming arcs.
-
-        Returns:
-            Probability to remain healthy and probability to become metastatic
-            as a list of length 2.
-
-        Note:
-            This function should only be called when the :class:`Node`, to
-            which the incoming weights and states refer to, is in state ``0``.
-            Otherwise, meaning it is already involved/metastatic, it must stay
-            in this state no matter what, because self-healing is forbidden.
-        """
-        healthy_prob = 1.
-        for state, weight in zip(in_states, in_weights):
-            healthy_prob *= (1. - weight) ** state
-        return [healthy_prob, 1. - healthy_prob]
+    @property
+    def is_trinary(self) -> bool:
+        """Return whether the node is trinary."""
+        return len(self.allowed_states) == 3
 
 
-    def obs_prob(
-        self, obs: Union[float, int], obstable: np.ndarray = np.eye(2)
-    ) -> float:
-        """Compute the probability of observing a certain diagnose, given its
-        current state. If the diagnose is unspecified (e.g. ``None`` or
-        ``NaN``), the probability is of that "diagnose" is 1.
+    def comp_bayes_net_prob(self, log: bool = False) -> float:
+        """Compute the Bayesian network's probability for the current state."""
+        res = super().comp_bayes_net_prob(log=log)
 
-        Args:
-            obs: Diagnose/observation for the node.
-            obstable: 2x2 matrix containing info about sensitivity and
-                specificty of the observational/diagnostic modality from which
-                `obs` was obtained.
-
-        Returns:
-            The probability of observing the given diagnose.
-        """
-        if obs is None or np.isnan(obs):
-            return 1.
-        else:
-            return obstable[int(obs), self.state]
-
-
-    def bn_prob(self, log: bool = False) -> float:
-        """Computes the conditional probability of a node being in the state it
-        is in, given its parents are in the states they are in.
-
-        Args:
-            log: If ``True``, returns the log-probability.
-                (default: ``False``)
-
-        Returns:
-            The conditional (log-)probability.
-        """
-        res = 1.
         for edge in self.inc:
-            res *= (1 - edge.t)**edge.start.state
+            if log:
+                res += edge.comp_bayes_net_prob(log=True)
+            else:
+                res *= edge.comp_bayes_net_prob(log=False)
 
-        res *= (-1)**self.state
-        res += self.state
+        return res
 
-        return np.log(res) if log else res
+    # note: here we gained extra computation time. the former version used to save
+    # transition probabilities that were computed before with an @lru_cache decorator
+    # since the computation is not done in node anymore, this will not work now.
+    # thus we will need to implement a function that checks and caches results
+    def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
+        """Compute the hidden Markov model's transition probability to a new state."""
+        stay_prob = super().comp_trans_prob(new_state, log)
+        if new_state == self.state == self.allowed_states[-1]:
+            return stay_prob
+        if new_state - self.state > 1:
+            return -np.inf if log else 0
+
+        for edge in self.inc:
+            stay_prob *= edge.comp_stay_prob()
+        if self.state == new_state:
+            return log(stay_prob) if log else stay_prob
+        return log(1-stay_prob) if log else 1-stay_prob

@@ -26,21 +26,59 @@ def test_integration():
     assert model.graph == graph
     assert len(model.spread_probs) == exp_num_edges
 
-    scanners = {
-        "bad_scanner": [0.67, 0.72],
-        "fancy_scanner": [0.89, 0.92],
-    }
-    model.modalities = scanners
+    model.microscopic_parameter = 0.5
+    model.growth_parameter = 0.3
+    assert model.microscopic_parameter == 0.5
+    assert model.growth_parameter == 0.3
 
-    for mod, spsn in scanners.items():
+    scanners_clinical = {
+        "bad_scanner": [0.67, 0.72],
+        "fancy_scanner": [0.89, 0.9],
+    }
+    scanners_pathological = {
+        "good_test": [1, 0.91]
+    }
+
+    modalities_combined = {
+        'clinical' : scanners_clinical,
+        'pathological' : scanners_pathological
+    }
+    model.modalities = modalities_combined
+
+    for mod, spsn in scanners_clinical.items():
         assert mod in model._spsn_tables
         assert np.all(np.sum(model._spsn_tables[mod], axis=0) == 1.)
         assert model._spsn_tables[mod][0,0] == spsn[0]
-        assert model._spsn_tables[mod][1,1] == spsn[1]
+        assert model._spsn_tables[mod][1,2] == spsn[1]
+
+    for mod, spsn in scanners_pathological.items():
+        assert mod in model._spsn_tables
+        assert np.all(np.sum(model._spsn_tables[mod], axis=0) == 1.)
+        assert model._spsn_tables[mod][0,0] == spsn[0]
+        assert model._spsn_tables[mod][1,2] == spsn[1]
+
+    diagnoses = {'bad_scanner': {'a': 1, 'b': 1, 'c' : 1, 'd': 1}, 'fancy_scanner': {'a': 1, 'b': 1, 'c' : 1, 'd': 1}, 'good_test': {'a': 1, 'b': 1, 'c' : 1, 'd': 1}}
+    prob = 1.
+    model.state = [1,1,1,1]
+    for modality, spsn in model._spsn_tables.items():
+        if modality in diagnoses:
+            mod_diagnose = diagnoses[modality]
+            for lnl in model.lnls:
+                try:
+                    lnl_diagnose = mod_diagnose[lnl.name]
+                except KeyError:
+                    continue
+                except IndexError as idx_err:
+                    raise ValueError(
+                        "diagnoses were not provided in the correct format"
+                    ) from idx_err
+
+                prob *= lnl.obs_prob(lnl_diagnose, spsn)
+    assert prob == (1-0.67)**4*(1-0.89)**4*(0.91)**4
 
     max_t = 10
     time_support = np.arange(max_t + 1)
-    time_marg = lymph.MarginalizorDict(max_t=max_t)
+    time_marg = lymph_trinary.MarginalizorDict(max_t=max_t)
     time_marg["early"] = sp.stats.binom.pmf(time_support, n=max_t, p=0.3)
     time_marg["late"] = lambda t,p: sp.stats.binom.pmf(t, n=max_t, p=p)
     model.diag_time_dists = time_marg
@@ -51,7 +89,7 @@ def test_integration():
         assert np.isclose(np.sum(model.diag_time_dists[stage].pmf), 1.)
 
     given_params = np.random.uniform(
-        size=len(model.spread_probs) + model.diag_time_dists.num_parametric
+        size=len(model.spread_probs) + model.diag_time_dists.num_parametric +2
     )
     model.check_and_assign(given_params)
 
@@ -60,7 +98,7 @@ def test_integration():
     exp_dist["late"] = sp.stats.binom.pmf(time_support, n=max_t, p=given_params[-1])
     for stage in ["early", "late"]:
         assert np.all(np.isclose(model.diag_time_dists[stage].pmf, exp_dist[stage]))
-    exp_spread_probs = given_params[:-1]
+    exp_spread_probs = given_params[2:-1]
     assert np.all(model.spread_probs == exp_spread_probs)
 
     synth_data = model.generate_dataset(
@@ -85,24 +123,50 @@ def test_integration():
     assert np.isclose(log_llh, np.log(llh))
 
     involvement = {
-        "a": False,
-        "b": True,
-        "c": True,
+        "a": 0,
+        "b": 2,
+        "c": 2,
+        "d": None,
+    }
+    involvement1 = {
+        "a": 0,
+        "b": 1,
+        "c": 2,
+        "d": None,
+    }
+    involvement2 = {
+        "a": 0,
+        "b": 2,
+        "c": 1,
+        "d": None,
+    }
+    involvement3 = {
+        "a": 0,
+        "b": 1,
+        "c": 1,
         "d": None,
     }
     bad_diagnosis = {
         "bad_scanner": {
-            "a": False,
-            "b": True,
-            "c": True,
+            "a": 0,
+            "b": 1,
+            "c": 1,
             "d": None,
         }
     }
     better_diagnosis = {
         "fancy_scanner": {
-            "a": False,
-            "b": True,
-            "c": True,
+            "a": 0,
+            "b": 1,
+            "c": 1,
+            "d": None,
+        }
+    }
+    best_diagnosis = {
+        "good_test": {
+            "a": 0,
+            "b": 1,
+            "c": 1,
             "d": None,
         }
     }
@@ -115,6 +179,28 @@ def test_integration():
         involvement=involvement,
         given_diagnoses=better_diagnosis
     )
+    individual_best_risk1 = model.risk(
+        involvement=involvement,
+        given_diagnoses=best_diagnosis
+    )
+    individual_best_risk0 = model.risk(
+        involvement=involvement,
+        given_diagnoses=best_diagnosis
+    )
+    individual_best_risk1 = model.risk(
+        involvement=involvement1,
+        given_diagnoses=best_diagnosis
+    )
+    individual_best_risk2 = model.risk(
+        involvement=involvement2,
+        given_diagnoses=best_diagnosis
+    )
+    individual_best_risk3 = model.risk(
+        involvement=involvement3,
+        given_diagnoses=best_diagnosis
+    )
     assert 0. <= general_risk <= 1.
     assert individual_bad_risk > general_risk
     assert individual_better_risk > individual_bad_risk
+    assert individual_best_risk0+individual_best_risk1+individual_best_risk2+individual_best_risk3 > individual_better_risk
+    # we add over all microscopic involvements that are equal to the [0,2,2] state in the macroscopic state for the pathological analysis
