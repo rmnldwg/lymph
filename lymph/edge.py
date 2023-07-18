@@ -4,6 +4,7 @@ This module implements the edges of the graph representation of the lymphatic sy
 from __future__ import annotations
 
 from typing import Union
+import warnings
 import numpy as np
 
 from lymph.node import AbstractNode, LymphNodeLevel, Tumor
@@ -95,14 +96,18 @@ class Edge:
 
     def get_micro_mod(self) -> float:
         """Return the spread probability."""
-        if not hasattr(self, "_micro_mod"):
+        if not hasattr(self, "_micro_mod") or self.end.is_binary:
             self._micro_mod = 1.
         return self._micro_mod
 
     def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
+        if self.end.is_binary:
+            warnings.warn("Microscopic spread modifier is not used for binary nodes!")
+
         if not 0. <= new_micro_mod <= 1.:
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
+
         self._micro_mod = new_micro_mod
 
         if hasattr(self, "_trans_factor_matrix"):
@@ -153,25 +158,23 @@ class Edge:
         """Generate the transition factor matrix for the edge.
 
         This matrix has one row for each possible state of the starting `Node` instance,
-        and one column for each possible state of the ending `Node` instance.
+        and one column for each possible state of the ending `Node` instance. It is a
+        3x3 matrix, regardless of the number of states of the nodes, because the top
+        left 2x2 submatrix coincidentally has the values that are necessary for the
+        binary case.
 
-        This matrix needs to be recomputed every time the parameters of the edge change.
+        In the trinary case, this can also return the transition factor matrix for the
+        growth case, which is different from the spread case.
         """
-        if self.start.is_binary:
+        if isinstance(self.start, Tumor):
             self._trans_factor_matrix = np.array([
-                [1.                   ,               1.],
-                [1. - self.spread_prob, self.spread_prob],
+                [1. - self.spread_prob, self.spread_prob, 1.],
+                [1. - self.spread_prob, self.spread_prob, 1.],
+                [1. - self.spread_prob, self.spread_prob, 1.],
             ])
 
-        elif self.start.is_trinary and self.is_growth:
-            growth_prob = self.spread_prob
-            self._trans_factor_matrix = np.array([
-                [1., 1.              , 0.         ],
-                [0., 1. - growth_prob, growth_prob],
-                [0., 0.              , 1.         ],
-            ])
-
-        elif self.start.is_trinary:
+        elif not self.is_growth:
+            # for binary nodes, the micro_mod parameter is set to 1
             micro_spread_prob = self.micro_mod * self.spread_prob
             self._trans_factor_matrix = np.array([
                 [1.                    , 1.               , 1.],
@@ -180,7 +183,12 @@ class Edge:
             ])
 
         else:
-            raise NotImplementedError("Only binary and trinary nodes are supported!")
+            growth_prob = self.spread_prob
+            self._trans_factor_matrix = np.array([
+                [1., 1.              , 0.         ],
+                [0., 1. - growth_prob, growth_prob],
+                [0., 0.              , 1.         ],
+            ])
 
 
     @property
