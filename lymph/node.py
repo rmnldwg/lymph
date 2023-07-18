@@ -90,15 +90,12 @@ class AbstractNode:
         return 0. if log else 1.
 
 
-    def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
+    def comp_trans_prob(self, new_state: int) -> float:
         """Compute the hidden Markov model's transition probability to a new state."""
         if new_state not in self.allowed_states:
             raise ValueError("New state must be one of the allowed states")
 
-        if new_state < self.state:
-            return -np.inf if log else 0.
-
-        return 0. if log else 1.
+        return 0. if new_state < self.state else 1.
 
 
     def comp_obs_prob(
@@ -181,20 +178,21 @@ class LymphNodeLevel(AbstractNode):
         return res
 
 
-    # note: here we gained extra computation time. the former version used to save
-    # transition probabilities that were computed before with an @lru_cache decorator
-    # since the computation is not done in node anymore, this will not work now.
-    # thus we will need to implement a function that checks and caches results
-    def comp_trans_prob(self, new_state: int, log: bool = False) -> float:
-        """Compute the hidden Markov model's transition probability to a new state."""
-        stay_prob = super().comp_trans_prob(new_state, log)
-        if new_state == self.state == self.allowed_states[-1]:
-            return stay_prob
-        if new_state - self.state > 1:
-            return -np.inf if log else 0
+    def comp_trans_prob(self, new_state: int) -> float:
+        """Compute the hidden Markov model's transition probability to a `new_state`.
+
+        It does this by first computing if the requested transition is even allowed
+        and then asking all incoming edges for their contributing factors to this
+        transition probability.
+        """
+        trans_prob = super().comp_trans_prob(new_state)
+
+        # TODO: Check if this is even necessary. Due to the mask in the `Unilateral`
+        # class, this case should not occur.
+        if trans_prob == 0.:
+            return 0.
 
         for edge in self.inc:
-            stay_prob *= edge.comp_stay_prob()
-        if self.state == new_state:
-            return log(stay_prob) if log else stay_prob
-        return log(1-stay_prob) if log else 1-stay_prob
+            trans_prob *= edge.trans_factors[new_state]
+
+        return trans_prob

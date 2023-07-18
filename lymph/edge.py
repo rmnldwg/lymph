@@ -101,10 +101,12 @@ class Edge:
 
     def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
-        if not (0. <= new_micro_mod <= 1.):
+        if not 0. <= new_micro_mod <= 1.:
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
         self._micro_mod = new_micro_mod
-        del self._trans_factor_matrix
+
+        if hasattr(self, "_trans_factor_matrix"):
+            del self._trans_factor_matrix
 
     micro_mod = property(
         get_micro_mod,
@@ -121,10 +123,12 @@ class Edge:
 
     def set_spread_prob(self, new_spread_prob):
         """Set the spread probability of the edge."""
-        if not (0. <= new_spread_prob <= 1.):
+        if not 0. <= new_spread_prob <= 1.:
             raise ValueError("Spread probability must be between 0 and 1!")
         self._spread_prob = new_spread_prob
-        del self._trans_factor_matrix
+
+        if hasattr(self, "_trans_factor_matrix"):
+            del self._trans_factor_matrix
 
     spread_prob = property(
         get_spread_prob,
@@ -157,6 +161,14 @@ class Edge:
             self._trans_factor_matrix = np.array([
                 [1.                   ,               1.],
                 [1. - self.spread_prob, self.spread_prob],
+            ])
+
+        elif self.start.is_trinary and self.is_growth:
+            growth_prob = self.spread_prob
+            self._trans_factor_matrix = np.array([
+                [1., 1.              , 0.         ],
+                [0., 1. - growth_prob, growth_prob],
+                [0., 0.              , 1.         ],
             ])
 
         elif self.start.is_trinary:
