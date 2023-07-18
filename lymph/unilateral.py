@@ -55,6 +55,11 @@ class Unilateral:
         self._init_params_lookup()
 
 
+    def __str__(self) -> str:
+        """Print info about the instance."""
+        return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
+
+
     def check_unique_names(self, graph):
         """Check if all nodes have unique names."""
         node_names = [name for _, name in graph]
@@ -106,7 +111,11 @@ class Unilateral:
 
 
     def _init_params_lookup(self):
-        """Initialize a dictionary of setter methods for the edges of the graph."""
+        """Initialize a dictionary of `Param` instances for the edges of the graph.
+
+        This allows one to quickly access the getter and setter methods related to the
+        parameters of the edges.
+        """
         self._params_lookup = {}
 
         for edge in self.tumor_edges:
@@ -137,44 +146,9 @@ class Unilateral:
 
 
     @property
-    def allowed_lnl_states(self) -> List[int]:
+    def allowed_states(self) -> List[int]:
         """Return the list of allowed states for the LNLs."""
         return self.lnls[0].allowed_states
-
-
-    def __str__(self) -> str:
-        """Print info about the instance."""
-        return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
-
-    def print_graph(self):
-        """generates the a a visual chart of the spread model based on mermaid graph
-
-        Returns:
-            list: list with the string to create the mermaid graph and an url that directly leads to the graph
-        """
-        graph = ('flowchart TD\n')
-        for index, node in enumerate(self.nodes):
-            for edge in self.nodes[index].out:
-                line = f"{node.name} -->|{edge.spread_prob}| {edge.end.name} \n"
-                graph += line
-        graphbytes = graph.encode("ascii")
-        base64_bytes = base64.b64encode(graphbytes)
-        base64_string = base64_bytes.decode("ascii")
-        url="https://mermaid.ink/img/" + base64_string
-        return graph, url
-
-
-    def print_info(self):
-        """Print detailed information about the instance."""
-        num_tumors = len(self.tumors)
-        num_lnls   = len(self.lnls)
-        string = (
-            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
-            f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
-            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
-        )
-        print(string)
 
 
     @property
@@ -229,6 +203,37 @@ class Unilateral:
         return res
 
 
+    def print_graph(self):
+        """generates the a a visual chart of the spread model based on mermaid graph
+
+        Returns:
+            list: list with the string to create the mermaid graph and an url that directly leads to the graph
+        """
+        graph = ('flowchart TD\n')
+        for index, node in enumerate(self.nodes):
+            for edge in self.nodes[index].out:
+                line = f"{node.name} -->|{edge.spread_prob}| {edge.end.name} \n"
+                graph += line
+        graphbytes = graph.encode("ascii")
+        base64_bytes = base64.b64encode(graphbytes)
+        base64_string = base64_bytes.decode("ascii")
+        url="https://mermaid.ink/img/" + base64_string
+        return graph, url
+
+
+    def print_info(self):
+        """Print detailed information about the instance."""
+        num_tumors = len(self.tumors)
+        num_lnls   = len(self.lnls)
+        string = (
+            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
+            f"and {num_lnls} LNL(s).\n"
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
+            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
+        )
+        print(string)
+
+
     def get_state(self) -> np.ndarray:
         """Returns the state of the system as a numpy array."""
         return np.array([node.state for node in self.nodes])
@@ -250,7 +255,7 @@ class Unilateral:
         return {lnl.name: lnl.state for lnl in self.lnls}
 
     def set_state_by_lnl(self, **states) -> None:
-        """Sets the state of the system to `state`."""
+        """Sets the state of every LNL to the corresponding value in `states`."""
         for lnl in self.lnls:
             lnl.state = states[lnl.name]
 
@@ -416,11 +421,11 @@ class Unilateral:
         """
         if not hasattr(self, "_state_list"):
             self._state_list = np.zeros(
-                shape=(len(self.allowed_lnl_states)**len(self.lnls), len(self.lnls)), dtype=int
+                shape=(len(self.allowed_states)**len(self.lnls), len(self.lnls)), dtype=int
             )
-        for i in range(len(self.allowed_lnl_states)**len(self.lnls)):
+        for i in range(len(self.allowed_states)**len(self.lnls)):
             self._state_list[i] = [
-                int(digit) for digit in change_base(i, len(self.allowed_lnl_states), length=len(self.lnls))
+                int(digit) for digit in change_base(i, len(self.allowed_states), length=len(self.lnls))
             ]
 
     @property
@@ -500,7 +505,7 @@ class Unilateral:
         zero.
         """
         if not hasattr(self, "_transition_matrix"):
-            shape = (len(self.allowed_lnl_states)**len(self.lnls), len(self.allowed_lnl_states)**len(self.lnls))
+            shape = (len(self.allowed_states)**len(self.lnls), len(self.allowed_states)**len(self.lnls))
             self._transition_matrix = np.zeros(shape=shape)
 
         for i,state in enumerate(self.state_list):
@@ -558,7 +563,7 @@ class Unilateral:
         try:
             modality_spsn = {}
             for mod, table in self._confusion_matrices.items():
-                modality_spsn[mod] = [table[0,0], table[len(self.allowed_lnl_states)-1,1]]
+                modality_spsn[mod] = [table[0,0], table[len(self.allowed_states)-1,1]]
             return modality_spsn
 
         except AttributeError:
@@ -591,16 +596,16 @@ class Unilateral:
             if not np.all(matrix.sum(axis = 1) == 1):
                 msg = ("All values need to be between 0 and 1 and rows add up to 1")
                 raise ValueError(msg)
-            if len(self.allowed_lnl_states) == 3:
-                if matrix.shape != (len(self.allowed_lnl_states), 2):
+            if len(self.allowed_states) == 3:
+                if matrix.shape != (len(self.allowed_states), 2):
                     msg = (f'the shape of the confusion matrix does not match the model '
-                    f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+                    f'insert a ({len(self.allowed_states)}x2) matrix ')
                     raise ValueError(msg)
                 self._confusion_matrices[mod] = matrix
-            elif len(self.allowed_lnl_states) == 2 and matrix.shape[0] == 3:
-                if matrix.shape != (len(self.allowed_lnl_states), 2):
+            elif len(self.allowed_states) == 2 and matrix.shape[0] == 3:
+                if matrix.shape != (len(self.allowed_states), 2):
                     msg = (f'the shape of the confusion matrix does not match the model '
-                    f'insert a ({len(self.allowed_lnl_states)}x2) matrix ')
+                    f'insert a ({len(self.allowed_states)}x2) matrix ')
                     raise ValueError(msg)
                 self._confusion_matrices[mod] = np.delete(matrix, 1, axis = 0)
 
