@@ -305,7 +305,7 @@ class Unilateral:
             del self._transition_matrix
 
 
-    def get_param_names(self) -> Dict[str, Union[float, str]]:
+    def get_parameters(self) -> Dict[str, Union[float, str]]:
         """Returns a generator of all parameter names in the order they can be set."""
         result = {}
         for name, param in self._params_lookup.items():

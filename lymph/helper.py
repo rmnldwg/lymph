@@ -1,11 +1,9 @@
 """Module containing supporting classes and functions."""
 
 import warnings
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
-
-from lymph.unilateral import check_spsn
 
 
 class Param:
