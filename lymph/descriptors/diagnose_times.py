@@ -220,23 +220,15 @@ class DistributionDict(dict):
         return drawn_t_stages, drawn_diag_times
 
 
-class DistributionDictDescriptor:
+class DistributionLookup:
     """Descriptor to access the distributions over diagnose times per T-category."""
     def __get__(self, _instance, _cls) -> DistributionDict:
         if not hasattr(self, "lookup"):
             self.lookup = DistributionDict()
         return self.lookup
 
-    def __set__(
-        self,
-        instance,
-        value: Union[Dict[str, Callable], DistributionDict],
-    ):
-        if isinstance(value, dict):
-            self.lookup = DistributionDict(value)
-        elif isinstance(value, DistributionDict):
+    def __set__(self, instance, value: DistributionDict):
+        if isinstance(value, DistributionDict):
             self.lookup = value
         else:
-            raise TypeError(
-                "Value must be a dictionary or a DiagnoseTimeDistributionDict"
-            )
+            raise TypeError("Value must be a DistributionDict")

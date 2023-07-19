@@ -14,12 +14,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
-from lymph.helper import change_base
 
 from lymph.edge import Edge
 from lymph.node import LymphNodeLevel, Tumor
-from lymph.descriptors import params
-from lymph.descriptors import diagnose_times
+from lymph.descriptors import params, diagnose_times
+from lymph.helper import change_base
 
 
 class Unilateral:
@@ -29,7 +28,8 @@ class Unilateral:
     It does this by representing it as a directed graph. The progression itself can be
     modelled via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    _params = params.Lookup()
+    edge_params = params.Lookup()
+    diag_time_dists = diagnose_times.DistributionLookup()
 
     def __init__(
         self,
@@ -246,7 +246,7 @@ class Unilateral:
         The keyword arguments override the positional arguments.
         """
         params_access = [
-            *[param.set for param in self._params.values()],
+            *[param.set for param in self.edge_params.values()],
             *[getattr(dist, "update") for dist in self.diag_time_dists.values()]
         ]
         for setter, new_param_value in zip(params_access, new_params_args):
@@ -265,7 +265,7 @@ class Unilateral:
                     edge.micro_mod = value
 
             else:
-                self._params[key].set(value)
+                self.edge_params[key].set(value)
 
         if hasattr(self, "_transition_matrix"):
             del self._transition_matrix
@@ -274,47 +274,13 @@ class Unilateral:
     def get_parameters(self) -> Dict[str, Union[float, str]]:
         """Returns a dictionary of all parameters and their currently set values."""
         result = {}
-        for name, param in self._params.items():
+        for name, param in self.edge_params.items():
             result[name] = param.get()
 
-        for name, marginalizor in self.diag_time_dists.items():
-            result[name] = marginalizor.get_param()
+        for name, dist in self.diag_time_dists.items():
+            result[name] = dist.get_param()
 
         return result
-
-
-    @property
-    def diag_time_dists(self) -> diagnose_times.DistributionDict:
-        """This property holds the probability mass functions for marginalizing over
-        possible diagnose times for each T-stage.
-
-        When setting this property, one may also provide a normal Python dict, in
-        which case it tries to convert it to a :class:`MarginalizorDict`.
-
-        See Also:
-            :class:`MarginalzorDict`, :class:`Marginalizor`.
-        """
-        if not hasattr(self, "_diag_time_dists"):
-            self._diag_time_dists = diagnose_times.DistributionDict()
-        return self._diag_time_dists
-
-    @diag_time_dists.setter
-    def diag_time_dists(self, new_dists: Union[dict, diagnose_times.DistributionDict]):
-        """Assign new :class:`MarginalizorDict` to this property. If it is a normal
-        Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
-        """
-        if isinstance(new_dists, diagnose_times.DistributionDict):
-            self._diag_time_dists = new_dists
-        elif isinstance(new_dists, dict):
-            warnings.warn("Trying to convert dictionary into MarginalizorDict.")
-            guessed_max_t = len(new_dists.values()[0])
-            self._diag_time_dists = diagnose_times.DistributionDict(max_t=guessed_max_t)
-            for t_stage, dist in new_dists.items():
-                self._diag_time_dists[t_stage] = dist
-        else:
-            raise TypeError(
-                f"Cannot use type {type(new_dists)} for marginalization over "
-                "diagnose times.")
 
 
     def comp_transition_prob(
