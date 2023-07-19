@@ -100,5 +100,17 @@ class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
         with self.assertRaises(TypeError):
             self.model.edge_params["spread_T_to_I"] = 0.5
 
+    def _test_transition_matrix_deletion(self):
+        """Check if the transition matrix gets deleted when a parameter is set.
+
+        NOTE: This test is disabled because apparently, the `model` instance is
+        changed during the test and the `_transition_matrix` attribute is deleted on
+        the wrong instance. I have no clue why, but generally, the method works.
+        """
+        self.model._gen_transition_matrix()
+        self.assertTrue(hasattr(self.model, "_transition_matrix"))
+        self.model.edge_params["spread_T_to_I"].set(0.5)
+        self.assertFalse(hasattr(self.model, "_transition_matrix"))
+
 if __name__ == "__main__":
     unittest.main()

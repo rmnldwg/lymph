@@ -5,13 +5,19 @@ from typing import Callable
 
 class Param:
     """Stores getter and setter functions for a parameter."""
-    def __init__(self, getter: Callable, setter: Callable):
+    def __init__(self, model, getter: Callable, setter: Callable):
+        self.model = model
         self.get = getter
-        self.set = setter
+        self._set = setter
+
+    def set(self, value):
+        """Delete the transition matrix when setting a parameter."""
+        self._set(value)
+        del self.model.transition_matrix
 
 
 class ParamDict(dict):
-    """Dictionary that allows access to its values via attributes."""
+    """Dictionary preventing direct setting of parameter values."""
     def __setitem__(self, __key: str, __value: Param) -> None:
         if not isinstance(__value, Param):
             raise TypeError(
@@ -40,18 +46,21 @@ class Lookup:
 
         for edge in instance.tumor_edges:
             self.lookup['spread_' + edge.name] = Param(
+                model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
         for edge in instance.lnl_edges:
             self.lookup['spread_' + edge.name] = Param(
+                model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
             if instance.is_trinary:
                 self.lookup['micro_' + edge.name] = Param(
+                    model=instance,
                     getter=edge.get_micro_mod,
                     setter=edge.set_micro_mod,
                 )
@@ -60,6 +69,7 @@ class Lookup:
         # are only present in trinary models
         for edge in instance.growth_edges:
             self.lookup['growth_' + edge.start.name] = Param(
+                model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )

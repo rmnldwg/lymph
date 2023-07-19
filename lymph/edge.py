@@ -33,7 +33,9 @@ class Edge:
         self.start = start
         self.end = end
 
-        self.micro_mod = micro_mod
+        if self.end.is_trinary:
+            self.micro_mod = micro_mod
+
         self.spread_prob = spread_prob
 
 

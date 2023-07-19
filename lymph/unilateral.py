@@ -267,9 +267,6 @@ class Unilateral:
             else:
                 self.edge_params[key].set(value)
 
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
-
 
     def get_parameters(self) -> Dict[str, Union[float, str]]:
         """Returns a dictionary of all parameters and their currently set values."""
@@ -447,30 +444,6 @@ class Unilateral:
                 self._transition_matrix[i,j] = transition_prob
 
     @property
-    def A(self) -> np.ndarray:
-        """Return the transition matrix :math:`\\mathbf{A}`, which contains the
-        probability to transition from any state :math:`S_t` to any other state
-        :math:`S_{t+1}` one timestep later:
-        :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}` is a
-        square matrix with size ``(# of states)``. The lower diagonal is zero,
-        because those entries correspond to transitions that would require
-        self-healing.
-
-        Warning:
-            This will be deprecated in favour of :attr:`transition_matrix`.
-        """
-        warnings.warn(
-            "The unintuitive `A` will be dropped for the more semantic "
-            "`transition_matrix`.",
-            DeprecationWarning
-        )
-        try:
-            return self._transition_matrix
-        except AttributeError:
-            self._gen_transition_matrix()
-            return self._transition_matrix
-
-    @property
     def transition_matrix(self) -> np.ndarray:
         """Return the transition matrix :math:`\\mathbf{A}`, which contains the
         probability to transition from any state :math:`S_t` to any other state
@@ -485,6 +458,12 @@ class Unilateral:
         except AttributeError:
             self._gen_transition_matrix()
             return self._transition_matrix
+
+    @transition_matrix.deleter
+    def transition_matrix(self):
+        """Safely delete the transition matrix."""
+        if hasattr(self, "_transition_matrix"):
+            del self._transition_matrix
 
 
     @property
