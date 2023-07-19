@@ -58,12 +58,7 @@ class AbstractNode:
     @name.setter
     def name(self, new_name: str) -> None:
         """Set the name of the node."""
-        try:
-            new_name = str(new_name)
-        except ValueError as val_err:
-            raise ValueError("Name of node must be castable to string") from val_err
-
-        self._name = new_name
+        self._name = str(new_name)
 
 
     @property
@@ -74,10 +69,7 @@ class AbstractNode:
     @state.setter
     def state(self, new_state: int) -> None:
         """Set the state of the node."""
-        try:
-            new_state = int(new_state)
-        except ValueError as val_err:
-            raise ValueError("State of node must be castable to int") from val_err
+        new_state = int(new_state)
 
         if new_state not in self.allowed_states:
             raise ValueError("State of node must be one of the allowed states")
