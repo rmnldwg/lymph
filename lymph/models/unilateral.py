@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from lymph.descriptors import params, diagnose_times, transition
+from lymph.descriptors import matrix, params, diagnose_times
 from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import change_base
 
@@ -418,7 +418,7 @@ class Unilateral:
             return self._obs_list
 
 
-    allowed_transitions = transition.Mask()
+    allowed_transitions = matrix.TransitionMask()
     """Mask of allowed transitions.
 
     We can save a lot of computation time by only computing the transitions in the
@@ -426,7 +426,7 @@ class Unilateral:
     """
 
 
-    transition_matrix = transition.Matrix()
+    transition_matrix = matrix.Transition()
     """The matrix encoding the probabilities to transition from one state to another.
 
     This is the crucial object for modelling the evolution of the probabilistic

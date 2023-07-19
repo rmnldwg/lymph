@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Callable
 
+from lymph import models
+
 
 class Param:
     """Stores getter and setter functions for a parameter.
@@ -10,7 +12,7 @@ class Param:
     This simple class also makes sure that the transition matrix of the model
     is deleted when a spread parameter is set.
     """
-    def __init__(self, model, getter: Callable, setter: Callable):
+    def __init__(self, model: models.Unilateral, getter: Callable, setter: Callable):
         self.model = model
         self.get = getter
         self._set = setter
@@ -45,14 +47,14 @@ class Lookup:
         self.private_name = '_' + name
 
 
-    def __get__(self, instance, _cls) -> ParamDict:
+    def __get__(self, instance: models.Unilateral, _cls) -> ParamDict:
         if not hasattr(instance, self.private_name):
             self.init_params_lookup(instance)
 
         return getattr(instance, self.private_name)
 
 
-    def init_params_lookup(self, instance):
+    def init_params_lookup(self, instance: models.Unilateral):
         """Compute the lookup table for all edge parameters of the lymph model."""
         param_dict = ParamDict()
 

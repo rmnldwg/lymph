@@ -2,10 +2,14 @@
 Module that defines helper classes for marginalizing over diagnose times in the
 model classes.
 """
+from __future__ import annotations
+
 import warnings
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+
+from lymph import models
 
 
 
@@ -227,14 +231,14 @@ class DistributionLookup:
         self.public_name = name
 
 
-    def __get__(self, instance, _cls) -> DistributionDict:
+    def __get__(self, instance: models.Unilateral, _cls) -> DistributionDict:
         if not hasattr(instance, self.private_name):
             setattr(instance, self.public_name, DistributionDict())
 
         return getattr(instance, self.private_name)
 
 
-    def __set__(self, instance, value: DistributionDict):
+    def __set__(self, instance: models.Unilateral, value: DistributionDict):
         if isinstance(value, DistributionDict):
             setattr(instance, self.private_name, value)
         else:
