@@ -222,13 +222,20 @@ class DistributionDict(dict):
 
 class DistributionLookup:
     """Descriptor to access the distributions over diagnose times per T-category."""
-    def __get__(self, _instance, _cls) -> DistributionDict:
-        if not hasattr(self, "lookup"):
-            self.lookup = DistributionDict()
-        return self.lookup
+    def __set_name__(self, owner, name):
+        self.private_name = '_' + name
+        self.public_name = name
+
+
+    def __get__(self, instance, _cls) -> DistributionDict:
+        if not hasattr(instance, self.private_name):
+            setattr(instance, self.public_name, DistributionDict())
+
+        return getattr(instance, self.private_name)
+
 
     def __set__(self, instance, value: DistributionDict):
         if isinstance(value, DistributionDict):
-            self.lookup = value
+            setattr(instance, self.private_name, value)
         else:
             raise TypeError("Value must be a DistributionDict")

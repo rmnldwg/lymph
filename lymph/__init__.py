@@ -14,13 +14,13 @@ __uri__ = "https://github.com/rmnldwg/lymph"
 
 # nopycln: file
 
-from lymph.descriptors import params, diagnose_times
+from lymph.descriptors import params, diagnose_times, transition
 from lymph import graph, models
 from lymph.helper import clinical, pathological
 
 
 __all__ = [
-    "params", "diagnose_times",
+    "params", "diagnose_times", "transition",
     "graph", "models",
     "clinical", "pathological",
 ]

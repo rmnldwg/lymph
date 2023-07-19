@@ -4,7 +4,11 @@ from typing import Callable
 
 
 class Param:
-    """Stores getter and setter functions for a parameter."""
+    """Stores getter and setter functions for a parameter.
+
+    This simple class also makes sure that the transition matrix of the model
+    is deleted when a spread parameter is set.
+    """
     def __init__(self, model, getter: Callable, setter: Callable):
         self.model = model
         self.get = getter
@@ -13,6 +17,7 @@ class Param:
     def set(self, value):
         """Delete the transition matrix when setting a parameter."""
         self._set(value)
+        print(f"Delete transition matrix of model with ID {id(self.model)}")
         del self.model.transition_matrix
 
 
@@ -36,31 +41,37 @@ class Lookup:
     objects. These Param objects store the getter and setter functions for the
     corresponding parameter.
     """
-    def __get__(self, instance, _cls) -> ParamDict:
-        """Test"""
-        if not hasattr(self, "lookup"):
-            self._init_params_lookup(instance)
-        return self.lookup
+    def __set_name__(self, owner, name):
+        self.private_name = '_' + name
 
-    def _init_params_lookup(self, instance):
-        self.lookup = ParamDict()
+
+    def __get__(self, instance, _cls) -> ParamDict:
+        if not hasattr(instance, self.private_name):
+            self.init_params_lookup(instance)
+
+        return getattr(instance, self.private_name)
+
+
+    def init_params_lookup(self, instance):
+        """Compute the lookup table for all edge parameters of the lymph model."""
+        param_dict = ParamDict()
 
         for edge in instance.tumor_edges:
-            self.lookup['spread_' + edge.name] = Param(
+            param_dict['spread_' + edge.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
         for edge in instance.lnl_edges:
-            self.lookup['spread_' + edge.name] = Param(
+            param_dict['spread_' + edge.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
             if instance.is_trinary:
-                self.lookup['micro_' + edge.name] = Param(
+                param_dict['micro_' + edge.name] = Param(
                     model=instance,
                     getter=edge.get_micro_mod,
                     setter=edge.set_micro_mod,
@@ -69,8 +80,10 @@ class Lookup:
         # here we don't need to check if the model is trinary, because the growth edges
         # are only present in trinary models
         for edge in instance.growth_edges:
-            self.lookup['growth_' + edge.start.name] = Param(
+            param_dict['growth_' + edge.start.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
+
+        setattr(instance, self.private_name, param_dict)

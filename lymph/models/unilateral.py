@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from lymph import params, diagnose_times
+from lymph import params, diagnose_times, transition
 from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import change_base
 
@@ -416,73 +416,23 @@ class Unilateral:
             return self._obs_list
 
 
-    def _gen_allowed_transitions(self):
-        """Generate the allowed transitions.
-        """
-        self._allowed_transitions = {}
-        for i in range(len(self.state_list)):
-            self._allowed_transitions[i] = []
-            for j in range(len(self.state_list)):
-                if not np.any(np.greater(self.state_list[i,:],self.state_list[j,:])) and not np.any(self.state_list[j,:] - self.state_list[i,:] > 1): # here we only allow a transition that increases by 1
-                    self._allowed_transitions[i].append(j)
+    allowed_transitions = transition.Mask()
+    """Mask of allowed transitions.
 
-    @property
-    def allowed_transitions(self):
-        """Return a dictionary that contains for each row :math:`i` of the
-        transition matrix :math:`\\mathbf{A}` the column numbers :math:`j` for
-        which the transtion probability :math:`P\\left( x_j \\mid x_i \\right)`
-        is not zero due to the forbidden self-healing.
-
-        For example: The hidden state ``[True, False]`` in a network with only
-        one tumor and two LNLs (one involved, one healthy) corresponds to the
-        index ``1`` and can only evolve into the state ``[True, True]``, which
-        has index 3. So, the key-value pair for that particular hidden state
-        would be ``1: [3]``.
-        """
-        try:
-            return self._allowed_transitions
-        except AttributeError:
-            self._gen_allowed_transitions()
-            return self._allowed_transitions
+    We can save a lot of computation time by only computing the transitions in the
+    transition matrix where no self-healing occurs, which we prohibit in our model.
+    """
 
 
-    def _gen_transition_matrix(self):
-        """Generate the transition matrix :math:`\\mathbf{A}`, which contains
-        the :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}`
-        is a square matrix with size ``(# of states)``. The lower diagonal is
-        zero.
-        """
-        if not hasattr(self, "_transition_matrix"):
-            shape = (len(self.allowed_states)**len(self.lnls), len(self.allowed_states)**len(self.lnls))
-            self._transition_matrix = np.zeros(shape=shape)
+    transition_matrix = transition.Matrix()
+    """The matrix encoding the probabilities to transition from one state to another.
 
-        for i,state in enumerate(self.state_list):
-            self.set_state(state)
-            for j in self.allowed_transitions[i]:
-                transition_prob = self.comp_transition_prob(self.state_list[j])
-                self._transition_matrix[i,j] = transition_prob
+    This is the crucial object for modelling the evolution of the probabilistic
+    system in the context of the hidden Markov model.
 
-    @property
-    def transition_matrix(self) -> np.ndarray:
-        """Return the transition matrix :math:`\\mathbf{A}`, which contains the
-        probability to transition from any state :math:`S_t` to any other state
-        :math:`S_{t+1}` one timestep later:
-        :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}` is a
-        square matrix with size ``(# of states)``. The lower diagonal is zero,
-        because those entries correspond to transitions that would require
-        self-healing.
-        """
-        try:
-            return self._transition_matrix
-        except AttributeError:
-            self._gen_transition_matrix()
-            return self._transition_matrix
-
-    @transition_matrix.deleter
-    def transition_matrix(self):
-        """Safely delete the transition matrix."""
-        if hasattr(self, "_transition_matrix"):
-            del self._transition_matrix
+    It is recomputed every time the parameters along the edges of the graph are
+    changed.
+    """
 
 
     @property
@@ -1023,14 +973,3 @@ class Unilateral:
         dataset[('info', 't_stage')] = drawn_t_stages
 
         return dataset
-
-
-if __name__ == "__main__":
-    graph = {
-        ("tumor", "T"): ["I", "II", "III", "IV"],
-        ("lnl", "I"): [],
-        ("lnl", "II"): ["I", "III"],
-        ("lnl", "III"): ["IV"],
-        ("lnl", "IV"): [],
-    }
-    model = Unilateral(graph)
