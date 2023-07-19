@@ -14,8 +14,8 @@ __uri__ = "https://github.com/rmnldwg/lymph"
 
 # nopycln: file
 
-from lymph.descriptors import params, diagnose_times, transition
 from lymph import graph, models
+from lymph.descriptors import params, diagnose_times, transition
 from lymph.helper import clinical, pathological
 
 

@@ -9,7 +9,7 @@ class Matrix:
     matrix of the model. This is done by iterating over all edges and creating
     a matrix with rows and columns corresponding to the nodes of the model.
     """
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner, name: str):
         self.private_name = '_' + name
 
 
@@ -49,7 +49,7 @@ class Mask:
     zeros. This descriptor creates a mask that is used when generating the transition
     matrix, so that only allowed transitions are computed.
     """
-    def __set_name__(self, owner, name):
+    def __set_name__(self, owner, name: str):
         self.private_name = '_' + name
 
 

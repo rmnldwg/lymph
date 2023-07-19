@@ -7,6 +7,8 @@ connected by instances of `Edge`.
 The resulting class can compute all kinds of conditional probabilities with respect to
 the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a tumor.
 """
+from __future__ import annotations
+
 import base64
 import warnings
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -15,7 +17,7 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from lymph import params, diagnose_times, transition
+from lymph.descriptors import params, diagnose_times, transition
 from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import change_base
 
@@ -91,8 +93,8 @@ class Unilateral:
 
     def init_nodes(self, graph, tumor_state, allowed_lnl_states):
         """Initialize the nodes of the graph."""
-        self.tumors = []
-        self.lnls = []
+        self.tumors: List[Tumor] = []
+        self.lnls: List[LymphNodeLevel] = []
 
         for node_type, node_name in graph:
             if node_type == "tumor":
@@ -110,9 +112,9 @@ class Unilateral:
 
         When a `LymphNodeLevel` is trinary, it is connected to itself via a growth edge.
         """
-        self.tumor_edges = []
-        self.lnl_edges = []
-        self.growth_edges = []
+        self.tumor_edges: List[Edge] = []
+        self.lnl_edges: List[Edge] = []
+        self.growth_edges: List[Edge] = []
 
         for (_, start_name), end_names in graph.items():
             start = self.find_node(start_name)

@@ -1,4 +1,5 @@
 """Provide a descriptor class to access parameters of a lymph model."""
+from __future__ import annotations
 
 from typing import Callable
 
@@ -17,7 +18,6 @@ class Param:
     def set(self, value):
         """Delete the transition matrix when setting a parameter."""
         self._set(value)
-        print(f"Delete transition matrix of model with ID {id(self.model)}")
         del self.model.transition_matrix
 
 

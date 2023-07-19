@@ -3,7 +3,7 @@ Module defining the nodes and edges of the graph representing the lymphatic syst
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Union
 import warnings
 
 import numpy as np
