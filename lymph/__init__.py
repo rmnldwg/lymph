@@ -18,7 +18,7 @@ from lymph.bilateral import Bilateral, BilateralSystem
 from lymph.edge import Edge
 from lymph.midline import MidlineBilateral
 from lymph.node import LymphNodeLevel, Tumor
-from lymph.diag_time_distribution import DiagnoseTimeDistribution, DiagnoseTimeDistributionDict
+from lymph.descriptors.diagnose_times import Distribution, DistributionDict
 from lymph.unilateral import Unilateral
 from lymph.helper import clinical, pathological
 
@@ -29,6 +29,6 @@ __all__ = [
     "Unilateral",
     "Bilateral", "BilateralSystem",
     "MidlineBilateral",
-    "DiagnoseTimeDistribution", "DiagnoseTimeDistributionDict",
+    "Distribution", "DistributionDict",
     "clinical", "pathological",
 ]

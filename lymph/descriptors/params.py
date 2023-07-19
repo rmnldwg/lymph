@@ -11,7 +11,7 @@ class Param:
         self.set = setter
 
 
-class ParamsLookup:
+class Lookup:
     """Descriptor class to access parameters of a lymph model.
 
     When first trying to access this descriptor, it will compute a lookup table

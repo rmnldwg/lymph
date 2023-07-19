@@ -13,7 +13,7 @@ class SupportError(Exception):
     """Error that is raised when no support for a distribution is provided."""
 
 
-class DiagnoseTimeDistribution:
+class Distribution:
     """
     Class that provides methods for marginalizing over diagnose times.
     """
@@ -120,7 +120,7 @@ class DiagnoseTimeDistribution:
         return np.random.choice(a=self.support, p=self.pmf)
 
 
-class DiagnoseTimeDistributionDict(dict):
+class DistributionDict(dict):
     """
     Class that replicates the behaviour of a dictionary of marginalizors for each
     T-stage, ensuring they all have the same support.
@@ -129,7 +129,7 @@ class DiagnoseTimeDistributionDict(dict):
         super().__init__(*args, **kwargs)
         self.max_t = max_t
 
-    def __getitem__(self, t_stage) -> DiagnoseTimeDistribution:
+    def __getitem__(self, t_stage) -> Distribution:
         try:
             return super().__getitem__(t_stage)
         except KeyError as key_err:
@@ -158,9 +158,9 @@ class DiagnoseTimeDistributionDict(dict):
             self.max_t = len(dist) - 1
 
         if callable(dist):
-            marg = DiagnoseTimeDistribution(func=dist, max_t=self.max_t)
+            marg = Distribution(func=dist, max_t=self.max_t)
         else:
-            marg = DiagnoseTimeDistribution(dist=dist, max_t=self.max_t)
+            marg = Distribution(dist=dist, max_t=self.max_t)
 
         super().__setitem__(t_stage, marg)
 
@@ -220,21 +220,21 @@ class DiagnoseTimeDistributionDict(dict):
         return drawn_t_stages, drawn_diag_times
 
 
-class DiagnoseTimeDistributionLookup:
+class DistributionDictDescriptor:
     """Descriptor to access the distributions over diagnose times per T-category."""
-    def __get__(self, _instance, _cls) -> DiagnoseTimeDistributionDict:
+    def __get__(self, _instance, _cls) -> DistributionDict:
         if not hasattr(self, "lookup"):
-            self.lookup = DiagnoseTimeDistributionDict()
+            self.lookup = DistributionDict()
         return self.lookup
 
     def __set__(
         self,
         instance,
-        value: Union[Dict[str, Callable], DiagnoseTimeDistributionDict],
+        value: Union[Dict[str, Callable], DistributionDict],
     ):
         if isinstance(value, dict):
-            self.lookup = DiagnoseTimeDistributionDict(value)
-        elif isinstance(value, DiagnoseTimeDistributionDict):
+            self.lookup = DistributionDict(value)
+        elif isinstance(value, DistributionDict):
             self.lookup = value
         else:
             raise TypeError(

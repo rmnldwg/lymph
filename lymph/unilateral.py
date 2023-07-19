@@ -18,8 +18,8 @@ from lymph.helper import change_base
 
 from lymph.edge import Edge
 from lymph.node import LymphNodeLevel, Tumor
-from lymph.params_lookup import ParamsLookup
-from lymph.diag_time_distribution import DiagnoseTimeDistributionDict
+from lymph.descriptors import params
+from lymph.descriptors import diagnose_times
 
 
 class Unilateral:
@@ -29,7 +29,7 @@ class Unilateral:
     It does this by representing it as a directed graph. The progression itself can be
     modelled via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-    _params = ParamsLookup()
+    _params = params.Lookup()
 
     def __init__(
         self,
@@ -284,7 +284,7 @@ class Unilateral:
 
 
     @property
-    def diag_time_dists(self) -> DiagnoseTimeDistributionDict:
+    def diag_time_dists(self) -> diagnose_times.DistributionDict:
         """This property holds the probability mass functions for marginalizing over
         possible diagnose times for each T-stage.
 
@@ -295,20 +295,20 @@ class Unilateral:
             :class:`MarginalzorDict`, :class:`Marginalizor`.
         """
         if not hasattr(self, "_diag_time_dists"):
-            self._diag_time_dists = DiagnoseTimeDistributionDict()
+            self._diag_time_dists = diagnose_times.DistributionDict()
         return self._diag_time_dists
 
     @diag_time_dists.setter
-    def diag_time_dists(self, new_dists: Union[dict, DiagnoseTimeDistributionDict]):
+    def diag_time_dists(self, new_dists: Union[dict, diagnose_times.DistributionDict]):
         """Assign new :class:`MarginalizorDict` to this property. If it is a normal
         Python dictionary, tr to convert it into a :class:`MarginalizorDict`.
         """
-        if isinstance(new_dists, DiagnoseTimeDistributionDict):
+        if isinstance(new_dists, diagnose_times.DistributionDict):
             self._diag_time_dists = new_dists
         elif isinstance(new_dists, dict):
             warnings.warn("Trying to convert dictionary into MarginalizorDict.")
             guessed_max_t = len(new_dists.values()[0])
-            self._diag_time_dists = DiagnoseTimeDistributionDict(max_t=guessed_max_t)
+            self._diag_time_dists = diagnose_times.DistributionDict(max_t=guessed_max_t)
             for t_stage, dist in new_dists.items():
                 self._diag_time_dists[t_stage] = dist
         else:
