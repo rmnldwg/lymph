@@ -1,7 +1,6 @@
 """Provide a descriptor class to access parameters of a lymph model."""
 
-from typing import Callable, Dict
-import warnings
+from typing import Callable
 
 
 class Param:
@@ -9,6 +8,19 @@ class Param:
     def __init__(self, getter: Callable, setter: Callable):
         self.get = getter
         self.set = setter
+
+
+class ParamDict(dict):
+    """Dictionary that allows access to its values via attributes."""
+    def __setitem__(self, __key: str, __value: Param) -> None:
+        if not isinstance(__value, Param):
+            raise TypeError(
+                "Params cannot be set directly! Use the `set` method instead."
+            )
+        return super().__setitem__(__key, __value)
+
+    def __getitem__(self, __key: str) -> float:
+        return super().__getitem__(__key).get()
 
 
 class Lookup:
@@ -20,17 +32,13 @@ class Lookup:
     objects. These Param objects store the getter and setter functions for the
     corresponding parameter.
     """
-    def __get__(self, instance, _cls) -> Dict[str, Param]:
+    def __get__(self, instance, _cls) -> ParamDict:
         if not hasattr(self, "lookup"):
             self._init_params_lookup(instance)
         return self.lookup
 
-    def __set__(self, instance, _value):
-        warnings.warn("Provided value is ignored! This only recomputes the lookup.")
-        self._init_params_lookup(instance)
-
     def _init_params_lookup(self, instance):
-        self.lookup = {}
+        self.lookup = ParamDict()
 
         for edge in instance.tumor_edges:
             self.lookup['spread_' + edge.name] = Param(
