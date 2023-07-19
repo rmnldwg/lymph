@@ -4,8 +4,8 @@ import unittest
 
 import numpy as np
 
-from lymph import Unilateral
-from lymph.node import LymphNodeLevel, Tumor
+from lymph.models import Unilateral
+from lymph.graph import LymphNodeLevel, Tumor
 
 
 class BinaryFixtureMixin:

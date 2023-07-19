@@ -10,7 +10,7 @@ from hypothesis.extra import numpy as hynp
 from hypothesis.extra import pandas as hypd
 
 from lymph import Marginalizor, Node
-from lymph.unilateral import Unilateral
+from lymph.models.unilateral import Unilateral
 
 ST_CHARACTERS = st.characters(
     whitelist_categories=('L', 'N'),

@@ -4,7 +4,7 @@ import pytest
 from custom_strategies import nodes
 from hypothesis import given
 
-from lymph import Edge
+from lymph.graph import Edge
 
 
 @given(

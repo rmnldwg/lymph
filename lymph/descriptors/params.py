@@ -37,6 +37,7 @@ class Lookup:
     corresponding parameter.
     """
     def __get__(self, instance, _cls) -> ParamDict:
+        """Test"""
         if not hasattr(self, "lookup"):
             self._init_params_lookup(instance)
         return self.lookup

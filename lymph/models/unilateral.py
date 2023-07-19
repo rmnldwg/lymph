@@ -15,9 +15,8 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from lymph.edge import Edge
-from lymph.node import LymphNodeLevel, Tumor
-from lymph.descriptors import params, diagnose_times
+from lymph import params, diagnose_times
+from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import change_base
 
 
@@ -28,8 +27,28 @@ class Unilateral:
     It does this by representing it as a directed graph. The progression itself can be
     modelled via hidden Markov models (HMM) or Bayesian networks (BN).
     """
+
     edge_params = params.Lookup()
+    """Dictionary that maps parameter names to their corresponding `Param` objects.
+
+    Parameter names are constructed from the names of the tumors and LNLs in the graph
+    that represents the lymphatic system. For example, the parameter for the spread
+    probability from the tumor `T` to the LNL `I` is accessed via the key
+    `spread_T_to_I`.
+
+    The parameters can be read out and changed via the `get` and `set` methods of the
+    `Param` objects. The `set` method also deletes the transition matrix, so that it
+    needs to be recomputed when accessing it the next time.
+    """
+
     diag_time_dists = diagnose_times.DistributionLookup()
+    """Mapping of T-categories to the corresponding distributions over diagnose times.
+
+    Every distribution is represented by a `diagnose_times.Distribution` object, which
+    holds the parametrized and frozen versions of the probability mass function over
+    the diagnose times. They are used to marginalize over the (generally unknown)
+    diagnose times when computing e.g. the likelihood.
+    """
 
     def __init__(
         self,
@@ -1004,3 +1023,14 @@ class Unilateral:
         dataset[('info', 't_stage')] = drawn_t_stages
 
         return dataset
+
+
+if __name__ == "__main__":
+    graph = {
+        ("tumor", "T"): ["I", "II", "III", "IV"],
+        ("lnl", "I"): [],
+        ("lnl", "II"): ["I", "III"],
+        ("lnl", "III"): ["IV"],
+        ("lnl", "IV"): [],
+    }
+    model = Unilateral(graph)

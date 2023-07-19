@@ -14,15 +14,13 @@ __uri__ = "https://github.com/rmnldwg/lymph"
 
 # nopycln: file
 
-from lymph.edge import Edge
-from lymph.node import LymphNodeLevel, Tumor
-from lymph.unilateral import Unilateral
+from lymph.descriptors import params, diagnose_times
+from lymph import graph, models
 from lymph.helper import clinical, pathological
 
+
 __all__ = [
-    "LymphNodeLevel",
-    "Tumor",
-    "Edge",
-    "Unilateral",
+    "params", "diagnose_times",
+    "graph", "models",
     "clinical", "pathological",
 ]

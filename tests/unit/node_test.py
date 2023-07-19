@@ -4,7 +4,8 @@ import pytest
 from custom_strategies import nodes
 from hypothesis import HealthCheck, assume, given, settings
 
-from lymph import Edge, Node
+from lymph import Node
+from lymph.graph import Edge
 
 settings.register_profile(
     "tests",
