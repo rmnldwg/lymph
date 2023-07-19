@@ -86,14 +86,14 @@ class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
         params_to_set = self.create_random_params(seed=42)
         for name, value in params_to_set.items():
             self.model.edge_params[name].set(value)
-            self.assertEqual(self.model.edge_params[name], value)
+            self.assertEqual(self.model.edge_params[name].get(), value)
 
     def test_edge_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=43)
         self.model.assign_parameters(**params_to_set)
         for name, value in params_to_set.items():
-            self.assertEqual(self.model.edge_params[name], value)
+            self.assertEqual(self.model.edge_params[name].get(), value)
 
     def test_direct_assignment_raises_error(self):
         """Make sure direct assignment of parameters raises an error."""

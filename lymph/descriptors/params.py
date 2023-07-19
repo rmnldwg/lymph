@@ -15,12 +15,10 @@ class ParamDict(dict):
     def __setitem__(self, __key: str, __value: Param) -> None:
         if not isinstance(__value, Param):
             raise TypeError(
-                "Params cannot be set directly! Use the `set` method instead."
+                "Params cannot be accessed directly! "
+                "Use the `get` & `set` methods instead."
             )
         return super().__setitem__(__key, __value)
-
-    def __getitem__(self, __key: str) -> float:
-        return super().__getitem__(__key).get()
 
 
 class Lookup:
