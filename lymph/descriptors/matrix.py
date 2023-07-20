@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from lymph import models
+from lymph.helper import get_transition_tensor_idx
 
 
 class Transition:
@@ -33,15 +34,22 @@ class Transition:
 
     def generate_system_transition_matrix(self, instance: models.Unilateral):
         """Compute the transition matrix of the lymph model."""
-        num = len(instance.state_list)
-        transition_matrix = np.zeros(shape=(num, num))
+        num_states = len(instance.state_list)
+        num_lnls = len(instance.lnls)
+        transition_matrix = np.ones(shape=(num_states, num_states))
 
-        for i, state in enumerate(instance.state_list):
-            instance.set_state(state)
-            for j in instance.allowed_transitions[i]:
-                new_state = instance.state_list[j]
-                transition_prob = instance.comp_transition_prob(new_state)
-                transition_matrix[i, j] = transition_prob
+        for end_node_i, lnl in enumerate(instance.lnls):
+            end_node_idx = get_transition_tensor_idx(end_node_i, num_lnls)
+            new_state_idx = end_node_idx.T
+            for edge in lnl.inc:
+                if edge.is_tumor_spread:
+                    start_node_idx = 0
+                else:
+                    start_node_i = instance.nodes.index(edge.start)
+                    start_node_idx = get_transition_tensor_idx(start_node_i, num_lnls)
+                transition_matrix *= edge.transition_tensor[
+                    start_node_idx, end_node_idx, new_state_idx
+                ]
 
         setattr(instance, self.private_name, transition_matrix)
 

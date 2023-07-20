@@ -3,7 +3,8 @@ Module defining the nodes and edges of the graph representing the lymphatic syst
 """
 from __future__ import annotations
 
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
+from functools import wraps
 import warnings
 
 import numpy as np
@@ -191,6 +192,19 @@ class LymphNodeLevel(AbstractNode):
         return trans_prob
 
 
+def delete_transition_tensor(setter: Callable) -> Callable:
+    """Decorator to delete the transition tensor of the edge.
+
+    This decorator is used to delete the transition tensor of the edge whenever
+    the spread probability or the spread modifier is changed.
+    """
+    @wraps(setter)
+    def wrapper(self, *args, **kwargs):
+        del self.transition_tensor
+        return setter(self, *args, **kwargs)
+    return wrapper
+
+
 class Edge:
     """
     This class represents an arc in the graph representation of the lymphatic system.
@@ -215,7 +229,7 @@ class Edge:
         self.end = end
 
         if self.end.is_trinary:
-            self.micro_mod = micro_mod
+            self.macro_mod = micro_mod
 
         self.spread_prob = spread_prob
 
@@ -277,29 +291,27 @@ class Edge:
         return isinstance(self.start, Tumor)
 
 
-    def get_micro_mod(self) -> float:
+    def get_macro_mod(self) -> float:
         """Return the spread probability."""
-        if not hasattr(self, "_micro_mod") or self.end.is_binary:
-            self._micro_mod = 1.
-        return self._micro_mod
+        if not hasattr(self, "_macro_mod") or self.end.is_binary:
+            self._macro_mod = 1.
+        return self._macro_mod
 
-    def set_micro_mod(self, new_micro_mod: float) -> None:
+    @delete_transition_tensor
+    def set_macro_mod(self, new_macro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
         if self.end.is_binary:
             warnings.warn("Microscopic spread modifier is not used for binary nodes!")
 
-        if not 0. <= new_micro_mod <= 1.:
+        if not 0. <= new_macro_mod <= 1.:
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
 
-        self._micro_mod = new_micro_mod
+        self._macro_mod = new_macro_mod
 
-        if hasattr(self, "_trans_factor_matrix"):
-            del self._trans_factor_matrix
-
-    micro_mod = property(
-        get_micro_mod,
-        set_micro_mod,
-        doc="Parameter modifying spread probability in case of microscopic involvement",
+    macro_mod = property(
+        fget=get_macro_mod,
+        fset=set_macro_mod,
+        doc="Parameter modifying spread probability in case of macroscopic involvement",
     )
 
 
@@ -309,18 +321,16 @@ class Edge:
             self._spread_prob = 0.
         return self._spread_prob
 
+    @delete_transition_tensor
     def set_spread_prob(self, new_spread_prob):
         """Set the spread probability of the edge."""
         if not 0. <= new_spread_prob <= 1.:
             raise ValueError("Spread probability must be between 0 and 1!")
         self._spread_prob = new_spread_prob
 
-        if hasattr(self, "_trans_factor_matrix"):
-            del self._trans_factor_matrix
-
     spread_prob = property(
-        get_spread_prob,
-        set_spread_prob,
+        fget=get_spread_prob,
+        fset=set_spread_prob,
         doc="Spread probability of the edge",
     )
 
@@ -332,61 +342,76 @@ class Edge:
         node is in its state, given the parent node's state and the parameters of the
         edge.
         """
-
-        # Implementing this is not a priority, but it would be nice to have.
+        # TODO: Implement this function
         raise NotImplementedError("Not implemented yet!")
 
 
-    def _gen_trans_factor_matrix(self) -> None:
-        """Generate the transition factor matrix for the edge.
+    def comp_transition_tensor(self) -> np.ndarray:
+        """Compute the transition factors of the edge.
 
-        This matrix has one row for each possible state of the starting `Node` instance,
-        and one column for each possible state of the ending `Node` instance. It is a
-        3x3 matrix, regardless of the number of states of the nodes, because the top
-        left 2x2 submatrix coincidentally has the values that are necessary for the
-        binary case.
+        The returned array is of shape (s,e,e), where s is the number of states of the
+        start node and e is the number of states of the end node.
 
-        In the trinary case, this can also return the transition factor matrix for the
-        growth case, which is different from the spread case.
+        Essentially, the tensors computed here contain most of the parametrization of
+        the model. They are used to compute the transition matrix.
         """
-        if isinstance(self.start, Tumor):
-            self._trans_factor_matrix = np.array([
-                [1. - self.spread_prob, self.spread_prob, 1.],
-                [1. - self.spread_prob, self.spread_prob, 1.],
-                [1. - self.spread_prob, self.spread_prob, 1.],
-            ])
+        num_start = len(self.start.allowed_states)
+        num_end = len(self.end.allowed_states)
+        tensor = np.ones(shape=(num_start, num_end, num_end))
 
-        elif not self.is_growth:
-            # for binary nodes, the micro_mod parameter is set to 1
-            micro_spread_prob = self.micro_mod * self.spread_prob
-            self._trans_factor_matrix = np.array([
-                [1.                    , 1.               , 1.],
-                [1. - micro_spread_prob, micro_spread_prob, 1.],
-                [1. - self.spread_prob , self.spread_prob , 1.],
-            ])
+        for i, start_state in enumerate(self.start.allowed_states):
+            if start_state == 2:
+                # here we implement how the macroscopic state changes the spread
+                spread_prob = self.spread_prob * self.macro_mod
+            else:
+                spread_prob = self.spread_prob
 
-        else:
-            growth_prob = self.spread_prob
-            self._trans_factor_matrix = np.array([
-                [1., 1.              , 0.         ],
-                [0., 1. - growth_prob, growth_prob],
-                [0., 0.              , 1.         ],
-            ])
+            for j, end_state in enumerate(self.end.allowed_states):
+                # in the growth case, s must be equal to e
+                if self.is_growth and start_state != end_state:
+                    continue
+
+                for k, new_state in enumerate(self.end.allowed_states):
+                    if self.is_growth and end_state == 1:
+                        tensor[i,j,k] = (
+                            (1. - spread_prob) ** (new_state == 1)
+                            * spread_prob ** (new_state == 2)
+                        )
+
+                    else:
+                        tensor[i,j,k] = (
+                            (1. - spread_prob) ** (new_state == 0)
+                            * spread_prob ** (new_state == 1)
+                        ) ** (end_state == 0 and start_state != 0)
+
+            tensor[i] = np.triu(tensor[i])
+
+        # making the tensor upper triangular, because self-healing is not allowed
+        return tensor
 
 
     @property
-    def trans_factors(self) -> np.ndarray:
-        """Compute the transition factors of the edge.
+    def transition_tensor(self) -> np.ndarray:
+        """Return the transition tensor of the edge.
 
-        These factors are returned in an array with one element for each possible state
-        of the `Node` instance at the end of the edge. It can be multiplied with the
-        probability of the end node's intrinsic probability to change from its current
-        to another state.
+        This tensor of the shape (s,e,e) contains the transition probabilities for
+        the `Node` at this instance's end to transition from any starting state to
+        any new state, given any possible state of the `Node` at the start of this
+        edge.
+
+        The correct term can be accessed like this:
+        >>> edge.transition_tensor[start_state, end_state, new_state]
         """
-        if not hasattr(self, "_trans_factor_matrix"):
-            self._gen_trans_factor_matrix()
+        if not hasattr(self, "_transition_tensor"):
+            self._transition_tensor = self.comp_transition_tensor()
 
-        return self._trans_factor_matrix[self.start.state]
+        return self._transition_tensor
+
+    @transition_tensor.deleter
+    def transition_tensor(self) -> None:
+        """Delete the transition tensor of the edge."""
+        if hasattr(self, "_transition_tensor"):
+            del self._transition_tensor
 
 
     def comp_stay_prob(self) -> float:
@@ -404,7 +429,7 @@ class Edge:
 
         if self.start.state == 1:
             if self.end.state == 0:
-                return 1 - self.spread_prob * self.micro_mod
+                return 1 - self.spread_prob * self.macro_mod
             elif self.end.state == 1:
                 if self.is_growth:
                     return 1 - self.spread_prob

@@ -1,5 +1,6 @@
 """Module containing supporting classes and functions."""
 
+from functools import lru_cache
 import warnings
 from typing import Optional, List
 
@@ -90,16 +91,17 @@ def check_modality(modality: str, spsn: list):
         ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
     """
     if not isinstance(modality, str):
-            msg = ("Modality names must be strings.")
-            raise TypeError(msg)
+        raise TypeError("Modality names must be strings.")
+
     has_len_2 = len(spsn) == 2
     is_above_lb = np.all(np.greater_equal(spsn, 0.5))
     is_below_ub = np.all(np.less_equal(spsn, 1.))
+
     if not has_len_2 or not is_above_lb or not is_below_ub:
-        msg = ("For each modality provide a list of two decimals "
-            "between 0.5 and 1.0 as specificity & sensitivity "
-            "respectively.")
-        raise ValueError(msg)
+        raise ValueError(
+            "For each modality provide a list of two decimals between 0.5 and 1.0 "
+            "as specificity & sensitivity respectively."
+        )
 
 
 def clinical(spsn: list) -> np.ndarray:
@@ -112,14 +114,13 @@ def clinical(spsn: list) -> np.ndarray:
     Returns:
         np.ndarray: confusion matrix of modality
     """
-    try:
-        check_spsn(spsn)
-    except ValueError:
-        raise
+    check_spsn(spsn)
     sp, sn = spsn
-    confusion_matrix = np.array([[sp, 1. - sp],
-                                 [sp, 1. - sp],
-                                 [1. - sn, sn]])
+    confusion_matrix = np.array([
+        [sp     , 1. - sp],
+        [sp     , 1. - sp],
+        [1. - sn, sn     ],
+    ])
     return confusion_matrix
 
 
@@ -133,12 +134,61 @@ def pathological(spsn: list) -> np.ndarray:
     Returns:
         np.ndarray: confusion matrix of modality
     """
-    try:
-        check_spsn(spsn)
-    except ValueError:
-        raise
+    check_spsn(spsn)
     sp, sn = spsn
-    confusion_matrix = np.array([[sp, 1. - sp],
-                                 [1. - sn, sn],
-                                 [1. - sn, sn]])
+    confusion_matrix = np.array([
+        [sp     , 1. - sp],
+        [1. - sn, sn     ],
+        [1. - sn, sn     ],
+    ])
     return confusion_matrix
+
+
+def tile_and_repeat(mat: np.ndarray, i: int, num: int) -> np.ndarray:
+    """Tile and repeat a matrix.
+
+    The matrix `mat` is first tiled 2**i times, then repeated 2**(num-i) times along
+    both axes.
+
+    Example:
+    >>> mat = np.array([[1, 2], [3, 4]])
+    >>> tile_and_repeat(mat, 1, 2)
+    array([[1, 1, 2, 2, 1, 1, 2, 2],
+           [1, 1, 2, 2, 1, 1, 2, 2],
+           [3, 3, 4, 4, 3, 3, 4, 4],
+           [3, 3, 4, 4, 3, 3, 4, 4],
+           [1, 1, 2, 2, 1, 1, 2, 2],
+           [1, 1, 2, 2, 1, 1, 2, 2],
+           [3, 3, 4, 4, 3, 3, 4, 4],
+           [3, 3, 4, 4, 3, 3, 4, 4]])
+    """
+    tiled = np.tile(mat, (2**i, 2**i))
+    repeat_along_0 = np.repeat(tiled, 2**(num-i), axis=0)
+    return np.repeat(repeat_along_0, 2**(num-i), axis=1)
+
+
+@lru_cache
+def get_transition_tensor_idx(lnl_idx: int, num_lnls: int) -> np.ndarray:
+    """Return the indices for the transition tensor correpsonding to `lnl_idx`.
+
+    Example:
+    >>> get_transition_tensor_idx(1, 3)
+    array([[0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1],
+           [1, 1, 1, 1, 1, 1, 1, 1],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1],
+           [1, 1, 1, 1, 1, 1, 1, 1]])
+    """
+    idx_4x4 = np.array([
+        [0, 0],
+        [1, 1],
+    ])
+    return tile_and_repeat(idx_4x4, lnl_idx, num_lnls - 1)
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

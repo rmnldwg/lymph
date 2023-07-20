@@ -1,4 +1,4 @@
-"""Test the unilateral module."""
+"""Test the binary unilateral system."""
 from typing import Dict
 import unittest
 
@@ -128,14 +128,34 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
         params_to_set = self.create_random_params(seed=42)
         self.model.assign_parameters(**params_to_set)
 
-    def test_transition_matrix_shape(self):
+    def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
         self.assertEqual(self.model.transition_matrix.shape, (4, 4))
 
-    def test_transition_matrix_row_sums(self):
+    def test_is_probabilistic(self):
         """Make sure the rows of the transition matrix sum to one."""
         row_sums = np.sum(self.model.transition_matrix, axis=1)
         self.assertTrue(np.allclose(row_sums, 1.0))
+
+    @staticmethod
+    def is_recusively_upper_triangular(mat: np.ndarray) -> bool:
+        """Return `True` is `mat` is recursively upper triangular."""
+        if mat.shape == (1, 1):
+            return True
+
+        if not np.all(np.equal(np.triu(mat), mat)):
+            return False
+
+        half = mat.shape[0] // 2
+        for i in [0, 1]:
+            for j in [0, 1]:
+                return BinaryTransitionMatrixTestCase.is_recusively_upper_triangular(
+                    mat[i * half:(i + 1) * half, j * half:(j + 1) * half]
+                )
+
+    def test_is_recusively_upper_triangular(self) -> None:
+        """Make sure the transition matrix is recursively upper triangular."""
+        self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
 
 
 if __name__ == "__main__":

@@ -75,8 +75,8 @@ class Lookup:
             if instance.is_trinary:
                 param_dict['micro_' + edge.name] = Param(
                     model=instance,
-                    getter=edge.get_micro_mod,
-                    setter=edge.set_micro_mod,
+                    getter=edge.get_macro_mod,
+                    setter=edge.set_macro_mod,
                 )
 
         # here we don't need to check if the model is trinary, because the growth edges
