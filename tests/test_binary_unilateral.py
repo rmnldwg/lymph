@@ -13,13 +13,27 @@ class BinaryFixtureMixin:
 
     def setUp(self):
         """Initialize a simple binary model."""
-        self.graph = {
-            ("tumor", "T"): ["I", "II", "III", "IV"],
+        large_graph = {
+            ("tumor", "T"): ["I", "II", "III", "IV", "V", "VII"],
             ("lnl", "I"): [],
-            ("lnl", "II"): ["I", "III"],
-            ("lnl", "III"): ["IV"],
+            ("lnl", "II"): ["I", "III", "V"],
+            ("lnl", "III"): ["IV", "V"],
             ("lnl", "IV"): [],
+            ("lnl", "V"): [],
+            ("lnl", "VII"): [],
         }
+        medium_graph = {
+            ("tumor", "T"): ["II", "III", "V"],
+            ("lnl", "II"): ["III", "V"],
+            ("lnl", "III"): ["V"],
+            ("lnl", "V"): [],
+        }
+        small_graph = {
+            ("tumor", "T"): ["II", "III"],
+            ("lnl", "II"): ["III"],
+            ("lnl", "III"): [],
+        }
+        self.graph = medium_graph
         self.model = Unilateral(graph=self.graph)
 
     def create_random_params(self, seed: int = 42) -> Dict[str, float]:
@@ -33,15 +47,29 @@ class InitBinaryTestCase(BinaryFixtureMixin, unittest.TestCase):
 
     def test_num_nodes(self):
         """Check number of nodes initialized."""
-        self.assertEqual(len(self.model.nodes), 5)
-        self.assertEqual(len(self.model.tumors), 1)
-        self.assertEqual(len(self.model.lnls), 4)
+        num_nodes = len(self.graph)
+        num_tumor = len({name for kind, name in self.graph if kind == "tumor"})
+        num_lnls = len({name for kind, name in self.graph if kind == "lnl"})
+
+        self.assertEqual(len(self.model.nodes), num_nodes)
+        self.assertEqual(len(self.model.tumors), num_tumor)
+        self.assertEqual(len(self.model.lnls), num_lnls)
 
     def test_num_edges(self):
         """Check number of edges initialized."""
-        self.assertEqual(len(self.model.edges), 7)
-        self.assertEqual(len(self.model.tumor_edges), 4)
-        self.assertEqual(len(self.model.lnl_edges), 3)
+        num_edges = sum(len(receiving_nodes) for receiving_nodes in self.graph.values())
+        num_tumor_edges = sum(
+            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph.items()
+            if kind == "tumor"
+        )
+        num_lnl_edges = sum(
+            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph.items()
+            if kind == "lnl"
+        )
+
+        self.assertEqual(len(self.model.edges), num_edges)
+        self.assertEqual(len(self.model.tumor_edges), num_tumor_edges)
+        self.assertEqual(len(self.model.lnl_edges), num_lnl_edges)
         self.assertEqual(len(self.model.growth_edges), 0)
 
     def test_tumor(self):
@@ -118,19 +146,15 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
 
     def setUp(self):
         """Initialize a simple binary model."""
-        self.graph = {
-            ("tumor", "T"): ["II", "III"],
-            ("lnl", "II"): ["III"],
-            ("lnl", "III"): [],
-        }
-        self.model = Unilateral(graph=self.graph)
+        super().setUp()
 
         params_to_set = self.create_random_params(seed=42)
         self.model.assign_parameters(**params_to_set)
 
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
-        self.assertEqual(self.model.transition_matrix.shape, (4, 4))
+        num_lnls = len({name for kind, name in self.graph if kind == "lnl"})
+        self.assertEqual(self.model.transition_matrix.shape, (2**num_lnls, 2**num_lnls))
 
     def test_is_probabilistic(self):
         """Make sure the rows of the transition matrix sum to one."""
@@ -158,5 +182,24 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
         self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
 
 
+def delete_and_recompute_transition_matrix(model: Unilateral) -> None:
+    """Delete the transition matrix and recompute it."""
+    del model.transition_matrix
+    _ = model.transition_matrix
+
+
 if __name__ == "__main__":
-    unittest.main()
+    import timeit
+
+    fixture = BinaryFixtureMixin()
+    fixture.setUp()
+    params = fixture.create_random_params(42)
+    fixture.model.assign_parameters(**params)
+
+    number = 1000
+    measured_time = timeit.timeit(
+        lambda: delete_and_recompute_transition_matrix(fixture.model),
+        number=number,
+    )
+    print(f"Time to recompute transition matrix {number} times: {measured_time:.3f} s")
+    print(fixture.model.transition_matrix)

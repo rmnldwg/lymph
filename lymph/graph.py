@@ -139,7 +139,7 @@ class LymphNodeLevel(AbstractNode):
         super().__init__(name, state, allowed_states)
 
         # LNLs can also have incoming edge connections
-        self.inc = []
+        self.inc: List[LymphNodeLevel] = []
 
 
     def __str__(self):
@@ -173,21 +173,15 @@ class LymphNodeLevel(AbstractNode):
 
 
     def comp_trans_prob(self, new_state: int) -> float:
-        """Compute the hidden Markov model's transition probability to a `new_state`.
-
-        It does this by first computing if the requested transition is even allowed
-        and then asking all incoming edges for their contributing factors to this
-        transition probability.
-        """
+        """Compute the hidden Markov model's transition probability to a `new_state`."""
         trans_prob = super().comp_trans_prob(new_state)
 
-        # TODO: Check if this is even necessary. Due to the mask in the `Unilateral`
-        # class, this case should not occur.
-        if trans_prob == 0.:
-            return 0.
-
         for edge in self.inc:
-            trans_prob *= edge.trans_factors[new_state]
+            trans_prob *= edge.transition_tensor[
+                edge.start.state,
+                edge.end.state,
+                new_state,
+            ]
 
         return trans_prob
 

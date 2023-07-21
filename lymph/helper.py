@@ -168,11 +168,11 @@ def tile_and_repeat(mat: np.ndarray, i: int, num: int) -> np.ndarray:
 
 
 @lru_cache
-def get_transition_tensor_idx(lnl_idx: int, num_lnls: int) -> np.ndarray:
+def get_state_idx_matrix(lnl_idx: int, num_lnls: int) -> np.ndarray:
     """Return the indices for the transition tensor correpsonding to `lnl_idx`.
 
     Example:
-    >>> get_transition_tensor_idx(1, 3)
+    >>> get_state_idx_matrix(1, 3)
     array([[0, 0, 0, 0, 0, 0, 0, 0],
            [0, 0, 0, 0, 0, 0, 0, 0],
            [1, 1, 1, 1, 1, 1, 1, 1],
@@ -189,6 +189,14 @@ def get_transition_tensor_idx(lnl_idx: int, num_lnls: int) -> np.ndarray:
     return tile_and_repeat(idx_4x4, lnl_idx, num_lnls - 1)
 
 
+@lru_cache
+def init_recursively_upper_tri(size: int) -> np.ndarray:
+    """Return a recursively upper triangular matrix of size `2**size`."""
+    res = np.ones(shape=(2**size, 2**size))
+    for i in range(size):
+        res *= tile_and_repeat(np.array([[1, 1], [0, 1]]), i, size-1)
+    return res
+
+
 if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
+    print(init_recursively_upper_tri(4) & True)
