@@ -216,7 +216,7 @@ class Unilateral:
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
             + " ".join([f"{e} {e.spread_prob}%" for e in self.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.lnl_edges])
-            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].macro_mod}"
+            + f"\n the growth probability is: {self.growth_edges[0].spread_prob}" + f" the micro mod is {self.lnl_edges[0].micro_mod}"
         )
         print(string)
 
@@ -283,7 +283,7 @@ class Unilateral:
 
             elif key == "micro_mod":
                 for edge in self.lnl_edges:
-                    edge.macro_mod = value
+                    edge.micro_mod = value
 
             else:
                 self.edge_params[key].set(value)
@@ -416,14 +416,6 @@ class Unilateral:
         except AttributeError:
             self._gen_obs_list()
             return self._obs_list
-
-
-    allowed_transitions = matrix.TransitionMask()
-    """Mask of allowed transitions.
-
-    We can save a lot of computation time by only computing the transitions in the
-    transition matrix where no self-healing occurs, which we prohibit in our model.
-    """
 
 
     transition_matrix = matrix.Transition()

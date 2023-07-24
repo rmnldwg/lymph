@@ -1,5 +1,6 @@
 """Module containing supporting classes and functions."""
 
+import doctest
 from functools import lru_cache
 import warnings
 from typing import Optional, List
@@ -168,11 +169,11 @@ def tile_and_repeat(mat: np.ndarray, i: int, num: int) -> np.ndarray:
 
 
 @lru_cache
-def get_state_idx_matrix(lnl_idx: int, num_lnls: int) -> np.ndarray:
+def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
     """Return the indices for the transition tensor correpsonding to `lnl_idx`.
 
     Example:
-    >>> get_state_idx_matrix(1, 3)
+    >>> get_state_idx_matrix(1, 3, 2)
     array([[0, 0, 0, 0, 0, 0, 0, 0],
            [0, 0, 0, 0, 0, 0, 0, 0],
            [1, 1, 1, 1, 1, 1, 1, 1],
@@ -181,22 +182,21 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int) -> np.ndarray:
            [0, 0, 0, 0, 0, 0, 0, 0],
            [1, 1, 1, 1, 1, 1, 1, 1],
            [1, 1, 1, 1, 1, 1, 1, 1]])
+    >>> get_state_idx_matrix(1, 2, 3)
+    array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1, 1],
+           [2, 2, 2, 2, 2, 2, 2, 2, 2],
+           [0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1, 1],
+           [2, 2, 2, 2, 2, 2, 2, 2, 2],
+           [0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1, 1],
+           [2, 2, 2, 2, 2, 2, 2, 2, 2]])
     """
-    idx_4x4 = np.array([
-        [0, 0],
-        [1, 1],
-    ])
-    return tile_and_repeat(idx_4x4, lnl_idx, num_lnls - 1)
-
-
-@lru_cache
-def init_recursively_upper_tri(size: int) -> np.ndarray:
-    """Return a recursively upper triangular matrix of size `2**size`."""
-    res = np.ones(shape=(2**size, 2**size))
-    for i in range(size):
-        res *= tile_and_repeat(np.array([[1, 1], [0, 1]]), i, size-1)
-    return res
+    indices = np.arange(num_states).reshape(num_states, -1)
+    row = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
+    return np.repeat(row, num_states ** (num_lnls - lnl_idx - 1), axis=0)
 
 
 if __name__ == "__main__":
-    print(init_recursively_upper_tri(4) & True)
+    doctest.testmod()

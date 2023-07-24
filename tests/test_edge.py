@@ -1,0 +1,48 @@
+"""Unit tests for the Edge class."""
+import unittest
+
+import numpy as np
+
+from lymph import graph
+
+
+class BinaryEdgeTestCase(unittest.TestCase):
+    """Tests for the Edge class."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        parent = graph.LymphNodeLevel("parent")
+        child = graph.LymphNodeLevel("child")
+        self.edge = graph.Edge(parent, child)
+        self.edge.spread_prob = 0.75
+
+    def test_transition_tensor_row_sums(self) -> None:
+        """Testing the transition tensor."""
+        row_sum = self.edge.transition_tensor.sum(axis=2)
+        self.assertTrue(np.allclose(row_sum, 1.0))
+
+
+
+class TrinaryEdgeTestCase(unittest.TestCase):
+    """Tests for the Edge class in case the parent and child node are trinary."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        parent = graph.LymphNodeLevel("parent", allowed_states=[0,1,2])
+        child = graph.LymphNodeLevel("child", allowed_states=[0,1,2])
+        self.edge = graph.Edge(parent, child)
+        self.edge.spread_prob = 0.3
+        self.edge.micro_mod = 0.7
+
+        self.growth_edge = graph.Edge(parent, parent)
+        self.growth_edge.spread_prob = 0.5
+
+    def test_transition_tensor_row_sums(self) -> None:
+        """Testing the transition tensor."""
+        row_sum = self.edge.transition_tensor.sum(axis=2)
+        self.assertTrue(np.allclose(row_sum, 1.0))
+
+    def test_growth_transition_tensor_row_sums(self) -> None:
+        """Testing the transition tensor."""
+        row_sum = self.growth_edge.transition_tensor.sum(axis=2)
+        self.assertTrue(np.allclose(row_sum, 1.0))

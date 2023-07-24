@@ -223,7 +223,7 @@ class Edge:
         self.end = end
 
         if self.end.is_trinary:
-            self.macro_mod = micro_mod
+            self.micro_mod = micro_mod
 
         self.spread_prob = spread_prob
 
@@ -285,26 +285,26 @@ class Edge:
         return isinstance(self.start, Tumor)
 
 
-    def get_macro_mod(self) -> float:
+    def get_micro_mod(self) -> float:
         """Return the spread probability."""
-        if not hasattr(self, "_macro_mod") or self.end.is_binary:
-            self._macro_mod = 1.
-        return self._macro_mod
+        if not hasattr(self, "_micro_mod") or self.end.is_binary:
+            self._micro_mod = 1.
+        return self._micro_mod
 
     @delete_transition_tensor
-    def set_macro_mod(self, new_macro_mod: float) -> None:
+    def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
         if self.end.is_binary:
             warnings.warn("Microscopic spread modifier is not used for binary nodes!")
 
-        if not 0. <= new_macro_mod <= 1.:
+        if not 0. <= new_micro_mod <= 1.:
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
 
-        self._macro_mod = new_macro_mod
+        self._micro_mod = new_micro_mod
 
-    macro_mod = property(
-        fget=get_macro_mod,
-        fset=set_macro_mod,
+    micro_mod = property(
+        fget=get_micro_mod,
+        fset=set_micro_mod,
         doc="Parameter modifying spread probability in case of macroscopic involvement",
     )
 
@@ -351,36 +351,31 @@ class Edge:
         """
         num_start = len(self.start.allowed_states)
         num_end = len(self.end.allowed_states)
-        tensor = np.ones(shape=(num_start, num_end, num_end))
+        tensor = np.stack([np.eye(num_end)] * num_start)
 
-        for i, start_state in enumerate(self.start.allowed_states):
-            if start_state == 2:
-                # here we implement how the macroscopic state changes the spread
-                spread_prob = self.spread_prob * self.macro_mod
-            else:
-                spread_prob = self.spread_prob
+        # this should allow edges from trinary nodes to binary nodes
+        pad = [0.] * (num_end - 2)
 
-            for j, end_state in enumerate(self.end.allowed_states):
-                # in the growth case, s must be equal to e
-                if self.is_growth and start_state != end_state:
-                    continue
+        if self.is_tumor_spread:
+            # NOTE: Here we define how tumors spread to LNLs
+            tensor[0, 0, :] = np.array([1. - self.spread_prob, self.spread_prob, *pad])
+            return tensor
 
-                for k, new_state in enumerate(self.end.allowed_states):
-                    if self.is_growth and end_state == 1:
-                        tensor[i,j,k] = (
-                            (1. - spread_prob) ** (new_state == 1)
-                            * spread_prob ** (new_state == 2)
-                        )
+        if self.is_growth:
+            tensor[1, 1, :] = np.array([0., (1 - self.spread_prob), self.spread_prob])
+            return tensor
 
-                    else:
-                        tensor[i,j,k] = (
-                            (1. - spread_prob) ** (new_state == 0)
-                            * spread_prob ** (new_state == 1)
-                        ) ** (end_state == 0 and start_state != 0)
+        if self.start.is_trinary:
+            # NOTE: here we define how the micro_mod affects the spread probability
+            micro_spread = self.spread_prob * self.micro_mod
+            tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
 
-            tensor[i] = np.triu(tensor[i])
+            macro_spread = self.spread_prob
+            tensor[2,0,:] = np.array([1. - macro_spread, macro_spread, *pad])
 
-        # making the tensor upper triangular, because self-healing is not allowed
+            return tensor
+
+        tensor[1,0,:] = np.array([1. - self.spread_prob, self.spread_prob])
         return tensor
 
 
@@ -423,7 +418,7 @@ class Edge:
 
         if self.start.state == 1:
             if self.end.state == 0:
-                return 1 - self.spread_prob * self.macro_mod
+                return 1 - self.spread_prob * self.micro_mod
             elif self.end.state == 1:
                 if self.is_growth:
                     return 1 - self.spread_prob

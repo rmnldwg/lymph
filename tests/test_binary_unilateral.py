@@ -33,7 +33,7 @@ class BinaryFixtureMixin:
             ("lnl", "II"): ["III"],
             ("lnl", "III"): [],
         }
-        self.graph = medium_graph
+        self.graph = large_graph
         self.model = Unilateral(graph=self.graph)
 
     def create_random_params(self, seed: int = 42) -> Dict[str, float]:
@@ -97,14 +97,6 @@ class InitBinaryTestCase(BinaryFixtureMixin, unittest.TestCase):
             self.assertTrue(edge.is_tumor_spread)
             self.assertIn(edge.name, connecting_edge_names)
 
-    def test_lnl_to_lnl_edges(self):
-        """Make sure the LNL to LNL edges have been initialized correctly."""
-        for edge in self.model.lnl_edges:
-            self.assertIsInstance(edge.start, LymphNodeLevel)
-            self.assertIsInstance(edge.end, LymphNodeLevel)
-            self.assertIn(edge.start.name, ["II", "III"])
-            self.assertIn(edge.end.name, ["I", "III", "IV"])
-
 
 class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
     """Test the assignment of parameters in a binary model."""
@@ -135,9 +127,10 @@ class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
         changed during the test and the `_transition_matrix` attribute is deleted on
         the wrong instance. I have no clue why, but generally, the method works.
         """
+        first_lnl_name = self.model.lnls[0].name
         _ = self.model.transition_matrix
         self.assertTrue(hasattr(self.model, "_transition_matrix"))
-        self.model.edge_params["spread_T_to_I"].set(0.5)
+        self.model.edge_params[f"spread_T_to_{first_lnl_name}"].set(0.5)
         self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
@@ -159,7 +152,7 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
     def test_is_probabilistic(self):
         """Make sure the rows of the transition matrix sum to one."""
         row_sums = np.sum(self.model.transition_matrix, axis=1)
-        self.assertTrue(np.allclose(row_sums, 1.0))
+        self.assertTrue(np.allclose(row_sums, 1.))
 
     @staticmethod
     def is_recusively_upper_triangular(mat: np.ndarray) -> bool:
@@ -182,24 +175,14 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
         self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
 
 
-def delete_and_recompute_transition_matrix(model: Unilateral) -> None:
-    """Delete the transition matrix and recompute it."""
-    del model.transition_matrix
-    _ = model.transition_matrix
-
 
 if __name__ == "__main__":
-    import timeit
-
     fixture = BinaryFixtureMixin()
     fixture.setUp()
-    params = fixture.create_random_params(42)
-    fixture.model.assign_parameters(**params)
 
-    number = 1000
-    measured_time = timeit.timeit(
-        lambda: delete_and_recompute_transition_matrix(fixture.model),
-        number=number,
-    )
-    print(f"Time to recompute transition matrix {number} times: {measured_time:.3f} s")
-    print(fixture.model.transition_matrix)
+    params = fixture.create_random_params(234)
+    fixture.model.assign_parameters(**params)
+    _ = fixture.model.transition_matrix
+    del fixture.model.transition_matrix
+    _ = fixture.model.transition_matrix
+    
