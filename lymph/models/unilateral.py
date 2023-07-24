@@ -19,7 +19,7 @@ from numpy.linalg import matrix_power as mat_pow
 
 from lymph.descriptors import matrix, params, diagnose_times
 from lymph.graph import Edge, LymphNodeLevel, Tumor
-from lymph.helper import change_base
+from lymph.helper import change_base, check_unique_names
 
 
 class Unilateral:
@@ -72,23 +72,25 @@ class Unilateral:
         if tumor_state is None:
             tumor_state = allowed_states[-1]
 
-        self.check_unique_names(graph)
+        check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_states)
         self.init_edges(graph)
+
+
+    @classmethod
+    def binary(cls, graph: Dict[Tuple[str], Set[str]], **kwargs) -> Unilateral:
+        """Create a new instance of the `Unilateral` class with binary LNLs."""
+        return cls(graph, allowed_states=[0, 1], **kwargs)
+
+
+    @classmethod
+    def trinary(cls, graph: Dict[Tuple[str], Set[str]], **kwargs) -> Unilateral:
+        return cls(graph, allowed_states=[0, 1, 2], **kwargs)
 
 
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.tumors)} tumors and {len(self.lnls)} LNLs"
-
-
-    def check_unique_names(self, graph):
-        """Check if all nodes have unique names."""
-        node_names = [name for _, name in graph]
-        unique_node_names = set(node_names)
-
-        if len(node_names) != len(unique_node_names):
-            raise ValueError("No two nodes (tumor or LNL) can have the same name!")
 
 
     def init_nodes(self, graph, tumor_state, allowed_lnl_states):
@@ -221,33 +223,59 @@ class Unilateral:
         print(string)
 
 
-    def get_state(self) -> np.ndarray:
-        """Returns the state of the system as a numpy array."""
-        return np.array([node.state for node in self.nodes])
+    def get_states(self, as_dict: bool = False) -> Union[Dict[str, int], List[int]]:
+        """Return the states of the system's LNLs.
 
-    def set_state(self, system_state: list) -> None:
-        """Sets the state of the system to `state`."""
-        if len(system_state) != len(self.lnls):
-            raise ValueError(
-                f"Length of state vector {len(system_state)} does not match "
-                f"number of nodes {len(self.nodes)}"
-            )
+        If `as_dict` is `True`, the result is a dictionary with the names of the LNLs
+        as keys and their states as values. Otherwise, the result is a list of the
+        states of the LNLs in the order they appear in the graph.
+        """
+        result = {}
 
-        for node, state in zip(self.lnls, system_state):
-            node.state = state
-
-
-    def get_state_by_lnl(self) -> Dict[str, int]:
-        """Returns the state of the system as a dictionary with LNL names as keys."""
-        return {lnl.name: lnl.state for lnl in self.lnls}
-
-    def set_state_by_lnl(self, **states) -> None:
-        """Sets the state of every LNL to the corresponding value in `states`."""
         for lnl in self.lnls:
-            lnl.state = states[lnl.name]
+            result[lnl.name] = lnl.state
+
+        return result if as_dict else list(result.values())
 
 
-    def assign_parameters(self, *new_params_args, **new_params_kwargs):
+    def assign_states(self, *new_states_args, **new_states_kwargs) -> None:
+        """Assign a new state to the system's LNLs.
+
+        The state can either be provided with positional arguments or as keyword
+        arguments. In case of positional arguments, the order must be the same as the
+        order of the LNLs in the graph. If keyword arguments are used, the keys must be
+        the names of the LNLs. The order of the keyword arguments does not matter.
+
+        The keyword arguments override the positional arguments.
+        """
+        for new_lnl_state, lnl in zip(new_states_args, self.lnls):
+            lnl.state = new_lnl_state
+
+        for key, value in new_states_kwargs.items():
+            lnl = self.find_node(key)
+            if lnl is not None and isinstance(lnl, LymphNodeLevel):
+                lnl.state = value
+
+
+    def get_params(self, as_dict: bool = False) -> Union[Dict[str, float], List[float]]:
+        """Return a dictionary of all parameters and their currently set values.
+
+        If `as_dict` is `True`, the result is a dictionary with the names of the
+        edge parameters as keys and their values as values. Otherwise, the result is a
+        list of the values of the edge parameters in the order they appear in the
+        graph.
+        """
+        result = {}
+        for name, param in self.edge_params.items():
+            result[name] = param.get()
+
+        for name, dist in self.diag_time_dists.items():
+            result[name] = dist.get_param()
+
+        return result if as_dict else list(result.values())
+
+
+    def assign_params(self, *new_params_args, **new_params_kwargs):
         """Assign new parameters to the model.
 
         The parameters can either be provided with positional arguments or as
@@ -289,22 +317,10 @@ class Unilateral:
                 self.edge_params[key].set(value)
 
 
-    def get_parameters(self) -> Dict[str, Union[float, str]]:
-        """Returns a dictionary of all parameters and their currently set values."""
-        result = {}
-        for name, param in self.edge_params.items():
-            result[name] = param.get()
-
-        for name, dist in self.diag_time_dists.items():
-            result[name] = dist.get_param()
-
-        return result
-
-
     def comp_transition_prob(
         self,
         newstate: List[int],
-        acquire: bool = False
+        assign: bool = False
     ) -> float:
         """Computes the probability to transition to ``newstate``, given its
         current state.
@@ -313,7 +329,7 @@ class Unilateral:
             newstate: List of new states for each LNL in the lymphatic
                 system. The transition probability :math:`t` will be computed
                 from the current states to these states.
-            acquire: if ``True``, after computing and returning the probability,
+            assign: if ``True``, after computing and returning the probability,
                 the system updates its own state to be ``newstate``.
                 (default: ``False``)
 
@@ -326,8 +342,8 @@ class Unilateral:
             if trans_prob == 0:
                 break
 
-        if acquire:
-            self.set_state(newstate)
+        if assign:
+            self.assign_states(newstate)
 
         return trans_prob
 
@@ -808,7 +824,7 @@ class Unilateral:
             return self._likelihood(mode, log)
 
         try:
-            self.assign_parameters(**given_params)
+            self.assign_params(**given_params)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -856,7 +872,7 @@ class Unilateral:
             with probabilities for all possible hidden states otherwise.
         """
         if given_params is not None:
-            self.assign_parameters(**given_params)
+            self.assign_params(**given_params)
 
         if given_diagnoses is None:
             given_diagnoses = {}

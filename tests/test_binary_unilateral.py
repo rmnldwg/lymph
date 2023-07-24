@@ -111,7 +111,7 @@ class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
     def test_edge_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=43)
-        self.model.assign_parameters(**params_to_set)
+        self.model.assign_params(**params_to_set)
         for name, value in params_to_set.items():
             self.assertEqual(self.model.edge_params[name].get(), value)
 
@@ -142,7 +142,7 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
         super().setUp()
 
         params_to_set = self.create_random_params(seed=42)
-        self.model.assign_parameters(**params_to_set)
+        self.model.assign_params(**params_to_set)
 
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     fixture.setUp()
 
     params = fixture.create_random_params(234)
-    fixture.model.assign_parameters(**params)
+    fixture.model.assign_params(**params)
     _ = fixture.model.transition_matrix
     del fixture.model.transition_matrix
     _ = fixture.model.transition_matrix

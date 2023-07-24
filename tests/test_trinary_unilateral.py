@@ -33,7 +33,7 @@ class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         params_to_set = self.create_random_params(seed=123)
-        self.model.assign_parameters(**params_to_set)
+        self.model.assign_params(**params_to_set)
 
     def test_edge_transition_tensors(self) -> None:
         """Test the tensors associated with each edge.
@@ -42,6 +42,19 @@ class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
         how to test them yet.
         """
         base_edge_tensor = self.model.tumor_edges[0].comp_transition_tensor()
+        row_sums = base_edge_tensor.sum(axis=2)
+        self.assertTrue(np.allclose(row_sums, 1.0))
+
         lnl_edge_tensor = self.model.lnl_edges[0].comp_transition_tensor()
+        row_sums = lnl_edge_tensor.sum(axis=2)
+        self.assertTrue(np.allclose(row_sums, 1.0))
+
         growth_edge_tensor = self.model.growth_edges[0].comp_transition_tensor()
-        self.assertTrue(True)
+        row_sums = growth_edge_tensor.sum(axis=2)
+        self.assertTrue(np.allclose(row_sums, 1.0))
+
+    def test_transition_matrix(self) -> None:
+        """Test the transition matrix of the model."""
+        transition_matrix = self.model.transition_matrix
+        row_sums = transition_matrix.sum(axis=1)
+        self.assertTrue(np.allclose(row_sums, 1.0))

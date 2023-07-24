@@ -8,6 +8,15 @@ from typing import Optional, List
 import numpy as np
 
 
+def check_unique_names(graph):
+    """Check if all nodes have unique names."""
+    node_names = [name for _, name in graph]
+    unique_node_names = set(node_names)
+
+    if len(node_names) != len(unique_node_names):
+        raise ValueError("No two nodes (tumor or LNL) can have the same name!")
+
+
 def check_spsn(spsn: List[float]):
     """Private method that checks whether specificity and sensitvity
     are valid.
