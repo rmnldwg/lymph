@@ -446,7 +446,7 @@ class Unilateral:
 
 
     @property
-    def modalities(self):
+    def modalities(self) -> Dict[str, np.ndarray]:
         """Return specificity & sensitivity stored in this :class:`System` for
         every diagnostic modality that has been defined.
         """
@@ -462,7 +462,7 @@ class Unilateral:
             return {}
 
     @modalities.setter
-    def modalities(self, modality_spsn: Dict[Any, List[float]]):
+    def modalities(self, modality_confusion_matrices: Dict[Any, np.ndarray]):
         """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different
         diagnostic modalities, create a 2xstates matrix for every disgnostic
         modality that stores
@@ -475,71 +475,32 @@ class Unilateral:
         """
         if hasattr(self, "_observation_matrix"):
             del self._observation_matrix
+
         if hasattr(self, "_obs_list"):
             del self._obs_list
 
         self._confusion_matrices = {}
-        for mod,matrix in modality_spsn.items():
-            if not isinstance(mod, str):
-                msg = ("Modality names must be strings.")
-                raise TypeError(msg)
-            if not np.all(matrix.sum(axis = 1) == 1):
-                msg = ("All values need to be between 0 and 1 and rows add up to 1")
-                raise ValueError(msg)
-            if len(self.allowed_states) == 3:
-                if matrix.shape != (len(self.allowed_states), 2):
-                    msg = (f'the shape of the confusion matrix does not match the model '
-                    f'insert a ({len(self.allowed_states)}x2) matrix ')
-                    raise ValueError(msg)
-                self._confusion_matrices[mod] = matrix
-            elif len(self.allowed_states) == 2 and matrix.shape[0] == 3:
-                if matrix.shape != (len(self.allowed_states), 2):
-                    msg = (f'the shape of the confusion matrix does not match the model '
-                    f'insert a ({len(self.allowed_states)}x2) matrix ')
-                    raise ValueError(msg)
-                self._confusion_matrices[mod] = np.delete(matrix, 1, axis = 0)
+        for mod, confusion_matrix in modality_confusion_matrices.items():
+            if not np.allclose(confusion_matrix.sum(axis=1), 1.):
+                raise ValueError(
+                    "Sensitivity & specificity must be between 0 and 1 "
+                    "and rows add up to 1"
+                )
+
+            if confusion_matrix.shape != (len(self.allowed_states), 2):
+                raise ValueError(
+                    f"the shape of the confusion matrix does not match the model "
+                    f"insert a ({len(self.allowed_states)}x2) matrix."
+                )
+
+            if self.is_binary and confusion_matrix.shape[0] == 3:
+                self._confusion_matrices[mod] = np.delete(confusion_matrix, 1, axis = 0)
+
+            self._confusion_matrices[mod] = confusion_matrix
 
 
-    def _gen_observation_matrix(self):
-        """Generates the observation matrix :math:`\\mathbf{B}`, which contains
-        the probabilities :math:`P \\left(D \\mid S \\right)` of any possible
-        unique observation :math:`D` given any possible true hidden state
-        :math:`S`. :math:`\\mathbf{B}` has the shape ``(# of states, # of
-        possible observations)``.
-        """
-        n_lnl = len(self.lnls)
-
-        if not hasattr(self, "_observation_matrix"):
-            shape = (len(self.state_list), len(self.obs_list))
-            self._observation_matrix = np.zeros(shape=shape)
-
-        for i,state in enumerate(self.state_list):
-            self.set_state(state)
-            for j,obs in enumerate(self.obs_list):
-                observations = {}
-                for k,modality in enumerate(self._confusion_matrices):
-                    observations[modality] = {
-                        lnl.name: obs[n_lnl * k + i] for i,lnl in enumerate(self.lnls)
-                    }
-                self._observation_matrix[i,j] = self.comp_diagnose_prob(observations)
-
-    @property
-    def observation_matrix(self) -> np.ndarray:
-        """Return the observation matrix :math:`\\mathbf{B}`. It encodes the
-        probability :math:`P\\left( D \\mid S \\right)` to see a certain
-        diagnose :math:`D`, given a particular true (but hidden) state :math:`S`.
-        It is meant to be multiplied from the right onto the transition matrix
-        :math:`\\mathbf{A}`.
-
-        See Also:
-            :attr:`transition_matrix`: The mentioned transition matrix
-            :math:`\\mathbf{A}`.
-        """
-        try:
-            return self._observation_matrix
-        except AttributeError:
-            self._gen_observation_matrix()
-            return self._observation_matrix
+    observation_matrix = matrix.Observation()
+    """The matrix encoding the probabilities to observe a certain diagnosis."""
 
 
     def _gen_diagnose_matrices(self, table: pd.DataFrame, t_stage: str):
@@ -561,7 +522,7 @@ class Unilateral:
         self._diagnose_matrices[t_stage] = np.ones(shape=shape)
 
         for i,state in enumerate(self.state_list):
-            self.set_state(state)
+            self.assign_states(state)
 
             for j, (_, patient) in enumerate(table.iterrows()):
                 patient_obs_prob = self.comp_diagnose_prob(patient)
@@ -777,7 +738,7 @@ class Unilateral:
             state_probs = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.set_state(state)
+                self.assign_states(state)
                 for node in self.lnls:
                     state_probs[i] *= node.bn_prob()
 
@@ -880,7 +841,7 @@ class Unilateral:
         # vector containing P(Z=z|X)
         diagnose_probs = np.zeros(shape=len(self.state_list))
         for i,state in enumerate(self.state_list):
-            self.set_state(state)
+            self.assign_states(state)
             diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
         # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
@@ -893,7 +854,7 @@ class Unilateral:
         elif mode == "BN":
             marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
             for i, state in enumerate(self.state_list):
-                self.set_state(state)
+                self.assign_states(state)
                 for node in self.lnls:
                     marg_state_probs[i] *= node.bn_prob()
 

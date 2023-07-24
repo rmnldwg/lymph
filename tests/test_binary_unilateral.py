@@ -8,7 +8,7 @@ from lymph.graph import LymphNodeLevel, Tumor
 from lymph.models import Unilateral
 
 
-class BinaryFixtureMixin:
+class FixtureMixin:
     """Mixin class for simple binary model fixture creation."""
 
     def setUp(self):
@@ -42,7 +42,7 @@ class BinaryFixtureMixin:
         return {name: rng.random() for name in self.model.edge_params.keys()}
 
 
-class InitBinaryTestCase(BinaryFixtureMixin, unittest.TestCase):
+class InitTestCase(FixtureMixin, unittest.TestCase):
     """Test the initialization of a binary model."""
 
     def test_num_nodes(self):
@@ -98,7 +98,7 @@ class InitBinaryTestCase(BinaryFixtureMixin, unittest.TestCase):
             self.assertIn(edge.name, connecting_edge_names)
 
 
-class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
+class ParameterAssignmentTestCase(FixtureMixin, unittest.TestCase):
     """Test the assignment of parameters in a binary model."""
 
     def test_edge_params_assignment_via_lookup(self):
@@ -134,7 +134,7 @@ class BinaryParameterAssignmentTestCase(BinaryFixtureMixin, unittest.TestCase):
         self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
-class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
+class TransitionMatrixTestCase(FixtureMixin, unittest.TestCase):
     """Test the generation of the transition matrix in a binary model."""
 
     def setUp(self):
@@ -166,7 +166,7 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
         half = mat.shape[0] // 2
         for i in [0, 1]:
             for j in [0, 1]:
-                return BinaryTransitionMatrixTestCase.is_recusively_upper_triangular(
+                return TransitionMatrixTestCase.is_recusively_upper_triangular(
                     mat[i * half:(i + 1) * half, j * half:(j + 1) * half]
                 )
 
@@ -175,9 +175,35 @@ class BinaryTransitionMatrixTestCase(BinaryFixtureMixin, unittest.TestCase):
         self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
 
 
+class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
+    """Test the generation of the observation matrix in a binary model."""
+
+    def setUp(self):
+        super().setUp()
+
+        ct_sp, ct_sn = 0.81, 0.86
+        mr_sp, mr_sn = 0.85, 0.82
+
+        self.model.modalities = {
+            "CT": np.array([
+                [ct_sp     , 1. - ct_sp],
+                [1. - ct_sn, ct_sn     ],
+            ]),
+            "MR": np.array([
+                [mr_sp     , 1. - mr_sp],
+                [1. - mr_sn, mr_sn     ],
+            ]),
+        }
+
+    def test_shape(self):
+        """Make sure the observation matrix has the correct shape."""
+        num_lnls = len(self.model.lnls)
+        self.assertEqual(self.model.observation_matrix.shape, (2**num_lnls, 2**num_lnls))
+
+
 
 if __name__ == "__main__":
-    fixture = BinaryFixtureMixin()
+    fixture = FixtureMixin()
     fixture.setUp()
 
     params = fixture.create_random_params(234)
