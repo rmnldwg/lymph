@@ -3,9 +3,9 @@ Module defining the nodes and edges of the graph representing the lymphatic syst
 """
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Union
-from functools import wraps
 import warnings
+from functools import wraps
+from typing import Callable, List, Optional, Union
 
 import numpy as np
 

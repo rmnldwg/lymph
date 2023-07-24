@@ -1,9 +1,9 @@
 """Module containing supporting classes and functions."""
 
 import doctest
-from functools import lru_cache
 import warnings
-from typing import Optional, List
+from functools import lru_cache
+from typing import List, Optional
 
 import numpy as np
 

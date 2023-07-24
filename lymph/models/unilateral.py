@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from lymph.descriptors import matrix, params, diagnose_times
+from lymph.descriptors import diagnose_times, matrix, params
 from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import change_base, check_unique_names
 

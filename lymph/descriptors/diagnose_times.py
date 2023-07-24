@@ -12,7 +12,6 @@ import numpy as np
 from lymph import models
 
 
-
 class SupportError(Exception):
     """Error that is raised when no support for a distribution is provided."""
 

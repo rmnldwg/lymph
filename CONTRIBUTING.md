@@ -101,10 +101,10 @@ def my_well_named_function(
     optional_parameter: Optional[float] = None,
 ) -> np.ndarray:
     """This function is well named and does its job very well.
-    
+
     After a blank line we can add a bit of a longer description. This can even span
     multiple lines if it is necessary. Afterwards, the arguments follow.
-    
+
     Args:
         first_parameter: The first parameter is an integer.
         second_parameter: The second parameter is a string.

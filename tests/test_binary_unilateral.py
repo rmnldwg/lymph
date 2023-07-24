@@ -1,11 +1,11 @@
 """Test the binary unilateral system."""
-from typing import Dict
 import unittest
+from typing import Dict
 
 import numpy as np
 
-from lymph.models import Unilateral
 from lymph.graph import LymphNodeLevel, Tumor
+from lymph.models import Unilateral
 
 
 class BinaryFixtureMixin:
@@ -185,4 +185,4 @@ if __name__ == "__main__":
     _ = fixture.model.transition_matrix
     del fixture.model.transition_matrix
     _ = fixture.model.transition_matrix
-    
+
