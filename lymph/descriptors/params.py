@@ -25,13 +25,13 @@ class Param:
 
 class ParamDict(dict):
     """Dictionary preventing direct setting of parameter values."""
-    def __setitem__(self, __key: str, __value: Param) -> None:
-        if not isinstance(__value, Param):
+    def __setitem__(self, key: str, value: Param, / ) -> None:
+        if not isinstance(value, Param):
             raise TypeError(
                 "Params cannot be accessed directly! "
                 "Use the `get` & `set` methods instead."
             )
-        return super().__setitem__(__key, __value)
+        return super().__setitem__(key, value)
 
 
 class Lookup:
