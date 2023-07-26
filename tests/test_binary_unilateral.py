@@ -92,8 +92,8 @@ class InitTestCase(FixtureMixin, unittest.TestCase):
         connecting_edge_names = [f"{tumor.name}_to_{lnl}" for lnl in receiving_lnls]
 
         for edge in self.model.tumor_edges:
-            self.assertEqual(edge.start.name, "T")
-            self.assertIn(edge.end.name, receiving_lnls)
+            self.assertEqual(edge.parent.name, "T")
+            self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
             self.assertIn(edge.name, connecting_edge_names)
 

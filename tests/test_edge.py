@@ -16,6 +16,27 @@ class BinaryEdgeTestCase(unittest.TestCase):
         self.edge = graph.Edge(parent, child)
         self.edge.spread_prob = 0.75
 
+    def test_str(self) -> None:
+        """Test the string representation of the edge."""
+        self.assertEqual(str(self.edge), "Edge parent to child")
+
+    def test_repr(self) -> None:
+        """Test if the edge can be recreated from repr."""
+        # pylint: disable=eval-used
+        recreated_edge = eval(
+            repr(self.edge),
+            {
+                "Edge": graph.Edge,
+                "LymphNodeLevel": graph.LymphNodeLevel,
+                "Tumor": graph.Tumor,
+            },
+        )
+        self.assertEqual(self.edge.name, recreated_edge.name)
+        self.assertEqual(self.edge.parent.name, recreated_edge.parent.name)
+        self.assertEqual(self.edge.child.name, recreated_edge.child.name)
+        self.assertEqual(self.edge.spread_prob, recreated_edge.spread_prob)
+        self.assertEqual(self.edge.micro_mod, recreated_edge.micro_mod)
+
     def test_transition_tensor_row_sums(self) -> None:
         """Testing the transition tensor."""
         row_sum = self.edge.transition_tensor.sum(axis=2)
