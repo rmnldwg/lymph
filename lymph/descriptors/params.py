@@ -82,7 +82,7 @@ class Lookup:
         # here we don't need to check if the model is trinary, because the growth edges
         # are only present in trinary models
         for edge in instance.growth_edges:
-            param_dict['growth_' + edge.start.name] = Param(
+            param_dict['growth_' + edge.parent.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,

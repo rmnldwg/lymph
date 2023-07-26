@@ -51,6 +51,16 @@ class AbstractNode:
         """Return a string representation of the node."""
         return self.name
 
+    def __repr__(self) -> str:
+        """Return a string representation of the node."""
+        cls_name = type(self).__name__
+        return (
+            f"{cls_name}("
+            f"name={self.name!r}, "
+            f"state={self.state!r}, "
+            f"allowed_states={self.allowed_states!r})"
+        )
+
 
     @property
     def name(self) -> str:
@@ -77,19 +87,6 @@ class AbstractNode:
             raise ValueError("State of node must be one of the allowed states")
 
         self._state = new_state
-
-
-    def comp_bayes_net_prob(self, log: bool = False) -> float:
-        """Compute the Bayesian network's probability for the current state."""
-        return 0. if log else 1.
-
-
-    def comp_trans_prob(self, new_state: int) -> float:
-        """Compute the hidden Markov model's transition probability to a new state."""
-        if new_state not in self.allowed_states:
-            raise ValueError("New state must be one of the allowed states")
-
-        return 0. if new_state < self.state else 1.
 
 
     def comp_obs_prob(
@@ -161,7 +158,7 @@ class LymphNodeLevel(AbstractNode):
 
     def comp_bayes_net_prob(self, log: bool = False) -> float:
         """Compute the Bayesian network's probability for the current state."""
-        res = super().comp_bayes_net_prob(log=log)
+        res = 0 if log else 1
 
         for edge in self.inc:
             if log:
@@ -174,16 +171,17 @@ class LymphNodeLevel(AbstractNode):
 
     def comp_trans_prob(self, new_state: int) -> float:
         """Compute the hidden Markov model's transition probability to a `new_state`."""
-        trans_prob = super().comp_trans_prob(new_state)
+        if new_state == self.state:
+            stay_prob = 1.
+            for edge in self.inc:
+                edge_prob = edge.transition_tensor[edge.parent.state, self.state, new_state]
+                stay_prob *= edge_prob
+            return stay_prob
 
+        transition_prob = 0.
         for edge in self.inc:
-            trans_prob *= edge.transition_tensor[
-                edge.start.state,
-                edge.end.state,
-                new_state,
-            ]
-
-        return trans_prob
+            edge_prob = edge.transition_tensor[edge.parent.state, self.state, new_state]
+            transition_prob = 1. - (1. - transition_prob) * (1. - edge_prob)
 
 
 def delete_transition_tensor(setter: Callable) -> Callable:
@@ -205,62 +203,73 @@ class Edge:
     """
     def __init__(
         self,
-        start: Union[Tumor, LymphNodeLevel],
-        end: LymphNodeLevel,
+        parent: Union[Tumor, LymphNodeLevel],
+        child: LymphNodeLevel,
         spread_prob: float = 0.,
         micro_mod: float = 1.,
     ):
         """Create a new edge between two nodes.
 
-        The `start` node must be a `Tumor` or a `LymphNodeLevel`, and the `end` node
+        The `parent` node must be a `Tumor` or a `LymphNodeLevel`, and the `child` node
         must be a `LymphNodeLevel`.
 
         The `spread_prob` parameter is the probability of a tumor or involved LNL to
         spread to the next LNL. The `micro_mod` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
-        self.start = start
-        self.end = end
+        self.parent: Union[Tumor, LymphNodeLevel] = parent
+        self.child: LymphNodeLevel = child
 
-        if self.end.is_trinary:
+        if self.child.is_trinary:
             self.micro_mod = micro_mod
 
         self.spread_prob = spread_prob
 
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Print basic info."""
-        return f"{self.start}-->{self.end}"
+        return f"Edge {self.name.replace('_', ' ')}"
+
+    def __repr__(self) -> str:
+        """Print basic info."""
+        cls_name = type(self).__name__
+        return (
+            f"{cls_name}("
+            f"parent={self.parent!r}, "
+            f"child={self.child!r}, "
+            f"spread_prob={self.spread_prob!r}, "
+            f"micro_mod={self.micro_mod!r})"
+        )
 
 
     @property
-    def start(self) -> Union[Tumor, LymphNodeLevel]:
-        """Return the start (parent) node of the edge."""
-        return self._start
+    def parent(self) -> Union[Tumor, LymphNodeLevel]:
+        """Return the parent node that drains lymphatically via the edge."""
+        return self._parent
 
-    @start.setter
-    def start(self, new_start: Union[Tumor, LymphNodeLevel]) -> None:
-        """Set the start (parent) node of the edge."""
-        if not issubclass(new_start.__class__, AbstractNode):
+    @parent.setter
+    def parent(self, new_parent: Union[Tumor, LymphNodeLevel]) -> None:
+        """Set the parent node of the edge."""
+        if not issubclass(new_parent.__class__, AbstractNode):
             raise TypeError("Start must be instance of Node!")
 
-        self._start = new_start
-        self.start.out.append(self)
+        self._parent = new_parent
+        self.parent.out.append(self)
 
 
     @property
-    def end(self) -> LymphNodeLevel:
-        """Return the end (child) node of the edge."""
-        return self._end
+    def child(self) -> LymphNodeLevel:
+        """Return the child node of the edge, receiving lymphatic drainage."""
+        return self._child
 
-    @end.setter
-    def end(self, new_end: LymphNodeLevel) -> None:
+    @child.setter
+    def child(self, new_child: LymphNodeLevel) -> None:
         """Set the end (child) node of the edge."""
-        if not isinstance(new_end, LymphNodeLevel):
+        if not isinstance(new_child, LymphNodeLevel):
             raise TypeError("End must be instance of Node!")
 
-        self._end = new_end
-        self.end.inc.append(self)
+        self._child = new_child
+        self.child.inc.append(self)
 
 
     @property
@@ -270,31 +279,31 @@ class Edge:
         This is used to identify it and assign spread probabilities to it in
         the `Unilateral` class.
         """
-        return self.start.name + '_to_' + self.end.name
+        return self.parent.name + '_to_' + self.child.name
 
 
     @property
     def is_growth(self) -> bool:
         """Check if this edge represents a node's growth."""
-        return self.start == self.end
+        return self.parent == self.child
 
 
     @property
     def is_tumor_spread(self) -> bool:
         """Check if this edge represents spread from a tumor to an LNL."""
-        return isinstance(self.start, Tumor)
+        return isinstance(self.parent, Tumor)
 
 
     def get_micro_mod(self) -> float:
         """Return the spread probability."""
-        if not hasattr(self, "_micro_mod") or self.end.is_binary:
+        if not hasattr(self, "_micro_mod") or self.child.is_binary:
             self._micro_mod = 1.
         return self._micro_mod
 
     @delete_transition_tensor
     def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
-        if self.end.is_binary:
+        if self.child.is_binary:
             warnings.warn("Microscopic spread modifier is not used for binary nodes!")
 
         if not 0. <= new_micro_mod <= 1.:
@@ -329,7 +338,7 @@ class Edge:
     )
 
 
-    def comp_bayes_net_prob(self, log: bool = False) -> float:
+    def comp_bayes_prob(self, log: bool = False) -> float:
         """Compute the conditional probability of this edge's child node's state.
 
         This function dynamically computes the conditional probability that the child
@@ -343,18 +352,18 @@ class Edge:
     def comp_transition_tensor(self) -> np.ndarray:
         """Compute the transition factors of the edge.
 
-        The returned array is of shape (s,e,e), where s is the number of states of the
-        start node and e is the number of states of the end node.
+        The returned array is of shape (p,c,c), where p is the number of states of the
+        parent node and c is the number of states of the child node.
 
         Essentially, the tensors computed here contain most of the parametrization of
         the model. They are used to compute the transition matrix.
         """
-        num_start = len(self.start.allowed_states)
-        num_end = len(self.end.allowed_states)
-        tensor = np.stack([np.eye(num_end)] * num_start)
+        num_parent = len(self.parent.allowed_states)
+        num_child = len(self.child.allowed_states)
+        tensor = np.stack([np.eye(num_child)] * num_parent)
 
         # this should allow edges from trinary nodes to binary nodes
-        pad = [0.] * (num_end - 2)
+        pad = [0.] * (num_child - 2)
 
         if self.is_tumor_spread:
             # NOTE: Here we define how tumors spread to LNLs
@@ -362,10 +371,13 @@ class Edge:
             return tensor
 
         if self.is_growth:
+            # In the growth case, we can assume that two things:
+            # 1. parent and child state are the same
+            # 2. the child node is trinary
             tensor[1, 1, :] = np.array([0., (1 - self.spread_prob), self.spread_prob])
             return tensor
 
-        if self.start.is_trinary:
+        if self.parent.is_trinary:
             # NOTE: here we define how the micro_mod affects the spread probability
             micro_spread = self.spread_prob * self.micro_mod
             tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
@@ -375,7 +387,7 @@ class Edge:
 
             return tensor
 
-        tensor[1,0,:] = np.array([1. - self.spread_prob, self.spread_prob])
+        tensor[1,0,:] = np.array([1. - self.spread_prob, self.spread_prob, *pad])
         return tensor
 
 
@@ -401,30 +413,3 @@ class Edge:
         """Delete the transition tensor of the edge."""
         if hasattr(self, "_transition_tensor"):
             del self._transition_tensor
-
-
-    def comp_stay_prob(self) -> float:
-        """Compute the probability of spread per time-step in the hidden Markov model.
-
-        This function dynamically computes the probability of no spread per time-step,
-        i.e. that the child node will stay in the same state given the states of its
-        parent nodes, and the parameters of the edge.
-        """
-        # TODO: I think there's still something missing here: What if the start state
-        # and the end state are both 0? Then it should not return 1 - spread_prob.
-        if self.end.is_binary:
-            if self.end.state == 0:
-                return 1 - self.spread_prob
-
-        if self.start.state == 1:
-            if self.end.state == 0:
-                return 1 - self.spread_prob * self.micro_mod
-            elif self.end.state == 1:
-                if self.is_growth:
-                    return 1 - self.spread_prob
-
-        if self.start.state == 2:
-            if self.end.state == 0:
-                return 1 - self.spread_prob
-
-        return 1

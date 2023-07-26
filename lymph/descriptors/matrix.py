@@ -76,7 +76,7 @@ class Transition(AbstractMatrixDescriptor):
                         0, current_state_idx, new_state_idx
                     ]
                 else:
-                    parent_node_i = instance.lnls.index(edge.start)
+                    parent_node_i = instance.lnls.index(edge.parent)
                     parent_state_idx = get_state_idx_matrix(
                         lnl_idx=parent_node_i,
                         num_lnls=num_lnls,

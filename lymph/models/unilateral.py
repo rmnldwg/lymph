@@ -121,12 +121,12 @@ class Unilateral:
         for (_, start_name), end_names in graph.items():
             start = self.find_node(start_name)
             if isinstance(start, LymphNodeLevel) and start.is_trinary:
-                growth_edge = Edge(start=start, end=start)
+                growth_edge = Edge(parent=start, child=start)
                 self.growth_edges.append(growth_edge)
 
             for end_name in end_names:
                 end = self.find_node(end_name)
-                new_edge = Edge(start=start, end=end)
+                new_edge = Edge(parent=start, child=end)
 
                 if new_edge.is_tumor_spread:
                     self.tumor_edges.append(new_edge)
@@ -188,7 +188,7 @@ class Unilateral:
         res = {}
         for node in self.nodes:
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
-            res[(node_type, node.name)] = {o.end.name for o in node.out}
+            res[(node_type, node.name)] = {o.child.name for o in node.out}
         return res
 
 
@@ -201,7 +201,7 @@ class Unilateral:
         graph = ('flowchart TD\n')
         for index, node in enumerate(self.nodes):
             for edge in self.nodes[index].out:
-                line = f"{node.name} -->|{edge.spread_prob}| {edge.end.name} \n"
+                line = f"{node.name} -->|{edge.spread_prob}| {edge.child.name} \n"
                 graph += line
         graphbytes = graph.encode("ascii")
         base64_bytes = base64.b64encode(graphbytes)
