@@ -487,32 +487,6 @@ class Bilateral:
 
         return llh
 
-    def _likelihood2(
-        self,
-        stage,
-        state_probs,
-    ) -> float:
-        """Compute the (log-)likelihood of data, using the stored spread probs and
-        fixed distributions for marginalizing over diagnose times.
-
-        This method mainly exists so that the checking and assigning of the
-        spread probs can be skipped.
-        """
-        
-        joint_state_probs = (
-            state_probs["ipsi"].T
-             @ np.diag(self.ipsi.diag_time_dists[stage].pmf)
-             @ state_probs["contra"]
-        )
-        p = np.sum(
-            self.ipsi.diagnose_matrices[stage]
-            * (joint_state_probs
-                @ self.contra.diagnose_matrices[stage]),
-            axis=0
-        )
-
-        return p
-
     def likelihood(
         self,
         data: Optional[pd.DataFrame] = None,

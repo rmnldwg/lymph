@@ -101,6 +101,18 @@ class MidlineBilateral:
         except AttributeError:
             self._gen_midexstate_list()
             return self._midexstate_list
+        
+    @property
+    def midexstate(self):
+        """Return the currently set state of the system.
+        """
+        return self._midexstate
+
+    @midexstate.setter
+    def midexstate(self, newstate: np.ndarray):
+        """Sets the state of the system to ``newstate``.
+        """
+        self._midexstate = newstate
     
     @property
     def midext_prob(self):
@@ -233,8 +245,8 @@ class MidlineBilateral:
             shape = (2**1, 2**1)
             self._midextransition_matrix = np.zeros(shape=shape)
 
-        for i,state in enumerate(self.midexstate_list):
-            self.state = state
+        for i,midexstate in enumerate(self.midexstate_list):
+            self.midexstate = midexstate
             for j in self.allowed_midextransitions[i]:
                 midextransition_prob = self.comp_midextransition_prob(self.midexstate_list[j])
                 self._midextransition_matrix[i,j] = midextransition_prob
@@ -342,17 +354,15 @@ class MidlineBilateral:
             Transition probability :math:`t`.
         """
         res = 1.
-        for i, midexstate in enumerate(self.midexstates):
-            if not midexstate.state:
-                in_states = [1]
-                in_weights = [self.midext_prob]
-                res *= Node.trans_prob(in_states, in_weights)[newstate[i]]
-            elif not newstate[i]:
-                res = 0.
-                break
+        if not self.midexstate:
+            in_states = [1]
+            in_weights = [self.midext_prob]
+            res *= Node.trans_prob(in_states, in_weights)[newstate]
+        elif not newstate:
+            res = 0.
 
         if acquire:
-            self.state = newstate
+            self.midexstate = newstate
 
         return res
 
@@ -477,13 +487,17 @@ class MidlineBilateral:
         """
         # All healthy state at beginning
         if start_state is None:
-            start_state = np.zeros(shape=len(self.state_list), dtype=float)
-            start_state[0] = 1.
+            start_state = np.zeros(
+            shape=(self.diag_time_dists.max_t + 1, 2),
+            dtype=float
+            )
+            start_state[0,0] = 1.
 
         # compute involvement at first time-step
-        new_state = start_state @ self.transition_matrix
+        for i in range(len(start_state)-1):
+            start_state[i+1,:] = start_state[i,:] @ self.transition_matrix
 
-        return new_state
+        return start_state
 
     def _evolve_midext(
         self, start_midexstate: Optional[np.ndarray] = None
@@ -500,11 +514,18 @@ class MidlineBilateral:
 
         :meta public:
         """
+        if start_midexstate is None:
+            start_midexstate = np.zeros(
+            shape=(self.diag_time_dists.max_t + 1, 2),
+            dtype=float
+            )
+            start_midexstate[0,0] = 1.
 
         # compute involvement at first time-step
-        new_midexstate = start_midexstate @ self.midextransition_matrix
+        for i in range(len(start_midexstate)-1):
+            start_midexstate[i+1,:] = start_midexstate[i,:] @ self.midextransition_matrix
 
-        return new_midexstate
+        return start_midexstate
 
     def load_data(
         self,
@@ -654,24 +675,21 @@ class MidlineBilateral:
         )
         state_probs_midext[0,0] = 1.
 
-        llh_ex = 0. if log else 1.
-        llh_nox = 0. if log else 1.  
+        llh = 0. if log else 1.
 
         for stage in t_stages:
-            state_probs = np.zeros(
-            shape=(len_time_range + 1, len(self.state_list)),
-            dtype=float
-        )
             state_probs_ipsi_nox = self.ipsi._evolve_onestep(start_state = state_probs_ipsi_nox)
             state_probs_contra_nox = self.contra._evolve_onestep(start_state = state_probs_contra_nox)
-            state_probs_ipsi_ex = state_probs_midext[1] * self.ipsi._evolve_onestep(start_state = state_probs_ipsi_ex) + state_probs_midext[0] * state_probs_ipsi_nox
-            state_probs_contra_ex = state_probs_midext[1] * self.contra._evolve_onestep(start_state = state_probs_contra_ex) + state_probs_midext[0] * state_probs_contra_nox
-            state_probs_midext = self._evolve_midext(start_midextstate = state_probs_midext)
+            state_probs_midext = self._evolve_midext(start_midexstate = state_probs_midext)
+
+            for i in range(max_t):
+                state_probs_ipsi_ex[(i+1),:] = state_probs_midext[i,1] * self.ipsi._evolve_onestep(start_state = state_probs_ipsi_ex)[1,:] + state_probs_midext[i,0] * state_probs_ipsi_nox[(i+1),:]
+                state_probs_contra_ex[(i+1),:] = state_probs_midext[i,1] * self.contra._evolve_onestep(start_state = state_probs_contra_ex) + state_probs_midext[i,0] * state_probs_contra_nox[(i+1),:]
                 
-            for i in len(self.diagnose_matrices_midext[stage][:,0]):
+            for i in range(len(self.diagnose_matrices_midext[stage][:,0])):
                 if ((self.diagnose_matrices_midext[stage][i,0]==1) & (self.diagnose_matrices_midext[stage][i,1]==1)):
-                    self.diagnose_matrices_midext[stage][i,0] = state_probs_midext[0]
-                    self.diagnose_matrices_midext[stage][i,1] = state_probs_midext[1]
+                    self.diagnose_matrices_midext[stage][i,0] = state_probs_midext[i,0]
+                    self.diagnose_matrices_midext[stage][i,1] = state_probs_midext[i,1]
 
             joint_state_probs_nox = (
                 state_probs_ipsi_nox.T
@@ -749,6 +767,7 @@ class MidlineBilateral:
         except ValueError:
             return -np.inf if log else 0.
 
+        llh = 0. if log else 1.
         
         if log:
             llh += self.ext._likelihood_mid(log=log)
