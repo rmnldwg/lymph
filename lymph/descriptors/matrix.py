@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from lymph import models
-from lymph.helper import get_state_idx_matrix
+from lymph.helper import get_state_idx_matrix, row_wise_kron
 
 
 class AbstractMatrixDescriptor:
@@ -116,20 +116,14 @@ class Observation(AbstractMatrixDescriptor):
     def generate(instance: models.Unilateral) -> np.ndarray:
         """Generate the observation matrix of the lymph model."""
         num_lnls = len(instance.lnls)
-        num_states = len(instance.allowed_states)
-        observation_matrix = np.ones(shape=(len(instance.state_list), 2**num_lnls))
-        for i, confusion_matrix in enumerate(instance.modalities.values()):
-            tiled = np.tile(confusion_matrix, (num_states**i, 2**i))
-            repeat_along_0 = np.repeat(
-                tiled,
-                num_states**(len(instance.modalities) - i - 1),
-                axis=0,
-            )
-            modality_obs_mat = np.repeat(
-                repeat_along_0,
-                2**(len(instance.modalities) - i - 1),
-                axis=1,
-            )
-            observation_matrix *= modality_obs_mat
+        shape = (2**num_lnls, 1)
+        observation_matrix = np.ones(shape=shape)
+
+        for confusion_matrix in instance._confusion_matrices.values():
+            mod_obs_matrix = np.ones(shape=(1,1))
+            for _ in instance.lnls:
+                mod_obs_matrix = np.kron(mod_obs_matrix, confusion_matrix)
+
+            observation_matrix = row_wise_kron(observation_matrix, mod_obs_matrix)
 
         return observation_matrix

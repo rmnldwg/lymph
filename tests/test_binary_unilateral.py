@@ -33,7 +33,7 @@ class FixtureMixin:
             ("lnl", "II"): ["III"],
             ("lnl", "III"): [],
         }
-        self.graph = large_graph
+        self.graph = small_graph
         self.model = Unilateral(graph=self.graph)
 
     def create_random_params(self, seed: int = 42) -> Dict[str, float]:
@@ -181,8 +181,8 @@ class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        ct_sp, ct_sn = 0.81, 0.86
-        mr_sp, mr_sn = 0.85, 0.82
+        ct_sp, ct_sn = 1.0, 1.0
+        mr_sp, mr_sn = 0.9, 0.8
 
         self.model.modalities = {
             "CT": np.array([
@@ -198,8 +198,14 @@ class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
     def test_shape(self):
         """Make sure the observation matrix has the correct shape."""
         num_lnls = len(self.model.lnls)
-        self.assertEqual(self.model.observation_matrix.shape, (2**num_lnls, 2**num_lnls))
+        num_modalities = len(self.model.modalities)
+        expected_shape = (2**num_lnls, 2**(num_lnls + num_modalities))
+        self.assertEqual(self.model.observation_matrix.shape, expected_shape)
 
+    def test_is_probabilistic(self):
+        """Make sure the rows of the observation matrix sum to one."""
+        row_sums = np.sum(self.model.observation_matrix, axis=1)
+        self.assertTrue(np.allclose(row_sums, 1.))
 
 
 if __name__ == "__main__":

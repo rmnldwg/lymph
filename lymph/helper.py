@@ -207,5 +207,22 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
     return np.repeat(row, num_states ** (num_lnls - lnl_idx - 1), axis=0)
 
 
+def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Compute the kronecker product of two matrices row-wise.
+
+    Example:
+    >>> a = np.array([[1, 2], [3, 4]])
+    >>> b = np.array([[5, 6], [7, 8]])
+    >>> row_wise_kron(a, b)
+    array([[ 5.,  6., 10., 12.],
+           [21., 24., 28., 32.]])
+    """
+    result = np.zeros((a.shape[0], a.shape[1] * b.shape[1]))
+    for i in range(a.shape[0]):
+        result[i] = np.kron(a[i], b[i])
+
+    return result
+
+
 if __name__ == "__main__":
     doctest.testmod()
