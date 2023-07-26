@@ -109,7 +109,7 @@ class AbstractNode:
 
 class Tumor(AbstractNode):
     """A tumor in the graph representation of the lymphatic system."""
-    def __init__(self, name: str, state: int) -> None:
+    def __init__(self, name: str, state: int = 1) -> None:
         """Create a new tumor.
 
         A tumor can only ever be in one state, and it cannot change its state.
@@ -120,7 +120,7 @@ class Tumor(AbstractNode):
 
     def __str__(self):
         """Print basic info"""
-        return f"Tumor {super().__str__()}"
+        return f"Tumor '{super().__str__()}'"
 
 
 class LymphNodeLevel(AbstractNode):
@@ -139,9 +139,21 @@ class LymphNodeLevel(AbstractNode):
         self.inc: List[LymphNodeLevel] = []
 
 
+    @classmethod
+    def binary(cls, name: str, state: int = 0) -> LymphNodeLevel:
+        """Create a new binary LNL."""
+        return cls(name, state, [0, 1])
+
+    @classmethod
+    def trinary(cls, name: str, state: int = 0) -> LymphNodeLevel:
+        """Create a new trinary LNL."""
+        return cls(name, state, [0, 1, 2])
+
+
     def __str__(self):
         """Print basic info"""
-        return f"LNL {super().__str__()}"
+        narity = "binary" if self.is_binary else "trinary"
+        return f"{narity} LNL '{super().__str__()}'"
 
 
     @property
