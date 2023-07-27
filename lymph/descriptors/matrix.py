@@ -119,10 +119,10 @@ class Observation(AbstractMatrixDescriptor):
         shape = (2**num_lnls, 1)
         observation_matrix = np.ones(shape=shape)
 
-        for confusion_matrix in instance._confusion_matrices.values():
+        for modality in instance.modalities.values():
             mod_obs_matrix = np.ones(shape=(1,1))
             for _ in instance.lnls:
-                mod_obs_matrix = np.kron(mod_obs_matrix, confusion_matrix)
+                mod_obs_matrix = np.kron(mod_obs_matrix, modality.confusion_matrix)
 
             observation_matrix = row_wise_kron(observation_matrix, mod_obs_matrix)
 

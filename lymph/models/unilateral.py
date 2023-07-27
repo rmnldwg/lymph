@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import base64
 import warnings
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from numpy.linalg import matrix_power as mat_pow
 
-from lymph.descriptors import diagnose_times, matrix, params
+from lymph.descriptors import diagnose_times, matrix, modalities, params
 from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import change_base, check_unique_names
 
@@ -317,6 +317,18 @@ class Unilateral:
                 self.edge_params[key].set(value)
 
 
+    modalities = modalities.Lookup()
+    """Dictionary storing diagnostic modalities and their specificity/sensitivity.
+
+    The keys are the names of the modalities, e.g. "CT" or "pathology", the values are
+    instances of the `Modality` class. When setting the modality, the value can be
+    a `Modality` object, a confusion matrix (`np.ndarray`) or a list/tuple with
+    specificity and sensitivity.
+
+    One can then access the confusion matrix of a modality.
+    """
+
+
     def comp_transition_prob(
         self,
         newstate: List[int],
@@ -366,9 +378,9 @@ class Unilateral:
             diagnoses, given the current state of the system.
         """
         prob = 1.
-        for modality, spsn in self._confusion_matrices.items():
-            if modality in diagnoses:
-                mod_diagnose = diagnoses[modality]
+        for name, modality in self.modalities.items():
+            if name in diagnoses:
+                mod_diagnose = diagnoses[name]
                 for lnl in self.lnls:
                     try:
                         lnl_diagnose = mod_diagnose[lnl.name]
@@ -378,7 +390,7 @@ class Unilateral:
                         raise ValueError(
                             "diagnoses were not provided in the correct format"
                         ) from idx_err
-                    prob *= lnl.comp_obs_prob(lnl_diagnose, spsn)
+                    prob *= lnl.comp_obs_prob(lnl_diagnose, modality.confusion_matrix)
         return prob
 
 
@@ -409,7 +421,7 @@ class Unilateral:
     def _gen_obs_list(self):
         """Generates the list of possible observations.
         """
-        n_obs = len(self._confusion_matrices)
+        n_obs = len(self.modalities)
 
         if not hasattr(self, "_obs_list"):
             self._obs_list = np.zeros(
@@ -443,61 +455,6 @@ class Unilateral:
     It is recomputed every time the parameters along the edges of the graph are
     changed.
     """
-
-
-    @property
-    def modalities(self) -> Dict[str, np.ndarray]:
-        """Return specificity & sensitivity stored in this :class:`System` for
-        every diagnostic modality that has been defined.
-        """
-        try:
-            modality_spsn = {}
-            for mod, table in self._confusion_matrices.items():
-                modality_spsn[mod] = [table[0,0], table[len(self.allowed_states)-1,1]]
-            return modality_spsn
-
-        except AttributeError:
-            msg = ("No modality defined yet with specificity & sensitivity.")
-            warnings.warn(msg)
-            return {}
-
-    @modalities.setter
-    def modalities(self, modality_confusion_matrices: Dict[Any, np.ndarray]):
-        """Given specificity :math:`s_P` & sensitivity :math:`s_N` of different
-        diagnostic modalities, create a 2xstates matrix for every disgnostic
-        modality that stores
-        e.g. 2x2
-        .. math::
-            \\begin{pmatrix}
-            s_P & 1 - s_N \\\\
-            1 - s_P & s_N
-            \\end{pmatrix}
-        """
-        if hasattr(self, "_observation_matrix"):
-            del self._observation_matrix
-
-        if hasattr(self, "_obs_list"):
-            del self._obs_list
-
-        self._confusion_matrices = {}
-        for mod, confusion_matrix in modality_confusion_matrices.items():
-            if not np.allclose(confusion_matrix.sum(axis=1), 1.):
-                raise ValueError(
-                    "Sensitivity & specificity must be between 0 and 1 "
-                    "and rows add up to 1"
-                )
-
-            if confusion_matrix.shape != (len(self.allowed_states), 2):
-                raise ValueError(
-                    f"the shape of the confusion matrix does not match the model "
-                    f"insert a ({len(self.allowed_states)}x2) matrix."
-                )
-
-            if self.is_binary and confusion_matrix.shape[0] == 3:
-                self._confusion_matrices[mod] = np.delete(confusion_matrix, 1, axis = 0)
-
-            self._confusion_matrices[mod] = confusion_matrix
-
 
     observation_matrix = matrix.Observation()
     """The matrix encoding the probabilities to observe a certain diagnosis."""
@@ -631,7 +588,7 @@ class Unilateral:
             for stage in t_stages:
                 table = data.loc[
                     data[('info', 't_stage')] == stage,
-                    self._confusion_matrices.keys()
+                    self.modalities.keys()
                 ]
                 self._gen_diagnose_matrices(table, stage)
                 if stage not in self.diag_time_dists:
@@ -643,7 +600,7 @@ class Unilateral:
 
         # For the Bayesian Network
         elif mode=="BN":
-            table = data[self._confusion_matrices.keys()]
+            table = data[self.modalities.keys()]
             stage = "BN"
             self._gen_diagnose_matrices(table, stage)
 
@@ -935,9 +892,9 @@ class Unilateral:
         drawn_obs = self._draw_patient_diagnoses(drawn_diag_times)
 
         # construct MultiIndex for dataset from stored modalities
-        modalities = list(self.modalities.keys())
+        modality_names = list(self.modalities.keys())
         lnl_names = [lnl.name for lnl in self.lnls]
-        multi_cols = pd.MultiIndex.from_product([modalities, lnl_names])
+        multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
         # create DataFrame
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)

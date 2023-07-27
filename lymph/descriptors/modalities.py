@@ -1,7 +1,8 @@
 """This module implements the managing descriptor for the diagnostic modalities."""
 from __future__ import annotations
+
 import warnings
-from typing import Union
+from typing import List, Tuple, Union
 
 import numpy as np
 
@@ -12,23 +13,23 @@ class Modality:
     """Stores the confusion matrix of a diagnostic modality."""
     def __init__(
         self,
-        sensitivity: float,
         specificity: float,
+        sensitivity: float,
         is_trinary: bool = False,
     ) -> None:
         if not (0. <= sensitivity <= 1. and 0. <= specificity <= 1.):
             raise ValueError("Senstivity and specificity must be between 0 and 1.")
 
-        self.sensitivity = sensitivity
         self.specificity = specificity
+        self.sensitivity = sensitivity
         self.is_trinary = is_trinary
 
 
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}("
-            f"sensitivity={self.sensitivity!r}, "
             f"specificity={self.specificity!r}, "
+            f"sensitivity={self.sensitivity!r}, "
             f"is_trinary={self.is_trinary!r})"
         )
 
@@ -67,10 +68,10 @@ class Modality:
             raise ValueError("Confusion matrix must be less than or equal to one.")
 
         if self.is_trinary and value.shape[0] != 3:
-            raise ValueError("Confusion matrix must have three rows for trinary models.")
+            raise ValueError("Confusion matrix must have 3 rows for trinary models.")
 
         if not self.is_trinary and value.shape[0] != 2:
-            raise ValueError("Confusion matrix must have two rows for binary models.")
+            raise ValueError("Confusion matrix must have 2 rows for binary models.")
 
 
 class Clinical(Modality):
@@ -96,14 +97,53 @@ class Pathological(Modality):
 
 
 
-ModalityDef = Union[Modality, np.ndarray]
+ModalityDef = Union[Modality, np.ndarray, Tuple[float, float], List[float]]
 
 class ModalityDict(dict):
-    """Dictionary storing every diagnostic `Modality` of a lymph model."""
-    def __init__(self, is_trinary: bool = False) -> None:
+    """Dictionary storing instances of a diagnostic `Modality` for a lymph model.
+
+    This class allows the user to specify the diagnostic modalities of a lymph model
+    in a convenient way. The user may pass an instance of `Modality` - or one of its
+    subclasses - directly. Especially for trinary models, it is recommended to use the
+    subclasses `Clinical` and `Pathological` to avoid ambiguities.
+
+    Alternatively, a simple tuple or list of floats may be passed, from which the first
+    two entries are interpreted as the specificity and sensitivity, respectively. For
+    trinary models, we assume the modality to be `Clinical`.
+
+    For completely custom confusion matrices, the user may pass a numpy array directly.
+    In the binary case, a valid `Modality` instance is constructed from the array. For
+    trinary models, the array must have three rows, and is not possible anymore to
+    infer the type of the modality or unambiguouse values for sensitivity and
+    specificity. This may lead to unexpected results when the confusion matrix is
+    recomputed accidentally at some point.
+
+    Examples:
+    >>> binary_modalities = ModalityDict(is_trinary=False)
+    >>> binary_modalities["test"] = Modality(0.9, 0.8)
+    >>> binary_modalities["test"].confusion_matrix
+    array([[0.9, 0.1],
+           [0.2, 0.8]])
+    >>> modalities = ModalityDict(is_trinary=True)
+    >>> modalities["CT"] = Clinical(specificity=0.9, sensitivity=0.8)
+    >>> modalities["CT"].confusion_matrix
+    array([[0.9, 0.1],
+           [0.9, 0.1],
+           [0.2, 0.8]])
+    >>> modalities["PET"] = (0.85, 0.82)
+    >>> modalities["PET"]
+    Clinical(specificity=0.85, sensitivity=0.82, is_trinary=True)
+    >>> modalities["pathology"] = Pathological(specificity=1.0, sensitivity=1.0)
+    >>> modalities["pathology"].confusion_matrix
+    array([[1., 0.],
+           [0., 1.],
+           [0., 1.]])
+    """
+    def __init__(self, *args, is_trinary: bool = False, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.is_trinary = is_trinary
 
-    def __setitem__(self, key: str, value: ModalityDef, / ) -> None:
+    def __setitem__(self, name: str, value: ModalityDef, / ) -> None:
         """Set the modality of the lymph model."""
         cls = Clinical
 
@@ -112,8 +152,8 @@ class ModalityDict(dict):
             # it does not matter, but for a trinary model the base `Modalitiy` class
             # would not work.
             if self.is_trinary:
-                warnings.warn("Assuming modality to be clinical.")
-            value = cls(value.sensitivity, value.specificity, self.is_trinary)
+                warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
+            value = cls(value.specificity, value.sensitivity, self.is_trinary)
 
         elif isinstance(value, Modality):
             # in this case, the user has provided a `Clinical` or `Pathological`
@@ -127,8 +167,16 @@ class ModalityDict(dict):
             # misbehave, e.g. when a recomputation of the confusion matrix is triggered.
             specificity = value[0, 0]
             sensitivity = value[-1, -1]
-            modality = Modality(sensitivity, specificity, self.is_trinary)
+            modality = Modality(specificity, sensitivity, self.is_trinary)
             modality.confusion_matrix = value
+
+            if self.is_trinary:
+                warnings.warn(
+                    "Provided transition matrix will be used as is. The sensitivity "
+                    "and specificity extracted from it may be nonsensical. Recomputing "
+                    "the confusion matrix from them may not work."
+                )
+
             value = modality
 
         else:
@@ -138,19 +186,20 @@ class ModalityDict(dict):
             try:
                 specificity, sensitivity = value
                 if self.is_trinary:
-                    warnings.warn("Assuming modality to be clinical.")
-                value = cls(sensitivity, specificity, self.is_trinary)
-            except ValueError as val_err:
+                    warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
+                value = cls(specificity, sensitivity, self.is_trinary)
+            except (ValueError, TypeError) as err:
                 raise ValueError(
                     "Value must be a `Clinical` or `Pathological` modality, a "
-                    "confusion matrix or a list/tiple with specificity and sensitivity."
-                ) from val_err
+                    "confusion matrix or a list/tuple containing specificity and "
+                    "sensitivity."
+                ) from err
 
-        super().__setitem__(key, value)
+        super().__setitem__(name, value)
 
 
-    def update(self, value: dict) -> None:
-        for key, value in value.items():
+    def update(self, new_dict: dict) -> None:
+        for key, value in new_dict.items():
             self[key] = value
 
 
@@ -178,15 +227,17 @@ class Lookup:
 
 
     def __set__(self, instance: models.Unilateral, value: Union[ModalityDict, dict]):
-        """Set the modality of the lymph model."""
-        if not hasattr(instance, self.private_name):
-            modality = ModalityDict(is_trinary=instance.is_trinary)
-            setattr(instance, self.private_name, modality)
-
-        getattr(instance, self.private_name).update(value)
+        """Set the modality dictionary of the lymph model."""
+        self.__delete__(instance)
+        self.__get__(instance, type(instance)).update(value)
 
 
     def __delete__(self, instance: models.Unilateral):
         """Delete the modality of the lymph model."""
         if hasattr(instance, self.private_name):
             delattr(instance, self.private_name)
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
