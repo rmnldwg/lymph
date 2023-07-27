@@ -35,7 +35,8 @@ class AbstractMatrixDescriptor:
             delattr(instance, self.private_name)
 
 
-    def generate(self, instance: models.Unilateral) -> np.ndarray:
+    @staticmethod
+    def generate(instance: models.Unilateral) -> np.ndarray:
         """Compute the matrix of the lymph model."""
         raise NotImplementedError
 
@@ -127,3 +128,22 @@ class Observation(AbstractMatrixDescriptor):
             observation_matrix = row_wise_kron(observation_matrix, mod_obs_matrix)
 
         return observation_matrix
+
+
+class Diagnosis(AbstractMatrixDescriptor):
+    """Descriptor class to compute the diagnosis matrix of a lymph model.
+
+    The diagnosis matrix encodes the diagnosis of a number of patients in a binary
+    matrix. Its shape is :math:`2^\{V \\cdot K\} \\times N` where :math:`V` is the
+    number of LNLs, :math:`K` is the number of diagnostic modalities and :math:`N`
+    is the number of patients.
+
+    The entries of the matrix are 1 if the patient's diagnosis is consistent with
+    the respective observation and 0 if not. This means that the row, corresponding
+    to a patient may have multiple 1s if the patient's diagnosis is missing information
+    on some LNLs and/or diagnostic modalities.
+    """
+    @staticmethod
+    def generate(instance: models.Unilateral) -> np.ndarray:
+        """Generate the diagnostic matrix of the lymph model."""
+        pass

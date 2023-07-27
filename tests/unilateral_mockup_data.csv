@@ -1,5 +1,6 @@
-info,test-o-meter,test-o-meter,test-o-meter
-t_stage,one,two,three
+tumor,CT,CT,CT
+1,ipsi,ipsi,ipsi
+t_stage,I,II,III
 early,1,1,1
 early,1,0,1
 early,,1,1
