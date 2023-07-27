@@ -217,4 +217,3 @@ if __name__ == "__main__":
     _ = fixture.model.transition_matrix
     del fixture.model.transition_matrix
     _ = fixture.model.transition_matrix
-
