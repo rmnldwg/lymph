@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import warnings
+from itertools import product
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -19,7 +20,7 @@ from numpy.linalg import matrix_power as mat_pow
 
 from lymph.descriptors import diagnose_times, matrix, modalities, params
 from lymph.graph import Edge, LymphNodeLevel, Tumor
-from lymph.helper import change_base, check_unique_names
+from lymph.helper import check_unique_names
 
 
 class Unilateral:
@@ -395,21 +396,37 @@ class Unilateral:
 
 
     def _gen_state_list(self):
-        """Generates the list of (hidden) states.
-        """
-        if not hasattr(self, "_state_list"):
-            self._state_list = np.zeros(
-                shape=(len(self.allowed_states)**len(self.lnls), len(self.lnls)), dtype=int
-            )
-        for i in range(len(self.allowed_states)**len(self.lnls)):
-            self._state_list[i] = [
-                int(digit) for digit in change_base(i, len(self.allowed_states), length=len(self.lnls))
-            ]
+        """Generates the list of (hidden) states."""
+        allowed_states_list = []
+        for lnl in self.lnls:
+            allowed_states_list.append(lnl.allowed_states)
+
+        self._state_list = np.array(list(product(*allowed_states_list)))
 
     @property
     def state_list(self):
-        """Return list of all possible hidden states. They are arranged in the
-        same order as the lymph node levels in the network/graph.
+        """Return list of all possible hidden states.
+
+        E.g., for three binary LNLs I, II, III, the first state would be where all LNLs
+        are in state 0. The second state would be where LNL III is in state 1 and all
+        others are in state 0, etc. The third represents the case where LNL II is in
+        state 1 and all others are in state 0, etc. Essentially, it looks like binary
+        counting:
+        >>> model = Unilateral(graph={
+        ...     ("tumor", "T"): ["I", "II" , "III"],
+        ...     ("lnl", "I"): [],
+        ...     ("lnl", "II"): ["I", "III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.state_list
+        array([[0, 0, 0],
+               [0, 0, 1],
+               [0, 1, 0],
+               [0, 1, 1],
+               [1, 0, 0],
+               [1, 0, 1],
+               [1, 1, 0],
+               [1, 1, 1]])
         """
         try:
             return self._state_list
@@ -419,25 +436,44 @@ class Unilateral:
 
 
     def _gen_obs_list(self):
-        """Generates the list of possible observations.
-        """
-        n_obs = len(self.modalities)
+        """Generates the list of possible observations."""
+        possible_obs_list = []
+        for modality in self.modalities.values():
+            possible_obs = np.arange(modality.confusion_matrix.shape[1])
+            for _ in self.lnls:
+                possible_obs_list.append(possible_obs.copy())
 
-        if not hasattr(self, "_obs_list"):
-            self._obs_list = np.zeros(
-                shape=(2**(n_obs * len(self.lnls)), n_obs * len(self.lnls)),
-                dtype=int
-            )
-
-        for i in range(2**(n_obs * len(self.lnls))):
-            tmp = change_base(i, 2, reverse=False, length=n_obs * len(self.lnls))
-            for j in range(len(self.lnls)):
-                for k in range(n_obs):
-                    self._obs_list[i,(j*n_obs)+k] = int(tmp[k*len(self.lnls)+j])
+        self._obs_list = np.array(list(product(*possible_obs_list)))
 
     @property
     def obs_list(self):
         """Return the list of all possible observations.
+
+        They are ordered the same way as the `state_list`, but additionally by modality.
+        E.g., for two LNLs II, III and two modalities CT, pathology, the list would
+        look like this:
+        >>> model = Unilateral(graph={
+        ...     ("tumor", "T"): ["II" , "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.modalities = {
+        ...     "CT":        (0.8, 0.8),
+        ...     "pathology": (1.0, 1.0),
+        ... }
+        >>> model.obs_list  # doctest: +ELLIPSIS
+        array([[0, 0, 0, 0],
+               [0, 0, 0, 1],
+               [0, 0, 1, 0],
+               [0, 0, 1, 1],
+               ...
+               [1, 1, 0, 1],
+               [1, 1, 1, 0],
+               [1, 1, 1, 1]])
+
+        The first two columns correspond to the observation of LNLs II and III under
+        modality CT, the second two columns correspond to the same LNLs under the
+        pathology modality.
         """
         try:
             return self._obs_list
@@ -450,10 +486,31 @@ class Unilateral:
     """The matrix encoding the probabilities to transition from one state to another.
 
     This is the crucial object for modelling the evolution of the probabilistic
-    system in the context of the hidden Markov model.
+    system in the context of the hidden Markov model. It has the shape
+    :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
+    The :math:`i`-th row and :math:`j`-th column encodes the probability to transition
+    from the :math:`i`-th state to the :math:`j`-th state. The states are ordered as
+    in the `state_list`.
 
-    It is recomputed every time the parameters along the edges of the graph are
-    changed.
+    This matrix is recomputed every time the parameters along the edges of the graph
+    are changed.
+
+    See Also:
+        `matrix.Transition`: The class that implements the descriptor for the
+            transition matrix.
+
+    Example:
+    >>> model = Unilateral(graph={
+    ...     ("tumor", "T"): ["II", "III"],
+    ...     ("lnl", "II"): ["III"],
+    ...     ("lnl", "III"): [],
+    ... })
+    >>> model.assign_params(0.7, 0.3, 0.2)
+    >>> model.transition_matrix
+    array([[0.21, 0.09, 0.49, 0.21],
+           [0.  , 0.3 , 0.  , 0.7 ],
+           [0.  , 0.  , 0.56, 0.44],
+           [0.  , 0.  , 0.  , 1.  ]])
     """
 
     observation_matrix = matrix.Observation()
@@ -901,3 +958,8 @@ class Unilateral:
         dataset[('info', 't_stage')] = drawn_t_stages
 
         return dataset
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
