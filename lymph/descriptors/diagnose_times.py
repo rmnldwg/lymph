@@ -25,8 +25,18 @@ class Distribution:
         """Initialize a distribution over diagnose times.
 
         This object can either be created by passing a parametrized function (e.g.,
-        a frozen scipy distribution) or by passing a list of probabilities for each
+        `scipy.stats` distribution) or by passing a list of probabilities for each
         diagnose time.
+
+        The signature of the function must be `func(support, *args, **kwargs)`, where
+        `support` is the support of the distribution from 0 to `max_time`. The
+        function must return a list of probabilities for each diagnose time.
+
+        Since `max_time` specifies the support of the distribution (rangin from 0 to
+        `max_time`), it must be provided if a parametrized function is passed. If a
+        list of probabilities is passed, `max_time` is inferred from the length of the
+        list and can be omitted. But an error is raised if the length of the list and
+        `max_time` + 1 don't match, in case it is accidentally provided.
         """
         if max_time is None:
             if callable(distribution):
@@ -36,15 +46,30 @@ class Distribution:
         if max_time < 0:
             raise ValueError("Maximum time must be positive.")
 
-        if max_time is not None:
-            if callable(distribution):
-                self._func = distribution
-            elif len(distribution) != max_time + 1:
-                raise ValueError("Length of distribution and max_time + 1 don't match.")
-            else:
-                self._frozen = self.normalize(distribution)
+        if callable(distribution):
+            self._func = distribution
+        elif len(distribution) != max_time + 1:
+            raise ValueError("Length of distribution and max_time + 1 don't match.")
+        else:
+            self._frozen = self.normalize(distribution)
 
         self.support = np.arange(max_time + 1)
+        self._args = ()
+        self._kwargs = {}
+
+
+    @classmethod
+    def from_instance(cls, other: Distribution) -> Distribution:
+        """Create a new distribution from an existing one."""
+        if other.is_updateable:
+            new_instance = cls(other._func, max_time=other.support[-1])
+        else:
+            new_instance = cls(other.distribution, max_time=other.support[-1])
+
+        new_instance._args = other._args
+        new_instance._kwargs = other._kwargs
+
+        return new_instance
 
 
     @staticmethod
@@ -74,21 +99,22 @@ class Distribution:
         return hasattr(self, '_func')
 
 
-    def get_param(self) -> float | str:
-        """If the distribution is updateable, return the current parameter."""
+    def get_params(self) -> tuple[tuple, dict]:
+        """If the distribution is updateable, return the current parameters."""
+        if not self.is_updateable:
+            raise ValueError("Distribution is not updateable.")
+
+        return self._args, self._kwargs
+
+
+    def set_params(self, *args, **kwargs) -> None:
+        """Update distribution by setting its parameters and storing the frozen PMF."""
         if self.is_updateable:
-            if hasattr(self, '_param'):
-                return self._param
-            raise ValueError("Updateable distribution's parameter has not been set.")
-
-        raise ValueError("Distribution is not updateable.")
-
-
-    def set_param(self, param: float) -> None:
-        """Update distribution by setting its parameter and storing the frozen PMF."""
-        if self.is_updateable:
-            self._param = param
-            self._frozen = self.normalize(self._func(self.support, param))
+            self._args = args
+            self._kwargs = kwargs
+            self._frozen = self.normalize(
+                self._func(self.support, *self._args, **self._kwargs)
+            )
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 
@@ -99,10 +125,7 @@ class Distribution:
 
 
 class DistributionDict(dict):
-    """
-    Class that replicates the behaviour of a dictionary of marginalizors for each
-    T-stage, ensuring they all have the same support.
-    """
+    """Specialized dictionary for storing distributions over diagnose times."""
     def __init__(self, *args, max_time: int | None = None, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -115,10 +138,14 @@ class DistributionDict(dict):
     def __setitem__(
         self,
         t_stage: str,
-        distribution: list[float] | np.ndarray | callable,
+        distribution: list[float] | np.ndarray | Distribution,
     ) -> None:
         """Set the distribution to marginalize over diagnose times for a T-stage."""
-        distribution = Distribution(distribution, max_time=self.max_time)
+        if isinstance(distribution, Distribution):
+            distribution = Distribution.from_instance(distribution)
+        else:
+            distribution = Distribution(distribution, max_time=self.max_time)
+
         super().__setitem__(t_stage, distribution)
 
 
