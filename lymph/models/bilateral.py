@@ -113,7 +113,7 @@ class Bilateral:
 
     @property
     def base_probs(self) -> np.ndarray:
-        """Probabilities of lymphatic spread from the tumor(s) to the lymph
+        r"""Probabilities of lymphatic spread from the tumor(s) to the lymph
         node levels. If the ipsi- & contralateral spread from the tumor is set
         to be symmetric (``base_symmetric = True``) this only returns the
         parameters of one side. So, the returned array is composed like so:
@@ -152,7 +152,7 @@ class Bilateral:
 
     @property
     def trans_probs(self) -> np.ndarray:
-        """Probabilities of lymphatic spread among the lymph node levels. If
+        r"""Probabilities of lymphatic spread among the lymph node levels. If
         this ipsi- & contralateral spread is set to be symmetric
         (``trans_symmetric = True``) this only returns the parameters of one
         side. Similiar to the :attr:`base_probs`, this array's shape is:
@@ -190,7 +190,7 @@ class Bilateral:
 
     @property
     def spread_probs(self) -> np.ndarray:
-        """The parameters representing the probabilities for lymphatic spread
+        r"""The parameters representing the probabilities for lymphatic spread
         along a directed edge of the graph representing the lymphatic network.
 
         If the bilateral network is set to have symmetries, the length of the

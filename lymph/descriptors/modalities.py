@@ -227,7 +227,7 @@ class Lookup:
         return getattr(instance, self.private_name)
 
 
-    def __set__(self, instance: models.Unilateral, value: Union[ModalityDict, dict]):
+    def __set__(self, instance: models.Unilateral, value: ModalityDict | dict):
         """Set the modality dictionary of the lymph model."""
         self.__delete__(instance)
         self.__get__(instance, type(instance)).update(value)

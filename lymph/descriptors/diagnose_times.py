@@ -5,7 +5,7 @@ model classes.
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable
 
 import numpy as np
 
@@ -17,14 +17,12 @@ class SupportError(Exception):
 
 
 class Distribution:
-    """
-    Class that provides methods for marginalizing over diagnose times.
-    """
+    """Class that provides methods for marginalizing over diagnose times."""
     def __init__(
         self,
-        dist: Optional[Union[List[float], np.ndarray]] = None,
-        func: Optional[Callable] = None,
-        max_t: Optional[int] = None,
+        dist: list[float] | np.ndarray | None = None,
+        func: Callable | None = None,
+        max_t: int | None = None,
     ) -> None:
         """
         Initialize the marginalizor either with a function or with a fixed distribution.
@@ -61,7 +59,7 @@ class Distribution:
         return self._pmf
 
     @pmf.setter
-    def pmf(self, dist: Union[List[float], np.ndarray]) -> None:
+    def pmf(self, dist: list[float] | np.ndarray) -> None:
         """
         Set the probability mass function of the marginalizor and make sure
         it is normalized.
@@ -99,7 +97,7 @@ class Distribution:
         return self._func is not None
 
 
-    def get_param(self) -> Union[float, str]:
+    def get_param(self) -> float | str:
         """If the marginalizor is updateable, return the current parameter."""
         if self.is_updateable:
             return self._param or "not set"
@@ -114,12 +112,10 @@ class Distribution:
             self._param = param
             self.pmf = self._func(self.support, param)
         else:
-            raise RuntimeError("Marginalizor is not updateable.")
+            warnings.warn("Distribution is not updateable, skipping...")
 
     def draw(self) -> np.ndarray:
-        """
-        Draw sample of diagnose times from the PMF.
-        """
+        """Draw sample of diagnose times from the PMF."""
         return np.random.choice(a=self.support, p=self.pmf)
 
 
@@ -128,81 +124,66 @@ class DistributionDict(dict):
     Class that replicates the behaviour of a dictionary of marginalizors for each
     T-stage, ensuring they all have the same support.
     """
-    def __init__(self, *args, max_t: Optional[int] = None, **kwargs):
+    def __init__(self, *args, max_t: int | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_t = max_t
-
-    def __getitem__(self, t_stage) -> Distribution:
-        try:
-            return super().__getitem__(t_stage)
-        except KeyError as key_err:
-            raise KeyError(
-                f"For T-stage {t_stage}, no distribution to marginalize over "
-                "diagnose times was defined"
-            ) from key_err
 
     def __setitem__(
         self,
         t_stage: str,
-        dist: Union[List[float], np.ndarray, Callable]
+        distribution: list[float] | np.ndarray | Callable
     ) -> None:
-        """
-        Define the (frozen or unfrozen) marginalizor for a given T-stage. If the
-        provided dist is listlike, the PMF will be frozen. If it is callable, the
-        PMF will only be frozen after the instance of the Marginalizor is called with
-        the parameters of the function (except the first one, which is the support).
-        """
+        """Set the distribution to marginalize over diagnose times for a T-stage."""
         if self.max_t is None:
-            if callable(dist):
+            if callable(distribution):
                 raise SupportError(
                     "Cannot assign parametric distribution without first defining "
                     "its support"
                 )
-            self.max_t = len(dist) - 1
+            self.max_t = len(distribution) - 1
 
-        if callable(dist):
-            marg = Distribution(func=dist, max_t=self.max_t)
+        if callable(distribution):
+            marg = Distribution(func=distribution, max_t=self.max_t)
         else:
-            marg = Distribution(dist=dist, max_t=self.max_t)
+            marg = Distribution(dist=distribution, max_t=self.max_t)
 
         super().__setitem__(t_stage, marg)
+
+
+    def update(self, new_dict: DistributionDict) -> None:
+        for t_stage, distribution in new_dict.items():
+            self[t_stage] = distribution
+
 
     @property
     def num_parametric(self) -> int:
         """Return the number of parametrized distributions."""
-        count = 0
-        for marg in self.values():
-            if marg.is_updateable:
-                count += 1
-        return count
+        return sum(marg.is_updateable for marg in self.values())
 
-    def update(
-        self,
-        params: Union[List[float], np.ndarray],
-        stop_quietly: bool = False,
-    ) -> None:
+
+    def update_distributions(self, params: list[float] | np.ndarray) -> None:
         """
         Update all marginalizors stored in this instance that are updateable with
-        values from the ``parms`` argument.
+        values from the ``params`` argument.
 
         Use ``stop_quietly`` to avoid raising an error when too few parameters are
-        probided to update all distributions.
+        provided to update all distributions.
         """
-        params_iterator = iter(params)
-        for _, marg in self.items():
-            if marg.is_updateable:
-                try:
-                    marg.update(next(params_iterator))
-                except StopIteration:
-                    if not stop_quietly:
-                        raise ValueError("Not enough parameters provided")
-                    break
+        if len(params) < self.num_parametric:
+            warnings.warn("Not enough parameters to update all distributions.")
+        elif len(params) > self.num_parametric:
+            warnings.warn("More parameters than distributions to update.")
+
+        for param, distribution in zip(params, self.values()):
+            if distribution.is_updateable:
+                distribution.update(param)
+
 
     def draw(
         self,
-        dist: Dict[str, float],
+        prob_of_t_stage: dict[str, float],
         size: int = 1,
-    ) -> Tuple[List[str], List[int]]:
+    ) -> tuple[list[str], list[int]]:
         """
         Draw first a T-stage and then from that distribution a diagnose time.
 
@@ -213,10 +194,11 @@ class DistributionDict(dict):
         """
         stage_dist = np.zeros(shape=len(self))
         t_stages = list(self.keys())
-        for i, t_stage in enumerate(t_stages):
-            stage_dist[i] = dist[t_stage]
-        stage_dist = stage_dist / np.sum(stage_dist)
 
+        for i, t_stage in enumerate(t_stages):
+            stage_dist[i] = prob_of_t_stage[t_stage]
+
+        stage_dist = stage_dist / np.sum(stage_dist)
         drawn_t_stages = np.random.choice(a=t_stages, p=stage_dist, size=size).tolist()
         drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
 
@@ -227,18 +209,22 @@ class DistributionLookup:
     """Descriptor to access the distributions over diagnose times per T-category."""
     def __set_name__(self, owner, name):
         self.private_name = '_' + name
-        self.public_name = name
 
 
     def __get__(self, instance: models.Unilateral, _cls) -> DistributionDict:
         if not hasattr(instance, self.private_name):
-            setattr(instance, self.public_name, DistributionDict())
+            distribution_dict = DistributionDict(max_t=instance.max_t)
+            setattr(instance, self.private_name, distribution_dict)
 
         return getattr(instance, self.private_name)
 
 
     def __set__(self, instance: models.Unilateral, value: DistributionDict):
-        if isinstance(value, DistributionDict):
-            setattr(instance, self.private_name, value)
-        else:
-            raise TypeError("Value must be a DistributionDict")
+        self.__delete__(instance)
+        self.__get__(instance, type(instance)).update(value)
+
+
+    def __delete__(self, instance: models.Unilateral):
+        """Delete the modality of the lymph model."""
+        if hasattr(instance, self.private_name):
+            delattr(instance, self.private_name)

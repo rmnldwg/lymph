@@ -18,6 +18,10 @@ repos:
   - id: isort
     files: "\\.(py)$"
     args: [--settings-path=pyproject.toml]
+- repo: https://github.com/asottile/pyupgrade
+  rev: v3.9.0
+  hooks:
+  - id: pyupgrade
 - repo: https://github.com/compilerla/conventional-pre-commit
   rev: v2.3.0
   hooks:

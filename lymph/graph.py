@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import warnings
 from functools import wraps
-from typing import Callable, List, Optional, Union
+from typing import Callable
 
 import numpy as np
 
@@ -18,7 +18,7 @@ class AbstractNode:
         self,
         name: str,
         state: int,
-        allowed_states: Optional[List[int]] = None,
+        allowed_states: list[int] | None = None,
     ) -> None:
         """
         Make a new node.
@@ -129,14 +129,14 @@ class LymphNodeLevel(AbstractNode):
         self,
         name: str,
         state: int = 0,
-        allowed_states: Optional[List[int]] = None,
+        allowed_states: list[int] | None = None,
     ) -> None:
         """Create a new lymph node level."""
 
         super().__init__(name, state, allowed_states)
 
         # LNLs can also have incoming edge connections
-        self.inc: List[LymphNodeLevel] = []
+        self.inc: list[LymphNodeLevel] = []
 
 
     @classmethod
@@ -215,7 +215,7 @@ class Edge:
     """
     def __init__(
         self,
-        parent: Union[Tumor, LymphNodeLevel],
+        parent: Tumor | LymphNodeLevel,
         child: LymphNodeLevel,
         spread_prob: float = 0.,
         micro_mod: float = 1.,
@@ -229,7 +229,7 @@ class Edge:
         spread to the next LNL. The `micro_mod` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
-        self.parent: Union[Tumor, LymphNodeLevel] = parent
+        self.parent: Tumor | LymphNodeLevel = parent
         self.child: LymphNodeLevel = child
 
         if self.child.is_trinary:
@@ -255,12 +255,12 @@ class Edge:
 
 
     @property
-    def parent(self) -> Union[Tumor, LymphNodeLevel]:
+    def parent(self) -> Tumor | LymphNodeLevel:
         """Return the parent node that drains lymphatically via the edge."""
         return self._parent
 
     @parent.setter
-    def parent(self, new_parent: Union[Tumor, LymphNodeLevel]) -> None:
+    def parent(self, new_parent: Tumor | LymphNodeLevel) -> None:
         """Set the parent node of the edge."""
         if not issubclass(new_parent.__class__, AbstractNode):
             raise TypeError("Start must be instance of Node!")

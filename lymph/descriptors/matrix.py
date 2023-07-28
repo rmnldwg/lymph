@@ -135,7 +135,7 @@ class Data(AbstractMatrixDescriptor):
     """Descriptor class to compute the data matrix of a lymph model.
 
     The data matrix encodes the diagnosis of a number of patients in a binary
-    matrix. Its shape is :math:`2^\{V \\cdot K\} \\times N` where :math:`V` is the
+    matrix. Its shape is :math:`2^\\{V \\cdot K\\} \\times N` where :math:`V` is the
     number of LNLs, :math:`K` is the number of diagnostic modalities and :math:`N`
     is the number of patients.
 

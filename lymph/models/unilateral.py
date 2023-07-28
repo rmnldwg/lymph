@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import base64
 from itertools import product
-from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -54,9 +53,9 @@ class Unilateral:
 
     def __init__(
         self,
-        graph: Dict[Tuple[str], Set[str]],
-        tumor_state: Optional[int] = None,
-        allowed_states: Optional[List[int]] = None,
+        graph: dict[tuple[str], set[str]],
+        tumor_state: int | None = None,
+        allowed_states: list[int] | None = None,
         max_t: int = 10,
         **_kwargs,
     ) -> None:
@@ -84,13 +83,13 @@ class Unilateral:
 
 
     @classmethod
-    def binary(cls, graph: Dict[Tuple[str], Set[str]], **kwargs) -> Unilateral:
+    def binary(cls, graph: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
         """Create a new instance of the `Unilateral` class with binary LNLs."""
         return cls(graph, allowed_states=[0, 1], **kwargs)
 
 
     @classmethod
-    def trinary(cls, graph: Dict[Tuple[str], Set[str]], **kwargs) -> Unilateral:
+    def trinary(cls, graph: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
         return cls(graph, allowed_states=[0, 1, 2], **kwargs)
 
 
@@ -101,8 +100,8 @@ class Unilateral:
 
     def init_nodes(self, graph, tumor_state, allowed_lnl_states):
         """Initialize the nodes of the graph."""
-        self.tumors: List[Tumor] = []
-        self.lnls: List[LymphNodeLevel] = []
+        self.tumors: list[Tumor] = []
+        self.lnls: list[LymphNodeLevel] = []
 
         for node_type, node_name in graph:
             if node_type == "tumor":
@@ -120,9 +119,9 @@ class Unilateral:
 
         When a `LymphNodeLevel` is trinary, it is connected to itself via a growth edge.
         """
-        self.tumor_edges: List[Edge] = []
-        self.lnl_edges: List[Edge] = []
-        self.growth_edges: List[Edge] = []
+        self.tumor_edges: list[Edge] = []
+        self.lnl_edges: list[Edge] = []
+        self.growth_edges: list[Edge] = []
 
         for (_, start_name), end_names in graph.items():
             start = self.find_node(start_name)
@@ -141,7 +140,7 @@ class Unilateral:
 
 
     @property
-    def allowed_states(self) -> List[int]:
+    def allowed_states(self) -> list[int]:
         """Return the list of allowed states for the LNLs."""
         return self.lnls[0].allowed_states
 
@@ -169,18 +168,18 @@ class Unilateral:
 
 
     @property
-    def nodes(self) -> List[Union[Tumor, LymphNodeLevel]]:
+    def nodes(self) -> list[Tumor | LymphNodeLevel]:
         """List of all nodes in the graph."""
         return self.tumors + self.lnls
 
 
     @property
-    def edges(self) -> List[Edge]:
+    def edges(self) -> list[Edge]:
         """List of all edges in the graph."""
         return self.tumor_edges + self.lnl_edges + self.growth_edges
 
 
-    def find_node(self, name: str) -> Union[Tumor, LymphNodeLevel, None]:
+    def find_node(self, name: str) -> Tumor | LymphNodeLevel | None:
         """Finds and returns a node with name `name`."""
         for node in self.nodes:
             if node.name == name:
@@ -189,7 +188,7 @@ class Unilateral:
 
 
     @property
-    def graph(self) -> Dict[Tuple[str, str], Set[str]]:
+    def graph(self) -> dict[tuple[str, str], set[str]]:
         """Returns the graph representing this instance's nodes and egdes."""
         res = {}
         for node in self.nodes:
@@ -229,7 +228,7 @@ class Unilateral:
         print(string)
 
 
-    def get_states(self, as_dict: bool = False) -> Union[Dict[str, int], List[int]]:
+    def get_states(self, as_dict: bool = False) -> dict[str, int] | list[int]:
         """Return the states of the system's LNLs.
 
         If `as_dict` is `True`, the result is a dictionary with the names of the LNLs
@@ -263,7 +262,7 @@ class Unilateral:
                 lnl.state = value
 
 
-    def get_params(self, as_dict: bool = False) -> Union[Dict[str, float], List[float]]:
+    def get_params(self, as_dict: bool = False) -> dict[str, float] | list[float]:
         """Return a dictionary of all parameters and their currently set values.
 
         If `as_dict` is `True`, the result is a dictionary with the names of the
@@ -337,7 +336,7 @@ class Unilateral:
 
     def comp_transition_prob(
         self,
-        newstate: List[int],
+        newstate: list[int],
         assign: bool = False
     ) -> float:
         """Computes the probability to transition to ``newstate``, given its
@@ -368,7 +367,7 @@ class Unilateral:
 
     def comp_diagnose_prob(
         self,
-        diagnoses: Union[pd.Series, Dict[str, Dict[str, bool]]]
+        diagnoses: pd.Series | dict[str, dict[str, bool]]
     ) -> float:
         """Compute the probability to observe a diagnose given the current
         state of the network.
@@ -558,7 +557,7 @@ class Unilateral:
 
 
     def _evolve(
-        self, t_first: int = 0, t_last: Optional[int] = None
+        self, t_first: int = 0, t_last: int | None = None
     ) -> np.ndarray:
         """Evolve hidden Markov model based system over time steps. Compute
         :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t`
@@ -658,8 +657,8 @@ class Unilateral:
 
     def likelihood(
         self,
-        data: Optional[pd.DataFrame] = None,
-        given_params: Optional[dict] = None,
+        data: pd.DataFrame | None = None,
+        given_params: dict | None = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
@@ -703,13 +702,13 @@ class Unilateral:
 
     def risk(
         self,
-        involvement: Optional[Union[dict, np.ndarray]] = None,
-        given_params: Optional[dict] = None,
-        given_diagnoses: Optional[Dict[str, dict]] = None,
+        involvement: dict | np.ndarray | None = None,
+        given_params: dict | None = None,
+        given_diagnoses: dict[str, dict] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
         **_kwargs,
-    ) -> Union[float, np.ndarray]:
+    ) -> float | np.ndarray:
         """Compute risk(s) of involvement given a specific (but potentially
         incomplete) diagnosis.
 
@@ -797,7 +796,7 @@ class Unilateral:
 
     def _draw_patient_diagnoses(
         self,
-        diag_times: List[int],
+        diag_times: list[int],
     ) -> np.ndarray:
         """Draw random possible observations for a list of T-stages and
         diagnose times.
@@ -827,7 +826,7 @@ class Unilateral:
     def generate_dataset(
         self,
         num_patients: int,
-        stage_dist: Dict[str, float],
+        stage_dist: dict[str, float],
         **_kwargs,
     ) -> pd.DataFrame:
         """Generate/sample a pandas :class:`DataFrame` from the defined network
