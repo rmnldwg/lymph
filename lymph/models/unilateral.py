@@ -626,7 +626,7 @@ class Unilateral:
             provided_t_stages = set(self.diag_time_dists.keys())
             t_stages = list(stored_t_stages.intersection(provided_t_stages))
 
-            max_t = self.diag_time_dists.max_t
+            max_t = self.diag_time_dists.max_time
             evolved_model = self._evolve(t_last=max_t)
 
             llh = 0. if log else 1.
@@ -754,7 +754,7 @@ class Unilateral:
         # vector P(X=x) of probabilities of arriving in state x, marginalized over time
         # HMM version
         if mode == "HMM":
-            max_t = self.diag_time_dists.max_t
+            max_t = self.diag_time_dists.max_time
             state_probs = self._evolve(t_last=max_t)
             marg_state_probs = self.diag_time_dists[t_stage].pmf @ state_probs
 

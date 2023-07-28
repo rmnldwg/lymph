@@ -5,7 +5,6 @@ model classes.
 from __future__ import annotations
 
 import warnings
-from typing import Callable
 
 import numpy as np
 
@@ -20,103 +19,83 @@ class Distribution:
     """Class that provides methods for marginalizing over diagnose times."""
     def __init__(
         self,
-        dist: list[float] | np.ndarray | None = None,
-        func: Callable | None = None,
-        max_t: int | None = None,
+        distribution: list[float] | np.ndarray | callable,
+        max_time: int | None = None,
     ) -> None:
-        """
-        Initialize the marginalizor either with a function or with a fixed distribution.
+        """Initialize a distribution over diagnose times.
 
-        Args:
-            dist: Array or list of probabilities to be used as a frozen distribution.
-            func: If this function is provided, initialize distribution as unfrozen,
-                meaning that the instance needs to be called with the function's
-                parameters to get the PMF for its support and freeze it.
-            max_t: Support of the marginalization function runs from 0 to max_t.
+        This object can either be created by passing a parametrized function (e.g.,
+        a frozen scipy distribution) or by passing a list of probabilities for each
+        diagnose time.
         """
-        max_t = len(dist) - 1 if max_t is None else max_t
-        self.support = np.arange(max_t + 1)
+        if max_time is None:
+            if callable(distribution):
+                raise ValueError("The maximum time must be provided for a callable.")
+            max_time = len(distribution) - 1
 
-        if dist is not None:
-            self.pmf = dist
-            self._func = None
-        elif func is not None:
-            self._param = None
-            self._pmf = None
-            self._func = func
-        else:
-            raise ValueError("Either dist or func must be specified")
+        if max_time < 0:
+            raise ValueError("Maximum time must be positive.")
+
+        if max_time is not None:
+            if callable(distribution):
+                self._func = distribution
+            elif len(distribution) != max_time + 1:
+                raise ValueError("Length of distribution and max_time + 1 don't match.")
+            else:
+                self._frozen = self.normalize(distribution)
+
+        self.support = np.arange(max_time + 1)
+
+
+    @staticmethod
+    def normalize(distribution: np.ndarray) -> np.ndarray:
+        """Normalize a distribution."""
+        distribution = np.array(distribution)
+        return distribution / np.sum(distribution)
 
 
     @property
-    def pmf(self) -> np.ndarray:
-        """
-        Return the probability mass function of the marginalizor if it is frozen.
-        Raise an error otherwise.
-        """
-        if self._pmf is None:
-            raise ValueError("Marginalizor has not been frozen yet")
-        return self._pmf
+    def distribution(self) -> np.ndarray:
+        """Return the probability mass function of the distribution if it is frozen."""
+        if self._frozen is None:
+            raise ValueError("Distribution has not been frozen yet")
+        return self._frozen
 
-    @pmf.setter
-    def pmf(self, dist: list[float] | np.ndarray) -> None:
-        """
-        Set the probability mass function of the marginalizor and make sure
-        it is normalized.
-        """
-        if callable(dist):
-            raise TypeError(
-                "Parametrized distribution can only be provided in the constructor. "
-                "This method can only set a new frozen distribution."
-            )
-        dist_arr = np.array(dist)
-        cum_dist = np.sum(dist_arr)
-        if not np.isclose(cum_dist, 1.):
-            warnings.warn(
-                "Probability mass function does not sum to 1, will be normalized."
-            )
-        if not dist_arr.shape == self.support.shape:
-            raise ValueError(
-                f"Distribution must be of shape {self.support.shape}, "
-                f"but has shape {dist_arr.shape}"
-            )
-        self._pmf = dist_arr / cum_dist
 
     @property
     def is_frozen(self) -> bool:
-        """
-        Return True if the marginalizor is frozen.
-        """
-        return self._pmf is not None
+        """Return ``True`` if the distribution is frozen."""
+        return hasattr(self, '_frozen')
+
 
     @property
     def is_updateable(self) -> bool:
-        """
-        Return True if the marginalizor's PMF can be changed by calling `update`.
-        """
-        return self._func is not None
+        """Return ``True`` if the distribution can be updated by calling `set_param`."""
+        return hasattr(self, '_func')
 
 
     def get_param(self) -> float | str:
-        """If the marginalizor is updateable, return the current parameter."""
+        """If the distribution is updateable, return the current parameter."""
         if self.is_updateable:
-            return self._param or "not set"
-        return "not parametrized"
+            if hasattr(self, '_param'):
+                return self._param
+            raise ValueError("Updateable distribution's parameter has not been set.")
 
-    def update(self, param: float) -> None:
-        """
-        Update the marginalizor by providing the function with its parameter and
-        storing the resulting PMF.
-        """
+        raise ValueError("Distribution is not updateable.")
+
+
+    def set_param(self, param: float) -> None:
+        """Update distribution by setting its parameter and storing the frozen PMF."""
         if self.is_updateable:
             self._param = param
-            self.pmf = self._func(self.support, param)
+            self._frozen = self.normalize(self._func(self.support, param))
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 
+
     def draw(self) -> np.ndarray:
         """Draw sample of diagnose times from the PMF."""
-        return np.random.choice(a=self.support, p=self.pmf)
+        return np.random.choice(a=self.support, p=self.distribution)
 
 
 class DistributionDict(dict):
@@ -124,30 +103,23 @@ class DistributionDict(dict):
     Class that replicates the behaviour of a dictionary of marginalizors for each
     T-stage, ensuring they all have the same support.
     """
-    def __init__(self, *args, max_t: int | None = None, **kwargs):
+    def __init__(self, *args, max_time: int | None = None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.max_t = max_t
+
+        if max_time is not None and max_time < 0:
+            raise ValueError("Maximum time must be positive.")
+
+        self.max_time = max_time
+
 
     def __setitem__(
         self,
         t_stage: str,
-        distribution: list[float] | np.ndarray | Callable
+        distribution: list[float] | np.ndarray | callable,
     ) -> None:
         """Set the distribution to marginalize over diagnose times for a T-stage."""
-        if self.max_t is None:
-            if callable(distribution):
-                raise SupportError(
-                    "Cannot assign parametric distribution without first defining "
-                    "its support"
-                )
-            self.max_t = len(distribution) - 1
-
-        if callable(distribution):
-            marg = Distribution(func=distribution, max_t=self.max_t)
-        else:
-            marg = Distribution(dist=distribution, max_t=self.max_t)
-
-        super().__setitem__(t_stage, marg)
+        distribution = Distribution(distribution, max_time=self.max_time)
+        super().__setitem__(t_stage, distribution)
 
 
     def update(self, new_dict: DistributionDict) -> None:
@@ -158,10 +130,10 @@ class DistributionDict(dict):
     @property
     def num_parametric(self) -> int:
         """Return the number of parametrized distributions."""
-        return sum(marg.is_updateable for marg in self.values())
+        return sum(distribution.is_updateable for distribution in self.values())
 
 
-    def update_distributions(self, params: list[float] | np.ndarray) -> None:
+    def set_distribution_params(self, params: list[float] | np.ndarray) -> None:
         """
         Update all marginalizors stored in this instance that are updateable with
         values from the ``params`` argument.
@@ -176,7 +148,7 @@ class DistributionDict(dict):
 
         for param, distribution in zip(params, self.values()):
             if distribution.is_updateable:
-                distribution.update(param)
+                distribution.set_param(param)
 
 
     def draw(
@@ -213,7 +185,7 @@ class DistributionLookup:
 
     def __get__(self, instance: models.Unilateral, _cls) -> DistributionDict:
         if not hasattr(instance, self.private_name):
-            distribution_dict = DistributionDict(max_t=instance.max_t)
+            distribution_dict = DistributionDict(max_time=instance.max_t)
             setattr(instance, self.private_name, distribution_dict)
 
         return getattr(instance, self.private_name)
