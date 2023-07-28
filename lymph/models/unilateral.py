@@ -18,7 +18,7 @@ from numpy.linalg import matrix_power as mat_pow
 
 from lymph.descriptors import diagnose_times, matrix, modalities, params
 from lymph.graph import Edge, LymphNodeLevel, Tumor
-from lymph.helper import check_unique_names
+from lymph.helper import check_unique_names, early_late_mapping
 
 
 class Unilateral:
@@ -527,8 +527,33 @@ class Unilateral:
     """The probability to observe a certain diagnosis given any possible state."""
 
 
-    def load_patient_data(self, patient_data: pd.DataFrame, side: str = "ipsi") -> None:
-        """Load patient data in LyProX format into the model."""
+    def load_patient_data(
+        self,
+        patient_data: pd.DataFrame,
+        side: str = "ipsi",
+        mapping: callable = early_late_mapping,
+    ) -> None:
+        """Load patient data in LyProX format into the model.
+
+        Since the LyProX data format contains information on both sides (i.e., 'ipsi'
+        and 'contra'), the `side` parameter is used to select the side for which to
+        store the involvement data.
+
+        With the `mapping` function, the reported T-stages (usually 0, 1, 2, 3, and 4)
+        can be mapped to any keys also used to access the corresponding distribution
+        over diagnose times. The default mapping is to map 0, 1, and 2 to 'early' and
+        3 and 4 to 'late'.
+
+        What this method essentially does is to copy the entire data frame, check all
+        necessary information is present, and add a new top-level header '_model' to
+        the data frame. Under this header, columns are assembled that contain all the
+        information necessary to compute the observation and diagnose matrices.
+        """
+        patient_data = patient_data.copy()
+
+        if mapping is None:
+            mapping = {"early": [0,1,2], "late": [3,4]}
+
         for modality_name in self.modalities.keys():
             if modality_name not in patient_data:
                 raise ValueError(f"Modality '{modality_name}' not found in data.")
@@ -539,10 +564,16 @@ class Unilateral:
             for lnl in self.lnls:
                 if lnl.name not in patient_data[modality_name, side]:
                     raise ValueError(f"Involvement data for LNL {lnl} not found.")
+                column = patient_data[modality_name, side, lnl.name]
+                patient_data["_model", modality_name, lnl.name] = column
 
-        for t_category in self.diag_time_dists.keys():
-            if t_category not in patient_data["tumor", "1", "t_stage"].values:
-                raise ValueError(f"Tumor category {t_category} not found in data.")
+        patient_data["_model", "#", "t_stage"] = patient_data.apply(
+            lambda row: mapping(row["tumor", "1", "t_stage"]), axis=1
+        )
+
+        for t_stage in self.diag_time_dists.keys():
+            if t_stage not in patient_data["_model", "#", "t_stage"].values:
+                raise ValueError(f"Tumor category {t_stage} not found in data.")
 
         self._patient_data = patient_data
 

@@ -224,5 +224,18 @@ def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return result
 
 
+def early_late_mapping(t_stage: int | str) -> str:
+    """Map the reported T-category (i.e., 1, 2, 3, 4) to "early" and "late"."""
+    t_stage = int(t_stage)
+
+    if 0 <= t_stage <= 2:
+        return "early"
+
+    if 3 <= t_stage <= 4:
+        return "late"
+
+    raise ValueError(f"Invalid T-stage: {t_stage}")
+
+
 if __name__ == "__main__":
     doctest.testmod()

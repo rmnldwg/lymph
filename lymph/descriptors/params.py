@@ -34,6 +34,11 @@ class ParamDict(dict):
         return super().__setitem__(key, value)
 
 
+    def update(self, new_dict: dict) -> None:
+        for key, value in new_dict.items():
+            self[key].set(value)
+
+
 class Lookup:
     """Descriptor class to access parameters of a lymph model.
 
