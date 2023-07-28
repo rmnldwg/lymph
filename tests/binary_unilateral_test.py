@@ -1,9 +1,12 @@
 """Test the binary unilateral system."""
 import unittest
+from pathlib import Path
 from typing import Dict
 
 import numpy as np
+import pandas as pd
 
+from lymph.descriptors.modalities import Clinical, Modality, Pathological
 from lymph.graph import LymphNodeLevel, Tumor
 from lymph.models import Unilateral
 
@@ -40,6 +43,13 @@ class FixtureMixin:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
         return {name: rng.random() for name in self.model.edge_params.keys()}
+
+    def create_modalities(self) -> Dict[str, Modality]:
+        """Add modalities to the model."""
+        return {
+            "CT": Clinical(specificity=0.81, sensitivity=0.86),
+            "FNA": Pathological(specificity=0.95, sensitivity=0.81),
+        }
 
 
 class InitTestCase(FixtureMixin, unittest.TestCase):
@@ -179,21 +189,9 @@ class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
     """Test the generation of the observation matrix in a binary model."""
 
     def setUp(self):
+        """Initialize a simple binary model."""
         super().setUp()
-
-        ct_sp, ct_sn = 1.0, 1.0
-        mr_sp, mr_sn = 0.9, 0.8
-
-        self.model.modalities = {
-            "CT": np.array([
-                [ct_sp     , 1. - ct_sp],
-                [1. - ct_sn, ct_sn     ],
-            ]),
-            "MR": np.array([
-                [mr_sp     , 1. - mr_sp],
-                [1. - mr_sn, mr_sn     ],
-            ]),
-        }
+        self.model.modalities = self.create_modalities()
 
     def test_shape(self):
         """Make sure the observation matrix has the correct shape."""
@@ -206,6 +204,28 @@ class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
         """Make sure the rows of the observation matrix sum to one."""
         row_sums = np.sum(self.model.observation_matrix, axis=1)
         self.assertTrue(np.allclose(row_sums, 1.))
+
+
+class PatientDataTestCase(FixtureMixin, unittest.TestCase):
+    """Test loading the patient data."""
+
+    def setUp(self):
+        super().setUp()
+        self.model.modalities = self.create_modalities()
+
+        test_data_dir = Path(__file__).parent / "data"
+        self.patient_data = pd.read_csv(
+            test_data_dir / "2021-usz-oropharynx.csv",
+            header=[0,1,2],
+        )
+
+    def test_load_patient_data(self):
+        """Make sure the patient data is loaded correctly."""
+        self.model.load_patient_data(self.patient_data, side="ipsi")
+        self.assertEqual(len(self.model.patient_data), len(self.patient_data))
+        self.assertRaises(
+            ValueError, self.model.load_patient_data, self.patient_data, side="foo"
+        )
 
 
 if __name__ == "__main__":
