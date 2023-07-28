@@ -145,6 +145,7 @@ class ModalityDict(dict):
 
     def __setitem__(self, name: str, value: ModalityDef, / ) -> None:
         """Set the modality of the lymph model."""
+        # pylint: disable=unidiomatic-typecheck
         cls = Clinical
 
         if type(value) is Modality:
@@ -220,8 +221,8 @@ class Lookup:
     def __get__(self, instance: models.Unilateral, _cls) -> ModalityDict:
         """Return the modality of the lymph model."""
         if not hasattr(instance, self.private_name):
-            modality = ModalityDict(is_trinary=instance.is_trinary)
-            setattr(instance, self.private_name, modality)
+            modality_dict = ModalityDict(is_trinary=instance.is_trinary)
+            setattr(instance, self.private_name, modality_dict)
 
         return getattr(instance, self.private_name)
 

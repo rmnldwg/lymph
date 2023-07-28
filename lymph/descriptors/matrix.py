@@ -1,4 +1,5 @@
 """Descriptor to manage the transition from state to state in the HMM context."""
+# pylint: disable=too-few-public-methods
 from __future__ import annotations
 
 import numpy as np
@@ -130,10 +131,10 @@ class Observation(AbstractMatrixDescriptor):
         return observation_matrix
 
 
-class Diagnosis(AbstractMatrixDescriptor):
-    """Descriptor class to compute the diagnosis matrix of a lymph model.
+class Data(AbstractMatrixDescriptor):
+    """Descriptor class to compute the data matrix of a lymph model.
 
-    The diagnosis matrix encodes the diagnosis of a number of patients in a binary
+    The data matrix encodes the diagnosis of a number of patients in a binary
     matrix. Its shape is :math:`2^\{V \\cdot K\} \\times N` where :math:`V` is the
     number of LNLs, :math:`K` is the number of diagnostic modalities and :math:`N`
     is the number of patients.
@@ -147,3 +148,18 @@ class Diagnosis(AbstractMatrixDescriptor):
     def generate(instance: models.Unilateral) -> np.ndarray:
         """Generate the diagnostic matrix of the lymph model."""
         pass
+
+
+class Diagnose(AbstractMatrixDescriptor):
+    """Descriptor class to compute the diagnosis matrix of a lymph model.
+
+    The diagnosis matrix is the product of the observation and the data matrix. It has
+    the shape :math:`2^V \\times N` where :math:`V` is the number of LNLs and
+    :math:`N` is the number of patients. Using this matrix over the observation and
+    data matrix brings some performance benefits as both the observation, and the
+    data matrix can be very large.
+    """
+    @staticmethod
+    def generate(instance: models.Unilateral) -> np.ndarray:
+        """Generate the diagnostic matrix of the lymph model."""
+        return instance.observation_matrix @ instance.data_matrix

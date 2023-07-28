@@ -378,12 +378,12 @@ class Bilateral:
             columns=contra_data.columns.droplevel(1)
         )
 
-        self.ipsi.load_data(
+        self.ipsi.load_patient_data(
             ipsi_data,
             modality_spsn=modality_spsn,
             mode=mode
         )
-        self.contra.load_data(
+        self.contra.load_patient_data(
             contra_data,
             modality_spsn=modality_spsn,
             mode=mode

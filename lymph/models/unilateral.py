@@ -10,7 +10,6 @@ the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a
 from __future__ import annotations
 
 import base64
-import warnings
 from itertools import product
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -58,6 +57,7 @@ class Unilateral:
         graph: Dict[Tuple[str], Set[str]],
         tumor_state: Optional[int] = None,
         allowed_states: Optional[List[int]] = None,
+        max_t: int = 10,
         **_kwargs,
     ) -> None:
         """Create a new instance of the `Unilateral` class.
@@ -76,6 +76,11 @@ class Unilateral:
         check_unique_names(graph)
         self.init_nodes(graph, tumor_state, allowed_states)
         self.init_edges(graph)
+
+        if 0 >= max_t:
+            raise ValueError("Latest diagnosis time `max_t` must be a positive integer")
+
+        self.max_t = max_t
 
 
     @classmethod
@@ -516,150 +521,40 @@ class Unilateral:
     observation_matrix = matrix.Observation()
     """The matrix encoding the probabilities to observe a certain diagnosis."""
 
+    data_matrix = matrix.Data()
+    """Patient data encoded in a binary matrix."""
 
-    def _gen_diagnose_matrices(self, table: pd.DataFrame, t_stage: str):
-        """Generate the matrix containing the probabilities to see the provided
-        diagnose, given any possible hidden state. The resulting matrix has
-        size :math:`2^N \\times M` where :math:`N` is the number of nodes in
-        the graph and :math:`M` the number of patients.
-
-        Args:
-            table: pandas ``DataFrame`` containing rows of patients. Must have
-                ``MultiIndex`` columns with two levels: First, the modalities
-                and second, the LNLs.
-            t_stage: The T-stage all the patients in ``table`` belong to.
-        """
-        if not hasattr(self, "_diagnose_matrices"):
-            self._diagnose_matrices = {}
-
-        shape = (len(self.state_list), len(table))
-        self._diagnose_matrices[t_stage] = np.ones(shape=shape)
-
-        for i,state in enumerate(self.state_list):
-            self.assign_states(state)
-
-            for j, (_, patient) in enumerate(table.iterrows()):
-                patient_obs_prob = self.comp_diagnose_prob(patient)
-                self._diagnose_matrices[t_stage][i,j] = patient_obs_prob
+    diagnose_matrix = matrix.Diagnose()
+    """The probability to observe a certain diagnosis given any possible state."""
 
 
-    @property
-    def diagnose_matrices(self):
-        try:
-            return self._diagnose_matrices
-        except AttributeError as att_err:
-            raise AttributeError(
-                "No data has been loaded and hence no observation matrix has "
-                "been computed."
-            ) from att_err
+    def load_patient_data(self, patient_data: pd.DataFrame, side: str = "ipsi") -> None:
+        """Load patient data in LyProX format into the model."""
+        for modality_name in self.modalities.keys():
+            if modality_name not in patient_data:
+                raise ValueError(f"Modality '{modality_name}' not found in data.")
+
+            if side not in patient_data[modality_name]:
+                raise ValueError(f"{side}lateral involvement data not found.")
+
+            for lnl in self.lnls:
+                if lnl.name not in patient_data[modality_name, side]:
+                    raise ValueError(f"Involvement data for LNL {lnl} not found.")
+
+        for t_category in self.diag_time_dists.keys():
+            if t_category not in patient_data["tumor", "1", "t_stage"].values:
+                raise ValueError(f"Tumor category {t_category} not found in data.")
+
+        self._patient_data = patient_data
 
 
     @property
     def patient_data(self):
-        """Table with rows of patients. Must have a two-level
-        :class:`MultiIndex` where the top-level has categories 'info' and the
-        name of the available diagnostic modalities. Under 'info', the second
-        level is only 't_stage', while under the modality, the names of the
-        diagnosed lymph node levels are given as the columns. Such a table
-        could look like this:
+        """Return the patient data loaded into the model."""
+        if not hasattr(self, "_patient_data"):
+            raise AttributeError("No patient data loaded yet.")
 
-        +---------+----------------------+-----------------------+
-        |  info   |         MRI          |          PET          |
-        +---------+----------+-----------+-----------+-----------+
-        | t_stage |    II    |    III    |    II     |    III    |
-        +=========+==========+===========+===========+===========+
-        | early   | ``True`` | ``False`` | ``True``  | ``False`` |
-        +---------+----------+-----------+-----------+-----------+
-        | late    | ``None`` | ``None``  | ``False`` | ``False`` |
-        +---------+----------+-----------+-----------+-----------+
-        | early   | ``True`` | ``True``  | ``True``  | ``None``  |
-        +---------+----------+-----------+-----------+-----------+
-        """
-        try:
-            return self._patient_data
-        except AttributeError as att_err:
-            raise AttributeError("No patient data has been loaded yet") from att_err
-
-    @patient_data.setter
-    def patient_data(self, patient_data: pd.DataFrame):
-        """Load the patient data. For now, this just calls the :meth:`load_data`
-        method, but at a later point, I would like to write a function here
-        that generates the pandas :class:`DataFrame` from the internal matrix
-        representation of the data.
-        """
-        self._patient_data = patient_data.copy()
-        self.load_data(patient_data)
-
-
-    def load_data(
-        self,
-        data: pd.DataFrame,
-        modality_spsn: Optional[Dict[str, List[float]]] = None,
-        mode: str = "HMM",
-    ):
-        """
-        Transform tabular patient data (:class:`pd.DataFrame`) into internal
-        representation, consisting of one or several matrices
-        :math:`\\mathbf{C}_{T}` that can marginalize over possible diagnoses.
-
-        Args:
-            data: Table with rows of patients. Must have a two-level
-                :class:`MultiIndex` where the top-level has categories 'info'
-                and the name of the available diagnostic modalities. Under
-                'info', the second level is only 't_stage', while under the
-                modality, the names of the diagnosed lymph node levels are
-                given as the columns. Such a table could look like this:
-
-                +---------+----------------------+-----------------------+
-                |  info   |         MRI          |          PET          |
-                +---------+----------+-----------+-----------+-----------+
-                | t_stage |    II    |    III    |    II     |    III    |
-                +=========+==========+===========+===========+===========+
-                | early   | ``True`` | ``False`` | ``True``  | ``False`` |
-                +---------+----------+-----------+-----------+-----------+
-                | late    | ``None`` | ``None``  | ``False`` | ``False`` |
-                +---------+----------+-----------+-----------+-----------+
-                | early   | ``True`` | ``True``  | ``True``  | ``None``  |
-                +---------+----------+-----------+-----------+-----------+
-
-            modality_spsn: Dictionary of specificity :math:`s_P` and :math:`s_N`
-                (in that order) for each observational/diagnostic modality. Can
-                be ommitted if the modalities where already defined.
-
-            mode: `"HMM"` for hidden Markov model and `"BN"` for Bayesian net.
-        """
-        if modality_spsn is not None:
-            self.modalities = modality_spsn
-        elif self.modalities == {}:
-            raise ValueError("No diagnostic modalities have been defined yet!")
-
-        # when first loading data with with different T-stages, and then loading a
-        # dataset with fewer T-stages, the old diagnose matrices should not be preserved
-        if hasattr(self, "_diagnose_matrices"):
-            del self._diagnose_matrices
-
-        # For the Hidden Markov Model
-        if mode=="HMM":
-            t_stages = list(set(data[("info", "t_stage")]))
-
-            for stage in t_stages:
-                table = data.loc[
-                    data[('info', 't_stage')] == stage,
-                    self.modalities.keys()
-                ]
-                self._gen_diagnose_matrices(table, stage)
-                if stage not in self.diag_time_dists:
-                    warnings.warn(
-                        "No distribution for marginalizing over diagnose times has "
-                        f"been defined for T-stage {stage}. During inference, all "
-                        "patients in this T-stage will be ignored."
-                    )
-
-        # For the Bayesian Network
-        elif mode=="BN":
-            table = data[self.modalities.keys()]
-            stage = "BN"
-            self._gen_diagnose_matrices(table, stage)
+        return self._patient_data
 
 
     def _evolve(
@@ -943,7 +838,7 @@ class Unilateral:
             stage_dist: Probability to find a patient in a certain T-stage.
         """
         drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
-            dist=stage_dist, size=num_patients
+            prob_of_t_stage=stage_dist, size=num_patients
         )
 
         drawn_obs = self._draw_patient_diagnoses(drawn_diag_times)
