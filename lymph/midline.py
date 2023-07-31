@@ -616,7 +616,6 @@ class MidlineBilateral:
 
             if log:
                 p = np.log(p)
-                #data not yet loaded correctly (or at all)
                 llh_nox_ex = p @ self.diagnose_matrices_midext[stage]
                 llh += np.sum(llh_nox_ex)
             #probably wrong. Matrix multiplication sums over patients but it should multiply.
