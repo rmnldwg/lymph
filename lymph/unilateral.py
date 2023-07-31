@@ -787,6 +787,35 @@ class Unilateral:
         state_probs[-1] = state
 
         return state_probs
+    
+    def _evolve_onestep(
+        self, start_state: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        """Evolve hidden Markov model based system over one time step. Compute
+        :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t`
+        is the time.
+
+        Args:
+            start_state: The current state.
+
+        Returns:
+            A matrix with the new state
+
+        :meta public:
+        """
+        # All healthy state at beginning
+        if start_state is None:
+            start_state = np.zeros(
+            shape=(self.diag_time_dists.max_t + 1, len(self.state_list)),
+            dtype=float
+            )
+            start_state[0,0] = 1.
+
+        # compute involvement at first time-step
+        for i in range(len(start_state)-1):
+            start_state[i+1,:] = start_state[i,:] @ self.transition_matrix
+
+        return start_state
 
     def check_and_assign(self, new_params: np.ndarray):
         """Check that the spread probability (rates) and the parameters for the
