@@ -814,7 +814,6 @@ class Unilateral:
         # compute involvement at first time-step
         for i in range(len(start_state)-1):
             start_state[i+1,:] = start_state[i,:] @ self.transition_matrix
-
         return start_state
 
     def check_and_assign(self, new_params: np.ndarray):

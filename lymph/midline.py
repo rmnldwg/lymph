@@ -74,47 +74,12 @@ class MidlineBilateral:
             self.alpha_mix = 0.
 
         self.noext.diag_time_dists = self.ext.diag_time_dists
-        self.midexstates = ["0", "1"]  
 
     @property
     def graph(self) -> Dict[Tuple[str], List[str]]:
         """Return the (unilateral) graph that was used to create this network.
         """
         return self.noext.graph
-    
-    def _gen_midexstate_list(self):
-        """Generates the list of (hidden) midline states.
-        """
-        if not hasattr(self, "_midexstate_list"):
-            self._midexstate_list = np.zeros(
-                shape=(2**1, 1), dtype=int
-                )
-        for i in range(2**1):
-            self._midexstate_list[i] = [
-                int(digit) for digit in change_base(i, 2, length=1)
-                ]
-
-    @property
-    def midexstate_list(self):
-        """Return list of all possible hidden midline states.
-        """
-        try:
-            return self._midexstate_list
-        except AttributeError:
-            self._gen_midexstate_list()
-            return self._midexstate_list
-        
-    @property
-    def midexstate(self):
-        """Return the currently set state of the system.
-        """
-        return self._midexstate
-
-    @midexstate.setter
-    def midexstate(self, newstate: np.ndarray):
-        """Sets the state of the system to ``newstate``.
-        """
-        self._midexstate = newstate
     
     @property
     def midext_prob(self):
@@ -177,7 +142,7 @@ class MidlineBilateral:
 
         if self.use_mixing:
             self.noext.contra.base_probs = new_params[k:2*k]
-            self.alpha_mix = new_params[-1]
+            self.alpha_mix = new_params[-2]
             # compute linear combination
             self.ext.contra.base_probs = (
                 self.alpha_mix * self.ext.ipsi.base_probs
@@ -206,37 +171,6 @@ class MidlineBilateral:
         self.ext.trans_probs = new_params
         # avoid unnecessary double computation of ipsilateral transition matrix
         self.noext.ipsi._transition_matrix = self.ext.ipsi.transition_matrix
-
-    def _gen_midextransition_matrix(self):
-        """Generate the midline extension transition matrix :math:`\\mathbf{A}`, which contains
-        the :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}`
-        is a square matrix with size ``(# of states)``. The lower diagonal is
-        zero.
-        """
-        if not hasattr(self, "_midextransition_matrix"):
-            shape = (2**1, 2**1)
-            self._midextransition_matrix = np.zeros(shape=shape)
-
-        self._midextransition_matrix[0,0] = 1 - self.midext_prob
-        self._midextransition_matrix[0,1] = self.midext_prob
-        self._midextransition_matrix[1,0] = 0
-        self._midextransition_matrix[1,1] = 1
-
-    @property
-    def midextransition_matrix(self) -> np.ndarray:
-        """Return the midline extension listtransition matrix :math:`\\mathbf{A}`, which contains the
-        probability to transition from any state :math:`S_t` to any other state
-        :math:`S_{t+1}` one timestep later:
-        :math:`P \\left( S_{t+1} \\mid S_t \\right)`. :math:`\\mathbf{A}` is a
-        square matrix with size ``(# of states)``. The lower diagonal is zero,
-        because those entries correspond to transitions that would require
-        self-healing.
-        """
-        try:
-            return self._midextransition_matrix
-        except AttributeError:
-            self._gen_midextransition_matrix()
-            return self._midextransition_matrix
 
     @property
     def spread_probs(self) -> np.ndarray:
@@ -392,7 +326,7 @@ class MidlineBilateral:
         self.load_data(patient_data)
 
     def _evolve_midext(
-        self, start_midexstate: Optional[np.ndarray] = None
+        self,  new_params: np.ndarray, start_midexstate: Optional[np.ndarray] = None
     ) -> np.ndarray:
         """Evolve hidden Markov model based system over one time step. Compute
         :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t`
@@ -412,11 +346,18 @@ class MidlineBilateral:
             dtype=float
             )
             start_midexstate[0,0] = 1.
+        
+        self.midext_prob = new_params
+
+        midextransition_matrix = np.zeros(shape=(2**1, 2**1))
+        midextransition_matrix[0,0] = 1 - self.midext_prob
+        midextransition_matrix[0,1] = self.midext_prob
+        midextransition_matrix[1,0] = 0
+        midextransition_matrix[1,1] = 1
 
         # compute involvement at first time-step
         for i in range(len(start_midexstate)-1):
-            start_midexstate[i+1,:] = start_midexstate[i,:] @ self.midextransition_matrix
-
+            start_midexstate[i+1,:] = start_midexstate[i,:] @ midextransition_matrix
         return start_midexstate
 
     def load_data(
@@ -572,7 +513,7 @@ class MidlineBilateral:
 
         state_probs_ipsi_nox = self.noext.ipsi._evolve_onestep()
         state_probs_contra_nox = self.noext.contra._evolve_onestep()
-        state_probs_midext = self._evolve_midext()
+        state_probs_midext = self._evolve_midext(new_params = given_params)
         state_probs_ipsi_ex = np.zeros(
         shape=(max_t + 1, len(self.ext.ipsi.state_list)),
         dtype=float
