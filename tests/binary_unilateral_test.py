@@ -229,6 +229,11 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
 
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""
+        self.assertRaises(
+            AttributeError,
+            lambda: setattr(self.model, "data_matrices", "foo")
+        )
+
         self.model.load_patient_data(self.patient_data, side="ipsi")
         for t_stage in ["early", "late"]:
             has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
@@ -237,6 +242,7 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
             }[t_stage])
             data_matrix = self.model.data_matrices[t_stage]
 
+            self.assertTrue(t_stage in self.model.data_matrices)
             self.assertEqual(
                 data_matrix.shape[0],
                 self.model.observation_matrix.shape[1],
@@ -245,6 +251,32 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
                 data_matrix.shape[1],
                 has_t_stage.sum(),
             )
+
+    def test_diagnose_matrices(self):
+        """Make sure the diagnose matrices are generated correctly."""
+        self.assertRaises(
+            AttributeError,
+            lambda: setattr(self.model, "diagnose_matrices", "foo")
+        )
+
+        self.model.load_patient_data(self.patient_data, side="ipsi")
+        for t_stage in ["early", "late"]:
+            has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
+                "early": [0,1,2],
+                "late": [3,4],
+            }[t_stage])
+            diagnose_matrix = self.model.diagnose_matrices[t_stage]
+
+            self.assertTrue(t_stage in self.model.diagnose_matrices)
+            self.assertEqual(
+                diagnose_matrix.shape[0],
+                self.model.transition_matrix.shape[1],
+            )
+            self.assertEqual(
+                diagnose_matrix.shape[1],
+                has_t_stage.sum(),
+            )
+            self.assertTrue(np.all(np.less_equal(diagnose_matrix, 1.)))
 
 
 if __name__ == "__main__":

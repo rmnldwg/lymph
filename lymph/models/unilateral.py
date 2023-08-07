@@ -21,6 +21,8 @@ from lymph.descriptors import diagnose_times, matrix, modalities, params
 from lymph.graph import Edge, LymphNodeLevel, Tumor
 from lymph.helper import check_unique_names, early_late_mapping
 
+warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+
 
 class Unilateral:
     """
@@ -522,7 +524,20 @@ class Unilateral:
     """The matrix encoding the probabilities to observe a certain diagnosis."""
 
     data_matrices = matrix.DataLookup()
-    """Dictionary with T-stages as keys and corresponding data matrices as values."""
+    """Dictionary with T-stages as keys and corresponding data matrices as values.
+
+    A data matrix is a binary encding of which of the possible observational states
+    agrees with the seen diagnosis of a patient. It accounts for missing involvement
+    information on some LNLs and/or diagnostic modalities and thereby allows to
+    marginalize over them.
+    """
+
+    diagnose_matrices = matrix.DiagnoseLookup()
+    """Dictionary with T-stages as keys and corresponding diagnose matrices as values.
+
+    Diagnose matrices are simply the dot product of the :py:attr:`~observation_matrix`
+    and the :py:attr:`~data_matrices` for a given T-stage.
+    """
 
     def load_patient_data(
         self,

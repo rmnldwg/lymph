@@ -1,6 +1,4 @@
 """Module containing supporting classes and functions."""
-
-import doctest
 import warnings
 from functools import lru_cache
 from typing import List, Optional
@@ -177,6 +175,8 @@ def tile_and_repeat(
     ...     tile=(1, 2),
     ...     repeat=(1, 3),
     ... )
+    array([[False, False, False,  True,  True,  True, False, False, False,
+             True,  True,  True]])
     """
     tiled = np.tile(mat, tile)
     repeat_along_0 = np.repeat(tiled, repeat[0], axis=0)
@@ -241,7 +241,3 @@ def early_late_mapping(t_stage: int | str) -> str:
         return "late"
 
     raise ValueError(f"Invalid T-stage: {t_stage}")
-
-
-if __name__ == "__main__":
-    doctest.testmod()

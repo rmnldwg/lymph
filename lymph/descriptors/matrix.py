@@ -6,6 +6,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from pyexpat import model
 
 from lymph import models
 from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
@@ -207,7 +208,6 @@ class DataDict(AbstractLookupDict):
     def __setitem__(self, __key, __value) -> None:
         warnings.warn("Setting the data matrices is not supported.")
 
-
     def __getitem__(self, t_stage: str) -> np.ndarray:
         """Get the data matrix for a specific T-stage. Create, if necessary."""
         # pylint: disable=no-member
@@ -224,6 +224,32 @@ class DataLookup(AbstractLookup):
         data_dict = DataDict(model=model)
         setattr(model, self.private_name, data_dict)
 
-
     def __set__(self, instance, value):
         raise AttributeError("Cannot set data matrix lookup dict.")
+
+
+class DiagnoseDict(AbstractLookupDict):
+    """Allows accessing the diagnose matrices of every T-category separately."""
+    def __setitem__(self, __key, __value) -> None:
+        warnings.warn("Setting the diagnose matrices is not supported.")
+
+    def __getitem__(self, t_stage: str) -> np.ndarray:
+        """Get the diagnose matrix for a specific T-stage. Create, if necessary."""
+        # pylint: disable=no-member
+        if t_stage not in self:
+            diagnose_matrix = (
+                self.model.observation_matrix @ self.model.data_matrices[t_stage]
+            )
+            super().__setitem__(t_stage, diagnose_matrix)
+
+        return super().__getitem__(t_stage)
+
+
+class DiagnoseLookup(AbstractLookup):
+    """Manages the diagnose matrices dictionary."""
+    def init_lookup(self, model: models.Unilateral):
+        diagnose_dict = DiagnoseDict(model=model)
+        setattr(model, self.private_name, diagnose_dict)
+
+    def __set__(self, instance, value):
+        raise AttributeError("Cannot set diagnose matrices lookup dict.")
