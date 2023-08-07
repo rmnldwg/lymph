@@ -2,9 +2,12 @@
 # pylint: disable=too-few-public-methods
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 from lymph import models
+from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
 from lymph.helper import get_state_idx_matrix, row_wise_kron
 
 
@@ -131,23 +134,45 @@ class Observation(AbstractMatrixDescriptor):
         return observation_matrix
 
 
-class Data(AbstractMatrixDescriptor):
-    """Descriptor class to compute the data matrix of a lymph model.
+def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
+    """Generate the data matrix for a specific T-stage."""
+    has_t_stage = model.patient_data["_model", "#", "t_stage"] == t_stage
+    patients_with_t_stage = model.patient_data[has_t_stage]
 
-    The data matrix encodes the diagnosis of a number of patients in a binary
-    matrix. Its shape is :math:`2^\\{V \\cdot K\\} \\times N` where :math:`V` is the
-    number of LNLs, :math:`K` is the number of diagnostic modalities and :math:`N`
-    is the number of patients.
+    result = np.ones(
+        shape=(model.observation_matrix.shape[1], len(patients_with_t_stage)),
+        dtype=bool,
+    )
 
-    The entries of the matrix are 1 if the patient's diagnosis is consistent with
-    the respective observation and 0 if not. This means that the row, corresponding
-    to a patient may have multiple 1s if the patient's diagnosis is missing information
-    on some LNLs and/or diagnostic modalities.
-    """
-    @staticmethod
-    def generate(instance: models.Unilateral) -> np.ndarray:
-        """Generate the diagnostic matrix of the lymph model."""
-        pass
+    # TODO: Implement data matrix generation
+
+    return result
+
+
+class DataDict(AbstractLookupDict):
+    """Allows accessing the data matrix of every T-category separately."""
+    def __setitem__(self, __key, __value) -> None:
+        warnings.warn("Setting the data matrices is not supported.")
+
+
+    def __getitem__(self, t_stage: str) -> np.ndarray:
+        """Get the data matrix for a specific T-stage. Create, if necessary."""
+        if t_stage not in self:
+            data_matrix = generate_data_matrix(self.model, t_stage)
+            super().__setitem__(t_stage, data_matrix)
+
+        return super().__getitem__(t_stage)
+
+
+class DataLookup(AbstractLookup):
+    """Manages the data matrices dictionary."""
+    def init_lookup(self, model: models.Unilateral):
+        data_dict = DataDict(model)
+        setattr(model, self.private_name, data_dict)
+
+
+    def __set__(self, instance, value):
+        raise AttributeError("Cannot set data matrix lookup dict.")
 
 
 class Diagnose(AbstractMatrixDescriptor):

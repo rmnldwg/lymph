@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Callable
 
 from lymph import models
+from lymph.descriptors.lookup import AbstractLookup
 
 
 class Param:
@@ -39,7 +40,7 @@ class ParamDict(dict):
             self[key].set(value)
 
 
-class Lookup:
+class Lookup(AbstractLookup):
     """Descriptor class to access parameters of a lymph model.
 
     When first trying to access this descriptor, it will compute a lookup table
@@ -48,18 +49,7 @@ class Lookup:
     objects. These Param objects store the getter and setter functions for the
     corresponding parameter.
     """
-    def __set_name__(self, owner, name):
-        self.private_name = '_' + name
-
-
-    def __get__(self, instance: models.Unilateral, _cls) -> ParamDict:
-        if not hasattr(instance, self.private_name):
-            self.init_params_lookup(instance)
-
-        return getattr(instance, self.private_name)
-
-
-    def init_params_lookup(self, instance: models.Unilateral):
+    def init_lookup(self, instance: models.Unilateral):
         """Compute the lookup table for all edge parameters of the lymph model."""
         param_dict = ParamDict()
 

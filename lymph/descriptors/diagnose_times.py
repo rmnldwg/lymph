@@ -9,6 +9,7 @@ import warnings
 import numpy as np
 
 from lymph import models
+from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
 
 
 class SupportError(Exception):
@@ -124,17 +125,8 @@ class Distribution:
         return np.random.choice(a=self.support, p=self.distribution)
 
 
-class DistributionDict(dict):
+class DistributionDict(AbstractLookupDict):
     """Specialized dictionary for storing distributions over diagnose times."""
-    def __init__(self, *args, max_time: int | None = None, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if max_time is not None and max_time < 0:
-            raise ValueError("Maximum time must be positive.")
-
-        self.max_time = max_time
-
-
     def __setitem__(
         self,
         t_stage: str,
@@ -144,14 +136,9 @@ class DistributionDict(dict):
         if isinstance(distribution, Distribution):
             distribution = Distribution.from_instance(distribution)
         else:
-            distribution = Distribution(distribution, max_time=self.max_time)
+            distribution = Distribution(distribution, max_time=self.model.max_time)
 
         super().__setitem__(t_stage, distribution)
-
-
-    def update(self, new_dict: DistributionDict) -> None:
-        for t_stage, distribution in new_dict.items():
-            self[t_stage] = distribution
 
 
     @property
@@ -204,26 +191,9 @@ class DistributionDict(dict):
         return drawn_t_stages, drawn_diag_times
 
 
-class DistributionLookup:
+class DistributionLookup(AbstractLookup):
     """Descriptor to access the distributions over diagnose times per T-category."""
-    def __set_name__(self, owner, name):
-        self.private_name = '_' + name
-
-
-    def __get__(self, instance: models.Unilateral, _cls) -> DistributionDict:
-        if not hasattr(instance, self.private_name):
-            distribution_dict = DistributionDict(max_time=instance.max_t)
-            setattr(instance, self.private_name, distribution_dict)
-
-        return getattr(instance, self.private_name)
-
-
-    def __set__(self, instance: models.Unilateral, value: DistributionDict):
-        self.__delete__(instance)
-        self.__get__(instance, type(instance)).update(value)
-
-
-    def __delete__(self, instance: models.Unilateral):
-        """Delete the modality of the lymph model."""
-        if hasattr(instance, self.private_name):
-            delattr(instance, self.private_name)
+    def init_lookup(self, model: models.Unilateral):
+        """Initialize the lookup dictionary."""
+        distribution_dict = DistributionDict(model)
+        setattr(model, self.private_name, distribution_dict)

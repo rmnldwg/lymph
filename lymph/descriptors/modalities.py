@@ -7,6 +7,7 @@ from typing import List, Tuple, Union
 import numpy as np
 
 from lymph import models
+from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
 
 
 class Modality:
@@ -99,7 +100,7 @@ class Pathological(Modality):
 
 ModalityDef = Union[Modality, np.ndarray, Tuple[float, float], List[float]]
 
-class ModalityDict(dict):
+class ModalityDict(AbstractLookupDict):
     """Dictionary storing instances of a diagnostic `Modality` for a lymph model.
 
     This class allows the user to specify the diagnostic modalities of a lymph model
@@ -139,10 +140,6 @@ class ModalityDict(dict):
            [0., 1.],
            [0., 1.]])
     """
-    def __init__(self, *args, is_trinary: bool = False, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.is_trinary = is_trinary
-
     def __setitem__(self, name: str, value: ModalityDef, / ) -> None:
         """Set the modality of the lymph model."""
         # pylint: disable=unidiomatic-typecheck
@@ -152,15 +149,15 @@ class ModalityDict(dict):
             # we assume the modality to be clinical here, because for a binary model
             # it does not matter, but for a trinary model the base `Modalitiy` class
             # would not work.
-            if self.is_trinary:
+            if self.model.is_trinary:
                 warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-            value = cls(value.specificity, value.sensitivity, self.is_trinary)
+            value = cls(value.specificity, value.sensitivity, self.model.is_trinary)
 
         elif isinstance(value, Modality):
             # in this case, the user has provided a `Clinical` or `Pathological`
             # modality, so we can just use it after passing the model's type (binary
             # or trinary).
-            value.is_trinary = self.is_trinary
+            value.is_trinary = self.model.is_trinary
 
         elif isinstance(value, np.ndarray):
             # this should allow users to pass some custom confusion matrix directly.
@@ -168,10 +165,10 @@ class ModalityDict(dict):
             # misbehave, e.g. when a recomputation of the confusion matrix is triggered.
             specificity = value[0, 0]
             sensitivity = value[-1, -1]
-            modality = Modality(specificity, sensitivity, self.is_trinary)
+            modality = Modality(specificity, sensitivity, self.model.is_trinary)
             modality.confusion_matrix = value
 
-            if self.is_trinary:
+            if self.model.is_trinary:
                 warnings.warn(
                     "Provided transition matrix will be used as is. The sensitivity "
                     "and specificity extracted from it may be nonsensical. Recomputing "
@@ -186,9 +183,9 @@ class ModalityDict(dict):
             # assume the modality to be clinical here.
             try:
                 specificity, sensitivity = value
-                if self.is_trinary:
+                if self.model.is_trinary:
                     warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-                value = cls(specificity, sensitivity, self.is_trinary)
+                value = cls(specificity, sensitivity, self.model.is_trinary)
             except (ValueError, TypeError) as err:
                 raise ValueError(
                     "Value must be a `Clinical` or `Pathological` modality, a "
@@ -199,12 +196,7 @@ class ModalityDict(dict):
         super().__setitem__(name, value)
 
 
-    def update(self, new_dict: dict) -> None:
-        for key, value in new_dict.items():
-            self[key] = value
-
-
-class Lookup:
+class Lookup(AbstractLookup):
     """Descriptor class for the diagnostic modalities.
 
     This class is used to manage the diagnostic modalities of a lymph model. It
@@ -214,29 +206,10 @@ class Lookup:
     Attributes:
         modality (Modality): modality of the lymph model
     """
-    def __set_name__(self, owner, name: str):
-        self.private_name = '_' + name
-
-
-    def __get__(self, instance: models.Unilateral, _cls) -> ModalityDict:
-        """Return the modality of the lymph model."""
-        if not hasattr(instance, self.private_name):
-            modality_dict = ModalityDict(is_trinary=instance.is_trinary)
-            setattr(instance, self.private_name, modality_dict)
-
-        return getattr(instance, self.private_name)
-
-
-    def __set__(self, instance: models.Unilateral, value: ModalityDict | dict):
-        """Set the modality dictionary of the lymph model."""
-        self.__delete__(instance)
-        self.__get__(instance, type(instance)).update(value)
-
-
-    def __delete__(self, instance: models.Unilateral):
-        """Delete the modality of the lymph model."""
-        if hasattr(instance, self.private_name):
-            delattr(instance, self.private_name)
+    def init_lookup(self, model: models.Unilateral) -> None:
+        """Initialize the lookup for the lymph model."""
+        modality_dict = ModalityDict(model)
+        setattr(model, self.private_name, modality_dict)
 
 
 if __name__ == "__main__":

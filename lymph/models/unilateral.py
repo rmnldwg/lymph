@@ -10,6 +10,7 @@ the (microscopic) involvement of lymph node levels (LNLs) due to the spread of a
 from __future__ import annotations
 
 import base64
+import warnings
 from itertools import product
 
 import numpy as np
@@ -56,7 +57,7 @@ class Unilateral:
         graph: dict[tuple[str], set[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
-        max_t: int = 10,
+        max_time: int = 10,
         **_kwargs,
     ) -> None:
         """Create a new instance of the `Unilateral` class.
@@ -76,10 +77,10 @@ class Unilateral:
         self.init_nodes(graph, tumor_state, allowed_states)
         self.init_edges(graph)
 
-        if 0 >= max_t:
-            raise ValueError("Latest diagnosis time `max_t` must be a positive integer")
+        if 0 >= max_time:
+            raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
-        self.max_t = max_t
+        self.max_time = max_time
 
 
     @classmethod
@@ -573,7 +574,7 @@ class Unilateral:
 
         for t_stage in self.diag_time_dists.keys():
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
-                raise ValueError(f"Tumor category {t_stage} not found in data.")
+                warnings.warn(f"No data for T-stage {t_stage} found.")
 
         self._patient_data = patient_data
 
