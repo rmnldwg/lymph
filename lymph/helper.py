@@ -154,15 +154,16 @@ def pathological(spsn: list) -> np.ndarray:
     return confusion_matrix
 
 
-def tile_and_repeat(mat: np.ndarray, i: int, num: int) -> np.ndarray:
+def tile_and_repeat(
+    mat: np.ndarray,
+    tile: tuple[int, int],
+    repeat: tuple[int, int],
+) -> np.ndarray:
     """Tile and repeat a matrix.
-
-    The matrix `mat` is first tiled 2**i times, then repeated 2**(num-i) times along
-    both axes.
 
     Example:
     >>> mat = np.array([[1, 2], [3, 4]])
-    >>> tile_and_repeat(mat, 1, 2)
+    >>> tile_and_repeat(mat, (2, 2), (2, 2))
     array([[1, 1, 2, 2, 1, 1, 2, 2],
            [1, 1, 2, 2, 1, 1, 2, 2],
            [3, 3, 4, 4, 3, 3, 4, 4],
@@ -171,10 +172,15 @@ def tile_and_repeat(mat: np.ndarray, i: int, num: int) -> np.ndarray:
            [1, 1, 2, 2, 1, 1, 2, 2],
            [3, 3, 4, 4, 3, 3, 4, 4],
            [3, 3, 4, 4, 3, 3, 4, 4]])
+    >>> tile_and_repeat(
+    ...     mat=np.array([False, True], dtype=bool),
+    ...     tile=(1, 2),
+    ...     repeat=(1, 3),
+    ... )
     """
-    tiled = np.tile(mat, (2**i, 2**i))
-    repeat_along_0 = np.repeat(tiled, 2**(num-i), axis=0)
-    return np.repeat(repeat_along_0, 2**(num-i), axis=1)
+    tiled = np.tile(mat, tile)
+    repeat_along_0 = np.repeat(tiled, repeat[0], axis=0)
+    return np.repeat(repeat_along_0, repeat[1], axis=1)
 
 
 @lru_cache

@@ -5,10 +5,12 @@ from __future__ import annotations
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from lymph import models
 from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
-from lymph.helper import get_state_idx_matrix, row_wise_kron
+from lymph.graph import LymphNodeLevel
+from lymph.helper import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
 
 class AbstractMatrixDescriptor:
@@ -134,8 +136,49 @@ class Observation(AbstractMatrixDescriptor):
         return observation_matrix
 
 
+def compute_diagnose_encoding(
+    lnls: list[LymphNodeLevel],
+    patient_row: pd.Series,
+    modality_name: str,
+) -> np.ndarray:
+    """Compute the binary encoding of a particular diagnosis."""
+    num_lnls = len(lnls)
+    diagnose_encoding = np.ones(shape=2**num_lnls, dtype=bool)
+    modality_diagnose = patient_row[modality_name]
+
+    for j, lnl in enumerate(lnls):
+        if (
+            lnl.name not in modality_diagnose
+            or pd.isna(modality_diagnose[lnl.name])
+        ):
+            continue
+
+        diagnose_encoding = np.logical_and(
+            diagnose_encoding,
+            tile_and_repeat(
+                mat=np.array([
+                    not modality_diagnose[lnl.name],
+                    modality_diagnose[lnl.name]
+                ]),
+                tile=(1, 2**j),
+                repeat=(1, 2**(num_lnls - j - 1)),
+            )[0],
+        )
+
+    return diagnose_encoding
+
+
 def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
-    """Generate the data matrix for a specific T-stage."""
+    """Generate the data matrix for a specific T-stage from patient data.
+
+    The patient data needs to contain the column ``"_model"``, which is constructed
+    when loading the data into the model.
+
+    The returned matrix has the shape :math:`2^{N \\cdot \\mathcal{O}} \\times M`,
+    where :math:`N` is the number of lymph node levels, :math:`\\mathcal{O}` is the
+    number of diagnostic modalities and :math:`M` is the number of patients with the
+    given ``t_stage``.
+    """
     has_t_stage = model.patient_data["_model", "#", "t_stage"] == t_stage
     patients_with_t_stage = model.patient_data[has_t_stage]
 
@@ -144,7 +187,17 @@ def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
         dtype=bool,
     )
 
-    # TODO: Implement data matrix generation
+    for i, (_, patient_row) in enumerate(patients_with_t_stage["_model"].iterrows()):
+        patient_encoding = np.ones(shape=1, dtype=bool)
+        for modality_name in model.modalities.keys():
+            if modality_name not in patient_row:
+                continue
+            diagnose_encoding = compute_diagnose_encoding(
+                model.lnls, patient_row, modality_name
+            )
+            patient_encoding = np.kron(patient_encoding, diagnose_encoding)
+
+        result[:,i] = patient_encoding
 
     return result
 
@@ -157,6 +210,7 @@ class DataDict(AbstractLookupDict):
 
     def __getitem__(self, t_stage: str) -> np.ndarray:
         """Get the data matrix for a specific T-stage. Create, if necessary."""
+        # pylint: disable=no-member
         if t_stage not in self:
             data_matrix = generate_data_matrix(self.model, t_stage)
             super().__setitem__(t_stage, data_matrix)
@@ -167,24 +221,9 @@ class DataDict(AbstractLookupDict):
 class DataLookup(AbstractLookup):
     """Manages the data matrices dictionary."""
     def init_lookup(self, model: models.Unilateral):
-        data_dict = DataDict(model)
+        data_dict = DataDict(model=model)
         setattr(model, self.private_name, data_dict)
 
 
     def __set__(self, instance, value):
         raise AttributeError("Cannot set data matrix lookup dict.")
-
-
-class Diagnose(AbstractMatrixDescriptor):
-    """Descriptor class to compute the diagnosis matrix of a lymph model.
-
-    The diagnosis matrix is the product of the observation and the data matrix. It has
-    the shape :math:`2^V \\times N` where :math:`V` is the number of LNLs and
-    :math:`N` is the number of patients. Using this matrix over the observation and
-    data matrix brings some performance benefits as both the observation, and the
-    data matrix can be very large.
-    """
-    @staticmethod
-    def generate(instance: models.Unilateral) -> np.ndarray:
-        """Generate the diagnostic matrix of the lymph model."""
-        return instance.observation_matrix @ instance.data_matrix

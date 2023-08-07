@@ -521,12 +521,8 @@ class Unilateral:
     observation_matrix = matrix.Observation()
     """The matrix encoding the probabilities to observe a certain diagnosis."""
 
-    data_matrix = matrix.Data()
-    """Patient data encoded in a binary matrix."""
-
-    diagnose_matrix = matrix.Diagnose()
-    """The probability to observe a certain diagnosis given any possible state."""
-
+    data_matrices = matrix.DataLookup()
+    """Dictionary with T-stages as keys and corresponding data matrices as values."""
 
     def load_patient_data(
         self,

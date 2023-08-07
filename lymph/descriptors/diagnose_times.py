@@ -127,6 +127,7 @@ class Distribution:
 
 class DistributionDict(AbstractLookupDict):
     """Specialized dictionary for storing distributions over diagnose times."""
+    # pylint: disable=no-member
     def __setitem__(
         self,
         t_stage: str,
@@ -136,7 +137,7 @@ class DistributionDict(AbstractLookupDict):
         if isinstance(distribution, Distribution):
             distribution = Distribution.from_instance(distribution)
         else:
-            distribution = Distribution(distribution, max_time=self.model.max_time)
+            distribution = Distribution(distribution, max_time=self.max_time)
 
         super().__setitem__(t_stage, distribution)
 
@@ -195,5 +196,5 @@ class DistributionLookup(AbstractLookup):
     """Descriptor to access the distributions over diagnose times per T-category."""
     def init_lookup(self, model: models.Unilateral):
         """Initialize the lookup dictionary."""
-        distribution_dict = DistributionDict(model)
+        distribution_dict = DistributionDict(max_time=model.max_time)
         setattr(model, self.private_name, distribution_dict)

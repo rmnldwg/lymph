@@ -227,6 +227,25 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
             ValueError, self.model.load_patient_data, self.patient_data, side="foo"
         )
 
+    def test_data_matrices(self):
+        """Make sure the data matrices are generated correctly."""
+        self.model.load_patient_data(self.patient_data, side="ipsi")
+        for t_stage in ["early", "late"]:
+            has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
+                "early": [0,1,2],
+                "late": [3,4],
+            }[t_stage])
+            data_matrix = self.model.data_matrices[t_stage]
+
+            self.assertEqual(
+                data_matrix.shape[0],
+                self.model.observation_matrix.shape[1],
+            )
+            self.assertEqual(
+                data_matrix.shape[1],
+                has_t_stage.sum(),
+            )
+
 
 if __name__ == "__main__":
     fixture = FixtureMixin()

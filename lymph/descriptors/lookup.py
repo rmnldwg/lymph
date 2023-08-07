@@ -1,6 +1,10 @@
 """
 Abstract dictionary subclass and discriptor class for accessing this dictionary.
 """
+from __future__ import annotations
+
+import doctest
+
 from lymph import models
 
 
@@ -8,13 +12,20 @@ class AbstractLookupDict(dict):
     """Abstract dictionary base class created and managed by subclasses of the
     :py:class:`AbstractLookup`.
 
-    Its primary use is to store a reference to the model it belongs to. Also, it
-    ensures that the ``update()`` method calls ``__setitem__()``.
+    Its primary use is to store information that its values depend on. Any keyword
+    passed to its constructor will be set as an attribute of the instance.
+
+    Example:
+    >>> test = AbstractLookupDict(a=1, b="two")
+    >>> test.a
+    1
+    >>> test.b
+    "two"
     """
-    def __init__(self, model: models.Unilateral, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.update(**kwargs)
-        self.model = model
+        for attr_name, attr_value in kwargs.items():
+            setattr(self, attr_name, attr_value)
 
 
     def update(self, new_dict: dict):
@@ -55,3 +66,7 @@ class AbstractLookup:
     def __delete__(self, instance):
         if hasattr(instance, self.private_name):
             delattr(instance, self.private_name)
+
+
+if __name__ == "__name__":
+    doctest.testmod()

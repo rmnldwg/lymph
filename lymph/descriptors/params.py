@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Callable
 
 from lymph import models
-from lymph.descriptors.lookup import AbstractLookup
+from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
 
 
 class Param:
@@ -24,7 +24,7 @@ class Param:
         del self.model.transition_matrix
 
 
-class ParamDict(dict):
+class ParamDict(AbstractLookupDict):
     """Dictionary preventing direct setting of parameter values."""
     def __setitem__(self, key: str, value: Param, / ) -> None:
         if not isinstance(value, Param):
@@ -33,11 +33,6 @@ class ParamDict(dict):
                 "Use the `get` & `set` methods instead."
             )
         return super().__setitem__(key, value)
-
-
-    def update(self, new_dict: dict) -> None:
-        for key, value in new_dict.items():
-            self[key].set(value)
 
 
 class Lookup(AbstractLookup):
