@@ -113,9 +113,13 @@ class Distribution:
         if self.is_updateable:
             self._args = args
             self._kwargs = kwargs
-            self._frozen = self.normalize(
-                self._func(self.support, *self._args, **self._kwargs)
-            )
+
+            try:
+                self._frozen = self.normalize(
+                    self._func(self.support, *self._args, **self._kwargs)
+                )
+            except Exception as exc:
+                raise ValueError("Error while freezing distribution.") from exc
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 

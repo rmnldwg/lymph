@@ -150,15 +150,15 @@ class ModalityDict(AbstractLookupDict):
             # we assume the modality to be clinical here, because for a binary model
             # it does not matter, but for a trinary model the base `Modalitiy` class
             # would not work.
-            if self.is_trinary:
+            if self.model.is_trinary:
                 warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-            value = cls(value.specificity, value.sensitivity, self.is_trinary)
+            value = cls(value.specificity, value.sensitivity, self.model.is_trinary)
 
         elif isinstance(value, Modality):
             # in this case, the user has provided a `Clinical` or `Pathological`
             # modality, so we can just use it after passing the model's type (binary
             # or trinary).
-            value.is_trinary = self.is_trinary
+            value.is_trinary = self.model.is_trinary
 
         elif isinstance(value, np.ndarray):
             # this should allow users to pass some custom confusion matrix directly.
@@ -166,10 +166,10 @@ class ModalityDict(AbstractLookupDict):
             # misbehave, e.g. when a recomputation of the confusion matrix is triggered.
             specificity = value[0, 0]
             sensitivity = value[-1, -1]
-            modality = Modality(specificity, sensitivity, self.is_trinary)
+            modality = Modality(specificity, sensitivity, self.model.is_trinary)
             modality.confusion_matrix = value
 
-            if self.is_trinary:
+            if self.model.is_trinary:
                 warnings.warn(
                     "Provided transition matrix will be used as is. The sensitivity "
                     "and specificity extracted from it may be nonsensical. Recomputing "
@@ -184,9 +184,9 @@ class ModalityDict(AbstractLookupDict):
             # assume the modality to be clinical here.
             try:
                 specificity, sensitivity = value
-                if self.is_trinary:
+                if self.model.is_trinary:
                     warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-                value = cls(specificity, sensitivity, self.is_trinary)
+                value = cls(specificity, sensitivity, self.model.is_trinary)
             except (ValueError, TypeError) as err:
                 raise ValueError(
                     "Value must be a `Clinical` or `Pathological` modality, a "
@@ -194,6 +194,10 @@ class ModalityDict(AbstractLookupDict):
                     "sensitivity."
                 ) from err
 
+        # The observation matrix needs to be updated after changing any of the
+        # modalities. This is done by deleting the matrix, which will trigger a
+        # recomputation when it is accessed the next time.
+        del self.model.observation_matrix
         super().__setitem__(name, value)
 
 
@@ -209,7 +213,7 @@ class Lookup(AbstractLookup):
     """
     def init_lookup(self, model: models.Unilateral) -> None:
         """Initialize the lookup for the lymph model."""
-        modality_dict = ModalityDict(is_trinary=model.is_trinary)
+        modality_dict = ModalityDict(model=model)
         setattr(model, self.private_name, modality_dict)
 
 

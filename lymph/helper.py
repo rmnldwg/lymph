@@ -4,6 +4,10 @@ from functools import lru_cache
 from typing import List, Optional
 
 import numpy as np
+from pandas._libs.missing import NAType
+
+PatternType = dict[str, bool | NAType | None]
+"""Type alias for an involvement pattern."""
 
 
 def check_unique_names(graph):

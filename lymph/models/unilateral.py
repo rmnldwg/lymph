@@ -15,11 +15,10 @@ from itertools import product
 
 import numpy as np
 import pandas as pd
-from numpy.linalg import matrix_power as mat_pow
 
 from lymph.descriptors import diagnose_times, matrix, modalities, params
 from lymph.graph import Edge, LymphNodeLevel, Tumor
-from lymph.helper import check_unique_names, early_late_mapping
+from lymph.helper import PatternType, check_unique_names, early_late_mapping
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -31,29 +30,6 @@ class Unilateral:
     It does this by representing it as a directed graph. The progression itself can be
     modelled via hidden Markov models (HMM) or Bayesian networks (BN).
     """
-
-    edge_params = params.Lookup()
-    """Dictionary that maps parameter names to their corresponding `Param` objects.
-
-    Parameter names are constructed from the names of the tumors and LNLs in the graph
-    that represents the lymphatic system. For example, the parameter for the spread
-    probability from the tumor `T` to the LNL `I` is accessed via the key
-    `spread_T_to_I`.
-
-    The parameters can be read out and changed via the `get` and `set` methods of the
-    `Param` objects. The `set` method also deletes the transition matrix, so that it
-    needs to be recomputed when accessing it the next time.
-    """
-
-    diag_time_dists = diagnose_times.DistributionLookup()
-    """Mapping of T-categories to the corresponding distributions over diagnose times.
-
-    Every distribution is represented by a `diagnose_times.Distribution` object, which
-    holds the parametrized and frozen versions of the probability mass function over
-    the diagnose times. They are used to marginalize over the (generally unknown)
-    diagnose times when computing e.g. the likelihood.
-    """
-
     def __init__(
         self,
         graph: dict[tuple[str], set[str]],
@@ -93,6 +69,7 @@ class Unilateral:
 
     @classmethod
     def trinary(cls, graph: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+        """Create a new instance of the `Unilateral` class with trinary LNLs."""
         return cls(graph, allowed_states=[0, 1, 2], **kwargs)
 
 
@@ -265,6 +242,30 @@ class Unilateral:
                 lnl.state = value
 
 
+    edge_params = params.Lookup()
+    """Dictionary that maps parameter names to their corresponding `Param` objects.
+
+    Parameter names are constructed from the names of the tumors and LNLs in the graph
+    that represents the lymphatic system. For example, the parameter for the spread
+    probability from the tumor `T` to the LNL `I` is accessed via the key
+    `spread_T_to_I`.
+
+    The parameters can be read out and changed via the `get` and `set` methods of the
+    `Param` objects. The `set` method also deletes the transition matrix, so that it
+    needs to be recomputed when accessing it the next time.
+    """
+
+
+    diag_time_dists = diagnose_times.DistributionLookup()
+    """Mapping of T-categories to the corresponding distributions over diagnose times.
+
+    Every distribution is represented by a `diagnose_times.Distribution` object, which
+    holds the parametrized and frozen versions of the probability mass function over
+    the diagnose times. They are used to marginalize over the (generally unknown)
+    diagnose times when computing e.g. the likelihood.
+    """
+
+
     def get_params(self, as_dict: bool = False) -> dict[str, float] | list[float]:
         """Return a dictionary of all parameters and their currently set values.
 
@@ -325,18 +326,6 @@ class Unilateral:
                 self.edge_params[key].set(value)
 
 
-    modalities = modalities.Lookup()
-    """Dictionary storing diagnostic modalities and their specificity/sensitivity.
-
-    The keys are the names of the modalities, e.g. "CT" or "pathology", the values are
-    instances of the `Modality` class. When setting the modality, the value can be
-    a `Modality` object, a confusion matrix (`np.ndarray`) or a list/tuple with
-    specificity and sensitivity.
-
-    One can then access the confusion matrix of a modality.
-    """
-
-
     def comp_transition_prob(
         self,
         newstate: list[int],
@@ -366,6 +355,18 @@ class Unilateral:
             self.assign_states(newstate)
 
         return trans_prob
+
+
+    modalities = modalities.Lookup()
+    """Dictionary storing diagnostic modalities and their specificity/sensitivity.
+
+    The keys are the names of the modalities, e.g. "CT" or "pathology", the values are
+    instances of the `Modality` class. When setting the modality, the value can be
+    a `Modality` object, a confusion matrix (`np.ndarray`) or a list/tuple with
+    specificity and sensitivity.
+
+    One can then access the confusion matrix of a modality.
+    """
 
 
     def comp_diagnose_prob(
@@ -539,6 +540,23 @@ class Unilateral:
     and the :py:attr:`~data_matrices` for a given T-stage.
     """
 
+
+    @property
+    def t_stages(self) -> set[str | int]:
+        """Set of all valid T-stages in the model.
+
+        This is the intersection of the unique T-stages found in the (mapped) data
+        and the T-stages defined in the distributions over diagnose times.
+        """
+        return set(self.diag_time_dists.keys()) & set(self.diagnose_matrices.keys())
+
+
+    @property
+    def stacked_diagnose_matrix(self) -> np.ndarray:
+        """Stacked version of all :py:attr:`~diagnose_matrices`."""
+        return np.hstack(list(self.diagnose_matrices.values()))
+
+
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
@@ -587,6 +605,11 @@ class Unilateral:
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
+        # Changes to the patient data require a recomputation of the data and
+        # diagnose matrices. Deleting them will trigger this when they are next
+        # accessed.
+        del self.data_matrices
+        del self.diagnose_matrices
         self._patient_data = patient_data
 
 
@@ -599,55 +622,74 @@ class Unilateral:
         return self._patient_data
 
 
-    def _evolve(
-        self, t_first: int = 0, t_last: int | None = None
-    ) -> np.ndarray:
-        """Evolve hidden Markov model based system over time steps. Compute
-        :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t`
-        is the time.
+    def evolve_dist(self, state_dist: np.ndarray, num_steps: int) -> np.ndarray:
+        """Evolve the ``state_dist`` of possible states over ``num_steps``."""
+        for _ in range(num_steps):
+            state_dist = state_dist @ self.transition_matrix
 
-        Args:
-            t_first: First time-step that should be in the list of returned
-                involvement probabilities.
+        return state_dist
 
-            t_last: Last time step to consider. This function computes
-                involvement probabilities for all :math:`t` in between
-                ``t_frist`` and ``t_last``. If ``t_first == t_last``,
-                :math:`p(S \\mid t)` is computed only at that time.
 
-        Returns:
-            A matrix with the values :math:`p(S \\mid t)` for each time-step.
+    def comp_dist_evolution(self) -> np.ndarray:
+        """Compute a complete evolution of the model.
 
-        :meta public:
+        This returns a matrix with the distribution over the possible states for
+        each time step.
+
+        Note that at this point, the distributions are not weighted with the
+        distribution over diagnose times.
         """
-        # All healthy state at beginning
-        start_state = np.zeros(shape=len(self.state_list), dtype=float)
-        start_state[0] = 1.
+        state_dists = np.zeros(shape=(self.max_time + 1, len(self.state_list)))
+        state_dists[0, 0] = 1.
 
-        # compute involvement at first time-step
-        state = start_state @ mat_pow(self.transition_matrix, t_first)
+        for t in range(1, self.max_time):
+            state_dists[t] = self.evolve_dist(state_dists[t-1], num_steps=1)
 
-        if t_last is None:
-            return state
+        return state_dists
 
-        len_time_range = t_last - t_first
-        if len_time_range < 0:
-            msg = ("Starting time must be smaller than ending time.")
-            raise ValueError(msg)
 
-        state_probs = np.zeros(
-            shape=(len_time_range + 1, len(self.state_list)),
-            dtype=float
-        )
+    def comp_state_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
+        """Compute the distribution over possible states.
 
-        # compute subsequent time-steps, effectively incrementing time until end
-        for i in range(len_time_range):
-            state_probs[i] = state
-            state = state @ self.transition_matrix
+        Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``.
+        This is essentially a marginalization of the evolution over the possible
+        states as computed by :py:meth:`comp_dist_evolution` with the distribution
+        over diagnose times for the given T-stage.
 
-        state_probs[-1] = state
+        When ``mode`` is set to ``"BN"``, compute the distribution over states for
+        the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
+        """
+        if mode == "HMM":
+            state_dists = self.comp_dist_evolution()
+            diag_time_dist = self.diag_time_dists[t_stage].distribution
 
-        return state_probs
+            return diag_time_dist @ state_dists
+
+        if mode == "BN":
+            state_dist = np.ones(shape=(len(self.state_list),), dtype=float)
+
+            for i, state in enumerate(self.state_list):
+                self.assign_states(state)
+                for node in self.lnls:
+                    state_dist[i] *= node.comp_bayes_net_prob()
+
+            return state_dist
+
+
+    def comp_obs_dist(self, t_stage: str) -> np.ndarray:
+        """Compute the distribution over all possible observations for a given T-stage.
+
+        Returns an array of probabilities for each possible complete observation. This
+        entails multiplying the distribution over states as returned by the
+        :py:meth:`comp_state_dist` method with the :py:attr:`observation_matrix`.
+
+        Note that since the :py:attr:`observation_matrix` can become very large, this
+        method is not very efficient for inference. Instead, we compute the
+        :py:attr:`diagnose_matrices` from the :py:attr:`observation_matrix` and
+        the :py:attr:`data_matrices` and use these to compute the likelihood.
+        """
+        state_dist = self.comp_state_dist(t_stage)
+        return state_dist @ self.observation_matrix
 
 
     def _likelihood(
@@ -655,46 +697,31 @@ class Unilateral:
         mode: str = "HMM",
         log: bool = True,
     ) -> float:
-        """
-        Compute the (log-)likelihood of stored data, using the stored spread probs
-        and parameters for the marginalizations over diagnose times (if the respective
-        distributions are parametrized).
-
-        This is the core method for computing the likelihood. The user-facing API calls
-        it after doing some preliminary checks with the passed arguments.
-        """
-        # hidden Markov model
-        if mode == "HMM":
-            stored_t_stages = set(self.diagnose_matrices.keys())
-            provided_t_stages = set(self.diag_time_dists.keys())
-            t_stages = list(stored_t_stages.intersection(provided_t_stages))
-
-            max_t = self.diag_time_dists.max_time
-            evolved_model = self._evolve(t_last=max_t)
-
+        """Compute the (log-)likelihood of stored data, using the stored params."""
+        if mode == "HMM":    # hidden Markov model
+            evolved_model = self.comp_dist_evolution()
             llh = 0. if log else 1.
-            for stage in t_stages:
-                p = (
-                    self.diag_time_dists[stage].pmf
+
+            for t_stage in self.t_stages:
+                patient_likelihoods = (
+                    self.diag_time_dists[t_stage].distribution
                     @ evolved_model
-                    @ self.diagnose_matrices[stage]
+                    @ self.diagnose_matrices[t_stage]
                 )
                 if log:
-                    llh += np.sum(np.log(p))
+                    llh += np.sum(np.log(patient_likelihoods))
                 else:
-                    llh *= np.prod(p)
+                    llh *= np.prod(patient_likelihoods)
 
-        # likelihood for the Bayesian network
-        elif mode == "BN":
-            state_probs = np.ones(shape=(len(self.state_list),), dtype=float)
+        elif mode == "BN":   # likelihood for the Bayesian network
+            state_dist = self.comp_state_dist(mode=mode)
+            patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
 
-            for i, state in enumerate(self.state_list):
-                self.assign_states(state)
-                for node in self.lnls:
-                    state_probs[i] *= node.bn_prob()
+            if log:
+                llh = np.sum(np.log(patient_likelihoods))
+            else:
+                llh = np.prod(patient_likelihoods)
 
-            p = state_probs @ self.diagnose_matrices["BN"]
-            llh = np.sum(np.log(p)) if log else np.prod(p)
         return llh
 
 
@@ -705,29 +732,15 @@ class Unilateral:
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
-        """
-        Compute (log-)likelihood of (already stored) data, given the probabilities of
-        spread in the network and the parameters for the distributions used to
-        marginalize over the diagnose times.
+        """Compute the (log-)likelihood of the ``data`` given the model (and params).
 
-        Args:
-            data: Table with rows of patients and columns of per-LNL involvment. See
-                :meth:`load_data` for more details on how this should look like.
+        If neither ``data`` nor the ``given_params`` are provided, it tries to compute
+        the likelihood for the stored :py:attr:`patient_data`,
+        :py:attr:`edge_params`, and the stored :py:attr:`diag_time_dists`.
 
-            given_params: The likelihood is a function of these parameters. They mainly
-                consist of the :attr:`spread_probs` of the model. Any excess parameters
-                will be used to update the parametrized distributions used for
-                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
-
-            log: When ``True``, the log-likelihood is returned.
-
-            mode: Compute the likelihood using the Bayesian network (``"BN"``) or
-                the hidden Markv model (``"HMM"``). When using the Bayesian net, no
-                marginalization over diagnose times is performed.
-
-        Returns:
-            The (log-)likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
-            is the data and :math:`\\theta` are the given parameters.
+        Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
+        determines whether the likelihood is computed for the hidden Markov model
+        (``"HMM"``) or the Bayesian network (``"BN"``).
         """
         if data is not None:
             self.patient_data = data
@@ -736,6 +749,8 @@ class Unilateral:
             return self._likelihood(mode, log)
 
         try:
+            # all functions and methods called here should raise a ValueError if the
+            # given parameters are invalid...
             self.assign_params(**given_params)
         except ValueError:
             return -np.inf if log else 0.
@@ -743,45 +758,29 @@ class Unilateral:
         return self._likelihood(mode, log)
 
 
-    def risk(
+    def comp_posterior_state_dist(
         self,
-        involvement: dict | np.ndarray | None = None,
         given_params: dict | None = None,
-        given_diagnoses: dict[str, dict] | None = None,
-        t_stage: str = "early",
+        given_diagnoses: PatternType | None = None,
+        t_stage: str | int = "early",
         mode: str = "HMM",
-        **_kwargs,
-    ) -> float | np.ndarray:
-        """Compute risk(s) of involvement given a specific (but potentially
-        incomplete) diagnosis.
+    ) -> np.ndarray:
+        """Compute the posterior distribution over hidden states given a diagnosis.
 
-        Args:
-            involvement: Specific hidden involvement one is interested in. If only parts
-                of the state are of interest, the remainder can be masked with
-                values ``None``. If specified, the functions returns a single
-                risk.
+        The ``given_diagnoses`` is a dictionary of diagnoses for each modality. E.g.,
+        this could look like this:
 
-            given_params: The risk is a function of these parameters. They mainly
-                consist of the :attr:`spread_probs` of the model. Any excess parameters
-                will be used to update the parametrized distributions used for
-                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
+        .. code-block:: python
 
-            given_diagnoses: Dictionary that can hold a potentially incomplete (mask
-                with ``None``) diagnose for every available modality. Leaving
-                out available modalities will assume a completely missing
-                diagnosis.
+            given_diagnoses = {
+                "MRI": {"II": True, "III": False, "IV": False},
+                "PET": {"II": True, "III": True, "IV": None},
+            }
 
-            t_stage: The T-stage for which the risk should be computed. The attribute
-                :attr:`diag_time_dists` must have a distribution for marginalizing
-                over diagnose times stored for this T-stage.
-
-            mode: Set to ``"HMM"`` for the hidden Markov model risk (requires
-                the ``time_dist``) or to ``"BN"`` for the Bayesian network
-                version.
-
-        Returns:
-            A single probability value if ``involvement`` is specified and an array
-            with probabilities for all possible hidden states otherwise.
+        The ``t_stage`` parameter determines the T-stage for which the posterior is
+        computed. The ``mode`` parameter determines whether the posterior is computed
+        for the hidden Markov model (``"HMM"``) or the Bayesian network (``"BN"``).
+        In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
         """
         if given_params is not None:
             self.assign_params(**given_params)
@@ -789,52 +788,66 @@ class Unilateral:
         if given_diagnoses is None:
             given_diagnoses = {}
 
-        # vector containing P(Z=z|X)
-        diagnose_probs = np.zeros(shape=len(self.state_list))
-        for i,state in enumerate(self.state_list):
-            self.assign_states(state)
-            diagnose_probs[i] = self.comp_diagnose_prob(given_diagnoses)
-        # vector P(X=x) of probabilities of arriving in state x, marginalized over time
-        # HMM version
-        if mode == "HMM":
-            max_t = self.diag_time_dists.max_time
-            state_probs = self._evolve(t_last=max_t)
-            marg_state_probs = self.diag_time_dists[t_stage].pmf @ state_probs
+        diagnose_encoding = np.array([True], dtype=bool)
+        for modality in self.modalities.keys():
+            diagnose_encoding = np.kron(
+                diagnose_encoding,
+                matrix.compute_encoding(
+                    lnls=[lnl.name for lnl in self.lnls],
+                    pattern=given_diagnoses.get(modality, {}),
+                ),
+            )
+        # vector containing P(Z=z|X). Essentially a data matrix for one patient
+        diagnose_given_state = diagnose_encoding @ self.observation_matrix
 
-        # BN version
-        elif mode == "BN":
-            marg_state_probs = np.ones(shape=(len(self.state_list)), dtype=float)
-            for i, state in enumerate(self.state_list):
-                self.assign_states(state)
-                for node in self.lnls:
-                    marg_state_probs[i] *= node.bn_prob()
+        # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
+        state_dist = self.comp_state_dist(t_stage, mode=mode)
 
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
-        joint_diag_state = marg_state_probs * diagnose_probs
-        # get marginal over X from joint
-        marg_diagnose_prob = np.sum(joint_diag_state)
-        # compute vector of probabilities for all possible involvements given
-        # the specified diagnosis P(X|Z=z)
-        post_state_probs =  joint_diag_state / marg_diagnose_prob
+        joint_diagnose_and_state = state_dist * diagnose_given_state
+
+        # compute vector of probabilities for all possible involvements given the
+        # specified diagnosis P(X|Z=z) = P(Z=z,X) / P(X), where P(X) = sum_z P(Z=z,X)
+        return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
+
+
+    def risk(
+        self,
+        involvement: PatternType | None = None,
+        given_params: dict | None = None,
+        given_diagnoses: dict[str, PatternType] | None = None,
+        t_stage: str = "early",
+        mode: str = "HMM",
+        **_kwargs,
+    ) -> float | np.ndarray:
+        """Compute risk of a certain involvement, given a patient's diagnosis.
+
+        If an ``involvement`` pattern of interest is provided, this method computes
+        the risk of seeing just that pattern for the set of ``given_params`` and a
+        dictionary of diagnoses for each modality.
+
+        Using the ``mode`` parameter, the risk can be computed either for the hidden
+        Markov model (``"HMM"``) or the Bayesian network (``"BN"``). In case of the
+        Bayesian network mode, the ``t_stage`` parameter is ignored.
+
+        See Also:
+            :py:meth:`comp_posterior_state_dist`
+        """
+        posterior_state_dist = self.comp_posterior_state_dist(
+            given_params, given_diagnoses, t_stage, mode,
+        )
+
         if involvement is None:
-            return post_state_probs
+            return posterior_state_dist
 
         # if a specific involvement of interest is provided, marginalize the
         # resulting vector of hidden states to match that involvement of
         # interest
-        if isinstance(involvement, dict):
-            involvement = np.array([involvement.get(lnl.name, None) for lnl in self.lnls])
-        else:
-            involvement = np.array(involvement)
-
-        marg_states = np.zeros(shape=post_state_probs.shape, dtype=bool)
-        for i,state in enumerate(self.state_list):
-            marg_states[i] = np.all(np.equal(
-                involvement, state,
-                where=(involvement!=None),
-                out=np.ones_like(state, dtype=bool)
-            ))
-        return marg_states @ post_state_probs
+        marginalize_over_states = matrix.compute_encoding(
+            lnls=[lnl.name for lnl in self.lnls],
+            pattern=involvement,
+        )
+        return marginalize_over_states @ posterior_state_dist
 
 
     def _draw_patient_diagnoses(
@@ -848,11 +861,9 @@ class Unilateral:
             diag_times: List of diagnose times for each patient who's diagnose
                 is supposed to be drawn.
         """
-        max_t = np.max(diag_times)
-
         # use the drawn diagnose times to compute probabilities over states and
         # diagnoses
-        per_time_state_probs = self._evolve(t_last=max_t)
+        per_time_state_probs = self.comp_dist_evolution()
         per_patient_state_probs = per_time_state_probs[diag_times]
         per_patient_obs_probs = per_patient_state_probs @ self.observation_matrix
 
@@ -862,8 +873,7 @@ class Unilateral:
             np.random.choice(obs_idx, p=obs_prob)
             for obs_prob in per_patient_obs_probs
         ]
-        drawn_obs = self.obs_list[drawn_obs_idx].astype(bool)
-        return drawn_obs
+        return self.obs_list[drawn_obs_idx].astype(bool)
 
 
     def generate_dataset(
@@ -895,8 +905,3 @@ class Unilateral:
         dataset[('info', 't_stage')] = drawn_t_stages
 
         return dataset
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()

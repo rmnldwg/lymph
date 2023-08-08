@@ -46,7 +46,7 @@ class AbstractLookup:
         self.private_name = '_' + name
 
 
-    def __get__(self, instance, _cls):
+    def __get__(self, instance: models.Unilateral, _cls):
         if not hasattr(instance, self.private_name):
             self.init_lookup(instance)
 
@@ -58,12 +58,12 @@ class AbstractLookup:
         raise NotImplementedError
 
 
-    def __set__(self, instance, value):
+    def __set__(self, instance: models.Unilateral, value):
         self.__delete__(instance)
         self.__get__(instance, type(instance)).update(value)
 
 
-    def __delete__(self, instance):
+    def __delete__(self, instance: models.Unilateral):
         if hasattr(instance, self.private_name):
             delattr(instance, self.private_name)
 

@@ -10,7 +10,6 @@ from pyexpat import model
 
 from lymph import models
 from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
-from lymph.graph import LymphNodeLevel
 from lymph.helper import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
 
@@ -137,36 +136,32 @@ class Observation(AbstractMatrixDescriptor):
         return observation_matrix
 
 
-def compute_diagnose_encoding(
-    lnls: list[LymphNodeLevel],
-    patient_row: pd.Series,
-    modality_name: str,
+def compute_encoding(
+    lnls: list[str],
+    pattern: pd.Series | dict[str, bool],
 ) -> np.ndarray:
-    """Compute the binary encoding of a particular diagnosis."""
+    """Compute the binary encoding of a particular ``pattern`` of involvement.
+
+    Here, a ``pattern`` must be indexable with the LNL names in ``lnls`` and return
+    either ``True``, if the respective LNL is involved, or ``False`` if it is healthy.
+    If it contains anything that ``pd.isna()`` considers ``True``, the respective
+    LNL is considered to be unknown.
+    """
     num_lnls = len(lnls)
-    diagnose_encoding = np.ones(shape=2**num_lnls, dtype=bool)
-    modality_diagnose = patient_row[modality_name]
+    encoding = np.ones(shape=2**num_lnls, dtype=bool)
 
     for j, lnl in enumerate(lnls):
-        if (
-            lnl.name not in modality_diagnose
-            or pd.isna(modality_diagnose[lnl.name])
-        ):
+        if lnl not in pattern or pd.isna(pattern[lnl]):
             continue
-
-        diagnose_encoding = np.logical_and(
-            diagnose_encoding,
+        encoding = np.logical_and(
+            encoding,
             tile_and_repeat(
-                mat=np.array([
-                    not modality_diagnose[lnl.name],
-                    modality_diagnose[lnl.name]
-                ]),
+                mat=np.array([not pattern[lnl], pattern[lnl]]),
                 tile=(1, 2**j),
                 repeat=(1, 2**(num_lnls - j - 1)),
             )[0],
         )
-
-    return diagnose_encoding
+    return encoding
 
 
 def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
@@ -193,8 +188,9 @@ def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
         for modality_name in model.modalities.keys():
             if modality_name not in patient_row:
                 continue
-            diagnose_encoding = compute_diagnose_encoding(
-                model.lnls, patient_row, modality_name
+            diagnose_encoding = compute_encoding(
+                lnls=[lnl.name for lnl in model.lnls],
+                pattern=patient_row[modality_name],
             )
             patient_encoding = np.kron(patient_encoding, diagnose_encoding)
 

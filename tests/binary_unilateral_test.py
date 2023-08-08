@@ -254,11 +254,6 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
 
     def test_diagnose_matrices(self):
         """Make sure the diagnose matrices are generated correctly."""
-        self.assertRaises(
-            AttributeError,
-            lambda: setattr(self.model, "diagnose_matrices", "foo")
-        )
-
         self.model.load_patient_data(self.patient_data, side="ipsi")
         for t_stage in ["early", "late"]:
             has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
@@ -277,6 +272,11 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
                 has_t_stage.sum(),
             )
             self.assertTrue(np.all(np.less_equal(diagnose_matrix, 1.)))
+
+        self.assertRaises(
+            AttributeError,
+            lambda: setattr(self.model, "diagnose_matrices", "foo")
+        )
 
 
 if __name__ == "__main__":

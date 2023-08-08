@@ -210,9 +210,7 @@ def delete_transition_tensor(setter: Callable) -> Callable:
 
 
 class Edge:
-    """
-    This class represents an arc in the graph representation of the lymphatic system.
-    """
+    """This class represents an arc in the graph representation of the lymph system."""
     def __init__(
         self,
         parent: Tumor | LymphNodeLevel,
@@ -413,7 +411,9 @@ class Edge:
         edge.
 
         The correct term can be accessed like this:
-        >>> edge.transition_tensor[start_state, end_state, new_state]
+
+        .. code-block:: python
+            edge.transition_tensor[start_state, end_state, new_state]
         """
         if not hasattr(self, "_transition_tensor"):
             self._transition_tensor = self.comp_transition_tensor()
