@@ -261,17 +261,18 @@ class MidlineBilateral:
         if not hasattr(self, "_diagnose_matrices_midext"):
             self._diagnose_matrices_midext = {}
         self._diagnose_matrices_midext[t_stage] = np.zeros((len(table), 2))
-        for patient in range(len(table)):
-            if table.iloc[patient]['info', 'tumor', 'midline_extension'] == False:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 0
-            if table.iloc[patient]['info', 'tumor', 'midline_extension'] == True:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 0
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
-            if (table.iloc[patient]['info', 'tumor', 'midline_extension'] != False) & (table.iloc[patient]['info', 'tumor', 'midline_extension'] != True):
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
-    
+        midext_column = table["info", "tumor", "midline_extension"]
+        for idx, midline_extension in midext_column.items():
+            if pd.isna(midline_extension):
+                self.diagnose_matrices_midext[t_stage][idx, 0] = 1
+                self.diagnose_matrices_midext[t_stage][idx, 1] = 1
+            elif midline_extension:
+                self.diagnose_matrices_midext[t_stage][idx, 0] = 0
+                self.diagnose_matrices_midext[t_stage][idx, 1] = 1
+            elif not midline_extension:
+                self.diagnose_matrices_midext[t_stage][idx, 0] = 1
+                self.diagnose_matrices_midext[t_stage][idx, 1] = 0
+
     @property
     def diagnose_matrices_midext(self):
         try:
@@ -349,13 +350,13 @@ class MidlineBilateral:
         
         self.midext_prob = new_params
 
-        midextransition_matrix = np.zeros(shape=(2**1, 2**1))
-        midextransition_matrix[0,0] = 1 - self.midext_prob
-        midextransition_matrix[0,1] = self.midext_prob
-        midextransition_matrix[1,0] = 0
+        midextransition_matrix = np.array(
+            [[1 - self.midext_prob, self.midext_prob],
+            [0.                  , 1.              ]]
+        )
         midextransition_matrix[1,1] = 1
 
-        # compute involvement at first time-step
+        # compute involvement for all time steps
         for i in range(len(start_midexstate)-1):
             start_midexstate[i+1,:] = start_midexstate[i,:] @ midextransition_matrix
         return start_midexstate
