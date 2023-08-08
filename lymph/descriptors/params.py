@@ -23,6 +23,7 @@ class Param:
 
 
 class ParamsUserDict(AbstractLookupDict):
+    """Dictionary class to store the parameters of a lymph model."""
     def __setitem__(self, key: str, value: Param, / ) -> None:
         if not isinstance(value, Param):
             raise TypeError(
@@ -35,13 +36,13 @@ class ParamsUserDict(AbstractLookupDict):
 class GetterSetterAccess(AbstractDictDescriptor):
     """Descriptor class to access parameters of a lymph model.
 
-    When first trying to access this descriptor, it will compute a lookup table
+    When first trying to access this descriptor, it will compute a lookup dictionary
     for all parameters of the model. This is done by iterating over all edges
     and creating a dictionary with keys of parameter names and values of `Param`
     objects. These Param objects store the getter and setter functions for the
     corresponding parameter.
     """
-    def init_lookup(self, instance: models.Unilateral):
+    def _get_callback(self, instance: models.Unilateral):
         """Compute the lookup table for all edge parameters of the lymph model."""
         params_dict = ParamsUserDict()
         for edge in instance.tumor_edges:

@@ -201,6 +201,7 @@ class ModalitiesUserDict(AbstractLookupDict):
 
 
 class ConfusionMatrices(AbstractDictDescriptor):
-    def init_lookup(self, instance):
+    """Stores a dictionary of confusion matrices for diagnostic modalities."""
+    def _get_callback(self, instance):
         modalities_dict = ModalitiesUserDict(model=instance)
         setattr(instance, self.private_name, modalities_dict)

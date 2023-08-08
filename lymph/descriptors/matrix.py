@@ -202,6 +202,15 @@ def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
 
 
 class DataEncodingUserDict(AbstractLookupDict):
+    """``UserDict`` that dynamically generates the data matrices for each T-stage.
+
+    Note the implementation details of the parent class
+    :py:class:`~lymph.descriptors.AbstractLookupDict` to see when and why the values
+    are lazily computed.
+
+    A data matrix for a T-stage is computed when no data matrix for that T-stage is
+    present and the T-stage is found in the stored patient data.
+    """
     def __setitem__(self, __key, __value) -> None:
         warnings.warn("Setting the data matrices is not supported.")
 
@@ -217,7 +226,7 @@ class DataEncodingUserDict(AbstractLookupDict):
 
 class DataEncodings(AbstractDictDescriptor):
     """Allows accessing the data matrix of every T-category separately."""
-    def init_lookup(self, instance: models.Unilateral):
+    def _get_callback(self, instance: models.Unilateral):
         """Add ``instance`` as ``model`` attribute to the descriptor."""
         data_encoding_dict = DataEncodingUserDict(model=instance)
         setattr(instance, self.private_name, data_encoding_dict)
@@ -227,6 +236,17 @@ class DataEncodings(AbstractDictDescriptor):
 
 
 class DiagnoseUserDict(AbstractLookupDict):
+    """``UserDict`` that dynamically generates the diagnose matrices for each T-stage.
+
+    Note the implementation details of the parent class
+    :py:class:`~lymph.descriptors.AbstractLookupDict` to see when and why the values
+    are lazily computed.
+
+    A diagnose matrix for a T-stage is computed when no diagnose matrix for that
+    T-stage is present and the T-stage is found in the stored data matrices, which in
+    turn are computed lazily when the T-stage is found in the data (see
+    :py:class:`~lymph.models.Unilateral.data_matrices` for more on that).
+    """
     def __setitem__(self, __key, __value) -> None:
         warnings.warn("Setting the diagnose matrices is not supported.")
 
@@ -243,7 +263,7 @@ class DiagnoseUserDict(AbstractLookupDict):
 
 class Diagnoses(AbstractDictDescriptor):
     """Allows accessing the diagnose matrices of every T-category separately."""
-    def init_lookup(self, instance: models.Unilateral):
+    def _get_callback(self, instance: models.Unilateral):
         """Add ``instance`` as ``model`` attribute to the descriptor."""
         diagnose_dict = DiagnoseUserDict(model=instance)
         setattr(instance, self.private_name, diagnose_dict)

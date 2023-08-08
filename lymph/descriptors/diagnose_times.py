@@ -17,7 +17,7 @@ class SupportError(Exception):
 
 
 class Distribution:
-    """Class that provides methods for marginalizing over diagnose times."""
+    """Class that provides a way of storeing distributions over diagnose times."""
     def __init__(
         self,
         distribution: list[float] | np.ndarray | callable,
@@ -130,7 +130,7 @@ class Distribution:
 
 
 class DistributionsUserDict(AbstractLookupDict):
-    """Specialized dictionary for storing distributions over diagnose times."""
+    """Dictionary with added methods for storing distributions over diagnose times."""
     # pylint: disable=no-member
     def __setitem__(
         self,
@@ -197,7 +197,8 @@ class DistributionsUserDict(AbstractLookupDict):
 
 
 class Distributions(AbstractDictDescriptor):
-    def init_lookup(self, instance: models.Unilateral):
+    """Descriptor that adds a dictionary for storing distributions over diagnose times."""
+    def _get_callback(self, instance: models.Unilateral):
         """Initialize the lookup dictionary."""
         distribution_dict = DistributionsUserDict(max_time=instance.max_time)
         setattr(instance, self.private_name, distribution_dict)
