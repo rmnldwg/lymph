@@ -242,7 +242,7 @@ class Unilateral:
                 lnl.state = value
 
 
-    edge_params = params.Lookup()
+    edge_params = params.GetterSetterAccess()
     """Dictionary that maps parameter names to their corresponding `Param` objects.
 
     Parameter names are constructed from the names of the tumors and LNLs in the graph
@@ -256,7 +256,7 @@ class Unilateral:
     """
 
 
-    diag_time_dists = diagnose_times.DistributionLookup()
+    diag_time_dists = diagnose_times.Distributions()
     """Mapping of T-categories to the corresponding distributions over diagnose times.
 
     Every distribution is represented by a `diagnose_times.Distribution` object, which
@@ -305,14 +305,14 @@ class Unilateral:
         """
         params_access = [
             *[param.set for param in self.edge_params.values()],
-            *[getattr(dist, "update") for dist in self.diag_time_dists.values()]
+            *[getattr(dist, "set_params") for dist in self.diag_time_dists.values()]
         ]
         for setter, new_param_value in zip(params_access, new_params_args):
             setter(new_param_value)
 
         for key, value in new_params_kwargs.items():
             if key in self.diag_time_dists:
-                self.diag_time_dists[key].update(value)
+                self.diag_time_dists[key].set_params(value)
 
             elif key == "growth":
                 for edge in self.growth_edges:
@@ -357,7 +357,7 @@ class Unilateral:
         return trans_prob
 
 
-    modalities = modalities.Lookup()
+    modalities = modalities.ConfusionMatrices()
     """Dictionary storing diagnostic modalities and their specificity/sensitivity.
 
     The keys are the names of the modalities, e.g. "CT" or "pathology", the values are
@@ -524,7 +524,7 @@ class Unilateral:
     observation_matrix = matrix.Observation()
     """The matrix encoding the probabilities to observe a certain diagnosis."""
 
-    data_matrices = matrix.DataLookup()
+    data_matrices = matrix.DataEncodings()
     """Dictionary with T-stages as keys and corresponding data matrices as values.
 
     A data matrix is a binary encding of which of the possible observational states
@@ -533,7 +533,7 @@ class Unilateral:
     marginalize over them.
     """
 
-    diagnose_matrices = matrix.DiagnoseLookup()
+    diagnose_matrices = matrix.Diagnoses()
     """Dictionary with T-stages as keys and corresponding diagnose matrices as values.
 
     Diagnose matrices are simply the dot product of the :py:attr:`~observation_matrix`
@@ -548,7 +548,13 @@ class Unilateral:
         This is the intersection of the unique T-stages found in the (mapped) data
         and the T-stages defined in the distributions over diagnose times.
         """
-        return set(self.diag_time_dists.keys()) & set(self.diagnose_matrices.keys())
+        for t_stage in self.diag_time_dists.keys():
+            # This implementation is a little special, because the diagnose matrix
+            # of a particular T-stage is only computed when either __contains__ or
+            # __getitem__ is called on it. Therefore, we cannot directly loop over
+            # the diagnose matrices' keys or something like that.
+            if t_stage in self.diagnose_matrices:
+                yield t_stage
 
 
     @property

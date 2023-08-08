@@ -6,8 +6,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
-from lymph import models
-from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
+from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
 
 
 class Modality:
@@ -100,7 +99,7 @@ class Pathological(Modality):
 
 ModalityDef = Union[Modality, np.ndarray, Tuple[float, float], List[float]]
 
-class ModalityDict(AbstractLookupDict):
+class ModalitiesUserDict(AbstractLookupDict):
     """Dictionary storing instances of a diagnostic `Modality` for a lymph model.
 
     This class allows the user to specify the diagnostic modalities of a lymph model
@@ -201,22 +200,7 @@ class ModalityDict(AbstractLookupDict):
         super().__setitem__(name, value)
 
 
-class Lookup(AbstractLookup):
-    """Descriptor class for the diagnostic modalities.
-
-    This class is used to manage the diagnostic modalities of a lymph model. It
-    provides a descriptor to access the modality of a lymph model. When first trying
-    to access this descriptor, it will compute the modality of the model.
-
-    Attributes:
-        modality (Modality): modality of the lymph model
-    """
-    def init_lookup(self, model: models.Unilateral) -> None:
-        """Initialize the lookup for the lymph model."""
-        modality_dict = ModalityDict(model=model)
-        setattr(model, self.private_name, modality_dict)
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
+class ConfusionMatrices(AbstractDictDescriptor):
+    def init_lookup(self, instance):
+        modalities_dict = ModalitiesUserDict(model=instance)
+        setattr(instance, self.private_name, modalities_dict)

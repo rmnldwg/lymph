@@ -9,7 +9,7 @@ import warnings
 import numpy as np
 
 from lymph import models
-from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
+from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
 
 
 class SupportError(Exception):
@@ -129,7 +129,7 @@ class Distribution:
         return np.random.choice(a=self.support, p=self.distribution)
 
 
-class DistributionDict(AbstractLookupDict):
+class DistributionsUserDict(AbstractLookupDict):
     """Specialized dictionary for storing distributions over diagnose times."""
     # pylint: disable=no-member
     def __setitem__(
@@ -196,9 +196,8 @@ class DistributionDict(AbstractLookupDict):
         return drawn_t_stages, drawn_diag_times
 
 
-class DistributionLookup(AbstractLookup):
-    """Descriptor to access the distributions over diagnose times per T-category."""
-    def init_lookup(self, model: models.Unilateral):
+class Distributions(AbstractDictDescriptor):
+    def init_lookup(self, instance: models.Unilateral):
         """Initialize the lookup dictionary."""
-        distribution_dict = DistributionDict(max_time=model.max_time)
-        setattr(model, self.private_name, distribution_dict)
+        distribution_dict = DistributionsUserDict(max_time=instance.max_time)
+        setattr(instance, self.private_name, distribution_dict)

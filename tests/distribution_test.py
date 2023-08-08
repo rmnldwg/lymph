@@ -4,7 +4,10 @@ import unittest
 import numpy as np
 import scipy as sp
 
-from lymph.descriptors.diagnose_times import Distribution, DistributionDict
+from lymph.descriptors.diagnose_times import (
+    Distribution,
+    DistributionsUserDict,
+)
 
 
 class FixtureMixin:
@@ -64,7 +67,7 @@ class DistributionDictTestCase(FixtureMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.rng = np.random.default_rng(42)
-        self.dist_dict = DistributionDict(max_time=self.max_time)
+        self.dist_dict = DistributionsUserDict(max_time=self.max_time)
 
     def test_setitem_distribution_from_array(self):
         """Test setting a distribution created from an array."""

@@ -1,10 +1,8 @@
 """Provide a descriptor class to access parameters of a lymph model."""
 from __future__ import annotations
 
-from typing import Callable
-
 from lymph import models
-from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
+from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
 
 
 class Param:
@@ -13,7 +11,7 @@ class Param:
     This simple class also makes sure that the transition matrix of the model
     is deleted when a spread parameter is set.
     """
-    def __init__(self, model: models.Unilateral, getter: Callable, setter: Callable):
+    def __init__(self, model: models.Unilateral, getter: callable, setter: callable):
         self.model = model
         self.get = getter
         self._set = setter
@@ -24,8 +22,7 @@ class Param:
         del self.model.transition_matrix
 
 
-class ParamDict(AbstractLookupDict):
-    """Dictionary preventing direct setting of parameter values."""
+class ParamsUserDict(AbstractLookupDict):
     def __setitem__(self, key: str, value: Param, / ) -> None:
         if not isinstance(value, Param):
             raise TypeError(
@@ -35,7 +32,7 @@ class ParamDict(AbstractLookupDict):
         return super().__setitem__(key, value)
 
 
-class Lookup(AbstractLookup):
+class GetterSetterAccess(AbstractDictDescriptor):
     """Descriptor class to access parameters of a lymph model.
 
     When first trying to access this descriptor, it will compute a lookup table
@@ -46,24 +43,23 @@ class Lookup(AbstractLookup):
     """
     def init_lookup(self, instance: models.Unilateral):
         """Compute the lookup table for all edge parameters of the lymph model."""
-        param_dict = ParamDict()
-
+        params_dict = ParamsUserDict()
         for edge in instance.tumor_edges:
-            param_dict['spread_' + edge.name] = Param(
+            params_dict['spread_' + edge.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
         for edge in instance.lnl_edges:
-            param_dict['spread_' + edge.name] = Param(
+            params_dict['spread_' + edge.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
             if instance.is_trinary:
-                param_dict['micro_' + edge.name] = Param(
+                params_dict['micro_' + edge.name] = Param(
                     model=instance,
                     getter=edge.get_micro_mod,
                     setter=edge.set_micro_mod,
@@ -72,10 +68,10 @@ class Lookup(AbstractLookup):
         # here we don't need to check if the model is trinary, because the growth edges
         # are only present in trinary models
         for edge in instance.growth_edges:
-            param_dict['growth_' + edge.parent.name] = Param(
+            params_dict['growth_' + edge.parent.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
-        setattr(instance, self.private_name, param_dict)
+        setattr(instance, self.private_name, params_dict)

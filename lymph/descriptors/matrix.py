@@ -6,10 +6,9 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pyexpat import model
 
 from lymph import models
-from lymph.descriptors.lookup import AbstractLookup, AbstractLookupDict
+from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
 from lymph.helper import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
 
@@ -175,6 +174,9 @@ def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
     number of diagnostic modalities and :math:`M` is the number of patients with the
     given ``t_stage``.
     """
+    if not model.patient_data["_model", "#", "t_stage"].isin([t_stage]).any():
+        raise ValueError(f"No patients with T-stage {t_stage} in patient data.")
+
     has_t_stage = model.patient_data["_model", "#", "t_stage"] == t_stage
     patients_with_t_stage = model.patient_data[has_t_stage]
 
@@ -199,53 +201,52 @@ def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
     return result
 
 
-class DataDict(AbstractLookupDict):
-    """Allows accessing the data matrix of every T-category separately."""
+class DataEncodingUserDict(AbstractLookupDict):
     def __setitem__(self, __key, __value) -> None:
         warnings.warn("Setting the data matrices is not supported.")
 
-    def __getitem__(self, t_stage: str) -> np.ndarray:
-        """Get the data matrix for a specific T-stage. Create, if necessary."""
-        # pylint: disable=no-member
-        if t_stage not in self:
-            data_matrix = generate_data_matrix(self.model, t_stage)
-            super().__setitem__(t_stage, data_matrix)
+    def __missing__(self, t_stage: str):
+        """Create the data matrix for a specific T-stage if necessary."""
+        try:
+            self.data[t_stage] = generate_data_matrix(self.model, t_stage)
+        except ValueError as val_err:
+            raise KeyError(f"No data matrix for T-stage {t_stage}.") from val_err
 
-        return super().__getitem__(t_stage)
+        return self[t_stage]
 
 
-class DataLookup(AbstractLookup):
-    """Manages the data matrices dictionary."""
-    def init_lookup(self, model: models.Unilateral):
-        data_dict = DataDict(model=model)
-        setattr(model, self.private_name, data_dict)
+class DataEncodings(AbstractDictDescriptor):
+    """Allows accessing the data matrix of every T-category separately."""
+    def init_lookup(self, instance: models.Unilateral):
+        """Add ``instance`` as ``model`` attribute to the descriptor."""
+        data_encoding_dict = DataEncodingUserDict(model=instance)
+        setattr(instance, self.private_name, data_encoding_dict)
 
     def __set__(self, instance, value):
         raise AttributeError("Cannot set data matrix lookup dict.")
 
 
-class DiagnoseDict(AbstractLookupDict):
-    """Allows accessing the diagnose matrices of every T-category separately."""
+class DiagnoseUserDict(AbstractLookupDict):
     def __setitem__(self, __key, __value) -> None:
         warnings.warn("Setting the diagnose matrices is not supported.")
 
-    def __getitem__(self, t_stage: str) -> np.ndarray:
-        """Get the diagnose matrix for a specific T-stage. Create, if necessary."""
-        # pylint: disable=no-member
-        if t_stage not in self:
-            diagnose_matrix = (
-                self.model.observation_matrix @ self.model.data_matrices[t_stage]
-            )
-            super().__setitem__(t_stage, diagnose_matrix)
+    def __missing__(self, t_stage: str) -> np.ndarray:
+        """If the matrix for a ``t_stage`` is missing, try to generate it lazily."""
+        if t_stage not in self.model.data_matrices:
+            raise KeyError(f"Data matrix for T-stage {t_stage} is missing.")
 
-        return super().__getitem__(t_stage)
+        self.data[t_stage] = (
+            self.model.observation_matrix @ self.model.data_matrices[t_stage]
+        )
+        return self[t_stage]
 
 
-class DiagnoseLookup(AbstractLookup):
-    """Manages the diagnose matrices dictionary."""
-    def init_lookup(self, model: models.Unilateral):
-        diagnose_dict = DiagnoseDict(model=model)
-        setattr(model, self.private_name, diagnose_dict)
+class Diagnoses(AbstractDictDescriptor):
+    """Allows accessing the diagnose matrices of every T-category separately."""
+    def init_lookup(self, instance: models.Unilateral):
+        """Add ``instance`` as ``model`` attribute to the descriptor."""
+        diagnose_dict = DiagnoseUserDict(model=instance)
+        setattr(instance, self.private_name, diagnose_dict)
 
     def __set__(self, instance, value):
         raise AttributeError("Cannot set diagnose matrices lookup dict.")

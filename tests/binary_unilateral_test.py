@@ -5,13 +5,15 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
+import scipy as sp
 
+from lymph.descriptors import diagnose_times
 from lymph.descriptors.modalities import Clinical, Modality, Pathological
 from lymph.graph import LymphNodeLevel, Tumor
 from lymph.models import Unilateral
 
 
-class FixtureMixin:
+class ModelFixtureMixin:
     """Mixin class for simple binary model fixture creation."""
 
     def setUp(self):
@@ -52,7 +54,7 @@ class FixtureMixin:
         }
 
 
-class InitTestCase(FixtureMixin, unittest.TestCase):
+class InitTestCase(ModelFixtureMixin, unittest.TestCase):
     """Test the initialization of a binary model."""
 
     def test_num_nodes(self):
@@ -108,7 +110,7 @@ class InitTestCase(FixtureMixin, unittest.TestCase):
             self.assertIn(edge.name, connecting_edge_names)
 
 
-class ParameterAssignmentTestCase(FixtureMixin, unittest.TestCase):
+class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
     """Test the assignment of parameters in a binary model."""
 
     def test_edge_params_assignment_via_lookup(self):
@@ -144,7 +146,7 @@ class ParameterAssignmentTestCase(FixtureMixin, unittest.TestCase):
         self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
-class TransitionMatrixTestCase(FixtureMixin, unittest.TestCase):
+class TransitionMatrixTestCase(ModelFixtureMixin, unittest.TestCase):
     """Test the generation of the transition matrix in a binary model."""
 
     def setUp(self):
@@ -185,7 +187,7 @@ class TransitionMatrixTestCase(FixtureMixin, unittest.TestCase):
         self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
 
 
-class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
+class ObservationMatrixTestCase(ModelFixtureMixin, unittest.TestCase):
     """Test the generation of the observation matrix in a binary model."""
 
     def setUp(self):
@@ -206,8 +208,8 @@ class ObservationMatrixTestCase(FixtureMixin, unittest.TestCase):
         self.assertTrue(np.allclose(row_sums, 1.))
 
 
-class PatientDataTestCase(FixtureMixin, unittest.TestCase):
-    """Test loading the patient data."""
+class LoadDataFixtureMixin(ModelFixtureMixin):
+    """Mixin for model with loaded data."""
 
     def setUp(self):
         super().setUp()
@@ -218,10 +220,14 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
             test_data_dir / "2021-usz-oropharynx.csv",
             header=[0,1,2],
         )
+        self.model.load_patient_data(self.patient_data, side="ipsi")
+
+
+class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
+    """Test loading the patient data."""
 
     def test_load_patient_data(self):
         """Make sure the patient data is loaded correctly."""
-        self.model.load_patient_data(self.patient_data, side="ipsi")
         self.assertEqual(len(self.model.patient_data), len(self.patient_data))
         self.assertRaises(
             ValueError, self.model.load_patient_data, self.patient_data, side="foo"
@@ -229,12 +235,6 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
 
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""
-        self.assertRaises(
-            AttributeError,
-            lambda: setattr(self.model, "data_matrices", "foo")
-        )
-
-        self.model.load_patient_data(self.patient_data, side="ipsi")
         for t_stage in ["early", "late"]:
             has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
                 "early": [0,1,2],
@@ -252,9 +252,13 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
                 has_t_stage.sum(),
             )
 
+        self.assertRaises(
+            AttributeError,
+            lambda: setattr(self.model, "data_matrices", "foo")
+        )
+
     def test_diagnose_matrices(self):
         """Make sure the diagnose matrices are generated correctly."""
-        self.model.load_patient_data(self.patient_data, side="ipsi")
         for t_stage in ["early", "late"]:
             has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
                 "early": [0,1,2],
@@ -279,12 +283,39 @@ class PatientDataTestCase(FixtureMixin, unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    fixture = FixtureMixin()
-    fixture.setUp()
+class LikelihoodTestCase(LoadDataFixtureMixin, unittest.TestCase):
+    """Test the likelihood of a model."""
 
-    params = fixture.create_random_params(234)
-    fixture.model.assign_params(**params)
-    _ = fixture.model.transition_matrix
-    del fixture.model.transition_matrix
-    _ = fixture.model.transition_matrix
+    def setUp(self):
+        super().setUp()
+        self.model.diag_time_dists["early"] = self.create_frozen_diag_time_dist(seed=42)
+        self.model.diag_time_dists["late"] = self.create_parametric_diag_time_dist(seed=42)
+        self.model.assign_params(**self.create_random_params(seed=42))
+
+    def create_random_params(self, seed: int = 42) -> Dict[str, float]:
+        """Create random parameters."""
+        rng = np.random.default_rng(seed)
+        random_params = super().create_random_params(seed=seed)
+        random_params["late"] = rng.uniform(low=0., high=1.)
+        return random_params
+
+    def create_frozen_diag_time_dist(self, seed: int = 42) -> np.ndarray:
+        """Create a frozen diagnose time distribution."""
+        rng = np.random.default_rng(seed)
+        unnormalized = rng.uniform(low=0., high=1., size=self.model.max_time + 1)
+        return unnormalized / np.sum(unnormalized)
+
+    def create_parametric_diag_time_dist(self, seed: int = 42) -> diagnose_times.Distribution:
+        """Create a parametric diagnose time distribution."""
+        def _pmf(support: np.ndarray, p: float) -> np.ndarray:
+            return sp.stats.binom.pmf(support, p=p, n=self.model.max_time + 1)
+
+        return diagnose_times.Distribution(
+            distribution=_pmf,
+            max_time=self.model.max_time,
+        )
+
+    def test_likelihood(self):
+        """Make sure the likelihood is computed correctly."""
+        likelihood = self.model.likelihood(log=True, mode="HMM")
+        self.assertLess(likelihood, 0.)
