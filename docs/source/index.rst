@@ -18,7 +18,7 @@ Documentation
    install
    quickstart
    sampling
-   lymph
+   api
    license
 
 Index & search

@@ -62,7 +62,10 @@ templates_path = ['_templates']
 exclude_patterns = ['_data']
 
 # document classes and their constructors
-autoclass_content = 'both'
+autoclass_content = 'class'
+
+# sort members by source
+autodoc_member_order = 'bysource'
 
 
 # -- Options for HTML output -------------------------------------------------
