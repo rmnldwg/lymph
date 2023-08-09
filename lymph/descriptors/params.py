@@ -45,14 +45,14 @@ class GetterSetterAccess(AbstractDictDescriptor):
     def _get_callback(self, instance: models.Unilateral):
         """Compute the lookup table for all edge parameters of the lymph model."""
         params_dict = ParamsUserDict()
-        for edge in instance.tumor_edges:
+        for edge in instance._tumor_edges:
             params_dict['spread_' + edge.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
                 setter=edge.set_spread_prob,
             )
 
-        for edge in instance.lnl_edges:
+        for edge in instance._lnl_edges:
             params_dict['spread_' + edge.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,
@@ -68,7 +68,7 @@ class GetterSetterAccess(AbstractDictDescriptor):
 
         # here we don't need to check if the model is trinary, because the growth edges
         # are only present in trinary models
-        for edge in instance.growth_edges:
+        for edge in instance._growth_edges:
             params_dict['growth_' + edge.parent.name] = Param(
                 model=instance,
                 getter=edge.get_spread_prob,

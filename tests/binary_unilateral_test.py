@@ -64,8 +64,8 @@ class InitTestCase(ModelFixtureMixin, unittest.TestCase):
         num_lnls = len({name for kind, name in self.graph if kind == "lnl"})
 
         self.assertEqual(len(self.model.nodes), num_nodes)
-        self.assertEqual(len(self.model.tumors), num_tumor)
-        self.assertEqual(len(self.model.lnls), num_lnls)
+        self.assertEqual(len(self.model._tumors), num_tumor)
+        self.assertEqual(len(self.model._lnls), num_lnls)
 
     def test_num_edges(self):
         """Check number of edges initialized."""
@@ -80,9 +80,9 @@ class InitTestCase(ModelFixtureMixin, unittest.TestCase):
         )
 
         self.assertEqual(len(self.model.edges), num_edges)
-        self.assertEqual(len(self.model.tumor_edges), num_tumor_edges)
-        self.assertEqual(len(self.model.lnl_edges), num_lnl_edges)
-        self.assertEqual(len(self.model.growth_edges), 0)
+        self.assertEqual(len(self.model._tumor_edges), num_tumor_edges)
+        self.assertEqual(len(self.model._lnl_edges), num_lnl_edges)
+        self.assertEqual(len(self.model._growth_edges), 0)
 
     def test_tumor(self):
         """Make sure the tumor has been initialized correctly."""
@@ -93,7 +93,7 @@ class InitTestCase(ModelFixtureMixin, unittest.TestCase):
 
     def test_lnls(self):
         """Test they are all binary lymph node levels."""
-        for lnl in self.model.lnls:
+        for lnl in self.model._lnls:
             self.assertIsInstance(lnl, LymphNodeLevel)
             self.assertTrue(lnl.is_binary)
 
@@ -103,7 +103,7 @@ class InitTestCase(ModelFixtureMixin, unittest.TestCase):
         receiving_lnls = self.graph[("tumor", "T")]
         connecting_edge_names = [f"{tumor.name}_to_{lnl}" for lnl in receiving_lnls]
 
-        for edge in self.model.tumor_edges:
+        for edge in self.model._tumor_edges:
             self.assertEqual(edge.parent.name, "T")
             self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
@@ -139,7 +139,7 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         changed during the test and the `_transition_matrix` attribute is deleted on
         the wrong instance. I have no clue why, but generally, the method works.
         """
-        first_lnl_name = self.model.lnls[0].name
+        first_lnl_name = self.model._lnls[0].name
         _ = self.model.transition_matrix
         self.assertTrue(hasattr(self.model, "_transition_matrix"))
         self.model.edge_params[f"spread_T_to_{first_lnl_name}"].set(0.5)
@@ -197,7 +197,7 @@ class ObservationMatrixTestCase(ModelFixtureMixin, unittest.TestCase):
 
     def test_shape(self):
         """Make sure the observation matrix has the correct shape."""
-        num_lnls = len(self.model.lnls)
+        num_lnls = len(self.model._lnls)
         num_modalities = len(self.model.modalities)
         expected_shape = (2**num_lnls, 2**(num_lnls + num_modalities))
         self.assertEqual(self.model.observation_matrix.shape, expected_shape)

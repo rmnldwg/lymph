@@ -11,7 +11,7 @@ PatternType = dict[str, bool | NAType | None]
 
 
 def check_unique_names(graph):
-    """Check if all nodes have unique names."""
+    """Check if all nodes in the ``graph`` have unique names."""
     node_names = [name for _, name in graph]
     unique_node_names = set(node_names)
 

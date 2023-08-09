@@ -51,8 +51,8 @@ class Bilateral:
         """Print info about the structure and parameters of the bilateral
         lymphatic system.
         """
-        num_tumors = len(self.ipsi.tumors)
-        num_lnls   = len(self.ipsi.lnls)
+        num_tumors = len(self.ipsi._tumors)
+        num_lnls   = len(self.ipsi._lnls)
         string = (
             f"Bilateral lymphatic system with {num_tumors} tumor(s) "
             f"and 2 * {num_lnls} LNL(s).\n"
@@ -107,8 +107,8 @@ class Bilateral:
         """
         Set the state of the system to ``newstate``.
         """
-        self.ipsi.state = newstate[:len(self.ipsi.lnls)]
-        self.contra.state = newstate[len(self.ipsi.lnls):]
+        self.ipsi.state = newstate[:len(self.ipsi._lnls)]
+        self.contra.state = newstate[len(self.ipsi._lnls):]
 
 
     @property
@@ -648,7 +648,7 @@ class Bilateral:
         # construct MultiIndex for dataset from stored modalities
         sides = ["ipsi", "contra"]
         modalities = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.ipsi.lnls]
+        lnl_names = [lnl.name for lnl in self.ipsi._lnls]
         multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
 
         # create DataFrame

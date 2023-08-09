@@ -110,9 +110,10 @@ class AbstractNode:
 class Tumor(AbstractNode):
     """A tumor in the graph representation of the lymphatic system."""
     def __init__(self, name: str, state: int = 1) -> None:
-        """Create a new tumor.
+        """Create a new tumor node.
 
-        A tumor can only ever be in one state, and it cannot change its state.
+        It can only ever be in one ``state``, which is implemented such that the
+        ``allowed_states`` are set to ``[state]``.
         """
         allowed_states = [state]
         super().__init__(name, state, allowed_states)
@@ -413,6 +414,7 @@ class Edge:
         The correct term can be accessed like this:
 
         .. code-block:: python
+
             edge.transition_tensor[start_state, end_state, new_state]
         """
         if not hasattr(self, "_transition_tensor"):

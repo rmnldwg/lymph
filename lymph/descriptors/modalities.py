@@ -119,6 +119,7 @@ class ModalitiesUserDict(AbstractLookupDict):
     recomputed accidentally at some point.
 
     Examples:
+
     >>> binary_modalities = ModalityDict(is_trinary=False)
     >>> binary_modalities["test"] = Modality(0.9, 0.8)
     >>> binary_modalities["test"].confusion_matrix

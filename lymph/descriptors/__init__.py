@@ -1,5 +1,6 @@
 """
-Abstract dictionary subclass and discriptor class for accessing this dictionary.
+Module containing mostly descriptors that are used to dynamically construct expensive
+attributes of a :py:class:`lymph.models.Unilateral` instance.
 """
 from __future__ import annotations
 
