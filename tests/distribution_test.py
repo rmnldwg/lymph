@@ -16,7 +16,7 @@ class FixtureMixin:
     def setUp(self):
         self.max_time = 10
         self.array_arg = np.random.uniform(size=self.max_time + 1, low=0., high=10.)
-        self.func_arg = lambda support, p: sp.stats.binom.pmf(support, self.max_time, p)
+        self.func_arg = lambda support, p=0.5: sp.stats.binom.pmf(support, self.max_time, p)
 
 
 class DistributionTestCase(FixtureMixin, unittest.TestCase):
@@ -25,9 +25,8 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
     def test_frozen_distribution_without_max_time(self):
         """Test the creation of a frozen distribution without providing a max time."""
         dist = Distribution(self.array_arg)
-        self.assertTrue(dist.is_frozen)
         self.assertFalse(dist.is_updateable)
-        self.assertRaises(ValueError, dist.get_params)
+        self.assertEqual({}, dist.get_params())
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
@@ -35,9 +34,8 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
     def test_frozen_distribution_with_max_time(self):
         """Test the creation of a frozen distribution where we provide the max_time."""
         dist = Distribution(self.array_arg)
-        self.assertTrue(dist.is_frozen)
         self.assertFalse(dist.is_updateable)
-        self.assertRaises(ValueError, dist.get_params)
+        self.assertEqual({}, dist.get_params())
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
@@ -51,13 +49,11 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
     def test_updateable_distribution_with_max_time(self):
         """Test the creation of an updateable distribution where we provide the max_time."""
         dist = Distribution(self.func_arg, max_time=self.max_time)
-        self.assertFalse(dist.is_frozen)
         self.assertTrue(dist.is_updateable)
 
-        dist.set_params(0.5)
+        dist.set_params(p=0.5)
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
-        self.assertTrue(dist.is_frozen)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
 
 
@@ -94,16 +90,14 @@ class DistributionDictTestCase(FixtureMixin, unittest.TestCase):
     def test_multiple_setitem(self):
         """Test setting multiple distributions."""
         for i in range(5):
-            func = lambda support, p: sp.stats.binom.pmf(support, self.max_time, p)
+            func = lambda support, p=0.2: sp.stats.binom.pmf(support, self.max_time, p)
             self.dist_dict[f"test_{i}"] = func
 
         self.assertTrue(len(self.dist_dict) == 5)
         for i in range(5):
             self.assertTrue(f"test_{i}" in self.dist_dict)
             self.assertTrue(self.dist_dict[f"test_{i}"].is_updateable)
-            self.assertFalse(self.dist_dict[f"test_{i}"].is_frozen)
             param = self.rng.uniform()
-            self.dist_dict[f"test_{i}"].set_params(param)
-            returned_param, _ = self.dist_dict[f"test_{i}"].get_params()
-            self.assertTrue(np.allclose(param, returned_param))
-            self.assertTrue(self.dist_dict[f"test_{i}"].is_frozen)
+            self.dist_dict[f"test_{i}"].set_params(p=param)
+            returned_param = self.dist_dict[f"test_{i}"].get_params()
+            self.assertTrue(np.allclose(param, returned_param["p"]))

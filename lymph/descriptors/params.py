@@ -13,12 +13,12 @@ class Param:
     """
     def __init__(self, model: models.Unilateral, getter: callable, setter: callable):
         self.model = model
-        self.get = getter
-        self._set = setter
+        self.get_param = getter
+        self._set_param = setter
 
-    def set(self, value):
+    def set_param(self, value):
         """Delete the transition matrix when setting a parameter."""
-        self._set(value)
+        self._set_param(value)
         del self.model.transition_matrix
 
 

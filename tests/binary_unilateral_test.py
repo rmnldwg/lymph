@@ -117,15 +117,15 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=42)
         for name, value in params_to_set.items():
-            self.model.edge_params[name].set(value)
-            self.assertEqual(self.model.edge_params[name].get(), value)
+            self.model.edge_params[name].set_param(value)
+            self.assertEqual(self.model.edge_params[name].get_param(), value)
 
     def test_edge_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=43)
         self.model.assign_params(**params_to_set)
         for name, value in params_to_set.items():
-            self.assertEqual(self.model.edge_params[name].get(), value)
+            self.assertEqual(self.model.edge_params[name].get_param(), value)
 
     def test_direct_assignment_raises_error(self):
         """Make sure direct assignment of parameters raises an error."""
@@ -142,7 +142,7 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         first_lnl_name = self.model._lnls[0].name
         _ = self.model.transition_matrix
         self.assertTrue(hasattr(self.model, "_transition_matrix"))
-        self.model.edge_params[f"spread_T_to_{first_lnl_name}"].set(0.5)
+        self.model.edge_params[f"spread_T_to_{first_lnl_name}"].set_param(0.5)
         self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
@@ -296,7 +296,7 @@ class LikelihoodTestCase(LoadDataFixtureMixin, unittest.TestCase):
         """Create random parameters."""
         rng = np.random.default_rng(seed)
         random_params = super().create_random_params(seed=seed)
-        random_params["late"] = rng.uniform(low=0., high=1.)
+        random_params["late_p"] = rng.uniform(low=0., high=1.)
         return random_params
 
     def create_frozen_diag_time_dist(self, seed: int = 42) -> np.ndarray:
@@ -307,7 +307,8 @@ class LikelihoodTestCase(LoadDataFixtureMixin, unittest.TestCase):
 
     def create_parametric_diag_time_dist(self, seed: int = 42) -> diagnose_times.Distribution:
         """Create a parametric diagnose time distribution."""
-        def _pmf(support: np.ndarray, p: float) -> np.ndarray:
+        rng = np.random.default_rng(seed)
+        def _pmf(support: np.ndarray, p: float = rng.uniform()) -> np.ndarray:
             return sp.stats.binom.pmf(support, p=p, n=self.model.max_time + 1)
 
         return diagnose_times.Distribution(

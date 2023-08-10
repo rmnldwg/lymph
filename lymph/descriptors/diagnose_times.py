@@ -4,7 +4,9 @@ model classes.
 """
 from __future__ import annotations
 
+import inspect
 import warnings
+from typing import Any
 
 import numpy as np
 
@@ -26,49 +28,93 @@ class Distribution:
         """Initialize a distribution over diagnose times.
 
         This object can either be created by passing a parametrized function (e.g.,
-        `scipy.stats` distribution) or by passing a list of probabilities for each
+        ``scipy.stats`` distribution) or by passing a list of probabilities for each
         diagnose time.
 
-        The signature of the function must be `func(support, *args, **kwargs)`, where
-        `support` is the support of the distribution from 0 to `max_time`. The
+        The signature of the function must be ``func(support, **kwargs)``, where
+        ``support`` is the support of the distribution from 0 to ``max_time``. The
         function must return a list of probabilities for each diagnose time.
 
-        Since `max_time` specifies the support of the distribution (rangin from 0 to
-        `max_time`), it must be provided if a parametrized function is passed. If a
-        list of probabilities is passed, `max_time` is inferred from the length of the
-        list and can be omitted. But an error is raised if the length of the list and
-        `max_time` + 1 don't match, in case it is accidentally provided.
-        """
-        if max_time is None:
-            if callable(distribution):
-                raise ValueError("The maximum time must be provided for a callable.")
-            max_time = len(distribution) - 1
+        Note:
+            All arguments except ``support`` must have default values.
 
-        if max_time < 0:
-            raise ValueError("Maximum time must be positive.")
+        Since ``max_time`` specifies the support of the distribution (rangin from 0 to
+        ``max_time``), it must be provided if a parametrized function is passed. If a
+        list of probabilities is passed, ``max_time`` is inferred from the length of the
+        list and can be omitted. But an error is raised if the length of the list and
+        ``max_time`` + 1 don't match, in case it is accidentally provided.
+        """
+        self._kwargs = {}
 
         if callable(distribution):
+            if max_time is None:
+                raise ValueError("max_time must be provided if a function is passed")
+            if max_time < 0:
+                raise ValueError("max_time must be a positive integer")
+
+            self.check_callable(distribution)
+            self.support = np.arange(max_time + 1)
             self._func = distribution
-        elif len(distribution) != max_time + 1:
-            raise ValueError("Length of distribution and max_time + 1 don't match.")
+            self._frozen = self.distribution
+
         else:
+            max_time = self.check_frozen(distribution, max_time)
+            self.support = np.arange(max_time + 1)
+            self._func = None
             self._frozen = self.normalize(distribution)
 
-        self.support = np.arange(max_time + 1)
-        self._args = ()
-        self._kwargs = {}
+
+    @staticmethod
+    def check_frozen(distribution: list[float] | np.ndarray, max_time: int) -> int:
+        """Check if the frozen distribution is valid.
+
+        The frozen distribution must be a list or array of probabilities for each
+        diagnose time. The length of the list must be ``max_time`` + 1.
+        """
+        if max_time is None:
+            max_time = len(distribution) - 1
+        elif max_time != len(distribution) - 1:
+            raise ValueError("max_time and the length of the distribution don't match")
+
+        return max_time
+
+
+    def check_callable(self, distribution: callable) -> None:
+        """Check if the callable's signature is valid.
+
+        The signature of the provided parametric distribution must be
+        ``func(support, **kwargs)``. The first argument is the support of the
+        distribution, which is a list or array of integers from 0 to ``max_time``.
+        The ``**kwargs`` are keyword parameters that are passed to the function to
+        update it.
+        """
+        # skip the first parameter, which is the support
+        skip_first = True
+        for name, param in inspect.signature(distribution).parameters.items():
+            if skip_first:
+                skip_first = False
+                continue
+
+            if param.default is inspect.Parameter.empty:
+                raise ValueError("All params of the function must be keyword arguments")
+
+            self._kwargs[name] = param.default
 
 
     @classmethod
-    def from_instance(cls, other: Distribution) -> Distribution:
+    def from_instance(cls, other: Distribution, max_time: int) -> Distribution:
         """Create a new distribution from an existing one."""
-        if other.is_updateable:
-            new_instance = cls(other._func, max_time=other.support[-1])
-        else:
-            new_instance = cls(other.distribution, max_time=other.support[-1])
+        if other.support[-1] != max_time:
+            warnings.warn(
+                "max_time of the new distribution is different from the old one. "
+                "Support will be truncated/expanded."
+            )
 
-        new_instance._args = other._args
-        new_instance._kwargs = other._kwargs
+        if other.is_updateable:
+            new_instance = cls(other._func, max_time=max_time)
+            new_instance._kwargs = other._kwargs
+        else:
+            new_instance = cls(other.distribution[:max_time + 1], max_time=max_time)
 
         return new_instance
 
@@ -83,43 +129,32 @@ class Distribution:
     @property
     def distribution(self) -> np.ndarray:
         """Return the probability mass function of the distribution if it is frozen."""
-        if self._frozen is None:
-            raise ValueError("Distribution has not been frozen yet")
+        if not hasattr(self, "_frozen") or self._frozen is None:
+            self._frozen = self.normalize(
+                self._func(self.support, **self._kwargs)
+            )
         return self._frozen
 
 
     @property
-    def is_frozen(self) -> bool:
-        """Return ``True`` if the distribution is frozen."""
-        return hasattr(self, '_frozen')
-
-
-    @property
     def is_updateable(self) -> bool:
-        """Return ``True`` if the distribution can be updated by calling `set_param`."""
-        return hasattr(self, '_func')
+        """``True`` if instance can be updated via :py:meth:`~set_param`."""
+        return self._func is not None
 
 
-    def get_params(self) -> tuple[tuple, dict]:
-        """If the distribution is updateable, return the current parameters."""
+    def get_params(self) -> dict[str, Any]:
+        """If the distribution is updateable, return the current parameters as dict."""
         if not self.is_updateable:
-            raise ValueError("Distribution is not updateable.")
+            warnings.warn("Distribution is not updateable, returning empty dict")
+            return {}
 
-        return self._args, self._kwargs
+        return self._kwargs
 
 
-    def set_params(self, *args, **kwargs) -> None:
+    def set_params(self, **kwargs) -> None:
         """Update distribution by setting its parameters and storing the frozen PMF."""
         if self.is_updateable:
-            self._args = args
-            self._kwargs = kwargs
-
-            try:
-                self._frozen = self.normalize(
-                    self._func(self.support, *self._args, **self._kwargs)
-                )
-            except Exception as exc:
-                raise ValueError("Error while freezing distribution.") from exc
+            self._kwargs.update({k: kwargs[k] for k in self._kwargs.keys()})
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 
@@ -139,7 +174,7 @@ class DistributionsUserDict(AbstractLookupDict):
     ) -> None:
         """Set the distribution to marginalize over diagnose times for a T-stage."""
         if isinstance(distribution, Distribution):
-            distribution = Distribution.from_instance(distribution)
+            distribution = Distribution.from_instance(distribution, max_time=self.max_time)
         else:
             distribution = Distribution(distribution, max_time=self.max_time)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import itertools
 import warnings
 from itertools import product
 
@@ -349,6 +350,44 @@ class Unilateral:
         return result if as_dict else list(result.values())
 
 
+    def _assign_via_args(self, new_params_args):
+        """Assign parameters to egdes and to distributions via positional arguments."""
+        objects = itertools.chain(
+            (param for param in self.edge_params.values()),
+            (dist for dist in self.diag_time_dists.values()),
+        )
+        new_params_args = iter(new_params_args)
+        while True:
+            try:
+                obj = next(objects)
+                if isinstance(obj, params.Param):
+                    obj.set_param(next(new_params_args))
+                elif isinstance(obj, diagnose_times.Distribution):
+                    kwargs = obj.get_params()
+                    obj.set_params(**{key: next(new_params_args) for key in kwargs})
+            except StopIteration:
+                break
+
+
+    def _assign_via_kwargs(self, new_params_kwargs):
+        """Assign parameters to egdes and to distributions via keyword arguments."""
+        for key, value in new_params_kwargs.items():
+            t_stage, param_name = key.split("_", 1)
+            if t_stage in self.diag_time_dists:
+                self.diag_time_dists[t_stage].set_params(**{param_name: value})
+
+            elif key == "growth":
+                for edge in self._growth_edges:
+                    edge.spread_prob = value
+
+            elif key == "micro_mod":
+                for edge in self._lnl_edges:
+                    edge.micro_mod = value
+
+            else:
+                self.edge_params[key].set_param(value)
+
+
     def assign_params(self, *new_params_args, **new_params_kwargs):
         """Assign new parameters to the model.
 
@@ -360,35 +399,34 @@ class Unilateral:
            parameter is set right after the corresponding LNL's spread prob.
         3. The growth parameters for each trinary LNL. For a binary model,
            this is skipped.
-        4. The parameters for the marginalizing distributions over diagnose times
+        4. The parameters for the marginalizing distributions over diagnose times. Note
+           that a distribution may take more than one parameter. So, if there are e.g.
+           two T-stages with distributions over diagnose times, this step requires four
+           arguments.
 
-        The order of the keyword arguments obviously does not matter. Also, if one
-        wants to set the microscopic or growth parameters globally for all LNLs, the
-        keyword arguments ``micro_mod`` and ``growth`` should be used.
+        The order of the keyword arguments obviously does not matter. If one wants to
+        set the microscopic or growth parameters globally for all LNLs, the keyword
+        arguments ``micro_mod`` and ``growth`` can be used for that.
 
-        The keyword arguments override the positional arguments.
+        Note:
+            Providing positional arguments does not allow using the global
+            parameters ``micro_mod`` and ``growth``.
+
+        Since the distributions over diagnose times may take more than one parameter,
+        they can be provided as keyword arguments by appending their name to the
+        corresponding T-stage, separated by an underscore. For example, a parameter
+        ``foo`` for the T-stage ``early`` is set via the keyword argument ``early_foo``.
+
+        Note:
+            When using keyword arguments to set the parameters of the distributions
+            over diagnose times, it is not possible to just use the name of the
+            T-stage, even when the distribution only takes one parameter.
+
+        Note:
+            The keyword arguments override the positional arguments.
         """
-        params_access = [
-            *[param.set for param in self.edge_params.values()],
-            *[getattr(dist, "set_params") for dist in self.diag_time_dists.values()]
-        ]
-        for setter, new_param_value in zip(params_access, new_params_args):
-            setter(new_param_value)
-
-        for key, value in new_params_kwargs.items():
-            if key in self.diag_time_dists:
-                self.diag_time_dists[key].set_params(value)
-
-            elif key == "growth":
-                for edge in self._growth_edges:
-                    edge.spread_prob = value
-
-            elif key == "micro_mod":
-                for edge in self._lnl_edges:
-                    edge.micro_mod = value
-
-            else:
-                self.edge_params[key].set(value)
+        self._assign_via_args(new_params_args)
+        self._assign_via_kwargs(new_params_kwargs)
 
 
     def comp_transition_prob(
