@@ -1,7 +1,6 @@
 """Test the binary unilateral system."""
 import unittest
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -41,12 +40,12 @@ class ModelFixtureMixin:
         self.graph_dict = small_graph
         self.model = Unilateral(graph_dict=self.graph_dict)
 
-    def create_random_params(self, seed: int = 42) -> Dict[str, float]:
+    def create_random_params(self, seed: int = 42) -> dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
         return {name: rng.random() for name in self.model.graph.edge_params.keys()}
 
-    def create_modalities(self) -> Dict[str, Modality]:
+    def create_modalities(self) -> dict[str, Modality]:
         """Add modalities to the model."""
         return {
             "CT": Clinical(specificity=0.81, sensitivity=0.86),
@@ -292,7 +291,7 @@ class LikelihoodTestCase(LoadDataFixtureMixin, unittest.TestCase):
         self.model.diag_time_dists["late"] = self.create_parametric_diag_time_dist(seed=42)
         self.model.assign_params(**self.create_random_params(seed=42))
 
-    def create_random_params(self, seed: int = 42) -> Dict[str, float]:
+    def create_random_params(self, seed: int = 42) -> dict[str, float]:
         """Create random parameters."""
         rng = np.random.default_rng(seed)
         random_params = super().create_random_params(seed=seed)

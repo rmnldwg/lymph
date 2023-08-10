@@ -13,8 +13,12 @@ class BinaryEdgeTestCase(unittest.TestCase):
         super().setUp()
         parent = graph.LymphNodeLevel("parent")
         child = graph.LymphNodeLevel("child")
-        self.edge = graph.Edge(parent, child)
-        self.edge.spread_prob = 0.75
+        self.was_called = False
+        self.edge = graph.Edge(parent, child, callbacks=[self.callback])
+
+    def callback(self) -> None:
+        """Callback function for the edge."""
+        self.was_called = True
 
     def test_str(self) -> None:
         """Test the string representation of the edge."""
@@ -37,11 +41,26 @@ class BinaryEdgeTestCase(unittest.TestCase):
         self.assertEqual(self.edge.spread_prob, recreated_edge.spread_prob)
         self.assertEqual(self.edge.micro_mod, recreated_edge.micro_mod)
 
+    def test_callback_on_param_change(self) -> None:
+        """Test if the callback function is called."""
+        self.edge.spread_prob = 0.5
+        self.assertTrue(self.was_called)
+        self.assertFalse(hasattr(self.edge, "_transition_tensor"))
+        _ = self.edge.transition_tensor
+        self.assertTrue(hasattr(self.edge, "_transition_tensor"))
+
+    def test_graph_change(self) -> None:
+        """Check if the callback also works when parent/child nodes are changed."""
+        old_child = self.edge.child
+        new_child = graph.LymphNodeLevel("new_child")
+        self.edge.child = new_child
+        self.assertTrue(self.was_called)
+        self.assertNotIn(self.edge, old_child.inc)
+
     def test_transition_tensor_row_sums(self) -> None:
         """Testing the transition tensor."""
         row_sum = self.edge.transition_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sum, 1.0))
-
 
 
 class TrinaryEdgeTestCase(unittest.TestCase):

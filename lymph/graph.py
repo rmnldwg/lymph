@@ -203,7 +203,7 @@ class Edge:
         child: LymphNodeLevel,
         spread_prob: float = 0.,
         micro_mod: float = 1.,
-        callback: callable | None = None,
+        callbacks: list[callable] | None = None,
     ):
         """Create a new edge between two nodes.
 
@@ -214,11 +214,12 @@ class Edge:
         spread to the next LNL. The `micro_mod` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
+        self.trigger_callbacks = [self.delete_transition_tensor]
+        if callbacks is not None:
+            self.trigger_callbacks += callbacks
+
         self.parent: Tumor | LymphNodeLevel = parent
         self.child: LymphNodeLevel = child
-        self.trigger_callbacks = [self.delete_transition_tensor]
-        if callback is not None:
-            self.trigger_callbacks.append(callback)
 
         if self.child.is_trinary:
             self.micro_mod = micro_mod
@@ -248,8 +249,12 @@ class Edge:
         return self._parent
 
     @parent.setter
+    @trigger
     def parent(self, new_parent: Tumor | LymphNodeLevel) -> None:
         """Set the parent node of the edge."""
+        if hasattr(self, '_parent'):
+            self.parent.out.remove(self)
+
         if not issubclass(new_parent.__class__, AbstractNode):
             raise TypeError("Start must be instance of Node!")
 
@@ -263,8 +268,12 @@ class Edge:
         return self._child
 
     @child.setter
+    @trigger
     def child(self, new_child: LymphNodeLevel) -> None:
         """Set the end (child) node of the edge."""
+        if hasattr(self, '_child'):
+            self.child.inc.remove(self)
+
         if not isinstance(new_child, LymphNodeLevel):
             raise TypeError("End must be instance of Node!")
 
@@ -543,12 +552,12 @@ class Representation:
         for (_, start_name), end_names in graph.items():
             start = self.find_node(start_name)
             if isinstance(start, LymphNodeLevel) and start.is_trinary:
-                growth_edge = Edge(parent=start, child=start, callback=on_edge_change)
+                growth_edge = Edge(parent=start, child=start, callbacks=on_edge_change)
                 self._growth_edges.append(growth_edge)
 
             for end_name in set(end_names):
                 end = self.find_node(end_name)
-                new_edge = Edge(parent=start, child=end, callback=on_edge_change)
+                new_edge = Edge(parent=start, child=end, callbacks=on_edge_change)
 
                 if new_edge.is_tumor_spread:
                     self._tumor_edges.append(new_edge)
