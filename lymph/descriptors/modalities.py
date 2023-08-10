@@ -6,7 +6,9 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
+from lymph import models
 from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
+from lymph.helper import trigger
 
 
 class Modality:
@@ -140,6 +142,7 @@ class ModalitiesUserDict(AbstractLookupDict):
            [0., 1.],
            [0., 1.]])
     """
+    @trigger
     def __setitem__(self, name: str, value: ModalityDef, / ) -> None:
         """Set the modality of the lymph model."""
         # pylint: disable=unidiomatic-typecheck
@@ -150,15 +153,15 @@ class ModalitiesUserDict(AbstractLookupDict):
             # we assume the modality to be clinical here, because for a binary model
             # it does not matter, but for a trinary model the base `Modalitiy` class
             # would not work.
-            if self.model.is_trinary:
+            if self.is_trinary:
                 warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-            value = cls(value.specificity, value.sensitivity, self.model.is_trinary)
+            value = cls(value.specificity, value.sensitivity, self.is_trinary)
 
         elif isinstance(value, Modality):
             # in this case, the user has provided a `Clinical` or `Pathological`
             # modality, so we can just use it after passing the model's type (binary
             # or trinary).
-            value.is_trinary = self.model.is_trinary
+            value.is_trinary = self.is_trinary
 
         elif isinstance(value, np.ndarray):
             # this should allow users to pass some custom confusion matrix directly.
@@ -166,10 +169,10 @@ class ModalitiesUserDict(AbstractLookupDict):
             # misbehave, e.g. when a recomputation of the confusion matrix is triggered.
             specificity = value[0, 0]
             sensitivity = value[-1, -1]
-            modality = Modality(specificity, sensitivity, self.model.is_trinary)
+            modality = Modality(specificity, sensitivity, self.is_trinary)
             modality.confusion_matrix = value
 
-            if self.model.is_trinary:
+            if self.is_trinary:
                 warnings.warn(
                     "Provided transition matrix will be used as is. The sensitivity "
                     "and specificity extracted from it may be nonsensical. Recomputing "
@@ -184,9 +187,9 @@ class ModalitiesUserDict(AbstractLookupDict):
             # assume the modality to be clinical here.
             try:
                 specificity, sensitivity = value
-                if self.model.is_trinary:
+                if self.is_trinary:
                     warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-                value = cls(specificity, sensitivity, self.model.is_trinary)
+                value = cls(specificity, sensitivity, self.is_trinary)
             except (ValueError, TypeError) as err:
                 raise ValueError(
                     "Value must be a `Clinical` or `Pathological` modality, a "
@@ -194,15 +197,14 @@ class ModalitiesUserDict(AbstractLookupDict):
                     "sensitivity."
                 ) from err
 
-        # The observation matrix needs to be updated after changing any of the
-        # modalities. This is done by deleting the matrix, which will trigger a
-        # recomputation when it is accessed the next time.
-        del self.model.observation_matrix
         super().__setitem__(name, value)
 
 
 class ConfusionMatrices(AbstractDictDescriptor):
     """Stores a dictionary of confusion matrices for diagnostic modalities."""
-    def _get_callback(self, instance):
-        modalities_dict = ModalitiesUserDict(model=instance)
+    def _get_callback(self, instance: models.Unilateral):
+        modalities_dict = ModalitiesUserDict(
+            is_trinary=instance.is_trinary,
+            trigger_callback=[instance.delete_observation_matrix],
+        )
         setattr(instance, self.private_name, modalities_dict)

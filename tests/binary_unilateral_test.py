@@ -38,13 +38,13 @@ class ModelFixtureMixin:
             ("lnl", "II"): ["III"],
             ("lnl", "III"): [],
         }
-        self.graph = small_graph
-        self.model = Unilateral(graph=self.graph)
+        self.graph_dict = small_graph
+        self.model = Unilateral(graph_dict=self.graph_dict)
 
     def create_random_params(self, seed: int = 42) -> Dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
-        return {name: rng.random() for name in self.model.edge_params.keys()}
+        return {name: rng.random() for name in self.model.graph.edge_params.keys()}
 
     def create_modalities(self) -> Dict[str, Modality]:
         """Add modalities to the model."""
@@ -59,51 +59,51 @@ class InitTestCase(ModelFixtureMixin, unittest.TestCase):
 
     def test_num_nodes(self):
         """Check number of nodes initialized."""
-        num_nodes = len(self.graph)
-        num_tumor = len({name for kind, name in self.graph if kind == "tumor"})
-        num_lnls = len({name for kind, name in self.graph if kind == "lnl"})
+        num_nodes = len(self.graph_dict)
+        num_tumor = len({name for kind, name in self.graph_dict if kind == "tumor"})
+        num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
 
-        self.assertEqual(len(self.model.nodes), num_nodes)
-        self.assertEqual(len(self.model._tumors), num_tumor)
-        self.assertEqual(len(self.model._lnls), num_lnls)
+        self.assertEqual(len(self.model.graph.nodes), num_nodes)
+        self.assertEqual(len(self.model.graph._tumors), num_tumor)
+        self.assertEqual(len(self.model.graph._lnls), num_lnls)
 
     def test_num_edges(self):
         """Check number of edges initialized."""
-        num_edges = sum(len(receiving_nodes) for receiving_nodes in self.graph.values())
+        num_edges = sum(len(receiving_nodes) for receiving_nodes in self.graph_dict.values())
         num_tumor_edges = sum(
-            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph.items()
+            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph_dict.items()
             if kind == "tumor"
         )
         num_lnl_edges = sum(
-            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph.items()
+            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph_dict.items()
             if kind == "lnl"
         )
 
-        self.assertEqual(len(self.model.edges), num_edges)
-        self.assertEqual(len(self.model._tumor_edges), num_tumor_edges)
-        self.assertEqual(len(self.model._lnl_edges), num_lnl_edges)
-        self.assertEqual(len(self.model._growth_edges), 0)
+        self.assertEqual(len(self.model.graph.edges), num_edges)
+        self.assertEqual(len(self.model.graph._tumor_edges), num_tumor_edges)
+        self.assertEqual(len(self.model.graph._lnl_edges), num_lnl_edges)
+        self.assertEqual(len(self.model.graph._growth_edges), 0)
 
     def test_tumor(self):
         """Make sure the tumor has been initialized correctly."""
-        tumor = self.model.find_node("T")
+        tumor = self.model.graph.find_node("T")
         state = tumor.state
         self.assertIsInstance(tumor, Tumor)
         self.assertListEqual(tumor.allowed_states, [state])
 
     def test_lnls(self):
         """Test they are all binary lymph node levels."""
-        for lnl in self.model._lnls:
+        for lnl in self.model.graph._lnls:
             self.assertIsInstance(lnl, LymphNodeLevel)
             self.assertTrue(lnl.is_binary)
 
     def test_tumor_to_lnl_edges(self):
         """Make sure the tumor to LNL edges have been initialized correctly."""
-        tumor = self.model.find_node("T")
-        receiving_lnls = self.graph[("tumor", "T")]
+        tumor = self.model.graph.find_node("T")
+        receiving_lnls = self.graph_dict[("tumor", "T")]
         connecting_edge_names = [f"{tumor.name}_to_{lnl}" for lnl in receiving_lnls]
 
-        for edge in self.model._tumor_edges:
+        for edge in self.model.graph._tumor_edges:
             self.assertEqual(edge.parent.name, "T")
             self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
@@ -117,20 +117,20 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=42)
         for name, value in params_to_set.items():
-            self.model.edge_params[name].set_param(value)
-            self.assertEqual(self.model.edge_params[name].get_param(), value)
+            self.model.graph.params[name].set_param(value)
+            self.assertEqual(self.model.graph.params[name].get_param(), value)
 
     def test_edge_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=43)
         self.model.assign_params(**params_to_set)
         for name, value in params_to_set.items():
-            self.assertEqual(self.model.edge_params[name].get_param(), value)
+            self.assertEqual(self.model.graph.params[name].get_param(), value)
 
     def test_direct_assignment_raises_error(self):
         """Make sure direct assignment of parameters raises an error."""
         with self.assertRaises(TypeError):
-            self.model.edge_params["spread_T_to_I"] = 0.5
+            self.model.graph.params["spread_T_to_I"] = 0.5
 
     def test_transition_matrix_deletion(self):
         """Check if the transition matrix gets deleted when a parameter is set.
@@ -139,10 +139,10 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         changed during the test and the `_transition_matrix` attribute is deleted on
         the wrong instance. I have no clue why, but generally, the method works.
         """
-        first_lnl_name = self.model._lnls[0].name
+        first_lnl_name = self.model.graph._lnls[0].name
         _ = self.model.transition_matrix
         self.assertTrue(hasattr(self.model, "_transition_matrix"))
-        self.model.edge_params[f"spread_T_to_{first_lnl_name}"].set_param(0.5)
+        self.model.graph.params[f"spread_T_to_{first_lnl_name}"].set_param(0.5)
         self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
@@ -158,7 +158,7 @@ class TransitionMatrixTestCase(ModelFixtureMixin, unittest.TestCase):
 
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
-        num_lnls = len({name for kind, name in self.graph if kind == "lnl"})
+        num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
         self.assertEqual(self.model.transition_matrix.shape, (2**num_lnls, 2**num_lnls))
 
     def test_is_probabilistic(self):
@@ -197,7 +197,7 @@ class ObservationMatrixTestCase(ModelFixtureMixin, unittest.TestCase):
 
     def test_shape(self):
         """Make sure the observation matrix has the correct shape."""
-        num_lnls = len(self.model._lnls)
+        num_lnls = len(self.model.graph._lnls)
         num_modalities = len(self.model.modalities)
         expected_shape = (2**num_lnls, 2**(num_lnls + num_modalities))
         self.assertEqual(self.model.observation_matrix.shape, expected_shape)

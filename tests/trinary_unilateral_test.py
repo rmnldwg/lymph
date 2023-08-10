@@ -19,12 +19,12 @@ class TrinaryFixtureMixin:
             ("lnl", "III"): ["IV"],
             ("lnl", "IV"): [],
         }
-        self.model = Unilateral(graph=self.graph, allowed_states=[0,1,2])
+        self.model = Unilateral(graph_dict=self.graph, allowed_states=[0,1,2])
 
     def create_random_params(self, seed: int = 42) -> Dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
-        return {name: rng.random() for name in self.model.edge_params.keys()}
+        return {name: rng.random() for name in self.model.graph.params.keys()}
 
 
 class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
@@ -41,15 +41,15 @@ class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
         NOTE: I am using this only in debug mode to look a the tensors. I am not sure
         how to test them yet.
         """
-        base_edge_tensor = self.model._tumor_edges[0].comp_transition_tensor()
+        base_edge_tensor = self.model.graph._tumor_edges[0].comp_transition_tensor()
         row_sums = base_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        lnl_edge_tensor = self.model._lnl_edges[0].comp_transition_tensor()
+        lnl_edge_tensor = self.model.graph._lnl_edges[0].comp_transition_tensor()
         row_sums = lnl_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        growth_edge_tensor = self.model._growth_edges[0].comp_transition_tensor()
+        growth_edge_tensor = self.model.graph._growth_edges[0].comp_transition_tensor()
         row_sums = growth_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 

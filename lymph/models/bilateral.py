@@ -38,8 +38,8 @@ class Bilateral:
             trans_symmetric: If ``True``, the spread probabilities among the
                 LNLs will be set symmetrically.
         """
-        self.ipsi   = Unilateral(graph=graph)   # ipsilateral and...
-        self.contra = Unilateral(graph=graph)   # ...contralateral network
+        self.ipsi   = Unilateral(graph_dict=graph)   # ipsilateral and...
+        self.contra = Unilateral(graph_dict=graph)   # ...contralateral network
 
         self.base_symmetric  = base_symmetric
         self.trans_symmetric = trans_symmetric
@@ -51,8 +51,8 @@ class Bilateral:
         """Print info about the structure and parameters of the bilateral
         lymphatic system.
         """
-        num_tumors = len(self.ipsi._tumors)
-        num_lnls   = len(self.ipsi._lnls)
+        num_tumors = len(self.ipsi.graph._tumors)
+        num_lnls   = len(self.ipsi.graph._lnls)
         string = (
             f"Bilateral lymphatic system with {num_tumors} tumor(s) "
             f"and 2 * {num_lnls} LNL(s).\n"
@@ -60,9 +60,9 @@ class Bilateral:
         string += "Symmetry: "
         string += "base " if self.base_symmetric else ""
         string += "trans\n" if self.trans_symmetric else "\n"
-        string += "Ipsilateral:\t" + " ".join([f"{e}" for e in self.ipsi.edges])
+        string += "Ipsilateral:\t" + " ".join([f"{e}" for e in self.ipsi.graph.edges])
         string += "\n"
-        string += "Contralateral:\t" + " ".join([f"{e}" for e in self.contra.edges])
+        string += "Contralateral:\t" + " ".join([f"{e}" for e in self.contra.graph.edges])
 
         return string
 
@@ -107,8 +107,8 @@ class Bilateral:
         """
         Set the state of the system to ``newstate``.
         """
-        self.ipsi.state = newstate[:len(self.ipsi._lnls)]
-        self.contra.state = newstate[len(self.ipsi._lnls):]
+        self.ipsi.state = newstate[:len(self.ipsi.graph._lnls)]
+        self.contra.state = newstate[len(self.ipsi.graph._lnls):]
 
 
     @property
@@ -648,7 +648,7 @@ class Bilateral:
         # construct MultiIndex for dataset from stored modalities
         sides = ["ipsi", "contra"]
         modalities = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.ipsi._lnls]
+        lnl_names = [lnl.name for lnl in self.ipsi.graph._lnls]
         multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
 
         # create DataFrame

@@ -8,9 +8,9 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
+from lymph import graph
 from lymph.descriptors import diagnose_times, matrix, modalities, params
-from lymph.graph import Edge, LymphNodeLevel, Tumor
-from lymph.helper import PatternType, check_unique_names, early_late_mapping
+from lymph.helper import PatternType, early_late_mapping
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -26,7 +26,7 @@ class Unilateral:
     """
     def __init__(
         self,
-        graph: dict[tuple[str], set[str]],
+        graph_dict: dict[tuple[str], set[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
@@ -63,15 +63,12 @@ class Unilateral:
         is evolved from :math:`t=0` to ``max_time``. In the BN case, this parameter has
         no effect.
         """
-        if allowed_states is None:
-            allowed_states = [0, 1]
-
-        if tumor_state is None:
-            tumor_state = allowed_states[-1]
-
-        check_unique_names(graph)
-        self._init_nodes(graph, tumor_state, allowed_states)
-        self._init_edges(graph)
+        self.graph = graph.Representation(
+            graph_dict=graph_dict,
+            tumor_state=tumor_state,
+            allowed_states=allowed_states,
+            on_edge_change=self.delete_transition_matrix,
+        )
 
         if 0 >= max_time:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
@@ -80,158 +77,20 @@ class Unilateral:
 
 
     @classmethod
-    def binary(cls, graph: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def binary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with binary LNLs."""
-        return cls(graph, allowed_states=[0, 1], **kwargs)
+        return cls(graph_dict, allowed_states=[0, 1], **kwargs)
 
 
     @classmethod
-    def trinary(cls, graph: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def trinary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with trinary LNLs."""
-        return cls(graph, allowed_states=[0, 1, 2], **kwargs)
+        return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
 
 
     def __str__(self) -> str:
         """Print info about the instance."""
-        return f"Unilateral with {len(self._tumors)} tumors and {len(self._lnls)} LNLs"
-
-
-    def _init_nodes(self, graph, tumor_state, allowed_lnl_states):
-        """Initialize the nodes of the graph."""
-        self._tumors: list[Tumor] = []
-        self._lnls: list[LymphNodeLevel] = []
-
-        for node_type, node_name in graph:
-            if node_type == "tumor":
-                self._tumors.append(
-                    Tumor(name=node_name, state=tumor_state)
-                )
-            elif node_type == "lnl":
-                self._lnls.append(
-                    LymphNodeLevel(name=node_name, allowed_states=allowed_lnl_states)
-                )
-
-    @property
-    def tumors(self) -> list[Tumor]:
-        """List of all :py:class:`~Tumor` nodes in the graph."""
-        return self._tumors
-
-    @property
-    def lnls(self) -> list[LymphNodeLevel]:
-        """List of all :py:class:`~LymphNodeLevel` nodes in the graph."""
-        return self._lnls
-
-    @property
-    def nodes(self) -> list[Tumor | LymphNodeLevel]:
-        """List of both :py:class:`~Tumor` and :py:class:`~LymphNodeLevel` instances."""
-        return self._tumors + self._lnls
-
-    @property
-    def allowed_states(self) -> list[int]:
-        """Return the list of allowed states for each :py:class:`~LymphNodeLevel`."""
-        return self._lnls[0].allowed_states
-
-    @property
-    def is_binary(self) -> bool:
-        """Indicate if the model is binary.
-
-        Returns ``True`` if all :py:class:`~LymphNodeLevel` instances are binary,
-        ``False`` otherwise.
-        """
-        res = {node.is_binary for node in self._lnls}
-
-        if len(res) != 1:
-            raise RuntimeError("Not all lnls have the same number of states")
-
-        return res.pop()
-
-    @property
-    def is_trinary(self) -> bool:
-        """Returns ``True`` if the graph is trinary, ``False`` otherwise.
-
-        Similar to :py:meth:`~Unilateral.is_binary`."""
-        res = {node.is_trinary for node in self._lnls}
-
-        if len(res) != 1:
-            raise RuntimeError("Not all lnls have the same number of states")
-
-        return res.pop()
-
-    def find_node(self, name: str) -> Tumor | LymphNodeLevel | None:
-        """Finds and returns a node with ``name``."""
-        for node in self.nodes:
-            if node.name == name:
-                return node
-        return None
-
-
-    def _init_edges(self, graph):
-        """Initialize the edges of the graph.
-
-        When a :py:class:`~LymphNodeLevel` is trinary, it is connected to itself via
-        a growth edge.
-        """
-        self._tumor_edges: list[Edge] = []
-        self._lnl_edges: list[Edge] = []
-        self._growth_edges: list[Edge] = []
-
-        for (_, start_name), end_names in graph.items():
-            start = self.find_node(start_name)
-            if isinstance(start, LymphNodeLevel) and start.is_trinary:
-                growth_edge = Edge(parent=start, child=start)
-                self._growth_edges.append(growth_edge)
-
-            for end_name in set(end_names):
-                end = self.find_node(end_name)
-                new_edge = Edge(parent=start, child=end)
-
-                if new_edge.is_tumor_spread:
-                    self._tumor_edges.append(new_edge)
-                else:
-                    self._lnl_edges.append(new_edge)
-
-    @property
-    def tumor_edges(self) -> list[Edge]:
-        """List of all tumor :py:class:`~Edge` instances in the graph.
-
-        This contains all edges who's parents are instances of :py:class:`~Tumor` and
-        who's children are instances of :py:class:`~LymphNodeLevel`.
-        """
-        return self._tumor_edges
-
-    @property
-    def lnl_edges(self) -> list[Edge]:
-        """List of all LNL :py:class:`~Edge` instances in the graph.
-
-        This contains all edges who's parents and children are instances of
-        :py:class:`~LymphNodeLevel` and that are not growth edges.
-        """
-        return self._lnl_edges
-
-    @property
-    def growth_edges(self) -> list[Edge]:
-        """List of all growth :py:class:`~Edge` instances in the graph.
-
-        Growth edges are only present in trinary models and are arcs where the parent
-        and child are the same :py:class:`~LymphNodeLevel` instance. They facilitate
-        the change from a micsoscopically positive to a macroscopically positive LNL.
-        """
-        return self._growth_edges
-
-    @property
-    def edges(self) -> list[Edge]:
-        """List of all :py:class:`~Edge` instances in the graph, regardless of type."""
-        return self._tumor_edges + self._lnl_edges + self._growth_edges
-
-
-    @property
-    def graph(self) -> dict[tuple[str, str], set[str]]:
-        """Returns graph representing this instance's nodes and egdes as dictionary."""
-        res = {}
-        for node in self.nodes:
-            node_type = "tumor" if isinstance(node, Tumor) else "lnl"
-            res[(node_type, node.name)] = {o.child.name for o in node.out}
-        return res
+        return f"Unilateral with {len(self.graph._tumors)} tumors and {len(self.graph._lnls)} LNLs"
 
 
     def print_graph(self):
@@ -240,85 +99,29 @@ class Unilateral:
         Returns:
             list: list with the string to create the mermaid graph and an url that directly leads to the graph
         """
-        graph = ('flowchart TD\n')
-        for index, node in enumerate(self.nodes):
-            for edge in self.nodes[index].out:
+        mermaid_graph = ('flowchart TD\n')
+        for index, node in enumerate(self.graph.nodes):
+            for edge in self.graph.nodes[index].out:
                 line = f"{node.name} -->|{edge.spread_prob}| {edge.child.name} \n"
-                graph += line
-        graphbytes = graph.encode("ascii")
+                mermaid_graph += line
+        graphbytes = mermaid_graph.encode("ascii")
         base64_bytes = base64.b64encode(graphbytes)
         base64_string = base64_bytes.decode("ascii")
         url="https://mermaid.ink/img/" + base64_string
-        return graph, url
+        return mermaid_graph, url
 
 
     def print_info(self):
         """Print detailed information about the instance."""
-        num_tumors = len(self._tumors)
-        num_lnls   = len(self._lnls)
+        num_tumors = len(self.graph._tumors)
+        num_lnls   = len(self.graph._lnls)
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self._tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self._lnl_edges])
-            + f"\n the growth probability is: {self._growth_edges[0].spread_prob}" + f" the micro mod is {self._lnl_edges[0].micro_mod}"
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph._tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph._lnl_edges])
+            + f"\n the growth probability is: {self.graph._growth_edges[0].spread_prob}" + f" the micro mod is {self.graph._lnl_edges[0].micro_mod}"
         )
         print(string)
-
-
-    def get_states(self, as_dict: bool = False) -> dict[str, int] | list[int]:
-        """Return the states of the system's LNLs.
-
-        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
-        LNLs as keys and their states as values. Otherwise, the result is a list of the
-        states of the LNLs in the order they appear in the graph.
-        """
-        result = {}
-
-        for lnl in self._lnls:
-            result[lnl.name] = lnl.state
-
-        return result if as_dict else list(result.values())
-
-
-    def assign_states(self, *new_states_args, **new_states_kwargs) -> None:
-        """Assign a new state to the system's LNLs.
-
-        The state can either be provided with positional arguments or as keyword
-        arguments. In case of positional arguments, the order must be the same as the
-        order of the LNLs in the graph. If keyword arguments are used, the keys must be
-        the names of the LNLs. The order of the keyword arguments does not matter.
-
-        The keyword arguments override the positional arguments.
-        """
-        for new_lnl_state, lnl in zip(new_states_args, self._lnls):
-            lnl.state = new_lnl_state
-
-        for key, value in new_states_kwargs.items():
-            lnl = self.find_node(key)
-            if lnl is not None and isinstance(lnl, LymphNodeLevel):
-                lnl.state = value
-
-
-    edge_params = params.GetterSetterAccess()
-    """Dictionary that maps parameter names to their corresponding parameter objects.
-
-    Parameter names are constructed from the names of the tumors and LNLs in the graph
-    that represents the lymphatic system. For example, the parameter for the spread
-    probability from the tumor ``T`` to the LNL ``I`` is accessed via the key
-    ``spread_T_to_I``.
-
-    The parameters can be read out and changed via the ``get`` and ``set`` methods of
-    the :py:class:`~lymph.descriptors.params.Param` objects. The ``set`` method also deletes
-    the transition matrix, so that it needs to be recomputed when accessing it the
-    next time.
-
-    Example:
-
-    .. code-block:: python
-
-        model.edge_params["spread_T_to_I"].set(0.5)
-        retrieved = model.edge_params["spread_T_to_I"].get()
-    """
 
 
     diag_time_dists = diagnose_times.Distributions()
@@ -341,11 +144,12 @@ class Unilateral:
         graph.
         """
         result = {}
-        for name, param in self.edge_params.items():
-            result[name] = param.get()
+        for name, param in self.graph.edge_params.items():
+            result[name] = param.get_param()
 
         for name, dist in self.diag_time_dists.items():
-            result[name] = dist.get_param()
+            for param_name, value in dist.get_params().items():
+                result[f"{name}_{param_name}"] = value
 
         return result if as_dict else list(result.values())
 
@@ -353,7 +157,7 @@ class Unilateral:
     def _assign_via_args(self, new_params_args):
         """Assign parameters to egdes and to distributions via positional arguments."""
         objects = itertools.chain(
-            (param for param in self.edge_params.values()),
+            (param for param in self.graph.edge_params.values()),
             (dist for dist in self.diag_time_dists.values()),
         )
         new_params_args = iter(new_params_args)
@@ -377,15 +181,15 @@ class Unilateral:
                 self.diag_time_dists[t_stage].set_params(**{param_name: value})
 
             elif key == "growth":
-                for edge in self._growth_edges:
+                for edge in self.graph._growth_edges:
                     edge.spread_prob = value
 
             elif key == "micro_mod":
-                for edge in self._lnl_edges:
+                for edge in self.graph._lnl_edges:
                     edge.micro_mod = value
 
             else:
-                self.edge_params[key].set_param(value)
+                self.graph.edge_params[key].set_param(value)
 
 
     def assign_params(self, *new_params_args, **new_params_kwargs):
@@ -441,13 +245,13 @@ class Unilateral:
         the model using the method :py:meth:`~Unilateral.assign_states`.
         """
         trans_prob = 1
-        for i, lnl in enumerate(self._lnls):
+        for i, lnl in enumerate(self.graph._lnls):
             trans_prob *= lnl.comp_trans_prob(new_state = newstate[i])
             if trans_prob == 0:
                 break
 
         if assign:
-            self.assign_states(newstate)
+            self.graph.set_state(newstate)
 
         return trans_prob
 
@@ -487,7 +291,7 @@ class Unilateral:
         for name, modality in self.modalities.items():
             if name in diagnoses:
                 mod_diagnose = diagnoses[name]
-                for lnl in self._lnls:
+                for lnl in self.graph._lnls:
                     try:
                         lnl_diagnose = mod_diagnose[lnl.name]
                     except KeyError:
@@ -503,7 +307,7 @@ class Unilateral:
     def _gen_state_list(self):
         """Generates the list of (hidden) states."""
         allowed_states_list = []
-        for lnl in self._lnls:
+        for lnl in self.graph._lnls:
             allowed_states_list.append(lnl.allowed_states)
 
         self._state_list = np.array(list(product(*allowed_states_list)))
@@ -546,7 +350,7 @@ class Unilateral:
         possible_obs_list = []
         for modality in self.modalities.values():
             possible_obs = np.arange(modality.confusion_matrix.shape[1])
-            for _ in self._lnls:
+            for _ in self.graph._lnls:
                 possible_obs_list.append(possible_obs.copy())
 
         self._obs_list = np.array(list(product(*possible_obs_list)))
@@ -620,6 +424,9 @@ class Unilateral:
            [0.  , 0.  , 0.56, 0.44],
            [0.  , 0.  , 0.  , 1.  ]])
     """
+    def delete_transition_matrix(self):
+        """Delete the transition matrix. Necessary to pass as callback."""
+        del self.transition_matrix
 
     observation_matrix = matrix.Observation()
     """The matrix encoding the probabilities to observe a certain diagnosis.
@@ -628,6 +435,9 @@ class Unilateral:
         :py:class:`~lymph.descriptors.matrix.Observation`
             The class that implements the descriptor for the observation matrix.
     """
+    def delete_observation_matrix(self):
+        """Delete the observation matrix. Necessary to pass as callback."""
+        del self.observation_matrix
 
     data_matrices = matrix.DataEncodings()
     """Dictionary with T-stages as keys and corresponding data matrices as values.
@@ -714,7 +524,7 @@ class Unilateral:
             if side not in patient_data[modality_name]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
-            for lnl in self._lnls:
+            for lnl in self.graph._lnls:
                 if lnl.name not in patient_data[modality_name, side]:
                     raise ValueError(f"Involvement data for LNL {lnl} not found.")
                 column = patient_data[modality_name, side, lnl.name]
@@ -811,8 +621,8 @@ class Unilateral:
             state_dist = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.assign_states(state)
-                for node in self._lnls:
+                self.graph.set_state(state)
+                for node in self.graph._lnls:
                     state_dist[i] *= node.comp_bayes_net_prob()
 
             return state_dist
@@ -935,7 +745,7 @@ class Unilateral:
             diagnose_encoding = np.kron(
                 diagnose_encoding,
                 matrix.compute_encoding(
-                    lnls=[lnl.name for lnl in self._lnls],
+                    lnls=[lnl.name for lnl in self.graph._lnls],
                     pattern=given_diagnoses.get(modality, {}),
                 ),
             )
@@ -986,7 +796,7 @@ class Unilateral:
         # resulting vector of hidden states to match that involvement of
         # interest
         marginalize_over_states = matrix.compute_encoding(
-            lnls=[lnl.name for lnl in self._lnls],
+            lnls=[lnl.name for lnl in self.graph._lnls],
             pattern=involvement,
         )
         return marginalize_over_states @ posterior_state_dist
@@ -1039,7 +849,7 @@ class Unilateral:
 
         # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self._lnls]
+        lnl_names = [lnl.name for lnl in self.graph._lnls]
         multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
         # create DataFrame
