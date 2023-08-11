@@ -16,7 +16,12 @@ class AbstractLookupDict(UserDict):
     the value for a key cannot be computed.
     """
     def __init__(self, dict=None, /, **kwargs):
-        """Use keyword arguments to set attributes of the instance."""
+        """Use keyword arguments to set attributes of the instance.
+
+        In contrast to the default ``UserDict`` constructor, this one instantiates
+        any keyword arguments as attributes of the instance and does not put them
+        into the dictionary itself.
+        """
         super().__init__(dict)
         for attr_name, attr_value in kwargs.items():
             if hasattr(self, attr_name):

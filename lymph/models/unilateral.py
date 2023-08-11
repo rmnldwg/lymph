@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import itertools
 import warnings
 from itertools import product
@@ -16,13 +15,13 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 
 class Unilateral:
-    """
-    Class that models metastatic progression in a (unilateral) lymphatic system.
+    """Class that models metastatic progression in a unilateral lymphatic system.
 
-    It does this by representing it as a directed graph (DAG). The progression itself
-    can be modelled via hidden Markov models (HMM) or Bayesian networks (BN). In both
-    cases, instances of this class allow to calculate the probability of a certain
-    hidden pattern of involvement, given an individual diagnosis of a patient.
+    It does this by representing it as a directed graph (DAG), which is stored in and
+    managed by the attribute :py:attr:`~graph`. The progression itself can be modelled
+    via hidden Markov models (HMM) or Bayesian networks (BN). In both cases, instances
+    of this class allow to calculate the probability of a certain hidden pattern of
+    involvement, given an individual diagnosis of a patient.
     """
     def __init__(
         self,
@@ -34,15 +33,15 @@ class Unilateral:
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
 
-        The ``graph`` that represents the lymphatic system is given as a dictionary. Its
-        keys are tuples of the form ``("tumor", "<tumor_name>")`` or
+        The ``graph_dict`` that represents the lymphatic system should given as a
+        dictionary. Its keys are tuples of the form ``("tumor", "<tumor_name>")`` or
         ``("lnl", "<lnl_name>")``. The values are lists of strings that represent the
         names of the nodes that are connected to the node given by the key.
 
         Note:
-            Do make sure the values in the dictionary are lists and not sets. Sets
-            do not preserve the order of the elements and thus the order of the edges
-            in the graph. This may lead to inconsistencies in the model.
+            Do make sure the values in the dictionary are of type ``list`` and *not*
+            ``set``. Sets do not preserve the order of the elements and thus the order
+            of the edges in the graph. This may lead to inconsistencies in the model.
 
         For example, the following graph represents a lymphatic system with one tumors
         and three lymph node levels:
@@ -56,9 +55,10 @@ class Unilateral:
                 ("lnl", "IV"): [],
             }
 
-        The ``tumor_state`` is the initial (and unchangeable) state of the tumor. The
-        states the LNLs can take on are given by ``allowed_states``. The default is
-        a binary representation with ``allowed_states=[0, 1]``. For this, one can also
+        The ``tumor_state`` is the initial (and unchangeable) state of the tumor.
+        Typically, this can be omitted and is then set to be the maximum of the
+        ``allowed_states``, which is the states the LNLs can take on. The default is a
+        binary representation with ``allowed_states=[0, 1]``. For this, one can also
         use the classmethod :py:meth:`~Unilateral.binary`. For a trinary representation
         with ``allowed_states=[0, 1, 2]`` use the classmethod
         :py:meth:`~Unilateral.trinary`.
@@ -96,24 +96,6 @@ class Unilateral:
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph._tumors)} tumors and {len(self.graph._lnls)} LNLs"
-
-
-    def print_graph(self):
-        """generates the a a visual chart of the spread model based on mermaid graph
-
-        Returns:
-            list: list with the string to create the mermaid graph and an url that directly leads to the graph
-        """
-        mermaid_graph = ('flowchart TD\n')
-        for index, node in enumerate(self.graph.nodes):
-            for edge in self.graph.nodes[index].out:
-                line = f"{node.name} -->|{edge.spread_prob}| {edge.child.name} \n"
-                mermaid_graph += line
-        graphbytes = mermaid_graph.encode("ascii")
-        base64_bytes = base64.b64encode(graphbytes)
-        base64_string = base64_bytes.decode("ascii")
-        url="https://mermaid.ink/img/" + base64_string
-        return mermaid_graph, url
 
 
     def print_info(self):
@@ -231,8 +213,7 @@ class Unilateral:
             over diagnose times, it is not possible to just use the name of the
             T-stage, even when the distribution only takes one parameter.
 
-        Note:
-            The keyword arguments override the positional arguments.
+        The keyword arguments override the positional arguments.
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)

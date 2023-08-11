@@ -1,4 +1,6 @@
-"""Subpackage implementig the main models for modelling lymphatic metastatic spread."""
+"""
+This module implements the core classes to model lymphatic tumor progression.
+"""
 
 from .unilateral import Unilateral
 

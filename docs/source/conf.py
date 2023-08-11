@@ -45,7 +45,6 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',
     'myst_nb'
 ]
 
@@ -67,6 +66,9 @@ autoclass_content = 'class'
 # sort members by source
 autodoc_member_order = 'bysource'
 
+# show type hints
+autodoc_typehints = 'signature'
+
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -74,7 +76,11 @@ autodoc_member_order = 'bysource'
 # a list of builtin themes.
 #
 
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'alabaster'
+html_theme_options = {
+    "fixed_sidebar": True,
+    "page_width": "1200px",
+}
 
 # import sphinx_modern_theme
 # html_theme = "sphinx_modern_theme"

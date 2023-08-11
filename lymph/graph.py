@@ -3,6 +3,7 @@ Module defining the nodes and edges of the graph representing the lymphatic syst
 """
 from __future__ import annotations
 
+import base64
 import warnings
 
 import numpy as np
@@ -436,7 +437,7 @@ class Representation:
     """Class holding the graph structure of the model.
 
     This class allows accessing the connected nodes (:py:class:`Tumor` and
-    :py:class:`LymphNodeLevel`) and edges (:py:class:`Edge`) of the :py:module:`models`.
+    :py:class:`LymphNodeLevel`) and edges (:py:class:`Edge`) of the :py:mod:`models`.
     """
     edge_params = params.GetterSetterAccess()
 
@@ -447,7 +448,15 @@ class Representation:
         allowed_states: list[int] | None = None,
         on_edge_change: list[callable] | None = None,
     ) -> None:
-        """"""
+        """Create a new graph representation of nodes and edges.
+
+        The ``graph_dict`` is a dictionary that defines which nodes are created and
+        with what edges they are connected. The keys of the dictionary are tuples of
+        the form ``(node_type, node_name)``. The ``node_type`` can be either ``"tumor"``
+        or ``"lnl"``. The ``node_name`` is a string that uniquely identifies the node.
+        The values of the dictionary are lists of node names to which the key node
+        should be connected.
+        """
         if allowed_states is None:
             allowed_states = [0, 1]
 
@@ -606,6 +615,46 @@ class Representation:
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
             res[(node_type, node.name)] = {o.child.name for o in node.out}
         return res
+
+
+    def get_mermaid(self) -> str:
+        """Prints the graph in mermaid format.
+
+        Example:
+
+        >>> graph_dict = {
+        ...    ("tumor", "T"): ["II", "III"],
+        ...    ("lnl", "II"): ["III"],
+        ...    ("lnl", "III"): [],
+        ... }
+        >>> graph = Representation(graph_dict)
+        >>> graph.edge_params["spread_T_to_II"].set_param(0.1)
+        >>> graph.edge_params["spread_T_to_III"].set_param(0.2)
+        >>> graph.edge_params["spread_II_to_III"].set_param(0.3)
+        >>> print(graph.get_mermaid())  # doctest: +NORMALIZE_WHITESPACE
+        flowchart TD
+            T-->|10%| II
+            T-->|20%| III
+            II-->|30%| III
+        <BLANKLINE>
+        """
+        mermaid_graph = "flowchart TD\n"
+
+        for idx, node in enumerate(self.nodes):
+            for edge in self.nodes[idx].out:
+                mermaid_graph += f"\t{node.name}-->|{edge.spread_prob:.0%}| {edge.child.name}\n"
+
+        return mermaid_graph
+
+
+    def get_mermaid_url(self) -> str:
+        """Returns the URL to the rendered graph."""
+        mermaid_graph = self.get_mermaid()
+        graphbytes = mermaid_graph.encode("ascii")
+        base64_bytes = base64.b64encode(graphbytes)
+        base64_string = base64_bytes.decode("ascii")
+        url="https://mermaid.ink/img/" + base64_string
+        return url
 
 
     def get_state(self, as_dict: bool = False) -> dict[str, int] | list[int]:

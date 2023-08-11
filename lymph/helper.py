@@ -174,6 +174,7 @@ def tile_and_repeat(
     """Tile and repeat a matrix.
 
     Example:
+
     >>> mat = np.array([[1, 2], [3, 4]])
     >>> tile_and_repeat(mat, (2, 2), (2, 2))
     array([[1, 1, 2, 2, 1, 1, 2, 2],
@@ -202,6 +203,7 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
     """Return the indices for the transition tensor correpsonding to `lnl_idx`.
 
     Example:
+
     >>> get_state_idx_matrix(1, 3, 2)
     array([[0, 0, 0, 0, 0, 0, 0, 0],
            [0, 0, 0, 0, 0, 0, 0, 0],
@@ -231,6 +233,7 @@ def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Compute the kronecker product of two matrices row-wise.
 
     Example:
+
     >>> a = np.array([[1, 2], [3, 4]])
     >>> b = np.array([[5, 6], [7, 8]])
     >>> row_wise_kron(a, b)
