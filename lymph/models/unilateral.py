@@ -26,7 +26,7 @@ class Unilateral:
     """
     def __init__(
         self,
-        graph_dict: dict[tuple[str], set[str]],
+        graph_dict: dict[tuple[str], list[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
@@ -36,8 +36,13 @@ class Unilateral:
 
         The ``graph`` that represents the lymphatic system is given as a dictionary. Its
         keys are tuples of the form ``("tumor", "<tumor_name>")`` or
-        ``("lnl", "<lnl_name>")``. The values are sets of strings that represent the
+        ``("lnl", "<lnl_name>")``. The values are lists of strings that represent the
         names of the nodes that are connected to the node given by the key.
+
+        Note:
+            Do make sure the values in the dictionary are lists and not sets. Sets
+            do not preserve the order of the elements and thus the order of the edges
+            in the graph. This may lead to inconsistencies in the model.
 
         For example, the following graph represents a lymphatic system with one tumors
         and three lymph node levels:
@@ -229,8 +234,10 @@ class Unilateral:
         Note:
             The keyword arguments override the positional arguments.
         """
-        self._assign_via_args(new_params_args)
-        self._assign_via_kwargs(new_params_kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            self._assign_via_args(new_params_args)
+            self._assign_via_kwargs(new_params_kwargs)
 
 
     def comp_transition_prob(
@@ -680,7 +687,7 @@ class Unilateral:
     def likelihood(
         self,
         data: pd.DataFrame | None = None,
-        given_params: dict | None = None,
+        given_params: list[float] | np.ndarray | dict[str, float] | None = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
@@ -703,7 +710,10 @@ class Unilateral:
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            self.assign_params(**given_params)
+            if isinstance(given_params, dict):
+                self.assign_params(**given_params)
+            else:
+                self.assign_params(*given_params)
         except ValueError:
             return -np.inf if log else 0.
 

@@ -442,7 +442,7 @@ class Representation:
 
     def __init__(
         self,
-        graph_dict: dict[tuple[str], set[str]],
+        graph_dict: dict[tuple[str], list[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         on_edge_change: list[callable] | None = None,
@@ -533,7 +533,7 @@ class Representation:
 
     def _init_edges(
         self,
-        graph: dict[tuple[str, str], set[str]],
+        graph: dict[tuple[str, str], list[str]],
         on_edge_change: callable
     ) -> None:
         """Initialize the edges of the ``graph``.
@@ -555,7 +555,7 @@ class Representation:
                 growth_edge = Edge(parent=start, child=start, callbacks=on_edge_change)
                 self._growth_edges.append(growth_edge)
 
-            for end_name in set(end_names):
+            for end_name in end_names:
                 end = self.find_node(end_name)
                 new_edge = Edge(parent=start, child=end, callbacks=on_edge_change)
 

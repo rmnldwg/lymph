@@ -10,13 +10,23 @@ PatternType = dict[str, bool | NAType | None]
 """Type alias for an involvement pattern."""
 
 
-def check_unique_names(graph):
-    """Check if all nodes in the ``graph`` have unique names."""
-    node_names = [name for _, name in graph]
-    unique_node_names = set(node_names)
+def check_unique_names(graph: dict):
+    """Check all nodes in ``graph`` have unique names and no duplicate connections."""
+    node_name_set = set()
+    for (_, node_name), connections in graph.items():
+        if isinstance(connections, set):
+            raise TypeError("A node's connection list should not be a set (ordering)")
+        if len(connections) != len(set(connections)):
+            raise ValueError(f"Duplicate connections for node {node_name} in graph")
+        if node_name in connections:
+            raise ValueError(f"Node {node_name} is connected to itself")
 
-    if len(node_names) != len(unique_node_names):
-        raise ValueError("No two nodes (tumor or LNL) can have the same name!")
+        node_name_set.add(node_name)
+
+    if len(node_name_set) != len(graph):
+        raise ValueError("Node names are not unique")
+
+
 
 
 def check_spsn(spsn: List[float]):
