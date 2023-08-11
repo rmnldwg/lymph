@@ -445,7 +445,7 @@ class Representation:
         graph_dict: dict[tuple[str], set[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
-        on_edge_change: callable | None = None,
+        on_edge_change: list[callable] | None = None,
     ) -> None:
         """"""
         if allowed_states is None:

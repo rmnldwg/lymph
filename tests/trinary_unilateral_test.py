@@ -24,7 +24,7 @@ class TrinaryFixtureMixin:
     def create_random_params(self, seed: int = 42) -> Dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
-        return {name: rng.random() for name in self.model.graph.params.keys()}
+        return {name: rng.random() for name in self.model.graph.edge_params.keys()}
 
 
 class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):

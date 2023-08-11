@@ -1,5 +1,6 @@
 """Test the binary unilateral system."""
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -116,20 +117,20 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=42)
         for name, value in params_to_set.items():
-            self.model.graph.params[name].set_param(value)
-            self.assertEqual(self.model.graph.params[name].get_param(), value)
+            self.model.graph.edge_params[name].set_param(value)
+            self.assertEqual(self.model.graph.edge_params[name].get_param(), value)
 
     def test_edge_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=43)
         self.model.assign_params(**params_to_set)
         for name, value in params_to_set.items():
-            self.assertEqual(self.model.graph.params[name].get_param(), value)
+            self.assertEqual(self.model.graph.edge_params[name].get_param(), value)
 
     def test_direct_assignment_raises_error(self):
         """Make sure direct assignment of parameters raises an error."""
         with self.assertRaises(TypeError):
-            self.model.graph.params["spread_T_to_I"] = 0.5
+            self.model.graph.edge_params["spread_T_to_I"] = 0.5
 
     def test_transition_matrix_deletion(self):
         """Check if the transition matrix gets deleted when a parameter is set.
@@ -141,7 +142,7 @@ class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
         first_lnl_name = self.model.graph._lnls[0].name
         _ = self.model.transition_matrix
         self.assertTrue(hasattr(self.model, "_transition_matrix"))
-        self.model.graph.params[f"spread_T_to_{first_lnl_name}"].set_param(0.5)
+        self.model.graph.edge_params[f"spread_T_to_{first_lnl_name}"].set_param(0.5)
         self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
@@ -219,6 +220,9 @@ class LoadDataFixtureMixin(ModelFixtureMixin):
             test_data_dir / "2021-usz-oropharynx.csv",
             header=[0,1,2],
         )
+
+        # Don't pollute the test output with performance warnings
+        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
         self.model.load_patient_data(self.patient_data, side="ipsi")
 
 

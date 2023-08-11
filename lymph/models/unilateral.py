@@ -67,7 +67,7 @@ class Unilateral:
             graph_dict=graph_dict,
             tumor_state=tumor_state,
             allowed_states=allowed_states,
-            on_edge_change=self.delete_transition_matrix,
+            on_edge_change=[self.delete_transition_matrix],
         )
 
         if 0 >= max_time:
