@@ -788,7 +788,7 @@ class Unilateral:
 
         return state_probs
     
-    def _evolve_onestep(
+    def _evolve_stepwise(
         self, start_state: Optional[np.ndarray] = None
     ) -> np.ndarray:
         """Evolve hidden Markov model based system over one time step. Compute
