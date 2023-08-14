@@ -1,0 +1,271 @@
+"""Module containing supporting classes and functions."""
+import warnings
+from functools import lru_cache, wraps
+from typing import List, Optional
+
+import numpy as np
+from pandas._libs.missing import NAType
+
+PatternType = dict[str, bool | NAType | None]
+"""Type alias for an involvement pattern."""
+
+
+def check_unique_names(graph: dict):
+    """Check all nodes in ``graph`` have unique names and no duplicate connections."""
+    node_name_set = set()
+    for (_, node_name), connections in graph.items():
+        if isinstance(connections, set):
+            raise TypeError("A node's connection list should not be a set (ordering)")
+        if len(connections) != len(set(connections)):
+            raise ValueError(f"Duplicate connections for node {node_name} in graph")
+        if node_name in connections:
+            raise ValueError(f"Node {node_name} is connected to itself")
+
+        node_name_set.add(node_name)
+
+    if len(node_name_set) != len(graph):
+        raise ValueError("Node names are not unique")
+
+
+
+
+def check_spsn(spsn: List[float]):
+    """Private method that checks whether specificity and sensitvity
+    are valid.
+
+    Args:
+        spsn (list): list with specificity and sensiticity
+
+    Raises:
+        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+    """
+    has_len_2 = len(spsn) == 2
+    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+    is_below_ub = np.all(np.less_equal(spsn, 1.))
+    if not has_len_2 or not is_above_lb or not is_below_ub:
+        msg = ("For each modality provide a list of two decimals "
+            "between 0.5 and 1.0 as specificity & sensitivity "
+            "respectively.")
+        raise ValueError(msg)
+
+
+def change_base(
+    number: int,
+    base: int,
+    reverse: bool = False,
+    length: Optional[int] = None
+) -> str:
+    """Convert an integer into another base.
+
+    Args:
+        number: Number to convert
+        base: Base of the resulting converted number
+        reverse: If true, the converted number will be printed in reverse order.
+        length: Length of the returned string. If longer than would be
+            necessary, the output will be padded.
+
+    Returns:
+        The (padded) string of the converted number.
+    """
+    if number < 0:
+        raise ValueError("Cannot convert negative numbers")
+    if base > 16:
+        raise ValueError("Base must be 16 or smaller!")
+    elif base < 2:
+        raise ValueError("There is no unary number system, base must be > 2")
+
+    convert_string = "0123456789ABCDEF"
+    result = ''
+
+    if number == 0:
+        result += '0'
+    else:
+        while number >= base:
+            result += convert_string[number % base]
+            number = number//base
+        if number > 0:
+            result += convert_string[number]
+
+    if length is None:
+        length = len(result)
+    elif length < len(result):
+        length = len(result)
+        warnings.warn("Length cannot be shorter than converted number.")
+
+    pad = '0' * (length - len(result))
+
+    if reverse:
+        return result + pad
+    else:
+        return pad + result[::-1]
+
+
+def check_modality(modality: str, spsn: list):
+    """Private method that checks whether all inserted values
+    are valid for a confusion matrix.
+
+    Args:
+        modality (str): name of the modality
+        spsn (list): list with specificity and sensiticity
+
+    Raises:
+        TypeError: returns a type error if the modality is not a string
+        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
+    """
+    if not isinstance(modality, str):
+        raise TypeError("Modality names must be strings.")
+
+    has_len_2 = len(spsn) == 2
+    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
+    is_below_ub = np.all(np.less_equal(spsn, 1.))
+
+    if not has_len_2 or not is_above_lb or not is_below_ub:
+        raise ValueError(
+            "For each modality provide a list of two decimals between 0.5 and 1.0 "
+            "as specificity & sensitivity respectively."
+        )
+
+
+def clinical(spsn: list) -> np.ndarray:
+    """produces the confusion matrix of a clinical modality, i.e. a modality
+    that can not detect microscopic metastases
+
+    Args:
+        spsn (list): list with specificity and sensitivity of modality
+
+    Returns:
+        np.ndarray: confusion matrix of modality
+    """
+    check_spsn(spsn)
+    sp, sn = spsn
+    confusion_matrix = np.array([
+        [sp     , 1. - sp],
+        [sp     , 1. - sp],
+        [1. - sn, sn     ],
+    ])
+    return confusion_matrix
+
+
+def pathological(spsn: list) -> np.ndarray:
+    """produces the confusion matrix of a pathological modality, i.e. a modality
+    that can detect microscopic metastases
+
+    Args:
+        spsn (list): list with specificity and sensitivity of modality
+
+    Returns:
+        np.ndarray: confusion matrix of modality
+    """
+    check_spsn(spsn)
+    sp, sn = spsn
+    confusion_matrix = np.array([
+        [sp     , 1. - sp],
+        [1. - sn, sn     ],
+        [1. - sn, sn     ],
+    ])
+    return confusion_matrix
+
+
+def tile_and_repeat(
+    mat: np.ndarray,
+    tile: tuple[int, int],
+    repeat: tuple[int, int],
+) -> np.ndarray:
+    """Tile and repeat a matrix.
+
+    Example:
+
+    >>> mat = np.array([[1, 2], [3, 4]])
+    >>> tile_and_repeat(mat, (2, 2), (2, 2))
+    array([[1, 1, 2, 2, 1, 1, 2, 2],
+           [1, 1, 2, 2, 1, 1, 2, 2],
+           [3, 3, 4, 4, 3, 3, 4, 4],
+           [3, 3, 4, 4, 3, 3, 4, 4],
+           [1, 1, 2, 2, 1, 1, 2, 2],
+           [1, 1, 2, 2, 1, 1, 2, 2],
+           [3, 3, 4, 4, 3, 3, 4, 4],
+           [3, 3, 4, 4, 3, 3, 4, 4]])
+    >>> tile_and_repeat(
+    ...     mat=np.array([False, True], dtype=bool),
+    ...     tile=(1, 2),
+    ...     repeat=(1, 3),
+    ... )
+    array([[False, False, False,  True,  True,  True, False, False, False,
+             True,  True,  True]])
+    """
+    tiled = np.tile(mat, tile)
+    repeat_along_0 = np.repeat(tiled, repeat[0], axis=0)
+    return np.repeat(repeat_along_0, repeat[1], axis=1)
+
+
+@lru_cache
+def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
+    """Return the indices for the transition tensor correpsonding to `lnl_idx`.
+
+    Example:
+
+    >>> get_state_idx_matrix(1, 3, 2)
+    array([[0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1],
+           [1, 1, 1, 1, 1, 1, 1, 1],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1],
+           [1, 1, 1, 1, 1, 1, 1, 1]])
+    >>> get_state_idx_matrix(1, 2, 3)
+    array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1, 1],
+           [2, 2, 2, 2, 2, 2, 2, 2, 2],
+           [0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1, 1],
+           [2, 2, 2, 2, 2, 2, 2, 2, 2],
+           [0, 0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 1, 1],
+           [2, 2, 2, 2, 2, 2, 2, 2, 2]])
+    """
+    indices = np.arange(num_states).reshape(num_states, -1)
+    row = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
+    return np.repeat(row, num_states ** (num_lnls - lnl_idx - 1), axis=0)
+
+
+def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Compute the kronecker product of two matrices row-wise.
+
+    Example:
+
+    >>> a = np.array([[1, 2], [3, 4]])
+    >>> b = np.array([[5, 6], [7, 8]])
+    >>> row_wise_kron(a, b)
+    array([[ 5.,  6., 10., 12.],
+           [21., 24., 28., 32.]])
+    """
+    result = np.zeros((a.shape[0], a.shape[1] * b.shape[1]))
+    for i in range(a.shape[0]):
+        result[i] = np.kron(a[i], b[i])
+
+    return result
+
+
+def early_late_mapping(t_stage: int | str) -> str:
+    """Map the reported T-category (i.e., 1, 2, 3, 4) to "early" and "late"."""
+    t_stage = int(t_stage)
+
+    if 0 <= t_stage <= 2:
+        return "early"
+
+    if 3 <= t_stage <= 4:
+        return "late"
+
+    raise ValueError(f"Invalid T-stage: {t_stage}")
+
+
+def trigger(func: callable) -> callable:
+    """Method decorator that runs instance's `trigger()` when the method is called."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        result = func(self, *args, **kwargs)
+        for callback in self.trigger_callbacks:
+            callback()
+        return result
+    return wrapper

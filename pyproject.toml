@@ -54,6 +54,7 @@ docs = [
     "sphinx-autodoc-typehints",
     "myst-nb",
     "ipython",
+    "matplotlib",
 ]
 
 [project.urls]

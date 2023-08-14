@@ -16,10 +16,7 @@
     :target: https://lymph-model.readthedocs.io
 
 
-What is ``lymph``?
-==================
-
-``lymph`` is a Python package for statistical modelling of lymphatic metastatic spread in head & neck squamous cell carinoma (HNSCC).
+A Python package for statistical modelling of lymphatic metastatic spread in head & neck squamous cell carinoma (HNSCC).
 
 
 Motivation

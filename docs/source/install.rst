@@ -23,10 +23,4 @@ From here you can either use `pip <http://www.pip-installer.org/>`_
 
     pip install .
 
-or the file ``setup.py``
-
-.. code-block:: bash
-
-    python setup.py
-
-.. note:: You will need to have  python 3.8 or higher installed.
+.. note:: You will need to have python 3.10 or higher installed.

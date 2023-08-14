@@ -3,6 +3,10 @@ repos:
   rev: v4.4.0
   hooks:
   - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: check-merge-conflict
+  - id: check-toml
+  - id: check-yaml
 - repo: https://github.com/hadialqattan/pycln
   rev: v2.1.5
   hooks:
@@ -14,6 +18,14 @@ repos:
   - id: isort
     files: "\\.(py)$"
     args: [--settings-path=pyproject.toml]
+- repo: https://github.com/asottile/pyupgrade
+  rev: v3.9.0
+  hooks:
+  - id: pyupgrade
+- repo: https://github.com/kynan/nbstripout
+  rev: 0.6.0
+  hooks:
+  - id: nbstripout
 - repo: https://github.com/compilerla/conventional-pre-commit
   rev: v2.3.0
   hooks:
