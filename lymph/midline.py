@@ -261,18 +261,30 @@ class MidlineBilateral:
         if not hasattr(self, "_diagnose_matrices_midext"):
             self._diagnose_matrices_midext = {}
         self._diagnose_matrices_midext[t_stage] = np.zeros((len(table), 2))
-        midext_column = table["info", "tumor", "midline_extension"]
-        for idx, midline_extension in midext_column.items():
-            if pd.isna(midline_extension):
-                self.diagnose_matrices_midext[t_stage][idx, 0] = 1
-                self.diagnose_matrices_midext[t_stage][idx, 1] = 1
+        midline_extension = table['info', 'tumor', 'midline_extension']
+        for patient in range(len(table)):
+            if table.iloc[patient]['info', 'tumor', 'midline_extension'] == False:
+                self.diagnose_matrices_midext[t_stage][patient, 0] = 0
+                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
+            if table.iloc[patient]['info', 'tumor', 'midline_extension'] == True:
+                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
+                self.diagnose_matrices_midext[t_stage][patient, 1] = 0
+            if (table.iloc[patient]['info', 'tumor', 'midline_extension'] != False) & (table.iloc[patient]['info', 'tumor', 'midline_extension'] != True):
+                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
+                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
+        """
+        for patient, row in table.iterrows():
+            midline_extension = row['info', 'tumor', 'midline_extension']
+            if not midline_extension:
+                self.diagnose_matrices_midext[t_stage][patient, 0] = 0
+                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
             elif midline_extension:
-                self.diagnose_matrices_midext[t_stage][idx, 0] = 0
-                self.diagnose_matrices_midext[t_stage][idx, 1] = 1
-            elif not midline_extension:
-                self.diagnose_matrices_midext[t_stage][idx, 0] = 1
-                self.diagnose_matrices_midext[t_stage][idx, 1] = 0
-
+                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
+                self.diagnose_matrices_midext[t_stage][patient, 1] = 0
+            else:
+                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
+                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
+        """
     @property
     def diagnose_matrices_midext(self):
         try:
@@ -512,8 +524,8 @@ class MidlineBilateral:
         max_t = self.diag_time_dists.max_t
         llh = 0. if log else 1.
 
-        state_probs_ipsi_nox = self.noext.ipsi._evolve_onestep()
-        state_probs_contra_nox = self.noext.contra._evolve_onestep()
+        state_probs_ipsi_nox = self.noext.ipsi._evolve_stepwise()
+        state_probs_contra_nox = self.noext.contra._evolve_stepwise()
         state_probs_midext = self._evolve_midext(new_params = given_params)
         state_probs_ipsi_ex = np.zeros(
         shape=(max_t + 1, len(self.ext.ipsi.state_list)),
@@ -557,12 +569,13 @@ class MidlineBilateral:
             p = np.array([p_nox,p_ex]) * np.array([[state_probs_midext[max_t,0]], [state_probs_midext[max_t,1]]])
 
             if log:
-                p = np.log(p)
-                llh_nox_ex = p @ self.diagnose_matrices_midext[stage]
+                llh_nox_ex = p.T * self.diagnose_matrices_midext[stage]
+                llh_nox_ex = np.log(llh_nox_ex[llh_nox_ex !=0])
                 llh += np.sum(llh_nox_ex)
-            #probably wrong. Matrix multiplication sums over patients but it should multiply.
+            
             else:
-                llh_nox_ex = p @ self.diagnose_matrices_midext[stage]
+                llh_nox_ex = p.T * self.diagnose_matrices_midext[stage]
+                llh_nox_ex = llh_nox_ex[llh_nox_ex !=0]
                 llh *= np.prod(llh_nox_ex)
 
         return llh
