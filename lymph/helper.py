@@ -264,7 +264,8 @@ def trigger(func: callable) -> callable:
     """Method decorator that runs instance's `trigger()` when the method is called."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
+        result = func(self, *args, **kwargs)
         for callback in self.trigger_callbacks:
             callback()
-        return func(self, *args, **kwargs)
+        return result
     return wrapper

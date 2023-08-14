@@ -543,13 +543,14 @@ class Representation:
     def _init_edges(
         self,
         graph: dict[tuple[str, str], list[str]],
-        on_edge_change: callable
+        on_edge_change: list[callable]
     ) -> None:
         """Initialize the edges of the ``graph``.
 
-        The provided ``on_edge_change`` callback is called whenever a parameter of
-        an edge is changed. Typically, this is used to update the transition tensor
-        of the edge or the transition matrix of the :py:class:`lymph.models`.
+        Every one of the provided ``on_edge_change`` list of callback functions is
+        called whenever a parameter of an edge is changed. Typically, this is used to
+        update the transition tensor of the edge or the transition matrix of the
+        :py:class:`lymph.models`.
 
         When a :py:class:`~LymphNodeLevel` is trinary, it is connected to itself via
         a growth edge.
@@ -606,6 +607,14 @@ class Representation:
     def edges(self) -> list[Edge]:
         """List of all :py:class:`~Edge` instances in the graph, regardless of type."""
         return self._tumor_edges + self._lnl_edges + self._growth_edges
+
+
+    def find_edge(self, name: str) -> Edge | None:
+        """Finds and returns an edge with ``name``."""
+        for edge in self.edges:
+            if edge.name == name:
+                return edge
+        return None
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
