@@ -3,13 +3,9 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-import pdb
-from numpy.linalg import matrix_power as mat_pow
 
 from .bilateral import Bilateral
-from .node import Node
 from .timemarg import MarginalizorDict
-from .unilateral import change_base
 
 
 class MidlineBilateral:
@@ -38,6 +34,7 @@ class MidlineBilateral:
         self,
         graph: Dict[Tuple[str], List[str]],
         use_mixing: bool = True,
+        evolve_midext: bool = False,
         trans_symmetric: bool = True,
         **_kwargs
     ):
@@ -73,30 +70,16 @@ class MidlineBilateral:
         if self.use_mixing:
             self.alpha_mix = 0.
 
+        self.evolve_midext = evolve_midext
+        if self.evolve_midext:
+            self.midext = 0.
+
         self.noext.diag_time_dists = self.ext.diag_time_dists
 
     @property
     def graph(self) -> Dict[Tuple[str], List[str]]:
-        """Return the (unilateral) graph that was used to create this network.
-        """
+        """Return the (unilateral) graph that was used to create this network."""
         return self.noext.graph
-    
-    @property
-    def midext_prob(self):
-        """Assign the last of the new_params to the midline extension probability
-        """
-        try:
-            return self._midext_prob
-        except AttributeError as attr_err:
-            raise AttributeError(
-                "No midline extension probability has been assigned"
-            ) from attr_err
-
-    @midext_prob.setter
-    def midext_prob(self, new_params):
-        """A variable containing the midline extension probability
-        """
-        self._midext_prob = new_params[-1]
 
     @property
     def base_probs(self) -> np.ndarray:
@@ -123,12 +106,11 @@ class MidlineBilateral:
                 self.noext.contra.base_probs,
                 [self.alpha_mix],
             ])
-        else:
-            return np.concatenate([
-                self.ext.ipsi.base_probs,
-                self.ext.contra.base_probs,
-                self.noext.contra.base_probs,
-            ])
+        return np.concatenate([
+            self.ext.ipsi.base_probs,
+            self.ext.contra.base_probs,
+            self.noext.contra.base_probs,
+        ])
 
     @base_probs.setter
     def base_probs(self, new_params: np.ndarray):
@@ -180,10 +162,13 @@ class MidlineBilateral:
         It is composed of the base spread probs (possible with the mixing parameter)
         and the probabilities of spread among the LNLs.
 
-        +-------------+-------------+
-        | base probs  | trans probs |
-        +-------------+-------------+
+        +-------------+-------------+-------------+
+        | base probs  | trans probs | midext prob |
+        +-------------+-------------+-------------+
         """
+        if self.evolve_midext:
+            return np.concatenate([self.base_probs, self.trans_probs, self.midext_prob])
+
         return np.concatenate([self.base_probs, self.trans_probs])
 
     @spread_probs.setter
@@ -193,8 +178,14 @@ class MidlineBilateral:
         """
         num_base_probs = len(self.base_probs)
 
+        if self.evolve_midext:
+            self.midext_prob = new_params[-1]
+            end = -1
+        else:
+            end = None
+
         self.base_probs  = new_params[:num_base_probs]
-        self.trans_probs = new_params[num_base_probs:]
+        self.trans_probs = new_params[num_base_probs:end]
 
 
     @property
@@ -260,31 +251,19 @@ class MidlineBilateral:
         """
         if not hasattr(self, "_diagnose_matrices_midext"):
             self._diagnose_matrices_midext = {}
+
         self._diagnose_matrices_midext[t_stage] = np.zeros((len(table), 2))
-        midline_extension = table['info', 'tumor', 'midline_extension']
-        for patient in range(len(table)):
-            if table.iloc[patient]['info', 'tumor', 'midline_extension'] == False:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 0
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
-            if table.iloc[patient]['info', 'tumor', 'midline_extension'] == True:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 0
-            if (table.iloc[patient]['info', 'tumor', 'midline_extension'] != False) & (table.iloc[patient]['info', 'tumor', 'midline_extension'] != True):
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
-        """
-        for patient, row in table.iterrows():
-            midline_extension = row['info', 'tumor', 'midline_extension']
-            if not midline_extension:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 0
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
-            elif midline_extension:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 0
-            else:
-                self.diagnose_matrices_midext[t_stage][patient, 0] = 1
-                self.diagnose_matrices_midext[t_stage][patient, 1] = 1
-        """
+        for idx, (_, patient) in enumerate(table.iterrows()):
+            midext = patient["info", "tumor", "midline_extension"]
+            if midext == False:
+                self.diagnose_matrices_midext[t_stage][idx] = np.array([0, 1])
+
+            if midext == True:
+                self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 0])
+
+            if pd.isna(midext):
+                self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 1])
+
     @property
     def diagnose_matrices_midext(self):
         try:
@@ -338,40 +317,31 @@ class MidlineBilateral:
         self._patient_data = patient_data.copy()
         self.load_data(patient_data)
 
-    def _evolve_midext(
-        self,  new_params: np.ndarray, start_midexstate: Optional[np.ndarray] = None
-    ) -> np.ndarray:
+    def _evolve_midext(self) -> np.ndarray:
         """Evolve hidden Markov model based system over one time step. Compute
         :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t`
         is the time.
-
-        Args:
-            start_midexstate: The current midline extension state.
 
         Returns:
             The new midline extension state
 
         :meta public:
         """
-        if start_midexstate is None:
-            start_midexstate = np.zeros(
-            shape=(self.diag_time_dists.max_t + 1, 2),
-            dtype=float
-            )
-            start_midexstate[0,0] = 1.
-        
-        self.midext_prob = new_params
-
-        midextransition_matrix = np.array(
-            [[1 - self.midext_prob, self.midext_prob],
-            [0.                  , 1.              ]]
+        midext_states = np.zeros(
+        shape=(self.diag_time_dists.max_t + 1, 2),
+        dtype=float
         )
-        midextransition_matrix[1,1] = 1
+        midext_states[0,0] = 1.
+
+        midextransition_matrix = np.array([
+            [1 - self.midext_prob, self.midext_prob],
+            [0.                  , 1.              ],
+        ])
 
         # compute involvement for all time steps
-        for i in range(len(start_midexstate)-1):
-            start_midexstate[i+1,:] = start_midexstate[i,:] @ midextransition_matrix
-        return start_midexstate
+        for i in range(len(midext_states)-1):
+            midext_states[i+1,:] = midext_states[i,:] @ midextransition_matrix
+        return midext_states
 
     def load_data(
         self,
@@ -427,7 +397,7 @@ class MidlineBilateral:
             modality_spsn=modality_spsn,
             mode=mode
         )
-    
+
         self.noext.load_data(
             data,
             modality_spsn=modality_spsn,
@@ -474,7 +444,6 @@ class MidlineBilateral:
             self.ext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
             self.noext.ipsi.diag_time_dists = self.ext.ipsi.diag_time_dists
             self.noext.contra.diag_time_dists = self.ext.ipsi.diag_time_dists
-            self.midext_prob = new_params
         except ValueError as val_err:
             raise ValueError(
                 "Parameters for marginalization over diagnose times are invalid"
@@ -487,10 +456,6 @@ class MidlineBilateral:
         if np.any(0. > new_spread_probs) or np.any(new_spread_probs > 1.):
             raise ValueError(
                 "Spread probs must be between 0 and 1"
-            )
-        if 0. > self.midext_prob or self.midext_prob > 1.:
-            raise ValueError(
-                "Midline extension probability must be between 0 and 1"
             )
 
         self.spread_probs = new_spread_probs
@@ -520,63 +485,57 @@ class MidlineBilateral:
         stored_t_stages = set(self.ext.ipsi.diagnose_matrices.keys())
         provided_t_stages = set(self.ext.ipsi.diag_time_dists.keys())
         t_stages = list(stored_t_stages.intersection(provided_t_stages))
-        
+
         max_t = self.diag_time_dists.max_t
         llh = 0. if log else 1.
 
-        state_probs_ipsi_nox = self.noext.ipsi._evolve_stepwise()
-        state_probs_contra_nox = self.noext.contra._evolve_stepwise()
-        state_probs_midext = self._evolve_midext(new_params = given_params)
-        state_probs_ipsi_ex = np.zeros(
-        shape=(max_t + 1, len(self.ext.ipsi.state_list)),
-        dtype=float
-        )
-        state_probs_ipsi_ex[0,0] = 1.
+        state_probs_ipsi = self.noext.ipsi._evolve(t_last=max_t)
+        state_probs_contra_nox = self.noext.contra._evolve(t_last=max_t)
+        state_probs_midext = self._evolve_midext()
+
         state_probs_contra_ex = np.zeros(
-        shape=(max_t + 1, len(self.ext.ipsi.state_list)),
-        dtype=float
+            shape=(max_t + 1, len(self.ext.ipsi.state_list)),
+            dtype=float
         )
         state_probs_contra_ex[0,0] = 1.
 
         for stage in t_stages:
             for i in range(max_t):
-                state_probs_ipsi_ex[(i+1),:] = state_probs_midext[i,1] * state_probs_ipsi_ex[i,:] @ self.ext.ipsi.transition_matrix + state_probs_midext[i,0] * state_probs_ipsi_nox[(i+1),:]
-                state_probs_contra_ex[(i+1),:] = state_probs_midext[i,1] * state_probs_contra_ex[i,:] @ self.ext.contra.transition_matrix + state_probs_midext[i,0] * state_probs_contra_nox[(i+1),:]
+                state_probs_contra_ex[i + 1] = (
+                    state_probs_midext[i,1] * state_probs_contra_ex[i] @ self.ext.contra.transition_matrix
+                    + state_probs_midext[i,0] * state_probs_contra_nox[i + 1]
+                )
 
             joint_state_probs_nox = (
-                state_probs_ipsi_nox.T
+                state_probs_ipsi.T
                 @ np.diag(self.noext.ipsi.diag_time_dists[stage].pmf)
                 @ state_probs_contra_nox
             )
             joint_state_probs_ex = (
-                state_probs_ipsi_ex.T
+                state_probs_ipsi.T
                 @ np.diag(self.ext.ipsi.diag_time_dists[stage].pmf)
                 @ state_probs_contra_ex
             )
-            p_ex = np.sum(
-                self.ext.ipsi.diagnose_matrices[stage]
-                * (joint_state_probs_ex
-                    @ self.ext.contra.diagnose_matrices[stage]),
-                axis=0
-                )
             p_nox = np.sum(
                 self.noext.ipsi.diagnose_matrices[stage]
                 * (joint_state_probs_nox
                     @ self.noext.contra.diagnose_matrices[stage]),
                 axis=0
                 )
+            p_ex = np.sum(
+                self.ext.ipsi.diagnose_matrices[stage]
+                * (joint_state_probs_ex
+                    @ self.ext.contra.diagnose_matrices[stage]),
+                axis=0
+                )
 
-            p = np.array([p_nox,p_ex]) * np.array([[state_probs_midext[max_t,0]], [state_probs_midext[max_t,1]]])
+            p = np.vstack((p_nox, p_ex))
+            stage_llh = p @ self.diagnose_matrices_midext[stage]
 
             if log:
-                llh_nox_ex = p.T * self.diagnose_matrices_midext[stage]
-                llh_nox_ex = np.log(llh_nox_ex[llh_nox_ex !=0])
-                llh += np.sum(llh_nox_ex)
-            
+                llh += np.sum(np.log(stage_llh))
             else:
-                llh_nox_ex = p.T * self.diagnose_matrices_midext[stage]
-                llh_nox_ex = llh_nox_ex[llh_nox_ex !=0]
-                llh *= np.prod(llh_nox_ex)
+                llh *= np.prod(stage_llh)
 
         return llh
 
