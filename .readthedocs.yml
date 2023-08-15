@@ -15,3 +15,11 @@ sphinx:
   builder: html
   configuration: docs/source/conf.py
   fail_on_warning: false
+
+# tell RTD to install the package with the docs optional requirements
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
