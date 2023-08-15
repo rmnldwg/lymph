@@ -72,7 +72,7 @@ class MidlineBilateral:
 
         self.evolve_midext = evolve_midext
         if self.evolve_midext:
-            self.midext = 0.
+            self.midext_prob = 0.
 
         self.noext.diag_time_dists = self.ext.diag_time_dists
 
