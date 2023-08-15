@@ -167,7 +167,7 @@ class MidlineBilateral:
         +-------------+-------------+-------------+
         """
         if self.evolve_midext:
-            return np.concatenate([self.base_probs, self.trans_probs, self.midext_prob])
+            return np.concatenate([self.base_probs, self.trans_probs, [self.midext_prob]])
 
         return np.concatenate([self.base_probs, self.trans_probs])
 
@@ -255,14 +255,12 @@ class MidlineBilateral:
         self._diagnose_matrices_midext[t_stage] = np.zeros((len(table), 2))
         for idx, (_, patient) in enumerate(table.iterrows()):
             midext = patient["info", "tumor", "midline_extension"]
-            if midext == False:
-                self.diagnose_matrices_midext[t_stage][idx] = np.array([0, 1])
-
-            if midext == True:
-                self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 0])
-
             if pd.isna(midext):
                 self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 1])
+            elif not midext:
+                self.diagnose_matrices_midext[t_stage][idx] = np.array([0, 1])
+            else:
+                self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 0])
 
     @property
     def diagnose_matrices_midext(self):
@@ -530,7 +528,7 @@ class MidlineBilateral:
                 )
 
             p = np.vstack((p_nox, p_ex))
-            stage_llh = p @ self.diagnose_matrices_midext[stage]
+            stage_llh = (p * self.diagnose_matrices_midext[stage].T).sum(axis=0)
 
             if log:
                 llh += np.sum(np.log(stage_llh))
