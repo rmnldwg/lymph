@@ -1,4 +1,5 @@
 .. image:: ./_static/github-social-card.png
+    :width: 800 px
 
 .. include:: badges.rst
 
@@ -12,14 +13,14 @@ Documentation
 =============
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Content
+    :maxdepth: 2
+    :caption: Content
 
-   install
-   quickstart
-   sampling
-   lymph
-   license
+    install
+    quickstart
+    sampling
+    api
+    license
 
 Index & search
 --------------
