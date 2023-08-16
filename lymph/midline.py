@@ -124,7 +124,7 @@ class MidlineBilateral:
 
         if self.use_mixing:
             self.noext.contra.base_probs = new_params[k:2*k]
-            self.alpha_mix = new_params[-2]
+            self.alpha_mix = new_params[-1]
             # compute linear combination
             self.ext.contra.base_probs = (
                 self.alpha_mix * self.ext.ipsi.base_probs
@@ -487,9 +487,16 @@ class MidlineBilateral:
         max_t = self.diag_time_dists.max_t
         llh = 0. if log else 1.
 
-        state_probs_ipsi = self.noext.ipsi._evolve(t_last=max_t)
-        state_probs_contra_nox = self.noext.contra._evolve(t_last=max_t)
         state_probs_midext = self._evolve_midext()
+        state_probs_ipsi = self.ext.ipsi._evolve(t_last=max_t)
+
+        # I think we need to discount the contralateral state probabilities for no
+        # midline extension, as it becomes less and less likely that the tumor
+        # does not cross the midline the longer it has been growing.
+        state_probs_contra_nox = (
+            self.noext.contra._evolve(t_last=max_t)
+            * state_probs_midext[:,0].reshape(-1,1)
+        )
 
         state_probs_contra_ex = np.zeros(
             shape=(max_t + 1, len(self.ext.ipsi.state_list)),
@@ -528,7 +535,14 @@ class MidlineBilateral:
                 )
 
             p = np.vstack((p_nox, p_ex))
-            stage_llh = (p * self.diagnose_matrices_midext[stage].T).sum(axis=0)
+            stage_llh = (
+                (p * self.diagnose_matrices_midext[stage].T).sum(axis=0)
+                * (
+                    self.diag_time_dists[stage].pmf
+                    @ state_probs_midext
+                    @ self.diagnose_matrices_midext[stage].T
+                )
+            )
 
             if log:
                 llh += np.sum(np.log(stage_llh))
