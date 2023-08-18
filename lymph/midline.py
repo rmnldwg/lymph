@@ -489,19 +489,8 @@ class MidlineBilateral:
 
         state_probs_midext = self._evolve_midext()
         state_probs_ipsi = self.ext.ipsi._evolve(t_last=max_t)
-
-        # I think we need to discount the contralateral state probabilities for no
-        # midline extension, as it becomes less and less likely that the tumor
-        # does not cross the midline the longer it has been growing.
-        state_probs_contra_nox = (
-            self.noext.contra._evolve(t_last=max_t)
-            * state_probs_midext[:,0].reshape(-1,1)
-        )
-
-        state_probs_contra_ex = np.zeros(
-            shape=(max_t + 1, len(self.ext.ipsi.state_list)),
-            dtype=float
-        )
+        state_probs_contra_nox = self.noext.contra._evolve(t_last=max_t)
+        state_probs_contra_ex = np.zeros_like(state_probs_contra_nox)
 
         for stage in t_stages:
             for i in range(max_t):
@@ -510,6 +499,9 @@ class MidlineBilateral:
                     + state_probs_contra_ex[i]
                 ) @ self.ext.contra.transition_matrix
 
+            # the two `joint_state_probs` below together represent the joint probability
+            # of any ips- AND contralateral state AND any midline extension state
+            # marginalized over the diagnose time.
             joint_state_probs_nox = (
                 state_probs_ipsi.T
                 @ np.diag(self.noext.ipsi.diag_time_dists[stage].pmf)
@@ -520,6 +512,7 @@ class MidlineBilateral:
                 @ np.diag(self.ext.ipsi.diag_time_dists[stage].pmf)
                 @ state_probs_contra_ex
             )
+
             p_nox = np.sum(
                 self.noext.ipsi.diagnose_matrices[stage]
                 * (joint_state_probs_nox
