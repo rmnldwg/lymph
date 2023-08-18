@@ -258,9 +258,9 @@ class MidlineBilateral:
             if pd.isna(midext):
                 self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 1])
             elif not midext:
-                self.diagnose_matrices_midext[t_stage][idx] = np.array([0, 1])
-            else:
                 self.diagnose_matrices_midext[t_stage][idx] = np.array([1, 0])
+            else:
+                self.diagnose_matrices_midext[t_stage][idx] = np.array([0, 1])
 
     @property
     def diagnose_matrices_midext(self):
@@ -502,19 +502,18 @@ class MidlineBilateral:
             shape=(max_t + 1, len(self.ext.ipsi.state_list)),
             dtype=float
         )
-        state_probs_contra_ex[0,0] = 1.
 
         for stage in t_stages:
             for i in range(max_t):
                 state_probs_contra_ex[i + 1] = (
-                    state_probs_midext[i,1] * state_probs_contra_ex[i] @ self.ext.contra.transition_matrix
-                    + state_probs_midext[i,0] * state_probs_contra_nox[i + 1]
-                )
+                    self.midext_prob * state_probs_contra_nox[i]
+                    + state_probs_contra_ex[i]
+                ) @ self.ext.contra.transition_matrix
 
             joint_state_probs_nox = (
                 state_probs_ipsi.T
                 @ np.diag(self.noext.ipsi.diag_time_dists[stage].pmf)
-                @ state_probs_contra_nox
+                @ (state_probs_contra_nox * state_probs_midext[:,0].reshape(-1,1))
             )
             joint_state_probs_ex = (
                 state_probs_ipsi.T
@@ -535,14 +534,7 @@ class MidlineBilateral:
                 )
 
             p = np.vstack((p_nox, p_ex))
-            stage_llh = (
-                (p * self.diagnose_matrices_midext[stage].T).sum(axis=0)
-                * (
-                    self.diag_time_dists[stage].pmf
-                    @ state_probs_midext
-                    @ self.diagnose_matrices_midext[stage].T
-                )
-            )
+            stage_llh = (p * self.diagnose_matrices_midext[stage].T).sum(axis=0)
 
             if log:
                 llh += np.sum(np.log(stage_llh))
