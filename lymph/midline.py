@@ -315,6 +315,7 @@ class MidlineBilateral:
         self._patient_data = patient_data.copy()
         self.load_data(patient_data)
 
+
     def _evolve_midext(self) -> np.ndarray:
         """Evolve hidden Markov model based system over one time step. Compute
         :math:`p(S \\mid t)` where :math:`S` is a distinct state and :math:`t`
@@ -340,6 +341,32 @@ class MidlineBilateral:
         for i in range(len(midext_states)-1):
             midext_states[i+1,:] = midext_states[i,:] @ midextransition_matrix
         return midext_states
+
+
+    def _evolve_contra(
+        self,
+        t_last: int,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Evolve contra side as mixture of with & without midline extension."""
+        state_probs_midext = np.zeros(
+            shape=(t_last + 1, len(self.ext.contra.state_list))
+        )
+        state_probs_noext = np.zeros(
+            shape=(t_last + 1, len(self.noext.contra.state_list))
+        )
+        state_probs_noext[0,0] = 1.
+
+        for t in range(t_last):
+            state_probs_noext[t+1] = (
+                (1. - self.midext_prob) * state_probs_noext[t]
+            ) @ self.noext.contra.transition_matrix
+            state_probs_midext[t+1] = (
+                self.midext_prob * state_probs_noext[t]
+                + state_probs_midext[t]
+            ) @ self.ext.contra.transition_matrix
+
+        return state_probs_noext, state_probs_midext
+
 
     def load_data(
         self,
@@ -417,6 +444,7 @@ class MidlineBilateral:
                         "patients in this T-stage will be ignored."
                     )
 
+
     def check_and_assign(self, new_params: np.ndarray):
         """Check that the spread probability (rates) and the parameters for the
         marginalization over diagnose times are all within limits and assign them to
@@ -458,6 +486,7 @@ class MidlineBilateral:
 
         self.spread_probs = new_spread_probs
 
+
     def likelihood(
         self,
         data: Optional[pd.DataFrame] = None,
@@ -478,8 +507,6 @@ class MidlineBilateral:
         except ValueError:
             return -np.inf if log else 0.
 
-        llh = 0. if log else 1.
-
         stored_t_stages = set(self.ext.ipsi.diagnose_matrices.keys())
         provided_t_stages = set(self.ext.ipsi.diag_time_dists.keys())
         t_stages = list(stored_t_stages.intersection(provided_t_stages))
@@ -487,25 +514,18 @@ class MidlineBilateral:
         max_t = self.diag_time_dists.max_t
         llh = 0. if log else 1.
 
-        state_probs_midext = self._evolve_midext()
+        # state_probs_midext = self._evolve_midext()
         state_probs_ipsi = self.ext.ipsi._evolve(t_last=max_t)
-        state_probs_contra_nox = self.noext.contra._evolve(t_last=max_t)
-        state_probs_contra_ex = np.zeros_like(state_probs_contra_nox)
+        state_probs_contra_nox, state_probs_contra_ex = self._evolve_contra(t_last=max_t)
 
         for stage in t_stages:
-            for i in range(max_t):
-                state_probs_contra_ex[i + 1] = (
-                    self.midext_prob * state_probs_contra_nox[i]
-                    + state_probs_contra_ex[i]
-                ) @ self.ext.contra.transition_matrix
-
             # the two `joint_state_probs` below together represent the joint probability
-            # of any ips- AND contralateral state AND any midline extension state
+            # of any ipsi- AND contralateral state AND any midline extension state
             # marginalized over the diagnose time.
             joint_state_probs_nox = (
                 state_probs_ipsi.T
                 @ np.diag(self.noext.ipsi.diag_time_dists[stage].pmf)
-                @ (state_probs_contra_nox * state_probs_midext[:,0].reshape(-1,1))
+                @ state_probs_contra_nox
             )
             joint_state_probs_ex = (
                 state_probs_ipsi.T
@@ -513,21 +533,23 @@ class MidlineBilateral:
                 @ state_probs_contra_ex
             )
 
-            p_nox = np.sum(
+            joint_diag_probs_nox = np.sum(
                 self.noext.ipsi.diagnose_matrices[stage]
                 * (joint_state_probs_nox
                     @ self.noext.contra.diagnose_matrices[stage]),
                 axis=0
-                )
-            p_ex = np.sum(
+            )
+            joint_diag_probs_ex = np.sum(
                 self.ext.ipsi.diagnose_matrices[stage]
                 * (joint_state_probs_ex
                     @ self.ext.contra.diagnose_matrices[stage]),
                 axis=0
-                )
+            )
 
-            p = np.vstack((p_nox, p_ex))
-            stage_llh = (p * self.diagnose_matrices_midext[stage].T).sum(axis=0)
+            joint_diag_probs = np.vstack((joint_diag_probs_nox, joint_diag_probs_ex))
+            stage_llh = (
+                joint_diag_probs * self.diagnose_matrices_midext[stage].T
+            ).sum(axis=0)
 
             if log:
                 llh += np.sum(np.log(stage_llh))
@@ -535,6 +557,7 @@ class MidlineBilateral:
                 llh *= np.prod(stage_llh)
 
         return llh
+
 
     def risk(
         self,
