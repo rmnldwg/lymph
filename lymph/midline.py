@@ -71,8 +71,7 @@ class MidlineBilateral:
             self.alpha_mix = 0.
 
         self.evolve_midext = evolve_midext
-        if self.evolve_midext:
-            self.midext_prob = 0.
+        self.midext_prob = 0.
 
         self.noext.diag_time_dists = self.ext.diag_time_dists
 
@@ -166,10 +165,7 @@ class MidlineBilateral:
         | base probs  | trans probs | midext prob |
         +-------------+-------------+-------------+
         """
-        if self.evolve_midext:
-            return np.concatenate([self.base_probs, self.trans_probs, [self.midext_prob]])
-
-        return np.concatenate([self.base_probs, self.trans_probs])
+        return np.concatenate([self.base_probs, self.trans_probs, [self.midext_prob]])
 
     @spread_probs.setter
     def spread_probs(self, new_params: np.ndarray):
@@ -178,14 +174,9 @@ class MidlineBilateral:
         """
         num_base_probs = len(self.base_probs)
 
-        if self.evolve_midext:
-            self.midext_prob = new_params[-1]
-            end = -1
-        else:
-            end = None
-
         self.base_probs  = new_params[:num_base_probs]
-        self.trans_probs = new_params[num_base_probs:end]
+        self.trans_probs = new_params[num_base_probs:-1]
+        self.midext_prob = new_params[-1]
 
 
     @property
@@ -327,8 +318,8 @@ class MidlineBilateral:
         :meta public:
         """
         midext_states = np.zeros(
-        shape=(self.diag_time_dists.max_t + 1, 2),
-        dtype=float
+            shape=(self.diag_time_dists.max_t + 1, 2),
+            dtype=float
         )
         midext_states[0,0] = 1.
 
@@ -348,22 +339,40 @@ class MidlineBilateral:
         t_last: int,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension."""
-        state_probs_midext = np.zeros(
-            shape=(t_last + 1, len(self.ext.contra.state_list))
-        )
         state_probs_noext = np.zeros(
             shape=(t_last + 1, len(self.noext.contra.state_list))
         )
         state_probs_noext[0,0] = 1.
 
+        state_probs_midext = np.zeros(
+            shape=(t_last + 1, len(self.ext.contra.state_list))
+        )
+        if not self.evolve_midext:
+            state_probs_noext[0,0] = (1. - self.midext_prob)
+            state_probs_midext[0,0] = self.midext_prob
+
         for t in range(t_last):
-            state_probs_noext[t+1] = (
-                (1. - self.midext_prob) * state_probs_noext[t]
-            ) @ self.noext.contra.transition_matrix
-            state_probs_midext[t+1] = (
-                self.midext_prob * state_probs_noext[t]
-                + state_probs_midext[t]
-            ) @ self.ext.contra.transition_matrix
+            # When evolving over the midline extension state, there's a chance at any
+            # time step that the tumor grows over the midline and starts spreading to
+            # the contralateral side more aggressively.
+            if self.evolve_midext:
+                state_probs_noext[t+1] = (
+                    (1. - self.midext_prob) * state_probs_noext[t]
+                ) @ self.noext.contra.transition_matrix
+                state_probs_midext[t+1] = (
+                    self.midext_prob * state_probs_noext[t]
+                    + state_probs_midext[t]
+                ) @ self.ext.contra.transition_matrix
+
+            # When we do not evolve, the tumor is considered lateralized or extending
+            # over the midline from the start.
+            else:
+                state_probs_noext[t+1] = (
+                    state_probs_noext[t] @ self.noext.contra.transition_matrix
+                )
+                state_probs_midext[t+1] = (
+                    state_probs_midext[t] @ self.ext.contra.transition_matrix
+                )
 
         return state_probs_noext, state_probs_midext
 
