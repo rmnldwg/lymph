@@ -16,9 +16,8 @@ sphinx:
   configuration: docs/source/conf.py
   fail_on_warning: false
 
-# Optionally set the version of Python and requirements required to build your docs
+# tell RTD to install the package with the docs optional requirements
 python:
-  version: 3.10
   install:
     - method: pip
       path: .
