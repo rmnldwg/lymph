@@ -200,6 +200,11 @@ class ModalitiesUserDict(AbstractLookupDict):
         super().__setitem__(name, value)
 
 
+    @trigger
+    def __delitem__(self, key: str) -> None:
+        return super().__delitem__(key)
+
+
 class ConfusionMatrices(AbstractDictDescriptor):
     """Stores a dictionary of confusion matrices for diagnostic modalities."""
     def _get_callback(self, instance: models.Unilateral):
