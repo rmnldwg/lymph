@@ -38,4 +38,4 @@ jobs:
           coverage run --omit=tests/*,*/_*.py -m unittest discover -v -p *_test.py ./tests
           coverage xml
       - name: Upload to codecov
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
