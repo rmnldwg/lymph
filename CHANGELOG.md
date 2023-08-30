@@ -88,7 +88,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a0...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a1...HEAD
+[1.0.0.a1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a0...1.0.0.a1
 [1.0.0.a0]: https://github.com/rmnldwg/lymph/compare/0.4.3...1.0.0.a0
 [0.4.3]: https://github.com/rmnldwg/lymph/compare/0.4.2...0.4.3
 [0.4.2]: https://github.com/rmnldwg/lymph/compare/0.4.1...0.4.2
