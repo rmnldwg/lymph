@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, Generator
 
 import numpy as np
 import pandas as pd
@@ -85,6 +85,10 @@ def create_modality_sync_callback(
         This is a one-way sync. Meaning that any changes to the modalities of ``other``
         are not reflected in ``this`` and get overwritten the next time this callback
         is triggered.
+
+        But this should not be a problem, since for a :py:class:`Bilateral` model with
+        symmetric modalities, only the modalities of the ipsilateral side should be
+        accessed directly.
     """
     def sync():
         for modality in this.keys():
@@ -191,14 +195,27 @@ class Bilateral:
         return self.ipsi.max_time
 
 
+    @property
+    def t_stages(self) -> Generator[str, None, None]:
+        """Generator over all valid T-stages present in both sides of the neck.
+
+        See Also:
+            :py:attr:`~lymph.models.Unilateral.t_stages`
+        """
+        for t_stage in self.ipsi.t_stages:
+            if t_stage in self.contra.t_stages:
+                yield t_stage
+
+
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
         mapping: callable = early_late_mapping,
     ) -> None:
-        """
-        See Also
-            :py:meth:`~lymph.models.Unilateral.load_patient_data`
+        """Load patient data into the model.
+
+        This amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
+        method of both sides of the neck.
         """
         self.ipsi.load_patient_data(patient_data, "ipsi", mapping)
         self.contra.load_patient_data(patient_data, "contra", mapping)
@@ -208,12 +225,8 @@ class Bilateral:
         self,
         log: bool = True
     ) -> float:
-        """Compute the (log-)likelihood of data, using the stored spread probs and
-        fixed distributions for marginalizing over diagnose times.
-
-        This method mainly exists so that the checking and assigning of the
-        spread probs can be skipped.
-        """
+        """Compute the (log-)likelihood of data, using the stored params."""
+        # TODO: Continue here.
         stored_t_stages = set(self.ipsi.diagnose_matrices.keys())
         provided_t_stages = set(self.ipsi.diag_time_dists.keys())
         t_stages = list(stored_t_stages.intersection(provided_t_stages))
