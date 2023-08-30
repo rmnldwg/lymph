@@ -225,6 +225,17 @@ class LoadDataFixtureMixin(ModelFixtureMixin):
         warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
         self.model.load_patient_data(self.patient_data, side="ipsi")
 
+        # Initialize some fixed diagnose time distributions
+        self.init_diag_time_dists(["early", "late", "foo"])
+
+    def init_diag_time_dists(self, t_stages: list[str], seed: int = 42) -> None:
+        """Initialize some fixed diagnose time distributions."""
+        rng = np.random.default_rng(seed)
+        for t_stage in t_stages:
+            self.model.diag_time_dists[t_stage] = rng.uniform(
+                low=0., high=1., size=self.model.max_time + 1
+            )
+
 
 class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
     """Test loading the patient data."""
@@ -235,6 +246,23 @@ class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
         self.assertRaises(
             ValueError, self.model.load_patient_data, self.patient_data, side="foo"
         )
+
+    def test_t_stages(self):
+        """Make sure all T-stages are present."""
+        t_stages_in_data = self.model.patient_data["_model", "#" ,"t_stage"].unique()
+        t_stages_in_diag_time_dists = self.model.diag_time_dists.keys()
+        t_stages_in_model = list(self.model.t_stages)
+        t_stages_intersection = set(t_stages_in_data).intersection(t_stages_in_diag_time_dists)
+
+        self.assertNotIn("foo", t_stages_in_model)
+        self.assertEqual(len(t_stages_in_diag_time_dists), 3)
+        self.assertEqual(len(t_stages_intersection), 2)
+        self.assertEqual(len(t_stages_intersection), len(t_stages_in_model))
+
+        for t_stage in t_stages_in_model:
+            self.assertIn(t_stage, t_stages_in_data)
+            self.assertIn(t_stage, t_stages_in_diag_time_dists)
+
 
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""

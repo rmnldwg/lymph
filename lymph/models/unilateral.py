@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import warnings
 from itertools import product
+from typing import Generator
 
 import numpy as np
 import pandas as pd
@@ -451,8 +452,8 @@ class Unilateral:
 
 
     @property
-    def t_stages(self) -> set[str | int]:
-        """Set of all valid T-stages in the model.
+    def t_stages(self) -> Generator[str, None, None]:
+        """Generator of all valid T-stages in the model.
 
         This is the intersection of the unique T-stages found in the (mapped) data
         and the T-stages defined in the distributions over diagnose times.
@@ -669,6 +670,7 @@ class Unilateral:
         self,
         data: pd.DataFrame | None = None,
         given_params: list[float] | np.ndarray | dict[str, float] | None = None,
+        load_data_kwargs: dict | None = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
@@ -678,12 +680,17 @@ class Unilateral:
         the likelihood for the stored :py:attr:`~patient_data`,
         :py:attr:`~edge_params`, and the stored :py:attr:`~diag_time_dists`.
 
+        One may specify additional ``load_data_kwargs`` to pass to the method
+        :py:meth:`~load_patient_data` when loading the data.
+
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
         """
         if data is not None:
-            self.patient_data = data
+            if load_data_kwargs is None:
+                load_data_kwargs = {}
+            self.load_patient_data(data, **load_data_kwargs)
 
         if given_params is None:
             return self._likelihood(mode, log)

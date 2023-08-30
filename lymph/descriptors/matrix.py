@@ -148,13 +148,14 @@ class Observation(AbstractMatrixDescriptor):
     @staticmethod
     def generate(instance: models.Unilateral) -> np.ndarray:
         """Generate the observation matrix of the lymph model."""
-        num_lnls = len(instance.graph._lnls)
-        shape = (2**num_lnls, 1)
+        num_lnls = len(instance.graph.lnls)
+        base = 2 if instance.graph.is_binary else 3
+        shape = (base ** num_lnls, 1)
         observation_matrix = np.ones(shape=shape)
 
         for modality in instance.modalities.values():
             mod_obs_matrix = np.ones(shape=(1,1))
-            for _ in instance.graph._lnls:
+            for _ in instance.graph.lnls:
                 mod_obs_matrix = np.kron(mod_obs_matrix, modality.confusion_matrix)
 
             observation_matrix = row_wise_kron(observation_matrix, mod_obs_matrix)
@@ -174,7 +175,7 @@ def compute_encoding(
     LNL is considered to be unknown.
     """
     num_lnls = len(lnls)
-    encoding = np.ones(shape=2**num_lnls, dtype=bool)
+    encoding = np.ones(shape=2 ** num_lnls, dtype=bool)
 
     for j, lnl in enumerate(lnls):
         if lnl not in pattern or pd.isna(pattern[lnl]):
@@ -183,8 +184,8 @@ def compute_encoding(
             encoding,
             tile_and_repeat(
                 mat=np.array([not pattern[lnl], pattern[lnl]]),
-                tile=(1, 2**j),
-                repeat=(1, 2**(num_lnls - j - 1)),
+                tile=(1, 2 ** j),
+                repeat=(1, 2 ** (num_lnls - j - 1)),
             )[0],
         )
     return encoding
@@ -284,9 +285,6 @@ class DiagnoseUserDict(AbstractLookupDict):
 
     def __missing__(self, t_stage: str) -> np.ndarray:
         """If the matrix for a ``t_stage`` is missing, try to generate it lazily."""
-        if t_stage not in self.model.data_matrices:
-            raise KeyError(f"Data matrix for T-stage {t_stage} is missing.")
-
         self.data[t_stage] = (
             self.model.observation_matrix @ self.model.data_matrices[t_stage]
         )
