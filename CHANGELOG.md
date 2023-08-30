@@ -1,5 +1,30 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+
 <a name="unreleased"></a>
 ## [Unreleased]
+
+
+<a name="1.0.0.a1"></a>
+## [1.0.0.a1] - 2023-08-30
+
+Second alpha release, aimed at testing the all new implementation. See these [issues](https://github.com/rmnldwg/lymph/milestone/1) for an idea of what this tries to address.
+
+### Bug Fixes
+- (**matrix**) Wrong shape of observation matrix for trinary model
+
+### Documentation
+- Fix wrong python version in rtd config file
+- Remove outdated sampling tutorial
+- Remove deprecated read-the-docs config
+- Tell read-the-docs to install extra requirements
+- Execute quickstart notebook
+
+### Testing
+- Check correct shapes for trinary model matrices
+
 
 <a name="1.0.0.a0"></a>
 ## [1.0.0.a0] - 2023-08-15
