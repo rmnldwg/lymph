@@ -623,7 +623,7 @@ class Unilateral(DelegatorMixin):
             return state_dist
 
 
-    def comp_obs_dist(self, t_stage: str) -> np.ndarray:
+    def comp_obs_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
         """Compute the distribution over all possible observations for a given T-stage.
 
         Returns an array of probabilities for each possible complete observation. This
@@ -635,7 +635,7 @@ class Unilateral(DelegatorMixin):
         :py:attr:`~diagnose_matrices` from the :py:attr:`~observation_matrix` and
         the :py:attr:`~data_matrices` and use these to compute the likelihood.
         """
-        state_dist = self.comp_state_dist(t_stage)
+        state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         return state_dist @ self.observation_matrix
 
 

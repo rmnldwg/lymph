@@ -206,38 +206,118 @@ class Bilateral(DelegatorMixin):
         self.contra.load_patient_data(patient_data, "contra", mapping)
 
 
+    def comp_joint_state_dist(
+        self,
+        t_stage: str = "early",
+        mode: str = "HMM",
+    ) -> np.ndarray:
+        """Compute the joint distribution over the ipsi- & contralateral hidden states.
+
+        This computes the state distributions of both sides and returns their outer
+        product. In case ``mode`` is ``"HMM"`` (default), the state distributions are
+        first marginalized over the diagnose time distribtions of the respective
+        ``t_stage``.
+
+        See Also:
+            :py:meth:`lymph.models.Unilateral.comp_state_dist`
+                The corresponding unilateral function.
+        """
+        if mode == "HMM":
+            ipsi_state_evo = self.ipsi.comp_dist_evolution()
+            contra_state_evo = self.contra.comp_dist_evolution()
+            time_marg_matrix = np.diag(self.ipsi.diag_time_dists[t_stage].distribution)
+
+            result = (
+                ipsi_state_evo.T
+                @ time_marg_matrix
+                @ contra_state_evo
+            )
+
+        elif mode == "BN":
+            ipsi_state_dist = self.ipsi.comp_state_dist(mode=mode)
+            contra_state_dist = self.contra.comp_state_dist(mode=mode)
+
+            result = np.outer(ipsi_state_dist, contra_state_dist)
+
+        else:
+            raise ValueError(f"Unknown mode '{mode}'.")
+
+        return result
+
+
+    def comp_joint_obs_dist(
+        self,
+        t_stage: str = "early",
+        mode: str = "HMM",
+    ) -> np.ndarray:
+        """Compute the joint distribution over the ipsi- & contralateral observations.
+
+        See Also:
+            :py:meth:`lymph.models.Unilateral.comp_obs_dist`
+                The corresponding unilateral function.
+        """
+        joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
+        return (
+            self.ipsi.observation_matrix.T
+            @ joint_state_dist
+            @ self.contra.observation_matrix
+        )
+
+
     def _likelihood(
         self,
+        mode: str = "HMM",
         log: bool = True
     ) -> float:
         """Compute the (log-)likelihood of data, using the stored params."""
-        # TODO: Continue here.
-        stored_t_stages = set(self.ipsi.diagnose_matrices.keys())
-        provided_t_stages = set(self.ipsi.diag_time_dists.keys())
-        t_stages = list(stored_t_stages.intersection(provided_t_stages))
-
-        max_t = self.diag_time_dists.max_t
-        state_probs = {}
-        state_probs["ipsi"] = self.ipsi._evolve(t_last=max_t)
-        state_probs["contra"] = self.contra._evolve(t_last=max_t)
-
         llh = 0. if log else 1.
-        for stage in t_stages:
-            joint_state_probs = (
-                state_probs["ipsi"].T
-                @ np.diag(self.ipsi.diag_time_dists[stage].pmf)
-                @ state_probs["contra"]
+
+        if mode == "HMM":    # Hidden Markov Model
+            ipsi_dist_evo = self.ipsi.comp_dist_evolution()
+            contra_dist_evo = self.contra.comp_dist_evolution()
+
+            for stage in self.t_stages:
+                diag_time_matrix = np.diag(self.diag_time_dists[stage].distribution)
+
+                joint_state_dist = (
+                    ipsi_dist_evo.T
+                    @ diag_time_matrix
+                    @ contra_dist_evo
+                )
+                # the computation below is a trick to make the computation fatser:
+                # What we want to compute is the sum over the diagonal of the matrix
+                # product of the ipsi diagnose matrix with the joint state distribution
+                # and the contra diagnose matrix.
+                # Source: https://stackoverflow.com/a/18854776
+                joint_diagnose_dist = np.sum(
+                    self.ipsi.diagnose_matrices[stage]
+                    * (
+                        joint_state_dist
+                        @ self.contra.diagnose_matrices[stage]
+                    ),
+                    axis=0,
+                )
+
+                if log:
+                    llh += np.sum(np.log(joint_diagnose_dist))
+                else:
+                    llh *= np.prod(joint_diagnose_dist)
+
+        elif mode == "BN":
+            joint_state_dist = self.comp_joint_state_dist(mode=mode)
+            joint_diagnose_dist = np.sum(
+                self.ipsi.stacked_diagnose_matrix
+                * (
+                    joint_state_dist
+                    @ self.contra.stacked_diagnose_matrix
+                ),
+                axis=0,
             )
-            p = np.sum(
-                self.ipsi.diagnose_matrices[stage]
-                * (joint_state_probs
-                    @ self.contra.diagnose_matrices[stage]),
-                axis=0
-            )
+
             if log:
-                llh += np.sum(np.log(p))
+                llh += np.sum(np.log(joint_diagnose_dist))
             else:
-                llh *= np.prod(p)
+                llh *= np.prod(joint_diagnose_dist)
 
         return llh
 
@@ -276,6 +356,7 @@ class Bilateral(DelegatorMixin):
             :meth:`Unilateral.likelihood`: The (log-)likelihood function of
             the unilateral system.
         """
+        # TODO: Continue here.
         if data is not None:
             self.patient_data = data
 
