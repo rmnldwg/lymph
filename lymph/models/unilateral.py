@@ -10,12 +10,12 @@ import pandas as pd
 
 from lymph import graph
 from lymph.descriptors import diagnose_times, matrix, modalities, params
-from lymph.helper import PatternType, early_late_mapping
+from lymph.helper import DelegatorMixin, PatternType, early_late_mapping
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 
-class Unilateral:
+class Unilateral(DelegatorMixin):
     """Class that models metastatic progression in a unilateral lymphatic system.
 
     It does this by representing it as a directed graph (DAG), which is stored in and
@@ -69,6 +69,8 @@ class Unilateral:
         is evolved from :math:`t=0` to ``max_time``. In the BN case, this parameter has
         no effect.
         """
+        super().__init__()
+
         self.graph = graph.Representation(
             graph_dict=graph_dict,
             tumor_state=tumor_state,
@@ -80,6 +82,10 @@ class Unilateral:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
         self.max_time = max_time
+
+        self.init_delegation(
+            graph=["is_binary", "is_trinary", "get_state", "set_state", "lnls"],
+        )
 
 
     @classmethod
