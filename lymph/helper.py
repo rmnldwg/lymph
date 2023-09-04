@@ -10,6 +10,73 @@ PatternType = dict[str, bool | NAType | None]
 """Type alias for an involvement pattern."""
 
 
+class DelegatorMixin:
+    """Mixin class that allows the delegation of attributes from another object."""
+    def init_delegation(self, **from_to) -> None:
+        """Initialize the delegation of attributes.
+
+        For each keyword argument that is an attribute of ``self``, the value is a
+        list of attributes to delegate to ``self``.
+
+        Inspiration from this came from the `delegation pattern`_.
+
+        .. _delegation pattern: https://github.com/faif/python-patterns/blob/master/patterns/fundamental/delegation_pattern.py
+
+        Example:
+
+        >>> class Delegate:
+        ...     def __init__(self):
+        ...         self.fancy_attr = "foo"
+        >>> class A(DelegatorMixin):
+        ...     def __init__(self):
+        ...         self.delegated = "hello world"
+        ...         self.also_delegated = Delegate()
+        ...         self.normal_attr = 42
+        ...         self.init_delegation(
+        ...             delegated=["count"],
+        ...             also_delegated=["fancy_attr"],
+        ...         )
+        >>> a = A()
+        >>> a.delegated.count("l")
+        3
+        >>> a.count("l")
+        3
+        >>> a.also_delegated.fancy_attr
+        'foo'
+        >>> a.fancy_attr
+        'foo'
+        >>> a.normal_attr
+        42
+        >>> a.non_existent
+        Traceback (most recent call last):
+        ...
+        AttributeError: 'A' object has no attribute 'non_existent'
+        """
+        self._delegated = {}
+
+        for attr, sub_attrs in from_to.items():
+            attr_obj = getattr(self, attr)
+
+            for sub_attr in sub_attrs:
+                if not hasattr(attr_obj, sub_attr):
+                    raise AttributeError(
+                        f"Attribute '{sub_attr}' not found in '{attr_obj}'"
+                    )
+
+                if sub_attr in self._delegated:
+                    warnings.warn(
+                        f"Attribute '{sub_attr}' already delegated. Overwriting."
+                    )
+                self._delegated[sub_attr] = getattr(attr_obj, sub_attr)
+
+    def __getattr__(self, name):
+        if name in self._delegated:
+            return self._delegated[name]
+
+        cls_name = self.__class__.__name__
+        raise AttributeError(f"'{cls_name}' object has no attribute '{name}'")
+
+
 def check_unique_names(graph: dict):
     """Check all nodes in ``graph`` have unique names and no duplicate connections."""
     node_name_set = set()
@@ -25,8 +92,6 @@ def check_unique_names(graph: dict):
 
     if len(node_name_set) != len(graph):
         raise ValueError("Node names are not unique")
-
-
 
 
 def check_spsn(spsn: List[float]):
@@ -171,7 +236,10 @@ def tile_and_repeat(
     tile: tuple[int, int],
     repeat: tuple[int, int],
 ) -> np.ndarray:
-    """Tile and repeat a matrix.
+    """Apply the numpy functions `tile`_ and `repeat`_ successively to ``mat``.
+
+    .. _tile: https://numpy.org/doc/stable/reference/generated/numpy.tile.html
+    .. _repeat: https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
 
     Example:
 
@@ -200,7 +268,7 @@ def tile_and_repeat(
 
 @lru_cache
 def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
-    """Return the indices for the transition tensor correpsonding to `lnl_idx`.
+    """Return the indices for the transition tensor correpsonding to ``lnl_idx``.
 
     Example:
 
@@ -230,7 +298,9 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
 
 
 def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Compute the kronecker product of two matrices row-wise.
+    """Compute the `kronecker product`_ of two matrices row-wise.
+
+    .. _kronecker product: https://en.wikipedia.org/wiki/Kronecker_product
 
     Example:
 
@@ -261,7 +331,7 @@ def early_late_mapping(t_stage: int | str) -> str:
 
 
 def trigger(func: callable) -> callable:
-    """Method decorator that runs instance's `trigger()` when the method is called."""
+    """Method decorator that runs instance's ``trigger()`` when the method is called."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
