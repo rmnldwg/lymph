@@ -12,6 +12,10 @@ PatternType = dict[str, bool | NAType | None]
 
 class DelegatorMixin:
     """Mixin class that allows the delegation of attributes from another object."""
+    def __init__(self):
+        self._delegated = {}
+
+
     def init_delegation(self, **from_to) -> None:
         """Initialize the delegation of attributes.
 
@@ -52,8 +56,6 @@ class DelegatorMixin:
         ...
         AttributeError: 'A' object has no attribute 'non_existent'
         """
-        self._delegated = {}
-
         for attr, sub_attrs in from_to.items():
             attr_obj = getattr(self, attr)
 
