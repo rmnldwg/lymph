@@ -38,7 +38,7 @@ class ModelFixtureMixin:
             ("lnl", "II"): ["III"],
             ("lnl", "III"): [],
         }
-        self.graph_dict = small_graph
+        self.graph_dict = large_graph
         self.model = Unilateral(graph_dict=self.graph_dict)
 
     def create_random_params(self, seed: int = 42) -> dict[str, float]:
@@ -108,6 +108,33 @@ class InitTestCase(ModelFixtureMixin, unittest.TestCase):
             self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
             self.assertIn(edge.name, connecting_edge_names)
+
+
+class DelegationTestCase(ModelFixtureMixin, unittest.TestCase):
+    """Test the delegation of parameters via the `DelegatorMixing`."""
+
+    def test_delegation(self):
+        """Make sure the specified attributes from graph are delegated upwards."""
+        self.assertEqual(
+            self.model.graph.is_binary,
+            self.model.is_binary,
+        )
+        self.assertEqual(
+            self.model.graph.is_trinary,
+            self.model.is_trinary,
+        )
+        self.assertEqual(
+            self.model.graph.get_state(),
+            self.model.get_state(),
+        )
+        self.assertEqual(
+            self.model.graph.set_state,
+            self.model.set_state,
+        )
+        self.assertEqual(
+            self.model.graph.lnls,
+            self.model.lnls,
+        )
 
 
 class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
@@ -199,7 +226,7 @@ class ObservationMatrixTestCase(ModelFixtureMixin, unittest.TestCase):
         """Make sure the observation matrix has the correct shape."""
         num_lnls = len(self.model.graph._lnls)
         num_modalities = len(self.model.modalities)
-        expected_shape = (2**num_lnls, 2**(num_lnls + num_modalities))
+        expected_shape = (2**num_lnls, 2**(num_lnls * num_modalities))
         self.assertEqual(self.model.observation_matrix.shape, expected_shape)
 
     def test_is_probabilistic(self):
@@ -306,7 +333,12 @@ class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
                 diagnose_matrix.shape[1],
                 has_t_stage.sum(),
             )
-            self.assertTrue(np.all(np.less_equal(diagnose_matrix, 1.)))
+            # some times, entries in the diagnose matrix are almost one, but just
+            # slightly larger. That's why we also have to have the `isclose` here.
+            self.assertTrue(np.all(
+                np.isclose(diagnose_matrix, 1.)
+                | np.less_equal(diagnose_matrix, 1.)
+            ))
 
         self.assertRaises(
             AttributeError,
