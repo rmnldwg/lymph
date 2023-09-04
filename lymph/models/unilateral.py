@@ -10,7 +10,12 @@ import pandas as pd
 
 from lymph import graph
 from lymph.descriptors import diagnose_times, matrix, modalities, params
-from lymph.helper import DelegatorMixin, PatternType, early_late_mapping
+from lymph.helper import (
+    DelegatorMixin,
+    DiagnoseType,
+    PatternType,
+    early_late_mapping,
+)
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -84,7 +89,11 @@ class Unilateral(DelegatorMixin):
         self.max_time = max_time
 
         self.init_delegation(
-            graph=["is_binary", "is_trinary", "get_state", "set_state", "lnls"],
+            graph=[
+                "is_binary", "is_trinary",
+                "get_state", "set_state", "state_list",
+                "lnls",
+            ],
         )
 
 
@@ -299,47 +308,6 @@ class Unilateral(DelegatorMixin):
         return prob
 
 
-    def _gen_state_list(self):
-        """Generates the list of (hidden) states."""
-        allowed_states_list = []
-        for lnl in self.graph._lnls:
-            allowed_states_list.append(lnl.allowed_states)
-
-        self._state_list = np.array(list(product(*allowed_states_list)))
-
-    @property
-    def state_list(self):
-        """Return list of all possible hidden states.
-
-        E.g., for three binary LNLs I, II, III, the first state would be where all LNLs
-        are in state 0. The second state would be where LNL III is in state 1 and all
-        others are in state 0, etc. The third represents the case where LNL II is in
-        state 1 and all others are in state 0, etc. Essentially, it looks like binary
-        counting:
-
-        >>> model = Unilateral(graph={
-        ...     ("tumor", "T"): ["I", "II" , "III"],
-        ...     ("lnl", "I"): [],
-        ...     ("lnl", "II"): ["I", "III"],
-        ...     ("lnl", "III"): [],
-        ... })
-        >>> model.state_list
-        array([[0, 0, 0],
-               [0, 0, 1],
-               [0, 1, 0],
-               [0, 1, 1],
-               [1, 0, 0],
-               [1, 0, 1],
-               [1, 1, 0],
-               [1, 1, 1]])
-        """
-        try:
-            return self._state_list
-        except AttributeError:
-            self._gen_state_list()
-            return self._state_list
-
-
     def _gen_obs_list(self):
         """Generates the list of possible observations."""
         possible_obs_list = []
@@ -387,6 +355,12 @@ class Unilateral(DelegatorMixin):
             self._gen_obs_list()
             return self._obs_list
 
+    @obs_list.deleter
+    def obs_list(self):
+        """Delete the observation list. Necessary to pass as callback."""
+        if hasattr(self, "_obs_list"):
+            del self._obs_list
+
 
     transition_matrix = matrix.Transition()
     """The matrix encoding the probabilities to transition from one state to another.
@@ -430,9 +404,10 @@ class Unilateral(DelegatorMixin):
         :py:class:`~lymph.descriptors.matrix.Observation`
             The class that implements the descriptor for the observation matrix.
     """
-    def delete_observation_matrix(self):
+    def delete_obs_list_and_matrix(self):
         """Delete the observation matrix. Necessary to pass as callback."""
         del self.observation_matrix
+        del self.obs_list
 
     data_matrices = matrix.DataEncodings()
     """Dictionary with T-stages as keys and corresponding data matrices as values.
@@ -714,10 +689,29 @@ class Unilateral(DelegatorMixin):
         return self._likelihood(mode, log)
 
 
+    def comp_diagnose_encoding(
+        self,
+        given_diagnoses: DiagnoseType | None = None,
+    ) -> np.ndarray:
+        """Compute one-hot vector encoding of a given diagnosis."""
+        diagnose_encoding = np.array([True], dtype=bool)
+
+        for modality in self.modalities.keys():
+            diagnose_encoding = np.kron(
+                diagnose_encoding,
+                matrix.compute_encoding(
+                    lnls=[lnl.name for lnl in self.graph._lnls],
+                    pattern=given_diagnoses.get(modality, {}),
+                ),
+            )
+
+        return diagnose_encoding
+
+
     def comp_posterior_state_dist(
         self,
         given_params: dict | None = None,
-        given_diagnoses: PatternType | None = None,
+        given_diagnoses: DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
     ) -> np.ndarray:
@@ -744,15 +738,7 @@ class Unilateral(DelegatorMixin):
         if given_diagnoses is None:
             given_diagnoses = {}
 
-        diagnose_encoding = np.array([True], dtype=bool)
-        for modality in self.modalities.keys():
-            diagnose_encoding = np.kron(
-                diagnose_encoding,
-                matrix.compute_encoding(
-                    lnls=[lnl.name for lnl in self.graph._lnls],
-                    pattern=given_diagnoses.get(modality, {}),
-                ),
-            )
+        diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
         diagnose_given_state = diagnose_encoding @ self.observation_matrix
 

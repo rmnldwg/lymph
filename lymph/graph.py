@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import warnings
+from itertools import product
 
 import numpy as np
 
@@ -698,6 +699,47 @@ class Representation:
             lnl = self.find_node(key)
             if lnl is not None and isinstance(lnl, LymphNodeLevel):
                 lnl.state = value
+
+
+    def _gen_state_list(self):
+        """Generates the list of (hidden) states."""
+        allowed_states_list = []
+        for lnl in self.lnls:
+            allowed_states_list.append(lnl.allowed_states)
+
+        self._state_list = np.array(list(product(*allowed_states_list)))
+
+    @property
+    def state_list(self):
+        """Return list of all possible hidden states.
+
+        E.g., for three binary LNLs I, II, III, the first state would be where all LNLs
+        are in state 0. The second state would be where LNL III is in state 1 and all
+        others are in state 0, etc. The third represents the case where LNL II is in
+        state 1 and all others are in state 0, etc. Essentially, it looks like binary
+        counting:
+
+        >>> model = Unilateral(graph={
+        ...     ("tumor", "T"): ["I", "II" , "III"],
+        ...     ("lnl", "I"): [],
+        ...     ("lnl", "II"): ["I", "III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.state_list
+        array([[0, 0, 0],
+               [0, 0, 1],
+               [0, 1, 0],
+               [0, 1, 1],
+               [1, 0, 0],
+               [1, 0, 1],
+               [1, 1, 0],
+               [1, 1, 1]])
+        """
+        try:
+            return self._state_list
+        except AttributeError:
+            self._gen_state_list()
+            return self._state_list
 
 
     edge_params = params.GetterSetterAccess()

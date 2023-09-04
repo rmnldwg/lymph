@@ -9,6 +9,9 @@ from pandas._libs.missing import NAType
 PatternType = dict[str, bool | NAType | None]
 """Type alias for an involvement pattern."""
 
+DiagnoseType = dict[str, PatternType]
+"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
+
 
 class DelegatorMixin:
     """Mixin class that allows the delegation of attributes from another object."""

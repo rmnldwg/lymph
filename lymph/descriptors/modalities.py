@@ -210,6 +210,6 @@ class ConfusionMatrices(AbstractDictDescriptor):
     def _get_callback(self, instance: models.Unilateral):
         modalities_dict = ModalitiesUserDict(
             is_trinary=instance.graph.is_trinary,
-            trigger_callbacks=[instance.delete_observation_matrix],
+            trigger_callbacks=[instance.delete_obs_list_and_matrix],
         )
         setattr(instance, self.private_name, modalities_dict)
