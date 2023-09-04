@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Generator
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from lymph import graph, models
 from lymph.descriptors import modalities
-from lymph.helper import early_late_mapping
+from lymph.helper import DelegatorMixin, early_late_mapping
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -103,7 +103,7 @@ def create_modality_sync_callback(
 
 
 
-class Bilateral:
+class Bilateral(DelegatorMixin):
     """Class that models metastatic progression in a bilateral lymphatic system.
 
     This is achieved by creating two instances of the
@@ -141,6 +141,8 @@ class Bilateral:
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model.
         """
+        super().__init__()
+
         # TODO: Implement asymmetric model. This should be relatively straightforward,
         #       since the transition matrices of the two sides do not need to have the
         #       same shape. The only thing that needs to be changed is the constructor
@@ -185,26 +187,9 @@ class Bilateral:
 
         self.diag_time_dists = self.ipsi.diag_time_dists
 
-
-    @property
-    def max_time(self) -> int:
-        """Latest diagnose time that is considered."""
-        if self.ipsi.max_time != self.contra.max_time:
-            raise RuntimeError("Max time of ipsi and contra side do not match.")
-
-        return self.ipsi.max_time
-
-
-    @property
-    def t_stages(self) -> Generator[str, None, None]:
-        """Generator over all valid T-stages present in both sides of the neck.
-
-        See Also:
-            :py:attr:`~lymph.models.Unilateral.t_stages`
-        """
-        for t_stage in self.ipsi.t_stages:
-            if t_stage in self.contra.t_stages:
-                yield t_stage
+        self.init_delegation(
+            ipsi=["max_time", "t_stages", "is_binary", "is_trinary"],
+        )
 
 
     def load_patient_data(
