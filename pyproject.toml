@@ -50,7 +50,7 @@ dev = [
 ]
 docs = [
     "sphinx",
-    "sphinx-rtd-theme",
+    "sphinx-book-theme",
     "sphinx-autodoc-typehints",
     "myst-nb",
     "ipython",
