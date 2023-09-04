@@ -206,14 +206,14 @@ class Edge:
         spread_prob: float = 0.,
         micro_mod: float = 1.,
         callbacks: list[callable] | None = None,
-    ):
+    ) -> None:
         """Create a new edge between two nodes.
 
-        The `parent` node must be a `Tumor` or a `LymphNodeLevel`, and the `child` node
-        must be a `LymphNodeLevel`.
+        The ``parent`` node must be a :py:class:`Tumor` or a :py:class:`LymphNodeLevel`,
+        and the ``child`` node must be a :py:class:`LymphNodeLevel`.
 
-        The `spread_prob` parameter is the probability of a tumor or involved LNL to
-        spread to the next LNL. The `micro_mod` parameter is a modifier for the spread
+        The ``spread_prob`` parameter is the probability of a tumor or involved LNL to
+        spread to the next LNL. The ``micro_mod`` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
         self.trigger_callbacks = [self.delete_transition_tensor]

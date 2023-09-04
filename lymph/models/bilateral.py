@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, Iterator
 
 import numpy as np
 import pandas as pd
 
 from lymph import graph, models
 from lymph.descriptors import modalities
-from lymph.helper import DelegatorMixin, early_late_mapping
+from lymph.helper import DelegatorMixin, DiagnoseType, early_late_mapping
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -170,11 +170,9 @@ class Bilateral(DelegatorMixin):
             )
 
         if self.lnl_spread_symmetric:
-            init_edge_sync(
-                property_names,
-                self.ipsi.graph.lnl_edges,
-                self.contra.graph.lnl_edges,
-            )
+            ipsi_edges = self.ipsi.graph.lnl_edges + self.ipsi.graph.growth_edges
+            contra_edges = self.contra.graph.lnl_edges + self.contra.graph.growth_edges
+            init_edge_sync(property_names, ipsi_edges, contra_edges)
 
         if self.modalities_symmetric:
             self.modalities = self.ipsi.modalities
@@ -185,11 +183,46 @@ class Bilateral(DelegatorMixin):
                 )
             )
 
-        self.diag_time_dists = self.ipsi.diag_time_dists
-
         self.init_delegation(
-            ipsi=["max_time", "t_stages", "is_binary", "is_trinary"],
+            ipsi=[
+                "max_time", "t_stages", "diag_time_dists",
+                "is_binary", "is_trinary",
+            ],
         )
+
+
+    def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
+        """Assign parameters to the model via positional arguments."""
+        # objects = (edge.set_spread_prob for edge in self.ipsi.graph.tumor_edges)
+        pass
+
+
+    def assign_params(
+        self,
+        *new_params_args,
+        **new_params_kwargs,
+    ) -> tuple[Iterator[float, dict[str, float]]]:
+        """Assign new parameters to the model.
+
+        See Also:
+            :py:meth:`lymph.models.Unilateral.assign_params`
+        """
+        ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
+        for key, value in new_params_kwargs.items():
+            if "ipsi_" in key:
+                ipsi_kwargs[key.replace("ipsi_", "")] = value
+            elif "contra_" in key:
+                contra_kwargs[key.replace("contra_", "")] = value
+            else:
+                general_kwargs[key] = value
+
+        remaining_args, remainings_kwargs = self.ipsi.assign_params(
+            *new_params_args, **ipsi_kwargs, **general_kwargs
+        )
+        remaining_args, remainings_kwargs = self.contra.assign_params(
+            *remaining_args, **contra_kwargs, **remainings_kwargs
+        )
+        return remaining_args, remainings_kwargs
 
 
     def load_patient_data(
@@ -225,7 +258,7 @@ class Bilateral(DelegatorMixin):
         if mode == "HMM":
             ipsi_state_evo = self.ipsi.comp_dist_evolution()
             contra_state_evo = self.contra.comp_dist_evolution()
-            time_marg_matrix = np.diag(self.ipsi.diag_time_dists[t_stage].distribution)
+            time_marg_matrix = np.diag(self.diag_time_dists[t_stage].distribution)
 
             result = (
                 ipsi_state_evo.T
@@ -325,50 +358,81 @@ class Bilateral(DelegatorMixin):
     def likelihood(
         self,
         data: pd.DataFrame | None = None,
-        given_params: np.ndarray | None = None,
+        given_params: list[float] | np.ndarray | dict[str, float] | None = None,
+        load_data_kwargs: dict | None = None,
         log: bool = True,
+        mode: str = "HMM"
     ):
-        """Compute log-likelihood of (already stored) data, given the spread
-        probabilities and either a discrete diagnose time or a distribution to
-        use for marginalization over diagnose times.
+        """Compute the (log-)likelihood of the ``data``, given the model (and params).
 
-        Args:
-            data: Table with rows of patients and columns of per-LNL involvment. See
-                :meth:`load_data` for more details on how this should look like.
-
-            given_params: The likelihood is a function of these parameters. They mainly
-                consist of the :attr:`spread_probs` of the model. Any excess parameters
-                will be used to update the parametrized distributions used for
-                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
-
-            log: When ``True``, the log-likelihood is returned.
-
-        Returns:
-            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
-            is the data and :math:`\\theta` is the tuple of spread probabilities
-            and diagnose times or distributions over diagnose times.
+        If ``data`` and/or ``given_params`` are provided, they are loaded into the
+        model. Otherwise, the stored data and params are used. The ``load_data_kwargs``
+        are passed to the :py:meth:`~lymph.models.Bilateral.load_patient_data` method.
 
         See Also:
-            :attr:`spread_probs`: Property for getting and setting the spread
-            probabilities, of which a lymphatic network has as many as it has
-            :class:`Edge` instances (in case no symmetries apply).
-
-            :meth:`Unilateral.likelihood`: The (log-)likelihood function of
-            the unilateral system.
+            :py:meth:`lymph.models.Unilateral.likelihood`
         """
-        # TODO: Continue here.
         if data is not None:
-            self.patient_data = data
+            if load_data_kwargs is None:
+                load_data_kwargs = {}
+            self.load_patient_data(data, **load_data_kwargs)
 
         if given_params is None:
             return self._likelihood(log)
 
         try:
-            self.check_and_assign(given_params)
+            # all functions and methods called here should raise a ValueError if the
+            # given parameters are invalid...
+            if isinstance(given_params, dict):
+                self.assign_params(**given_params)
+            else:
+                self.assign_params(*given_params)
         except ValueError:
             return -np.inf if log else 0.
 
         return self._likelihood(log)
+
+
+    def comp_posterior_joint_state_dist(
+        self,
+        given_params: dict | None = None,
+        given_diagnoses: dict[str, DiagnoseType] | None = None,
+        t_stage: str | int = "early",
+        mode: str = "HMM",
+    ) -> np.ndarray:
+        """Compute joint post. dist. over ipsi & contra states, ``given_diagnoses``.
+
+        The ``given_diagnoses`` is a dictionary storing a :py:class:`DiagnoseType` for
+        the ``"ipsi"`` and ``"contra"`` side of the neck.
+
+        See Also:
+            :py:meth:`lymph.models.Unilateral.comp_posterior_state_dist`
+        """
+        if given_params is not None:
+            self.assign_params(**given_params)
+
+        if given_diagnoses is None:
+            given_diagnoses = {}
+
+        diagnose_given_state = {}
+        for side in ["ipsi", "contra"]:
+            diagnose_encoding = getattr(self, side).comp_diagnose_encoding(
+                given_diagnoses.get(side, {})
+            )
+            observation_matrix = getattr(self, side).observation_matrix
+            # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
+            diagnose_given_state[side] = diagnose_encoding @ observation_matrix
+
+        joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
+        # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
+        joint_diagnose_and_state = (
+            diagnose_given_state["ipsi"].T
+            * joint_state_dist
+            * diagnose_given_state["contra"]
+        )
+        # Following Bayes' theorem, this is P(Xi,Xc|Zi=zi,Zc=zc) which is given by
+        # P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) / P(Zi=zi,Zc=zc)
+        return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
 
 
     def risk(
@@ -404,6 +468,7 @@ class Bilateral(DelegatorMixin):
         See Also:
             :meth:`Unilateral.risk`: The risk function for only one-sided models.
         """
+        # TODO: Continue here.
         if given_params is not None:
             self.check_and_assign(given_params)
 

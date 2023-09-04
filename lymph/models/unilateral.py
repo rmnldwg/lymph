@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 import warnings
 from itertools import product
-from typing import Generator
+from typing import Generator, Iterator
 
 import numpy as np
 import pandas as pd
@@ -111,13 +111,13 @@ class Unilateral(DelegatorMixin):
 
     def __str__(self) -> str:
         """Print info about the instance."""
-        return f"Unilateral with {len(self.graph._tumors)} tumors and {len(self.graph._lnls)} LNLs"
+        return f"Unilateral with {len(self.graph._tumors)} tumors and {len(self.graph.lnls)} LNLs"
 
 
     def print_info(self):
         """Print detailed information about the instance."""
         num_tumors = len(self.graph._tumors)
-        num_lnls   = len(self.graph._lnls)
+        num_lnls   = len(self.graph.lnls)
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
@@ -157,45 +157,59 @@ class Unilateral(DelegatorMixin):
         return result if as_dict else list(result.values())
 
 
-    def _assign_via_args(self, new_params_args):
+    def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
         """Assign parameters to egdes and to distributions via positional arguments."""
-        objects = itertools.chain(
-            (param for param in self.graph.edge_params.values()),
-            (dist for dist in self.diag_time_dists.values()),
+        setters = itertools.chain(
+            (param.set_param for param in self.graph.edge_params.values()),
+            (dist.set_params for dist in self.diag_time_dists.values()),
         )
-        new_params_args = iter(new_params_args)
         while True:
             try:
-                obj = next(objects)
-                if isinstance(obj, params.Param):
-                    obj.set_param(next(new_params_args))
-                elif isinstance(obj, diagnose_times.Distribution):
-                    kwargs = obj.get_params()
-                    obj.set_params(**{key: next(new_params_args) for key in kwargs})
+                setter = next(setters)
+                if isinstance(setter, params.Param):
+                    setter(next(new_params_args))
+                elif isinstance(setter, diagnose_times.Distribution):
+                    kwargs = setter.get_params()
+                    setter(**{key: next(new_params_args) for key in kwargs})
             except StopIteration:
                 break
 
+        return new_params_args
 
-    def _assign_via_kwargs(self, new_params_kwargs):
+
+    def _assign_via_kwargs(
+        self,
+        new_params_kwargs: dict[str, float],
+    ) -> dict[str, float]:
         """Assign parameters to egdes and to distributions via keyword arguments."""
+        remaining_kwargs = {}
         for key, value in new_params_kwargs.items():
             t_stage, param_name = key.split("_", 1)
             if t_stage in self.diag_time_dists:
                 self.diag_time_dists[t_stage].set_params(**{param_name: value})
 
             elif key == "growth":
-                for edge in self.graph._growth_edges:
+                for edge in self.graph.growth_edges:
                     edge.spread_prob = value
 
             elif key == "micro_mod":
-                for edge in self.graph._lnl_edges:
+                for edge in self.graph.lnl_edges:
                     edge.micro_mod = value
 
-            else:
+            elif key in self.graph.edge_params:
                 self.graph.edge_params[key].set_param(value)
 
+            else:
+                remaining_kwargs[key] = value
 
-    def assign_params(self, *new_params_args, **new_params_kwargs):
+        return remaining_kwargs
+
+
+    def assign_params(
+        self,
+        *new_params_args,
+        **new_params_kwargs,
+    ) -> tuple[Iterator[float], dict[str, float]]:
         """Assign new parameters to the model.
 
         The parameters can either be provided with positional arguments or as
@@ -208,12 +222,19 @@ class Unilateral(DelegatorMixin):
            this is skipped.
         4. The parameters for the marginalizing distributions over diagnose times. Note
            that a distribution may take more than one parameter. So, if there are e.g.
-           two T-stages with distributions over diagnose times, this step requires four
-           arguments.
+           two T-stages with distributions over diagnose times that take two parameters
+           each, this step requires and consumes four arguments.
 
-        The order of the keyword arguments obviously does not matter. If one wants to
-        set the microscopic or growth parameters globally for all LNLs, the keyword
-        arguments ``micro_mod`` and ``growth`` can be used for that.
+        If the arguments are not used up, the remaining ones are given back as the first
+        element of the returned tuple.
+
+        When providing keyword arguments, the order of the keyword arguments obviously
+        does not matter. If one wants to set the microscopic or growth parameters
+        globally for all LNLs, the keyword arguments ``micro_mod`` and ``growth`` can
+        be used for that.
+
+        As with the positional arguments, the dictionary of unused keyword arguments is
+        returned as the second element of the tuple.
 
         Note:
             Providing positional arguments does not allow using the global
@@ -233,8 +254,10 @@ class Unilateral(DelegatorMixin):
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
-            self._assign_via_args(new_params_args)
-            self._assign_via_kwargs(new_params_kwargs)
+            remaining_args = self._assign_via_args(iter(new_params_args))
+            remainig_kwargs = self._assign_via_kwargs(new_params_kwargs)
+
+        return remaining_args, remainig_kwargs
 
 
     def comp_transition_prob(
@@ -249,7 +272,7 @@ class Unilateral(DelegatorMixin):
         the model using the method :py:meth:`~Unilateral.assign_states`.
         """
         trans_prob = 1
-        for i, lnl in enumerate(self.graph._lnls):
+        for i, lnl in enumerate(self.graph.lnls):
             trans_prob *= lnl.comp_trans_prob(new_state = newstate[i])
             if trans_prob == 0:
                 break
@@ -295,7 +318,7 @@ class Unilateral(DelegatorMixin):
         for name, modality in self.modalities.items():
             if name in diagnoses:
                 mod_diagnose = diagnoses[name]
-                for lnl in self.graph._lnls:
+                for lnl in self.graph.lnls:
                     try:
                         lnl_diagnose = mod_diagnose[lnl.name]
                     except KeyError:
@@ -313,7 +336,7 @@ class Unilateral(DelegatorMixin):
         possible_obs_list = []
         for modality in self.modalities.values():
             possible_obs = np.arange(modality.confusion_matrix.shape[1])
-            for _ in self.graph._lnls:
+            for _ in self.graph.lnls:
                 possible_obs_list.append(possible_obs.copy())
 
         self._obs_list = np.array(list(product(*possible_obs_list)))
@@ -494,7 +517,7 @@ class Unilateral(DelegatorMixin):
             if side not in patient_data[modality_name]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
-            for lnl in self.graph._lnls:
+            for lnl in self.graph.lnls:
                 if lnl.name not in patient_data[modality_name, side]:
                     raise ValueError(f"Involvement data for LNL {lnl} not found.")
                 column = patient_data[modality_name, side, lnl.name]
@@ -592,7 +615,7 @@ class Unilateral(DelegatorMixin):
 
             for i, state in enumerate(self.state_list):
                 self.graph.set_state(state)
-                for node in self.graph._lnls:
+                for node in self.graph.lnls:
                     state_dist[i] *= node.comp_bayes_net_prob()
 
             return state_dist
@@ -700,7 +723,7 @@ class Unilateral(DelegatorMixin):
             diagnose_encoding = np.kron(
                 diagnose_encoding,
                 matrix.compute_encoding(
-                    lnls=[lnl.name for lnl in self.graph._lnls],
+                    lnls=[lnl.name for lnl in self.graph.lnls],
                     pattern=given_diagnoses.get(modality, {}),
                 ),
             )
@@ -786,7 +809,7 @@ class Unilateral(DelegatorMixin):
         # resulting vector of hidden states to match that involvement of
         # interest
         marginalize_over_states = matrix.compute_encoding(
-            lnls=[lnl.name for lnl in self.graph._lnls],
+            lnls=[lnl.name for lnl in self.graph.lnls],
             pattern=involvement,
         )
         return marginalize_over_states @ posterior_state_dist
@@ -839,7 +862,7 @@ class Unilateral(DelegatorMixin):
 
         # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.graph._lnls]
+        lnl_names = [lnl.name for lnl in self.graph.lnls]
         multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
         # create DataFrame
