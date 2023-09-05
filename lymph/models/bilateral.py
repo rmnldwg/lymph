@@ -45,8 +45,8 @@ def init_edge_sync(
     Implementing this as a separate method allows a user in theory to initialize
     an arbitrary kind of symmetry between the two sides of the neck.
     """
-    this_edge_names = [e.name for e in this_edge_list]
-    other_edge_names = [e.name for e in other_edge_list]
+    this_edge_names = [e_name for e_name in this_edge_list]
+    other_edge_names = [e_name for e_name in other_edge_list]
 
     for edge_name in set(this_edge_names).intersection(other_edge_names):
         this_edge = this_edge_list[this_edge_names.index(edge_name)]
@@ -165,13 +165,19 @@ class Bilateral(DelegatorMixin):
         if self.tumor_spread_symmetric:
             init_edge_sync(
                 property_names,
-                self.ipsi.graph.tumor_edges,
-                self.contra.graph.tumor_edges,
+                list(self.ipsi.graph.tumor_edges.values()),
+                list(self.contra.graph.tumor_edges.values()),
             )
 
         if self.lnl_spread_symmetric:
-            ipsi_edges = self.ipsi.graph.lnl_edges + self.ipsi.graph.growth_edges
-            contra_edges = self.contra.graph.lnl_edges + self.contra.graph.growth_edges
+            ipsi_edges = (
+                list(self.ipsi.graph.lnl_edges.values())
+                + list(self.ipsi.graph.growth_edges.values())
+            )
+            contra_edges = (
+                list(self.contra.graph.lnl_edges.values())
+                + list(self.contra.graph.growth_edges.values())
+            )
             init_edge_sync(property_names, ipsi_edges, contra_edges)
 
         if self.modalities_symmetric:
@@ -193,7 +199,7 @@ class Bilateral(DelegatorMixin):
 
     def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
         """Assign parameters to the model via positional arguments."""
-        # objects = (edge.set_spread_prob for edge in self.ipsi.graph.tumor_edges)
+        setters = (edge.set_spread_prob for edge in self.ipsi.graph.tumor_edges)
         pass
 
 

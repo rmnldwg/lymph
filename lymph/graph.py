@@ -6,10 +6,10 @@ from __future__ import annotations
 import base64
 import warnings
 from itertools import product
+from typing import Iterable
 
 import numpy as np
 
-from lymph.descriptors import params
 from lymph.helper import check_unique_names, trigger
 
 
@@ -287,9 +287,12 @@ class Edge:
     def name(self) -> str:
         """Return the name of the edge.
 
-        This is used to identify it and assign spread probabilities to it in
-        the `Unilateral` class.
+        This is used to identify and assign spread probabilities to it in the
+        :py:class:`~models.Unilateral` class.
         """
+        if self.is_growth:
+            return self.parent.name
+
         return self.parent.name + '_to_' + self.child.name
 
 
@@ -347,6 +350,47 @@ class Edge:
         fset=set_spread_prob,
         doc="Spread probability of the edge",
     )
+
+
+    def get_setters(
+        self,
+        as_dict: bool = False,
+    ) -> dict[str, callable] | Iterable[callable]:
+        """Return the setter functions for the edge's parameters.
+
+        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
+        parameters as keys and the setter functions as values. Otherwise, the result is
+        a list of the setter functions in the order they appear in the graph.
+        """
+        if self.is_growth:
+            setters = {"growth": self.set_spread_prob}
+            return setters if as_dict else setters.values()
+
+        setters = {"spread": self.set_spread_prob}
+        if self.child.is_trinary:
+            setters["micro"] = self.set_micro_mod
+
+        return setters if as_dict else setters.values()
+
+    def get_getters(
+        self,
+        as_dict: bool = False,
+    ) -> dict[str, callable] | Iterable[callable]:
+        """Return the getter functions for the edge's parameters.
+
+        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
+        parameters as keys and the getter functions as values. Otherwise, the result is
+        a list of the getter functions in the order they appear in the graph.
+        """
+        if self.is_growth:
+            getters = {"growth": self.get_spread_prob}
+            return getters if as_dict else getters.values()
+
+        getters = {"spread": self.get_spread_prob}
+        if self.child.is_trinary:
+            getters["micro"] = self.get_micro_mod
+
+        return getters if as_dict else getters.values()
 
 
     def comp_bayes_prob(self, log: bool = False) -> float:
@@ -420,16 +464,16 @@ class Edge:
         fget=get_transition_tensor,
         fdel=delete_transition_tensor,
         doc="""
-        This tensor of the shape (s,e,e) contains the transition probabilities for
-        the `Node` at this instance's end to transition from any starting state to
-        any new state, given any possible state of the `Node` at the start of this
-        edge.
+        This tensor of the shape (s,e,e) contains the transition probabilities for the
+        :py:class:`~LymphNodeLevel` at this instance's end to transition from any
+        starting state to any new state, given any possible state of the
+        :py:class:`~AbstractNode` instance at the start of this edge.
 
         The correct term can be accessed like this:
 
         .. code-block:: python
 
-            edge.transition_tensor[start_state, end_state, new_state]
+            edge.transition_tensor[parent_state, child_state, new_child_state]
         """
     )
 
@@ -440,8 +484,6 @@ class Representation:
     This class allows accessing the connected nodes (:py:class:`Tumor` and
     :py:class:`LymphNodeLevel`) and edges (:py:class:`Edge`) of the :py:mod:`models`.
     """
-    edge_params = params.GetterSetterAccess()
-
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
@@ -471,40 +513,37 @@ class Representation:
 
     def _init_nodes(self, graph, tumor_state, allowed_lnl_states):
         """Initialize the nodes of the graph."""
-        self._tumors: list[Tumor] = []
-        self._lnls: list[LymphNodeLevel] = []
+        self._nodes: dict[str, Tumor | LymphNodeLevel] = {}
 
         for node_type, node_name in graph:
             if node_type == "tumor":
-                self._tumors.append(
-                    Tumor(name=node_name, state=tumor_state)
-                )
+                tumor = Tumor(name=node_name, state=tumor_state)
+                self._nodes[node_name] = tumor
             elif node_type == "lnl":
-                self._lnls.append(
-                    LymphNodeLevel(name=node_name, allowed_states=allowed_lnl_states)
-                )
+                lnl = LymphNodeLevel(name=node_name, allowed_states=allowed_lnl_states)
+                self._nodes[node_name] = lnl
 
 
     @property
-    def tumors(self) -> list[Tumor]:
-        """List of all :py:class:`~Tumor` nodes in the graph."""
-        return self._tumors
-
-    @property
-    def lnls(self) -> list[LymphNodeLevel]:
-        """List of all :py:class:`~LymphNodeLevel` nodes in the graph."""
-        return self._lnls
-
-    @property
-    def nodes(self) -> list[Tumor | LymphNodeLevel]:
+    def nodes(self) -> dict[str, Tumor | LymphNodeLevel]:
         """List of both :py:class:`~Tumor` and :py:class:`~LymphNodeLevel` instances."""
-        return self._tumors + self._lnls
+        return self._nodes
+
+    @property
+    def tumors(self) -> dict[str, Tumor]:
+        """List of all :py:class:`~Tumor` nodes in the graph."""
+        return {n: t for n, t in self.nodes.items() if isinstance(t, Tumor)}
+
+    @property
+    def lnls(self) -> dict[str, LymphNodeLevel]:
+        """List of all :py:class:`~LymphNodeLevel` nodes in the graph."""
+        return {n: l for n, l in self.nodes.items() if isinstance(l, LymphNodeLevel)}
 
 
     @property
     def allowed_states(self) -> list[int]:
         """Return the list of allowed states for each :py:class:`~LymphNodeLevel`."""
-        return self._lnls[0].allowed_states
+        return self.lnls.values()[0].allowed_states
 
     @property
     def is_binary(self) -> bool:
@@ -513,7 +552,7 @@ class Representation:
         Returns ``True`` if all :py:class:`~LymphNodeLevel` instances are binary,
         ``False`` otherwise.
         """
-        res = {node.is_binary for node in self._lnls}
+        res = {node.is_binary for node in self.lnls.values()}
 
         if len(res) != 1:
             raise RuntimeError("Not all lnls have the same number of states")
@@ -525,20 +564,12 @@ class Representation:
         """Returns ``True`` if the graph is trinary, ``False`` otherwise.
 
         Similar to :py:meth:`~Unilateral.is_binary`."""
-        res = {node.is_trinary for node in self._lnls}
+        res = {node.is_trinary for node in self.lnls.values()}
 
         if len(res) != 1:
             raise RuntimeError("Not all lnls have the same number of states")
 
         return res.pop()
-
-
-    def find_node(self, name: str) -> Tumor | LymphNodeLevel | None:
-        """Finds and returns a node with ``name``."""
-        for node in self.nodes:
-            if node.name == name:
-                return node
-        return None
 
 
     def _init_edges(
@@ -556,66 +587,52 @@ class Representation:
         When a :py:class:`~LymphNodeLevel` is trinary, it is connected to itself via
         a growth edge.
         """
-        self._tumor_edges: list[Edge] = []
-        self._lnl_edges: list[Edge] = []
-        self._growth_edges: list[Edge] = []
+        self._edges: dict[str, Edge] = {}
 
         for (_, start_name), end_names in graph.items():
-            start = self.find_node(start_name)
+            start = self.nodes[start_name]
             if isinstance(start, LymphNodeLevel) and start.is_trinary:
                 growth_edge = Edge(parent=start, child=start, callbacks=on_edge_change)
-                self._growth_edges.append(growth_edge)
+                self._edges[growth_edge.name] = growth_edge
 
             for end_name in end_names:
-                end = self.find_node(end_name)
+                end = self.nodes[end_name]
                 new_edge = Edge(parent=start, child=end, callbacks=on_edge_change)
-
-                if new_edge.is_tumor_spread:
-                    self._tumor_edges.append(new_edge)
-                else:
-                    self._lnl_edges.append(new_edge)
+                self._edges[new_edge.name] = new_edge
 
 
     @property
-    def tumor_edges(self) -> list[Edge]:
+    def edges(self) -> dict[str, Edge]:
+        """Iterable of all edges in the graph."""
+        return self._edges
+
+    @property
+    def tumor_edges(self) -> dict[str, Edge]:
         """List of all tumor :py:class:`~Edge` instances in the graph.
 
         This contains all edges who's parents are instances of :py:class:`~Tumor` and
         who's children are instances of :py:class:`~LymphNodeLevel`.
         """
-        return self._tumor_edges
+        return {n: e for n, e in self.edges.items() if e.is_tumor_spread}
 
     @property
-    def lnl_edges(self) -> list[Edge]:
+    def lnl_edges(self) -> Iterable[Edge]:
         """List of all LNL :py:class:`~Edge` instances in the graph.
 
         This contains all edges who's parents and children are instances of
         :py:class:`~LymphNodeLevel` and that are not growth edges.
         """
-        return self._lnl_edges
+        return {n: e for n, e in self.edges.items() if not (e.is_tumor_spread or e.is_growth)}
 
     @property
-    def growth_edges(self) -> list[Edge]:
+    def growth_edges(self) -> Iterable[Edge]:
         """List of all growth :py:class:`~Edge` instances in the graph.
 
         Growth edges are only present in trinary models and are arcs where the parent
         and child are the same :py:class:`~LymphNodeLevel` instance. They facilitate
         the change from a micsoscopically positive to a macroscopically positive LNL.
         """
-        return self._growth_edges
-
-    @property
-    def edges(self) -> list[Edge]:
-        """List of all :py:class:`~Edge` instances in the graph, regardless of type."""
-        return self._tumor_edges + self._lnl_edges + self._growth_edges
-
-
-    def find_edge(self, name: str) -> Edge | None:
-        """Finds and returns an edge with ``name``."""
-        for edge in self.edges:
-            if edge.name == name:
-                return edge
-        return None
+        return {n: e for n, e in self.edges.items() if e.is_growth}
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
@@ -676,7 +693,7 @@ class Representation:
         """
         result = {}
 
-        for lnl in self._lnls:
+        for lnl in self.lnls.values():
             result[lnl.name] = lnl.state
 
         return result if as_dict else list(result.values())
@@ -692,11 +709,11 @@ class Representation:
 
         The keyword arguments override the positional arguments.
         """
-        for new_lnl_state, lnl in zip(new_states_args, self._lnls):
+        for new_lnl_state, lnl in zip(new_states_args, self.lnls.values()):
             lnl.state = new_lnl_state
 
         for key, value in new_states_kwargs.items():
-            lnl = self.find_node(key)
+            lnl = self.nodes[key]
             if lnl is not None and isinstance(lnl, LymphNodeLevel):
                 lnl.state = value
 
@@ -704,7 +721,7 @@ class Representation:
     def _gen_state_list(self):
         """Generates the list of (hidden) states."""
         allowed_states_list = []
-        for lnl in self.lnls:
+        for lnl in self.lnls.values():
             allowed_states_list.append(lnl.allowed_states)
 
         self._state_list = np.array(list(product(*allowed_states_list)))
@@ -740,25 +757,3 @@ class Representation:
         except AttributeError:
             self._gen_state_list()
             return self._state_list
-
-
-    edge_params = params.GetterSetterAccess()
-    """Dictionary that maps parameter names to their corresponding parameter objects.
-
-    Parameter names are constructed from the names of the tumors and LNLs in the graph
-    that represents the lymphatic system. For example, the parameter for the spread
-    probability from the tumor ``T`` to the LNL ``I`` is accessed via the key
-    ``spread_T_to_I``.
-
-    The parameters can be read out and changed via the ``get`` and ``set`` methods of
-    the :py:class:`~lymph.descriptors.params.Param` objects. The ``set`` method also deletes
-    the transition matrix, so that it needs to be recomputed when accessing it the
-    next time.
-
-    Example:
-
-    .. code-block:: python
-
-        model.edge_params["spread_T_to_I"].set(0.5)
-        retrieved = model.edge_params["spread_T_to_I"].get()
-    """

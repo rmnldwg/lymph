@@ -72,11 +72,11 @@ class Transition(AbstractMatrixDescriptor):
     @staticmethod
     def generate(instance: models.Unilateral):
         """Compute the transition matrix of the lymph model."""
-        num_lnls = len(instance.graph._lnls)
+        num_lnls = len(instance.graph.lnls)
         num_states = 3 if instance.graph.is_trinary else 2
         transition_matrix = np.ones(shape=(num_states**num_lnls, num_states**num_lnls))
 
-        for i, lnl in enumerate(instance.graph._lnls):
+        for i, lnl in enumerate(instance.graph.lnls.values()):
             current_state_idx = get_state_idx_matrix(
                 lnl_idx=i,
                 num_lnls=num_lnls,
@@ -95,7 +95,7 @@ class Transition(AbstractMatrixDescriptor):
                         0, current_state_idx, new_state_idx
                     ]
                 else:
-                    parent_node_i = instance.graph._lnls.index(edge.parent)
+                    parent_node_i = list(instance.graph.lnls.values()).index(edge.parent)
                     parent_state_idx = get_state_idx_matrix(
                         lnl_idx=parent_node_i,
                         num_lnls=num_lnls,
@@ -220,7 +220,7 @@ def generate_data_matrix(model: models.Unilateral, t_stage: str) -> np.ndarray:
             if modality_name not in patient_row:
                 continue
             diagnose_encoding = compute_encoding(
-                lnls=[lnl.name for lnl in model.graph._lnls],
+                lnls=[name for name in model.graph.lnls],
                 pattern=patient_row[modality_name],
             )
             patient_encoding = np.kron(patient_encoding, diagnose_encoding)

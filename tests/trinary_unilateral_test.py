@@ -1,6 +1,5 @@
 """Test the trinary unilateral system."""
 import unittest
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -23,10 +22,14 @@ class TrinaryFixtureMixin:
         }
         self.model = Unilateral(graph_dict=self.graph, allowed_states=[0,1,2])
 
-    def create_random_params(self, seed: int = 42) -> Dict[str, float]:
+    def create_random_params(self, seed: int = 42) -> dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
-        return {name: rng.random() for name in self.model.graph.edge_params.keys()}
+        return {
+            f"{type_}_{name}": rng.random()
+            for name, edge in self.model.graph.edges.items()
+            for type_ in edge.get_getters(as_dict=True).keys()
+        }
 
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
@@ -56,15 +59,15 @@ class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
         NOTE: I am using this only in debug mode to look a the tensors. I am not sure
         how to test them yet.
         """
-        base_edge_tensor = self.model.graph._tumor_edges[0].comp_transition_tensor()
+        base_edge_tensor = list(self.model.graph.tumor_edges.values())[0].comp_transition_tensor()
         row_sums = base_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        lnl_edge_tensor = self.model.graph._lnl_edges[0].comp_transition_tensor()
+        lnl_edge_tensor = list(self.model.graph.lnl_edges.values())[0].comp_transition_tensor()
         row_sums = lnl_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        growth_edge_tensor = self.model.graph._growth_edges[0].comp_transition_tensor()
+        growth_edge_tensor = list(self.model.graph.growth_edges.values())[0].comp_transition_tensor()
         row_sums = growth_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 

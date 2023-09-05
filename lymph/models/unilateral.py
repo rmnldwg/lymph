@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import warnings
 from itertools import product
 from typing import Generator, Iterator
@@ -9,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from lymph import graph
-from lymph.descriptors import diagnose_times, matrix, modalities, params
+from lymph.descriptors import diagnose_times, matrix, modalities
 from lymph.helper import (
     DelegatorMixin,
     DiagnoseType,
@@ -121,8 +120,8 @@ class Unilateral(DelegatorMixin):
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph._tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph._lnl_edges])
-            + f"\n the growth probability is: {self.graph._growth_edges[0].spread_prob}" + f" the micro mod is {self.graph._lnl_edges[0].micro_mod}"
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.lnl_edges])
+            + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
         )
         print(string)
 
@@ -138,7 +137,7 @@ class Unilateral(DelegatorMixin):
     """
 
 
-    def get_params(self, as_dict: bool = False) -> dict[str, float] | list[float]:
+    def get_params(self, as_dict: bool = False) -> dict[str, float] | Iterator[float]:
         """Return a dictionary of all parameters and their currently set values.
 
         If ``as_dict`` is ``True``, the result is a dictionary with the names of the
@@ -147,32 +146,32 @@ class Unilateral(DelegatorMixin):
         graph.
         """
         result = {}
-        for name, param in self.graph.edge_params.items():
-            result[name] = param.get_param()
+        for edge in self.graph.edges:
+            for param_name, getter in edge.get_getters(as_dict=True).items():
+                result[param_name + edge.name] = getter()
 
-        for name, dist in self.diag_time_dists.items():
+        for t_stage, dist in self.diag_time_dists.items():
             for param_name, value in dist.get_params().items():
-                result[f"{name}_{param_name}"] = value
+                result[f"{t_stage}_{param_name}"] = value
 
-        return result if as_dict else list(result.values())
+        return result if as_dict else result.values()
 
 
     def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
         """Assign parameters to egdes and to distributions via positional arguments."""
-        setters = itertools.chain(
-            (param.set_param for param in self.graph.edge_params.values()),
-            (dist.set_params for dist in self.diag_time_dists.values()),
-        )
-        while True:
-            try:
-                setter = next(setters)
-                if isinstance(setter, params.Param):
+        for edge in self.graph.edges.values():
+            for setter in edge.get_setters(as_dict=False):
+                try:
                     setter(next(new_params_args))
-                elif isinstance(setter, diagnose_times.Distribution):
-                    kwargs = setter.get_params()
-                    setter(**{key: next(new_params_args) for key in kwargs})
+                except StopIteration:
+                    return new_params_args
+
+        for dist in self.diag_time_dists.values():
+            try:
+                kwargs = {k: next(new_params_args) for k in dist.get_params().keys()}
+                dist.set_params(**kwargs)
             except StopIteration:
-                break
+                return new_params_args
 
         return new_params_args
 
@@ -183,24 +182,26 @@ class Unilateral(DelegatorMixin):
     ) -> dict[str, float]:
         """Assign parameters to egdes and to distributions via keyword arguments."""
         remaining_kwargs = {}
+
         for key, value in new_params_kwargs.items():
-            t_stage, param_name = key.split("_", 1)
-            if t_stage in self.diag_time_dists:
-                self.diag_time_dists[t_stage].set_params(**{param_name: value})
-
-            elif key == "growth":
-                for edge in self.graph.growth_edges:
-                    edge.spread_prob = value
-
-            elif key == "micro_mod":
-                for edge in self.graph.lnl_edges:
-                    edge.micro_mod = value
-
-            elif key in self.graph.edge_params:
-                self.graph.edge_params[key].set_param(value)
-
-            else:
+            type_, name = key.split("_", maxsplit=1)
+            try:
+                self.graph.edges[name].get_setters(as_dict=True)[type_](value)
+            except KeyError:
+                warnings.warn(f"Parameter '{key}' not found in edges, skipping...")
                 remaining_kwargs[key] = value
+
+        for t_stage, dist in self.diag_time_dists.items():
+            kwargs = dist.get_params()
+            for param_name in dist.get_params():
+                key = f"{t_stage}_{param_name}"
+                try:
+                    kwargs[param_name] = new_params_kwargs[key]
+                except KeyError:
+                    warnings.warn(f"Parameter '{key}' not found in distributions, skipping...")
+                    remaining_kwargs[key] = new_params_kwargs[key]
+
+            dist.set_params(**kwargs)
 
         return remaining_kwargs
 
@@ -517,11 +518,11 @@ class Unilateral(DelegatorMixin):
             if side not in patient_data[modality_name]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
-            for lnl in self.graph.lnls:
-                if lnl.name not in patient_data[modality_name, side]:
-                    raise ValueError(f"Involvement data for LNL {lnl} not found.")
-                column = patient_data[modality_name, side, lnl.name]
-                patient_data["_model", modality_name, lnl.name] = column
+            for name in self.graph.lnls:
+                if name not in patient_data[modality_name, side]:
+                    raise ValueError(f"Involvement data for LNL {name} not found.")
+                column = patient_data[modality_name, side, name]
+                patient_data["_model", modality_name, name] = column
 
         patient_data["_model", "#", "t_stage"] = patient_data.apply(
             lambda row: mapping(row["tumor", "1", "t_stage"]), axis=1

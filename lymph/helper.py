@@ -34,6 +34,9 @@ class DelegatorMixin:
         >>> class Delegate:
         ...     def __init__(self):
         ...         self.fancy_attr = "foo"
+        ...     @property
+        ...     def property_attr(self):
+        ...         return "bar"
         >>> class A(DelegatorMixin):
         ...     def __init__(self):
         ...         self.delegated = "hello world"
@@ -41,7 +44,7 @@ class DelegatorMixin:
         ...         self.normal_attr = 42
         ...         self.init_delegation(
         ...             delegated=["count"],
-        ...             also_delegated=["fancy_attr"],
+        ...             also_delegated=["fancy_attr", "property_attr"],
         ...         )
         >>> a = A()
         >>> a.delegated.count("l")
@@ -52,6 +55,10 @@ class DelegatorMixin:
         'foo'
         >>> a.fancy_attr
         'foo'
+        >>> a.also_delegated.property_attr
+        'bar'
+        >>> a.property_attr
+        'bar'
         >>> a.normal_attr
         42
         >>> a.non_existent
