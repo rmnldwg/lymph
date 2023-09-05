@@ -676,8 +676,8 @@ class Unilateral(DelegatorMixin):
             state_dist = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.graph.set_state(state)
-                for node in self.graph.lnls:
+                self.set_state(*state)
+                for node in self.graph.lnls.values():
                     state_dist[i] *= node.comp_bayes_net_prob()
 
             return state_dist

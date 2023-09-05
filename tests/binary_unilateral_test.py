@@ -38,7 +38,7 @@ class ModelFixtureMixin:
             ("lnl", "II"): ["III"],
             ("lnl", "III"): [],
         }
-        self.graph_dict = large_graph
+        self.graph_dict = small_graph
         self.model = Unilateral(graph_dict=self.graph_dict)
 
     def create_random_params(self, seed: int = 42) -> dict[str, float]:

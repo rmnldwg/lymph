@@ -171,15 +171,16 @@ class LymphNodeLevel(AbstractNode):
 
     def comp_bayes_net_prob(self, log: bool = False) -> float:
         """Compute the Bayesian network's probability for the current state."""
-        res = 0 if log else 1
+        if self.is_trinary:
+            raise NotImplementedError("Trinary nodes are not yet supported")
 
+        res = (-1) ** self.state
         for edge in self.inc:
-            if log:
-                res += edge.comp_bayes_net_prob(log=True)
-            else:
-                res *= edge.comp_bayes_net_prob(log=False)
+            parent_state = 0 if isinstance(edge.parent, Tumor) else edge.parent.state
+            res *= edge.transition_tensor[parent_state, 0, 0]
 
-        return res
+        res += self.state
+        return np.log(res) if log else res
 
 
     def comp_trans_prob(self, new_state: int) -> float:
@@ -391,17 +392,6 @@ class Edge:
             getters["micro"] = self.get_micro_mod
 
         return getters if as_dict else getters.values()
-
-
-    def comp_bayes_prob(self, log: bool = False) -> float:
-        """Compute the conditional probability of this edge's child node's state.
-
-        This function dynamically computes the conditional probability that the child
-        node is in its state, given the parent node's state and the parameters of the
-        edge.
-        """
-        # TODO: Implement this function
-        raise NotImplementedError("Not implemented yet!")
 
 
     def comp_transition_tensor(self) -> np.ndarray:
