@@ -34,11 +34,3 @@ Diagnostic Modalities
     :members:
     :special-members: __init__
     :show-inheritance:
-
-Parameter Lookup
-----------------
-
-.. automodule:: lymph.descriptors.params
-    :members:
-    :special-members: __init__
-    :show-inheritance:

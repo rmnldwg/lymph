@@ -367,7 +367,7 @@ class Edge:
             return setters if as_dict else setters.values()
 
         setters = {"spread": self.set_spread_prob}
-        if self.child.is_trinary:
+        if self.child.is_trinary and not self.is_tumor_spread:
             setters["micro"] = self.set_micro_mod
 
         return setters if as_dict else setters.values()
@@ -387,7 +387,7 @@ class Edge:
             return getters if as_dict else getters.values()
 
         getters = {"spread": self.get_spread_prob}
-        if self.child.is_trinary:
+        if self.child.is_trinary and not self.is_tumor_spread:
             getters["micro"] = self.get_micro_mod
 
         return getters if as_dict else getters.values()

@@ -34,6 +34,8 @@ class Unilateral(DelegatorMixin):
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
+        is_micro_mod_shared: bool = False,
+        is_growth_shared: bool = False,
         **_kwargs,
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
@@ -72,6 +74,11 @@ class Unilateral(DelegatorMixin):
         diagnosis. In the HMM case, the probability disitrubtion over all hidden states
         is evolved from :math:`t=0` to ``max_time``. In the BN case, this parameter has
         no effect.
+
+        The ``is_micro_mod_shared`` and ``is_growth_shared`` parameters determine
+        whether the microscopic involvement and growth parameters are shared among all
+        LNLs. If they are set to ``True``, the parameters are set globally for all LNLs.
+        If they are set to ``False``, the parameters are set individually for each LNL.
         """
         super().__init__()
 
@@ -86,6 +93,8 @@ class Unilateral(DelegatorMixin):
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
         self.max_time = max_time
+        self.is_micro_mod_shared = is_micro_mod_shared
+        self.is_growth_shared = is_growth_shared
 
         self.init_delegation(
             graph=[
@@ -110,12 +119,12 @@ class Unilateral(DelegatorMixin):
 
     def __str__(self) -> str:
         """Print info about the instance."""
-        return f"Unilateral with {len(self.graph._tumors)} tumors and {len(self.graph.lnls)} LNLs"
+        return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
 
 
     def print_info(self):
         """Print detailed information about the instance."""
-        num_tumors = len(self.graph._tumors)
+        num_tumors = len(self.graph.tumors)
         num_lnls   = len(self.graph.lnls)
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
@@ -146,9 +155,9 @@ class Unilateral(DelegatorMixin):
         graph.
         """
         result = {}
-        for edge in self.graph.edges:
+        for edge_name, edge in self.graph.edges.items():
             for param_name, getter in edge.get_getters(as_dict=True).items():
-                result[param_name + edge.name] = getter()
+                result[f"{param_name}_{edge_name}"] = getter()
 
         for t_stage, dist in self.diag_time_dists.items():
             for param_name, value in dist.get_params().items():
@@ -183,6 +192,18 @@ class Unilateral(DelegatorMixin):
         """Assign parameters to egdes and to distributions via keyword arguments."""
         remaining_kwargs = {}
 
+        global_growth_param = new_params_kwargs.pop("growth", None)
+        if self.is_growth_shared and global_growth_param is not None:
+            for growth_edge in self.graph.growth_edges.values():
+                growth_edge.set_spread_prob(global_growth_param)
+
+        global_micro_mod = new_params_kwargs.pop("micro_mod", None)
+        if self.is_micro_mod_shared and global_micro_mod is not None:
+            for lnl_edge in self.graph.lnl_edges.values():
+                lnl_edge.set_micro_mod(global_micro_mod)
+
+        # try to assign any of the kwargs to the edge params, based on the edge's name
+        # and the name of the parameter (e.g. "micro_II_to_III").
         for key, value in new_params_kwargs.items():
             type_, name = key.split("_", maxsplit=1)
             try:
@@ -191,6 +212,10 @@ class Unilateral(DelegatorMixin):
                 warnings.warn(f"Parameter '{key}' not found in edges, skipping...")
                 remaining_kwargs[key] = value
 
+        # try to find parameters for the distributions over diagnose times in the
+        # keyword argument dictionary. The name of the parameter is the name of the
+        # T-stage, followed by an underscore, followed by the name of the parameter
+        # that the distribution takes (e.g. "early_p", or "late_foo").
         for t_stage, dist in self.diag_time_dists.items():
             kwargs = dist.get_params()
             for param_name in dist.get_params():
@@ -217,11 +242,13 @@ class Unilateral(DelegatorMixin):
         keyword arguments. The positional arguments must be in the following order:
 
         1. All spread probs from tumor to the LNLs
-        2. The spread probs from LNL to LNL. If the model is trinary, the microscopic
-           parameter is set right after the corresponding LNL's spread prob.
-        3. The growth parameters for each trinary LNL. For a binary model,
-           this is skipped.
-        4. The parameters for the marginalizing distributions over diagnose times. Note
+        2. The parameters of arcs from LNL to LNL. For each arc, the parameters are set
+           in the following order:
+
+            1. The spread probability (or growth probability, if it's a growth edge)
+            2. The microscopic involvement probability, if the model is trinary
+
+        3. The parameters for the marginalizing distributions over diagnose times. Note
            that a distribution may take more than one parameter. So, if there are e.g.
            two T-stages with distributions over diagnose times that take two parameters
            each, this step requires and consumes four arguments.
@@ -241,6 +268,9 @@ class Unilateral(DelegatorMixin):
             Providing positional arguments does not allow using the global
             parameters ``micro_mod`` and ``growth``.
 
+            However, when assigning them via keyword arguments, the global parameters
+            are set first, while still allowing to override them for individual edges.
+
         Since the distributions over diagnose times may take more than one parameter,
         they can be provided as keyword arguments by appending their name to the
         corresponding T-stage, separated by an underscore. For example, a parameter
@@ -251,7 +281,38 @@ class Unilateral(DelegatorMixin):
             over diagnose times, it is not possible to just use the name of the
             T-stage, even when the distribution only takes one parameter.
 
-        The keyword arguments override the positional arguments.
+        The keyword arguments override the positional arguments, when both are provided.
+
+        Example:
+
+        >>> graph = {
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... }
+        >>> model = Unilateral.trinary(
+        ...     graph_dict=graph,
+        ...     is_micro_mod_shared=True,
+        ...     is_growth_shared=True,
+        ... )
+        >>> _ = model.assign_params(
+        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4
+        ... )
+        >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
+        {'spread_T_to_II': 0.7,
+         'spread_T_to_III': 0.5,
+         'growth_II': 0.3,
+         'spread_II_to_III': 0.2,
+         'micro_II_to_III': 0.1,
+         'growth_III': 0.4}
+        >>> _ = model.assign_params(growth=0.123)
+        >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
+        {'spread_T_to_II': 0.7,
+         'spread_T_to_III': 0.5,
+         'growth_II': 0.123,
+         'spread_II_to_III': 0.2,
+         'micro_II_to_III': 0.1,
+         'growth_III': 0.123}
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
@@ -350,7 +411,7 @@ class Unilateral(DelegatorMixin):
         additionally by modality. E.g., for two LNLs II, III and two modalities CT,
         pathology, the list would look like this:
 
-        >>> model = Unilateral(graph={
+        >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["II" , "III"],
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
@@ -405,7 +466,7 @@ class Unilateral(DelegatorMixin):
 
     Example:
 
-    >>> model = Unilateral(graph={
+    >>> model = Unilateral(graph_dict={
     ...     ("tumor", "T"): ["II", "III"],
     ...     ("lnl", "II"): ["III"],
     ...     ("lnl", "III"): [],
