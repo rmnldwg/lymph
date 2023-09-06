@@ -142,13 +142,17 @@ class Distribution:
         return self._func is not None
 
 
-    def get_params(self) -> dict[str, Any]:
-        """If the distribution is updateable, return the current parameters as dict."""
+    def get_params(
+        self,
+        param: str | None = None,
+        as_dict: bool = False,
+    ) -> Any | dict[str, Any]:
+        """If updateable, return the dist's ``param`` value or all params in a dict."""
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, returning empty dict")
-            return {}
+            return {} if as_dict else None
 
-        return self._kwargs
+        return self._kwargs[param] if not as_dict else self._kwargs
 
 
     def set_params(self, **kwargs) -> None:

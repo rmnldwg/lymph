@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import warnings
 from itertools import product
 from typing import Generator, Iterator
@@ -146,41 +147,43 @@ class Unilateral(DelegatorMixin):
     """
 
 
-    def get_params(self, as_dict: bool = False) -> dict[str, float] | Iterator[float]:
-        """Return a dictionary of all parameters and their currently set values.
+    def get_params(
+        self,
+        param: str | None = None,
+        as_dict: bool = False,
+    ) -> dict[str, float]:
+        """Get the parameters of the model.
 
-        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
-        edge parameters as keys and their values as values. Otherwise, the result is a
-        list of the values of the edge parameters in the order they appear in the
-        graph.
+        If ``as_dict`` is ``True``, return a dictionary with the parameters as values.
+        Otherwise, return the value of the parameter ``param``.
         """
-        result = {}
-        for edge_name, edge in self.graph.edges.items():
-            for param_name, getter in edge.get_getters(as_dict=True).items():
-                result[f"{param_name}_{edge_name}"] = getter()
+        params = {}
+        for edge_name_or_tstage, edge_or_dist in itertools.chain(
+            self.graph.edges.items(),
+            self.diag_time_dists.items(),
+        ):
+            edge_or_dist_params = edge_or_dist.get_params(as_dict=True)
+            for name, value in edge_or_dist_params.items():
+                params[f"{edge_name_or_tstage}_{name}"] = value
 
-        for t_stage, dist in self.diag_time_dists.items():
-            for param_name, value in dist.get_params().items():
-                result[f"{t_stage}_{param_name}"] = value
-
-        return result if as_dict else result.values()
+        return params if as_dict else params[param]
 
 
     def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
         """Assign parameters to egdes and to distributions via positional arguments."""
-        for edge in self.graph.edges.values():
-            for setter in edge.get_setters(as_dict=False):
+        for edge_or_dist in itertools.chain(
+            self.graph.edges.values(),
+            self.diag_time_dists.values(),
+        ):
+            params = edge_or_dist.get_params(as_dict=True)
+            new_params = {}
+            for name in params:
                 try:
-                    setter(next(new_params_args))
+                    new_params[name] = next(new_params_args)
                 except StopIteration:
                     return new_params_args
-
-        for dist in self.diag_time_dists.values():
-            try:
-                kwargs = {k: next(new_params_args) for k in dist.get_params().keys()}
-                dist.set_params(**kwargs)
-            except StopIteration:
-                return new_params_args
+                finally:
+                    edge_or_dist.set_params(**new_params)
 
         return new_params_args
 
@@ -197,36 +200,18 @@ class Unilateral(DelegatorMixin):
             for growth_edge in self.graph.growth_edges.values():
                 growth_edge.set_spread_prob(global_growth_param)
 
-        global_micro_mod = new_params_kwargs.pop("micro_mod", None)
+        global_micro_mod = new_params_kwargs.pop("micro", None)
         if self.is_micro_mod_shared and global_micro_mod is not None:
             for lnl_edge in self.graph.lnl_edges.values():
                 lnl_edge.set_micro_mod(global_micro_mod)
 
-        # try to assign any of the kwargs to the edge params, based on the edge's name
-        # and the name of the parameter (e.g. "micro_II_to_III").
+        edges_and_dists = self.graph.edges.copy()
+        edges_and_dists.update(self.diag_time_dists)
         for key, value in new_params_kwargs.items():
-            type_, name = key.split("_", maxsplit=1)
-            try:
-                self.graph.edges[name].get_setters(as_dict=True)[type_](value)
-            except KeyError:
-                warnings.warn(f"Parameter '{key}' not found in edges, skipping...")
-                remaining_kwargs[key] = value
-
-        # try to find parameters for the distributions over diagnose times in the
-        # keyword argument dictionary. The name of the parameter is the name of the
-        # T-stage, followed by an underscore, followed by the name of the parameter
-        # that the distribution takes (e.g. "early_p", or "late_foo").
-        for t_stage, dist in self.diag_time_dists.items():
-            kwargs = dist.get_params()
-            for param_name in dist.get_params():
-                key = f"{t_stage}_{param_name}"
-                try:
-                    kwargs[param_name] = new_params_kwargs[key]
-                except KeyError:
-                    warnings.warn(f"Parameter '{key}' not found in distributions, skipping...")
-                    remaining_kwargs[key] = new_params_kwargs[key]
-
-            dist.set_params(**kwargs)
+            edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
+            if edge_name_or_tstage in edges_and_dists:
+                edge_or_dist = edges_and_dists[edge_name_or_tstage]
+                edge_or_dist.set_params(**{type_: value})
 
         return remaining_kwargs
 
@@ -258,7 +243,7 @@ class Unilateral(DelegatorMixin):
 
         When providing keyword arguments, the order of the keyword arguments obviously
         does not matter. If one wants to set the microscopic or growth parameters
-        globally for all LNLs, the keyword arguments ``micro_mod`` and ``growth`` can
+        globally for all LNLs, the keyword arguments ``micro`` and ``growth`` can
         be used for that.
 
         As with the positional arguments, the dictionary of unused keyword arguments is
@@ -266,7 +251,7 @@ class Unilateral(DelegatorMixin):
 
         Note:
             Providing positional arguments does not allow using the global
-            parameters ``micro_mod`` and ``growth``.
+            parameters ``micro`` and ``growth``.
 
             However, when assigning them via keyword arguments, the global parameters
             are set first, while still allowing to override them for individual edges.
@@ -299,20 +284,20 @@ class Unilateral(DelegatorMixin):
         ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4
         ... )
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
-        {'spread_T_to_II': 0.7,
-         'spread_T_to_III': 0.5,
-         'growth_II': 0.3,
-         'spread_II_to_III': 0.2,
-         'micro_II_to_III': 0.1,
-         'growth_III': 0.4}
+        {'T_to_II_spread': 0.7,
+         'T_to_III_spread': 0.5,
+         'II_growth': 0.3,
+         'II_to_III_spread': 0.2,
+         'II_to_III_micro': 0.1,
+         'III_growth': 0.4}
         >>> _ = model.assign_params(growth=0.123)
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
-        {'spread_T_to_II': 0.7,
-         'spread_T_to_III': 0.5,
-         'growth_II': 0.123,
-         'spread_II_to_III': 0.2,
-         'micro_II_to_III': 0.1,
-         'growth_III': 0.123}
+        {'T_to_II_spread': 0.7,
+         'T_to_III_spread': 0.5,
+         'II_growth': 0.123,
+         'II_to_III_spread': 0.2,
+         'II_to_III_micro': 0.1,
+         'III_growth': 0.123}
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)

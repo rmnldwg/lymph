@@ -1,7 +1,6 @@
 """Module containing supporting classes and functions."""
 import warnings
 from functools import lru_cache, wraps
-from typing import List, Optional
 
 import numpy as np
 from pandas._libs.missing import NAType
@@ -39,6 +38,7 @@ class DelegatorMixin:
         ...         return "bar"
         >>> class A(DelegatorMixin):
         ...     def __init__(self):
+        ...         super().__init__()
         ...         self.delegated = "hello world"
         ...         self.also_delegated = Delegate()
         ...         self.normal_attr = 42
@@ -106,7 +106,7 @@ def check_unique_names(graph: dict):
         raise ValueError("Node names are not unique")
 
 
-def check_spsn(spsn: List[float]):
+def check_spsn(spsn: list[float]):
     """Private method that checks whether specificity and sensitvity
     are valid.
 
@@ -130,7 +130,7 @@ def change_base(
     number: int,
     base: int,
     reverse: bool = False,
-    length: Optional[int] = None
+    length: int | None = None
 ) -> str:
     """Convert an integer into another base.
 
@@ -351,3 +351,8 @@ def trigger(func: callable) -> callable:
             callback()
         return result
     return wrapper
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

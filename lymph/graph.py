@@ -353,45 +353,36 @@ class Edge:
     )
 
 
-    def get_setters(
+    def get_params(
         self,
+        param: str | None = None,
         as_dict: bool = False,
-    ) -> dict[str, callable] | Iterable[callable]:
-        """Return the setter functions for the edge's parameters.
-
-        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
-        parameters as keys and the setter functions as values. Otherwise, the result is
-        a list of the setter functions in the order they appear in the graph.
-        """
+    ) -> float | dict[str, float]:
+        """Return the value of the parameter ``param`` or all params in a dict."""
         if self.is_growth:
-            setters = {"growth": self.set_spread_prob}
-            return setters if as_dict else setters.values()
+            values = {"growth": self.get_spread_prob()}
+            return values if as_dict else values[param]
 
-        setters = {"spread": self.set_spread_prob}
+        values = {"spread": self.get_spread_prob()}
         if self.child.is_trinary and not self.is_tumor_spread:
-            setters["micro"] = self.set_micro_mod
+            values["micro"] = self.get_micro_mod()
 
-        return setters if as_dict else setters.values()
+        return values if as_dict else values[param]
 
-    def get_getters(
+    def set_params(
         self,
-        as_dict: bool = False,
-    ) -> dict[str, callable] | Iterable[callable]:
-        """Return the getter functions for the edge's parameters.
-
-        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
-        parameters as keys and the getter functions as values. Otherwise, the result is
-        a list of the getter functions in the order they appear in the graph.
-        """
+        growth: float | None = None,
+        spread: float | None = None,
+        micro: float | None = None,
+    ) -> None:
+        """Set the values of the edge's parameters."""
         if self.is_growth:
-            getters = {"growth": self.get_spread_prob}
-            return getters if as_dict else getters.values()
+            return self.set_spread_prob(growth) if growth is not None else None
 
-        getters = {"spread": self.get_spread_prob}
-        if self.child.is_trinary and not self.is_tumor_spread:
-            getters["micro"] = self.get_micro_mod
-
-        return getters if as_dict else getters.values()
+        if spread is not None:
+            self.set_spread_prob(spread)
+        if self.child.is_trinary and not self.is_tumor_spread and micro is not None:
+            self.set_micro_mod(micro)
 
 
     def comp_transition_tensor(self) -> np.ndarray:
