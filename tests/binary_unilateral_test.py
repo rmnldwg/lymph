@@ -44,11 +44,17 @@ class ModelFixtureMixin:
     def create_random_params(self, seed: int = 42) -> dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
-        return {
-            f"{type_}_{name}": rng.random()
+        params = {
+            f"{name}_{type_}": rng.random()
             for name, edge in self.model.graph.edges.items()
-            for type_ in edge.get_getters(as_dict=True).keys()
+            for type_ in edge.get_params(as_dict=True).keys()
         }
+        params.update({
+            f"{t_stage}_{type_}": rng.random()
+            for t_stage, dist in self.model.diag_time_dists.items()
+            for type_ in dist.get_params(as_dict=True).keys()
+        })
+        return params
 
     def create_modalities(self) -> dict[str, Modality]:
         """Add modalities to the model."""
@@ -144,25 +150,32 @@ class DelegationTestCase(ModelFixtureMixin, unittest.TestCase):
 class ParameterAssignmentTestCase(ModelFixtureMixin, unittest.TestCase):
     """Test the assignment of parameters in a binary model."""
 
-    def test_edge_params_assignment_via_lookup(self):
+    def test_params_assignment_via_lookup(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=42)
+        edges_and_dists = self.model.graph.edges.copy()
+        edges_and_dists.update(self.model.diag_time_dists)
+
         for param_name, value in params_to_set.items():
-            type_, name = param_name.split("_", maxsplit=1)
-            self.model.graph.edges[name].get_setters(as_dict=True)[type_](value)
+            name, type_ = param_name.rsplit("_", maxsplit=1)
+            edges_and_dists[name].set_params(**{type_: value})
             self.assertEqual(
-                self.model.graph.edges[name].get_getters(as_dict=True)[type_](),
+                edges_and_dists[name].get_params(type_),
                 value,
             )
 
-    def test_edge_params_assignment_via_method(self):
+    def test_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params(seed=43)
         self.model.assign_params(**params_to_set)
+
+        edges_and_dists = self.model.graph.edges.copy()
+        edges_and_dists.update(self.model.diag_time_dists)
+
         for param_name, value in params_to_set.items():
-            type_, name = param_name.split("_", maxsplit=1)
+            name, type_ = param_name.rsplit("_", maxsplit=1)
             self.assertEqual(
-                self.model.graph.edges[name].get_getters(as_dict=True)[type_](),
+                edges_and_dists[name].get_params(type_),
                 value,
             )
 

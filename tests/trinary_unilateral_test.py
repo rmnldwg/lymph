@@ -25,11 +25,17 @@ class TrinaryFixtureMixin:
     def create_random_params(self, seed: int = 42) -> dict[str, float]:
         """Create random parameters for the model."""
         rng = np.random.default_rng(seed)
-        return {
-            f"{type_}_{name}": rng.random()
+        params = {
+            f"{name}_{type_}": rng.random()
             for name, edge in self.model.graph.edges.items()
-            for type_ in edge.get_getters(as_dict=True).keys()
+            for type_ in edge.get_params(as_dict=True).keys()
         }
+        params.update({
+            f"{t_stage}_{type_}": rng.random()
+            for t_stage, dist in self.model.diag_time_dists.items()
+            for type_ in dist.get_params(as_dict=True).keys()
+        })
+        return params
 
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
