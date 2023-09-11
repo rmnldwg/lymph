@@ -7,8 +7,13 @@ import numpy as np
 import pandas as pd
 
 from lymph import graph, models
-from lymph.descriptors import modalities
-from lymph.helper import DelegatorMixin, DiagnoseType, early_late_mapping
+from lymph.descriptors import matrix, modalities
+from lymph.helper import (
+    DelegatorMixin,
+    DiagnoseType,
+    PatternType,
+    early_late_mapping,
+)
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -401,7 +406,7 @@ class Bilateral(DelegatorMixin):
 
     def comp_posterior_joint_state_dist(
         self,
-        given_params: dict | None = None,
+        given_params: dict[float] | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
@@ -410,6 +415,9 @@ class Bilateral(DelegatorMixin):
 
         The ``given_diagnoses`` is a dictionary storing a :py:class:`DiagnoseType` for
         the ``"ipsi"`` and ``"contra"`` side of the neck.
+
+        Essentially, this is the risk for any possible combination of ipsi- and
+        contralateral involvement, given the provided diagnoses.
 
         See Also:
             :py:meth:`lymph.models.Unilateral.comp_posterior_state_dist`
@@ -443,113 +451,48 @@ class Bilateral(DelegatorMixin):
 
     def risk(
         self,
-        involvement: dict | None = None,
-        given_params: np.ndarray | None = None,
-        given_diagnoses: dict | None = None,
+        involvement: PatternType | None = None,
+        given_params: dict[float] | None = None,
+        given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
-        **_kwargs,
+        mode: str = "HMM",
     ) -> float:
-        """Compute risk of ipsi- & contralateral involvement given specific (but
-        potentially incomplete) diagnoses for each side of the neck.
+        """Compute risk of ``involvement`` given parameters and diagnoses.
 
-        Args:
-            involvement: Nested dictionary that can have keys ``"ipsi"`` and
-                ``"contra"``, indicating the respective side's involvement patterns
-                that we're interested in. The corresponding values are dictionaries as
-                the :class:`Unilateral` model expects them.
-
-            given_params: The risk is a function of these parameters. They mainly
-                consist of the :attr:`spread_probs` of the model. Any excess parameters
-                will be used to update the parametrized distributions used for
-                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
-
-            given_diagnoses: Nested dictionary with keys of diagnostic modalities and
-                the values are dictionaries of the same format as the ``involvement``
-                arguments.
-
-            t_stage: The T-stage for which the risk should be computed. The attribute
-                :attr:`diag_time_dists` must have a distribution for marginalizing
-                over diagnose times stored for this T-stage.
+        The ``given_params`` must be provided as a dictionary, mapping parameter names
+        to their values. Similarily, the ``given_diagnoses`` must be a dictionary
+        mapping the side of the neck to a :py:class:`DiagnoseType`.
 
         See Also:
-            :meth:`Unilateral.risk`: The risk function for only one-sided models.
+            :py:meth:`lymph.models.Unilateral.risk`
+                The unilateral method for computing the risk of an involvment pattern.
+            :py:meth:`lymph.models.Bilateral.comp_posterior_joint_state_dist`
+                This method computes the joint distribution over ipsi- and
+                contralateral states, given the parameters and diagnoses. The risk then
+                only marginalizes over the states that match the involvement pattern.
         """
-        # TODO: Continue here.
-        if given_params is not None:
-            self.check_and_assign(given_params)
-
-        if given_diagnoses is None:
-            first_modality = list(self.modalities.keys())[0]
-            given_diagnoses = {first_modality: {}}
-
-        for val in given_diagnoses.values():
-            if "ipsi" not in val:
-                val["ipsi"] = {}
-            if "contra" not in val:
-                val["contra"] = {}
-
-        diagnose_probs = {}   # vectors containing P(Z=z|X) for respective side
-        state_probs = {}      # matrices containing P(X|t) for each side
-
-        for side in ["ipsi", "contra"]:
-            side_model = getattr(self, side)
-            diagnose_probs[side] = np.zeros(shape=len(side_model.state_list))
-            side_diagnose = {mod: diag[side] for mod,diag in given_diagnoses.items()}
-            for i,state in enumerate(side_model.state_list):
-                side_model.state = state
-                diagnose_probs[side][i] = side_model.comp_diagnose_prob(side_diagnose)
-
-            max_t = self.diag_time_dists.max_t
-            state_probs[side] = self.system[side]._evolve(t_last=max_t)
-
-        # time-prior in diagnoal matrix form
-        time_marg_matrix = np.diag(self.ipsi.diag_time_dists[t_stage].pmf)
-
-        # joint probability P(Xi,Xc) (marginalized over time). Acts as prior
-        # for p( Di,Dc | Xi,Xc ) and should be a 2D matrix.
-        marg_state_probs = (
-            state_probs["ipsi"].T @ time_marg_matrix @ state_probs["contra"]
+        # TODO: test this method
+        posterior_state_probs = self.comp_posterior_joint_state_dist(
+            given_params=given_params,
+            given_diagnoses=given_diagnoses,
+            t_stage=t_stage,
+            mode=mode,
         )
-
-        # joint probability P(Di=di,Dc=dc, Xi,Xc) of all hidden states and the
-        # provided diagnoses
-        joint_diag_state = np.einsum(
-            "i,ij,j->ij",
-            diagnose_probs["ipsi"], marg_state_probs, diagnose_probs["contra"],
-        )
-        # marginalized probability P(Di=di, Dc=dc)
-        marg_diagnose_prob = np.sum(joint_diag_state)
-
-        # P(Xi,Xc | Di=di,Dc=dc)
-        post_state_probs = joint_diag_state / marg_diagnose_prob
 
         if involvement is None:
-            return post_state_probs
-        if "ipsi" not in involvement:
-            involvement["ipsi"] = {}
-        if "contra" not in involvement:
-            involvement["contra"] = {}
+            return posterior_state_probs
 
-        marg_states = {}   # vectors marginalizing over only the states we care about
+        marginalize_over_states = {}
         for side in ["ipsi", "contra"]:
-            if isinstance(involvement[side], dict):
-                involvement[side] = np.array(
-                    [involvement[side].get(lnl.name, None) for lnl in side_model.lnls]
-                )
-            else:
-                involvement[side] = np.array(involvement[side])
-
-            side_model = getattr(self, side)
-            marg_states[side] = np.zeros(shape=len(side_model.state_list), dtype=bool)
-            for i,state in enumerate(side_model.state_list):
-                marg_states[side][i] = np.all(np.equal(
-                    involvement[side], state,
-                    where=(involvement[side] != None),
-                    out=np.ones_like(state, dtype=bool)
-                ))
-
-        return marg_states["ipsi"] @ post_state_probs @ marg_states["contra"]
-
+            marginalize_over_states[side] = matrix.compute_encoding(
+                lnls=[lnl.name for lnl in self.graph.lnls],
+                pattern=involvement[side],
+            )
+        return (
+            marginalize_over_states["ipsi"]
+            @ posterior_state_probs
+            @ marginalize_over_states["contra"]
+        )
 
 
     def generate_dataset(
@@ -563,6 +506,7 @@ class Bilateral(DelegatorMixin):
             num_patients: Number of patients to generate.
             stage_dist: Probability to find a patient in a certain T-stage.
         """
+        # TODO: check if this still works
         drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
             dist=stage_dist, size=num_patients
         )

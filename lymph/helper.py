@@ -305,8 +305,8 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
            [2, 2, 2, 2, 2, 2, 2, 2, 2]])
     """
     indices = np.arange(num_states).reshape(num_states, -1)
-    row = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
-    return np.repeat(row, num_states ** (num_lnls - lnl_idx - 1), axis=0)
+    block = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
+    return np.repeat(block, num_states ** (num_lnls - lnl_idx - 1), axis=0)
 
 
 def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:

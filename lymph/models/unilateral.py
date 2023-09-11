@@ -826,7 +826,7 @@ class Unilateral(DelegatorMixin):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: dict | None = None,
+        given_params: dict[float] | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
