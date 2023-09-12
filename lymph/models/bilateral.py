@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 from typing import Any, Iterable, Iterator
 
@@ -16,6 +17,7 @@ from lymph.helper import (
 )
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+logger = logging.getLogger(__name__)
 
 
 
@@ -37,6 +39,7 @@ def create_property_sync_callback(
             private_name = f"_{name}"
             setattr(other, private_name, getattr(this, name))
 
+    logger.debug(f"Created sync callback for properties {names} of {this.name} edge.")
     return sync
 
 
@@ -104,6 +107,7 @@ def create_modality_sync_callback(
             if modality not in this:
                 del other[modality]
 
+    logger.debug("Created modality sync callback.")
     return sync
 
 
