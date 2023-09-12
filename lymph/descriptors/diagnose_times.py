@@ -237,7 +237,7 @@ class DistributionsUserDict(AbstractLookupDict):
 
 class Distributions(AbstractDictDescriptor):
     """Descriptor that adds a dictionary for storing distributions over diagnose times."""
-    def _get_callback(self, instance: models.Unilateral):
+    def _lazy_pre_get(self, instance: models.Unilateral):
         """Initialize the lookup dictionary."""
         distribution_dict = DistributionsUserDict(max_time=instance.max_time)
         setattr(instance, self.private_name, distribution_dict)

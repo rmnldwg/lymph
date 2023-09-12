@@ -259,7 +259,7 @@ class DataEncodingUserDict(AbstractLookupDict):
 
 class DataEncodings(AbstractDictDescriptor):
     """Allows accessing the data matrix of every T-category separately."""
-    def _get_callback(self, instance: models.Unilateral):
+    def _lazy_pre_get(self, instance: models.Unilateral):
         """Add ``instance`` as ``model`` attribute to the descriptor."""
         data_encoding_dict = DataEncodingUserDict(model=instance)
         setattr(instance, self.private_name, data_encoding_dict)
@@ -293,7 +293,7 @@ class DiagnoseUserDict(AbstractLookupDict):
 
 class Diagnoses(AbstractDictDescriptor):
     """Descriptor that instantiates and manages the :py:class:`~DiagnoseUserDict`."""
-    def _get_callback(self, instance: models.Unilateral):
+    def _lazy_pre_get(self, instance: models.Unilateral):
         """Add ``instance`` as ``model`` attribute to the descriptor."""
         diagnose_dict = DiagnoseUserDict(model=instance)
         setattr(instance, self.private_name, diagnose_dict)

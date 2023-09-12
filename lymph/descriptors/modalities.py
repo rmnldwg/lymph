@@ -207,7 +207,16 @@ class ModalitiesUserDict(AbstractLookupDict):
 
 class ConfusionMatrices(AbstractDictDescriptor):
     """Stores a dictionary of confusion matrices for diagnostic modalities."""
-    def _get_callback(self, instance: models.Unilateral):
+    def __set__(self, instance, value):
+        # Instead of deleting the entire attribute and the trigger callback functions
+        # with it, here we just delete the `UserDict` subclass's internal dictionary
+        # when the attribute is set with an entire dictionary. This way, the trigger
+        # callbacks are preserved.
+        modalities_dict = self.__get__(instance, type(instance))
+        modalities_dict.clear()
+        modalities_dict.update(value)
+
+    def _lazy_pre_get(self, instance: models.Unilateral):
         modalities_dict = ModalitiesUserDict(
             is_trinary=instance.graph.is_trinary,
             trigger_callbacks=[instance.delete_obs_list_and_matrix],

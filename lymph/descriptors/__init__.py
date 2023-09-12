@@ -59,7 +59,7 @@ class AbstractDictDescriptor:
 
     def __get__(self, instance, _cls=None):
         if not hasattr(instance, self.private_name):
-            self._get_callback(instance)
+            self._lazy_pre_get(instance)
 
         return getattr(instance, self.private_name)
 
@@ -77,6 +77,6 @@ class AbstractDictDescriptor:
             delattr(instance, self.private_name)
 
 
-    def _get_callback(self, instance):
+    def _lazy_pre_get(self, instance):
         """Perform lazy dynamic stuff when ``__get__`` is called."""
         raise NotImplementedError("Subclasses must implement this method.")
