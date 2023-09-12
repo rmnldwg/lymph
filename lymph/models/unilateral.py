@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 import warnings
 from itertools import product
-from typing import Generator, Iterator
+from typing import Generator, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
@@ -684,35 +684,33 @@ class Unilateral(DelegatorMixin):
         return state_dist @ self.observation_matrix
 
 
-    def _likelihood(
-        self,
-        mode: str = "HMM",
-        log: bool = True,
-    ) -> float:
-        """Compute the (log-)likelihood of stored data, using the stored params."""
-        if mode == "HMM":    # hidden Markov model
-            evolved_model = self.comp_dist_evolution()
-            llh = 0. if log else 1.
+    def _bn_likelihood(self, log: bool = True) -> float:
+        """Compute the BN likelihood, using the stored params."""
+        state_dist = self.comp_state_dist(mode="BN")
+        patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
 
-            for t_stage in self.t_stages:
-                patient_likelihoods = (
-                    self.diag_time_dists[t_stage].distribution
-                    @ evolved_model
-                    @ self.diagnose_matrices[t_stage]
-                )
-                if log:
-                    llh += np.sum(np.log(patient_likelihoods))
-                else:
-                    llh *= np.prod(patient_likelihoods)
+        if log:
+            llh = np.sum(np.log(patient_likelihoods))
+        else:
+            llh = np.prod(patient_likelihoods)
+        return llh
 
-        elif mode == "BN":   # likelihood for the Bayesian network
-            state_dist = self.comp_state_dist(mode=mode)
-            patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
 
+    def _hmm_likelihood(self, log: bool = True) -> float:
+        """Compute the HMM likelihood, using the stored params."""
+        evolved_model = self.comp_dist_evolution()
+        llh = 0. if log else 1.
+
+        for t_stage in self.t_stages:
+            patient_likelihoods = (
+                self.diag_time_dists[t_stage].distribution
+                @ evolved_model
+                @ self.diagnose_matrices[t_stage]
+            )
             if log:
-                llh = np.sum(np.log(patient_likelihoods))
+                llh += np.sum(np.log(patient_likelihoods))
             else:
-                llh = np.prod(patient_likelihoods)
+                llh *= np.prod(patient_likelihoods)
 
         return llh
 
@@ -720,19 +718,22 @@ class Unilateral(DelegatorMixin):
     def likelihood(
         self,
         data: pd.DataFrame | None = None,
-        given_params: list[float] | np.ndarray | dict[str, float] | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         load_data_kwargs: dict | None = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
         """Compute the (log-)likelihood of the ``data`` given the model (and params).
 
-        If neither ``data`` nor the ``given_params`` are provided, it tries to compute
-        the likelihood for the stored :py:attr:`~patient_data`,
-        :py:attr:`~edge_params`, and the stored :py:attr:`~diag_time_dists`.
+        If the ``data`` is not provided, the previously loaded data is used. One may
+        specify additional ``load_data_kwargs`` to pass to the
+        :py:meth:`~load_patient_data` method when loading the data.
 
-        One may specify additional ``load_data_kwargs`` to pass to the method
-        :py:meth:`~load_patient_data` when loading the data.
+        The parameters of the model can be set via ``given_param_args`` and
+        ``given_param_kwargs``. Both arguments are used to call the
+        :py:meth:`~assign_params` method. If the parameters are not provided, the
+        previously assigned parameters are used.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
         determines whether the likelihood is computed for the hidden Markov model
@@ -743,20 +744,20 @@ class Unilateral(DelegatorMixin):
                 load_data_kwargs = {}
             self.load_patient_data(data, **load_data_kwargs)
 
-        if given_params is None:
-            return self._likelihood(mode, log)
+        if given_param_args is None:
+            given_param_args = []
+
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
 
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if isinstance(given_params, dict):
-                self.assign_params(**given_params)
-            else:
-                self.assign_params(*given_params)
+            self.assign_params(*given_param_args, **given_param_kwargs)
         except ValueError:
             return -np.inf if log else 0.
 
-        return self._likelihood(mode, log)
+        return self._hmm_likelihood(log) if mode == "HMM" else self._bn_likelihood(log)
 
 
     def comp_diagnose_encoding(
@@ -780,7 +781,8 @@ class Unilateral(DelegatorMixin):
 
     def comp_posterior_state_dist(
         self,
-        given_params: dict | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         given_diagnoses: DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
@@ -801,9 +803,18 @@ class Unilateral(DelegatorMixin):
         computed. The ``mode`` parameter determines whether the posterior is computed
         for the hidden Markov model (``"HMM"``) or the Bayesian network (``"BN"``).
         In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
+
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
         """
-        if given_params is not None:
-            self.assign_params(**given_params)
+        if given_param_args is None:
+            given_param_args = []
+
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
+
+        self.assign_params(*given_param_args, **given_param_kwargs)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -826,7 +837,8 @@ class Unilateral(DelegatorMixin):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: dict[float] | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
@@ -835,18 +847,22 @@ class Unilateral(DelegatorMixin):
         """Compute risk of a certain involvement, given a patient's diagnosis.
 
         If an ``involvement`` pattern of interest is provided, this method computes
-        the risk of seeing just that pattern for the set of ``given_params`` and a
+        the risk of seeing just that pattern for the set of given parameters and a
         dictionary of diagnoses for each modality.
 
         Using the ``mode`` parameter, the risk can be computed either for the hidden
         Markov model (``"HMM"``) or the Bayesian network (``"BN"``). In case of the
         Bayesian network mode, the ``t_stage`` parameter is ignored.
 
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
+
         See Also:
             :py:meth:`comp_posterior_state_dist`
         """
         posterior_state_dist = self.comp_posterior_state_dist(
-            given_params, given_diagnoses, t_stage, mode,
+            given_param_args, given_param_kwargs, given_diagnoses, t_stage, mode,
         )
 
         if involvement is None:

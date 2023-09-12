@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
@@ -202,12 +202,6 @@ class Bilateral(DelegatorMixin):
         )
 
 
-    def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
-        """Assign parameters to the model via positional arguments."""
-        setters = (edge.set_spread_prob for edge in self.ipsi.graph.tumor_edges)
-        pass
-
-
     def assign_params(
         self,
         *new_params_args,
@@ -308,53 +302,49 @@ class Bilateral(DelegatorMixin):
         )
 
 
-    def _likelihood(
-        self,
-        mode: str = "HMM",
-        log: bool = True
-    ) -> float:
-        """Compute the (log-)likelihood of data, using the stored params."""
+    def _bn_likelihood(self, log: bool = True) -> float:
+        """Compute the BN likelihood of data, using the stored params."""
         llh = 0. if log else 1.
 
-        if mode == "HMM":    # Hidden Markov Model
-            ipsi_dist_evo = self.ipsi.comp_dist_evolution()
-            contra_dist_evo = self.contra.comp_dist_evolution()
+        joint_state_dist = self.comp_joint_state_dist(mode="BN")
+        joint_diagnose_dist = np.sum(
+            self.ipsi.stacked_diagnose_matrix
+            * (joint_state_dist @ self.contra.stacked_diagnose_matrix),
+            axis=0,
+        )
 
-            for stage in self.t_stages:
-                diag_time_matrix = np.diag(self.diag_time_dists[stage].distribution)
+        if log:
+            llh += np.sum(np.log(joint_diagnose_dist))
+        else:
+            llh *= np.prod(joint_diagnose_dist)
+        return llh
 
-                joint_state_dist = (
-                    ipsi_dist_evo.T
-                    @ diag_time_matrix
-                    @ contra_dist_evo
-                )
-                # the computation below is a trick to make the computation fatser:
-                # What we want to compute is the sum over the diagonal of the matrix
-                # product of the ipsi diagnose matrix with the joint state distribution
-                # and the contra diagnose matrix.
-                # Source: https://stackoverflow.com/a/18854776
-                joint_diagnose_dist = np.sum(
-                    self.ipsi.diagnose_matrices[stage]
-                    * (
-                        joint_state_dist
-                        @ self.contra.diagnose_matrices[stage]
-                    ),
-                    axis=0,
-                )
 
-                if log:
-                    llh += np.sum(np.log(joint_diagnose_dist))
-                else:
-                    llh *= np.prod(joint_diagnose_dist)
+    def _hmm_likelihood(self, log: bool = True) -> float:
+        """Compute the HMM likelihood of data, using the stored params."""
+        llh = 0. if log else 1.
 
-        elif mode == "BN":
-            joint_state_dist = self.comp_joint_state_dist(mode=mode)
+        ipsi_dist_evo = self.ipsi.comp_dist_evolution()
+        contra_dist_evo = self.contra.comp_dist_evolution()
+
+        for stage in self.t_stages:
+            diag_time_matrix = np.diag(self.diag_time_dists[stage].distribution)
+
+            # Note that I am not using the `comp_joint_state_dist` method here, since
+            # that would recompute the state dist evolution for each T-stage.
+            joint_state_dist = (
+                ipsi_dist_evo.T
+                @ diag_time_matrix
+                @ contra_dist_evo
+            )
+            # the computation below is a trick to make the computation fatser:
+            # What we want to compute is the sum over the diagonal of the matrix
+            # product of the ipsi diagnose matrix with the joint state distribution
+            # and the contra diagnose matrix.
+            # Source: https://stackoverflow.com/a/18854776
             joint_diagnose_dist = np.sum(
-                self.ipsi.stacked_diagnose_matrix
-                * (
-                    joint_state_dist
-                    @ self.contra.stacked_diagnose_matrix
-                ),
+                self.ipsi.diagnose_matrices[stage]
+                * (joint_state_dist @ self.contra.diagnose_matrices[stage]),
                 axis=0,
             )
 
@@ -369,44 +359,60 @@ class Bilateral(DelegatorMixin):
     def likelihood(
         self,
         data: pd.DataFrame | None = None,
-        given_params: list[float] | np.ndarray | dict[str, float] | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         load_data_kwargs: dict | None = None,
         log: bool = True,
         mode: str = "HMM"
     ):
-        """Compute the (log-)likelihood of the ``data``, given the model (and params).
+        """Compute the (log-)likelihood of the ``data`` given the model (and params).
 
-        If ``data`` and/or ``given_params`` are provided, they are loaded into the
-        model. Otherwise, the stored data and params are used. The ``load_data_kwargs``
-        are passed to the :py:meth:`~lymph.models.Bilateral.load_patient_data` method.
+        If the ``data`` is not provided, the previously loaded data is used. One may
+        specify additional ``load_data_kwargs`` to pass to the
+        :py:meth:`~load_patient_data` method when loading the data.
+
+        The parameters of the model can be set via ``given_param_args`` and
+        ``given_param_kwargs``. Both arguments are used to call the
+        :py:meth:`~assign_params` method. If the parameters are not provided, the
+        previously assigned parameters are used.
+
+        Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
+        determines whether the likelihood is computed for the hidden Markov model
+        (``"HMM"``) or the Bayesian network (``"BN"``).
+
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
 
         See Also:
             :py:meth:`lymph.models.Unilateral.likelihood`
+                The corresponding unilateral function.
         """
         if data is not None:
             if load_data_kwargs is None:
                 load_data_kwargs = {}
             self.load_patient_data(data, **load_data_kwargs)
 
-        if given_params is None:
-            return self._likelihood(log)
+        if given_param_args is None:
+            given_param_args = []
+
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
 
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if isinstance(given_params, dict):
-                self.assign_params(**given_params)
-            else:
-                self.assign_params(*given_params)
+            self.assign_params(*given_param_args, **given_param_kwargs)
         except ValueError:
             return -np.inf if log else 0.
 
-        return self._likelihood(log)
+        return self._hmm_likelihood(log) if mode == "HMM" else self._bn_likelihood(log)
 
 
     def comp_posterior_joint_state_dist(
         self,
-        given_params: dict[float] | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
@@ -419,11 +425,20 @@ class Bilateral(DelegatorMixin):
         Essentially, this is the risk for any possible combination of ipsi- and
         contralateral involvement, given the provided diagnoses.
 
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
+
         See Also:
             :py:meth:`lymph.models.Unilateral.comp_posterior_state_dist`
         """
-        if given_params is not None:
-            self.assign_params(**given_params)
+        if given_param_args is None:
+            given_param_args = []
+
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
+
+        self.assign_params(*given_param_args, **given_param_kwargs)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -452,16 +467,22 @@ class Bilateral(DelegatorMixin):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: dict[float] | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
     ) -> float:
-        """Compute risk of ``involvement`` given parameters and diagnoses.
+        """Compute risk of an ``involvement`` pattern, given parameters and diagnoses.
 
-        The ``given_params`` must be provided as a dictionary, mapping parameter names
-        to their values. Similarily, the ``given_diagnoses`` must be a dictionary
+        The parameters can be set via the ``given_param_args`` and
+        ``given_param_kwargs``, both of which are passed to the
+        :py:meth:`~assign_params` method. The ``given_diagnoses`` must be a dictionary
         mapping the side of the neck to a :py:class:`DiagnoseType`.
+
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
 
         See Also:
             :py:meth:`lymph.models.Unilateral.risk`
@@ -473,7 +494,8 @@ class Bilateral(DelegatorMixin):
         """
         # TODO: test this method
         posterior_state_probs = self.comp_posterior_joint_state_dist(
-            given_params=given_params,
+            given_param_args=given_param_args,
+            given_param_kwargs=given_param_kwargs,
             given_diagnoses=given_diagnoses,
             t_stage=t_stage,
             mode=mode,
