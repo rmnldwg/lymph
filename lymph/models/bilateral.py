@@ -35,7 +35,7 @@ def create_property_sync_callback(
         # we would trigger the setter's callbacks and may end up in an infinite loop.
         for name in names:
             private_name = f"_{name}"
-            setattr(this, private_name, getattr(other, name))
+            setattr(other, private_name, getattr(this, name))
 
     return sync
 
@@ -50,8 +50,8 @@ def init_edge_sync(
     Implementing this as a separate method allows a user in theory to initialize
     an arbitrary kind of symmetry between the two sides of the neck.
     """
-    this_edge_names = [e_name for e_name in this_edge_list]
-    other_edge_names = [e_name for e_name in other_edge_list]
+    this_edge_names = [e.name for e in this_edge_list]
+    other_edge_names = [e.name for e in other_edge_list]
 
     for edge_name in set(this_edge_names).intersection(other_edge_names):
         this_edge = this_edge_list[this_edge_names.index(edge_name)]
@@ -361,7 +361,7 @@ class Bilateral(DelegatorMixin):
         data: pd.DataFrame | None = None,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        load_data_kwargs: dict | None = None,
+        load_data_kwargs: dict[str, Any] | None = None,
         log: bool = True,
         mode: str = "HMM"
     ):

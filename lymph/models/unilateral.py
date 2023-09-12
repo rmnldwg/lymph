@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 import warnings
 from itertools import product
-from typing import Generator, Iterable, Iterator
+from typing import Any, Generator, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
@@ -720,7 +720,7 @@ class Unilateral(DelegatorMixin):
         data: pd.DataFrame | None = None,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        load_data_kwargs: dict | None = None,
+        load_data_kwargs: dict[str, Any] | None = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
@@ -814,6 +814,10 @@ class Unilateral(DelegatorMixin):
         if given_param_kwargs is None:
             given_param_kwargs = {}
 
+        # in contrast to when computing the likelihood, we do want to raise an error
+        # here if the parameters are invalid, since we want to know if the user
+        # provided invalid parameters. In the likelihood, we rather return a zero
+        # likelihood to tell the inference algorithm that the parameters are invalid.
         self.assign_params(*given_param_args, **given_param_kwargs)
 
         if given_diagnoses is None:
