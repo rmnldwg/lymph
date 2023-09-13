@@ -1,80 +1,13 @@
 """Test the binary unilateral system."""
-import logging
 import unittest
-import warnings
-from pathlib import Path
 
+import fixtures
 import numpy as np
-import pandas as pd
-import scipy as sp
 
-from lymph.descriptors import diagnose_times
-from lymph.descriptors.modalities import Clinical, Modality, Pathological
 from lymph.graph import LymphNodeLevel, Tumor
-from lymph.models import Unilateral
 
 
-class UnilateralModelFixtureMixin:
-    """Mixin class for simple binary model fixture creation."""
-
-    def setUp(self):
-        """Initialize a simple binary model."""
-        large_graph = {
-            ("tumor", "T"): ["I", "II", "III", "IV", "V", "VII"],
-            ("lnl", "I"): [],
-            ("lnl", "II"): ["I", "III", "V"],
-            ("lnl", "III"): ["IV", "V"],
-            ("lnl", "IV"): [],
-            ("lnl", "V"): [],
-            ("lnl", "VII"): [],
-        }
-        medium_graph = {
-            ("tumor", "T"): ["II", "III", "V"],
-            ("lnl", "II"): ["III", "V"],
-            ("lnl", "III"): ["V"],
-            ("lnl", "V"): [],
-        }
-        small_graph = {
-            ("tumor", "T"): ["II", "III"],
-            ("lnl", "II"): ["III"],
-            ("lnl", "III"): [],
-        }
-        self.graph_dict = small_graph
-        self.uni_model = Unilateral.binary(graph_dict=self.graph_dict)
-        self.init_logging()
-
-
-    def init_logging(self, level: int = logging.DEBUG) -> None:
-        """Initialize logging for the tests."""
-        self.logger = logging.getLogger("lymph")
-        self.logger.setLevel(level)
-        self.logger.addHandler(logging.StreamHandler())
-
-
-    def create_random_params(self, seed: int = 42) -> dict[str, float]:
-        """Create random parameters for the model."""
-        rng = np.random.default_rng(seed)
-        params = {
-            f"{name}_{type_}": rng.random()
-            for name, edge in self.uni_model.graph.edges.items()
-            for type_ in edge.get_params(as_dict=True).keys()
-        }
-        params.update({
-            f"{t_stage}_{type_}": rng.random()
-            for t_stage, dist in self.uni_model.diag_time_dists.items()
-            for type_ in dist.get_params(as_dict=True).keys()
-        })
-        return params
-
-    def create_modalities(self) -> dict[str, Modality]:
-        """Add modalities to the model."""
-        return {
-            "CT": Clinical(specificity=0.81, sensitivity=0.86),
-            "FNA": Pathological(specificity=0.95, sensitivity=0.81),
-        }
-
-
-class InitTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
+class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the initialization of a binary model."""
 
     def test_num_nodes(self):
@@ -83,9 +16,9 @@ class InitTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
         num_tumor = len({name for kind, name in self.graph_dict if kind == "tumor"})
         num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
 
-        self.assertEqual(len(self.uni_model.graph.nodes), num_nodes)
-        self.assertEqual(len(self.uni_model.graph.tumors), num_tumor)
-        self.assertEqual(len(self.uni_model.graph.lnls), num_lnls)
+        self.assertEqual(len(self.model.graph.nodes), num_nodes)
+        self.assertEqual(len(self.model.graph.tumors), num_tumor)
+        self.assertEqual(len(self.model.graph.lnls), num_lnls)
 
     def test_num_edges(self):
         """Check number of edges initialized."""
@@ -99,72 +32,72 @@ class InitTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
             if kind == "lnl"
         )
 
-        self.assertEqual(len(self.uni_model.graph.edges), num_edges)
-        self.assertEqual(len(self.uni_model.graph.tumor_edges), num_tumor_edges)
-        self.assertEqual(len(self.uni_model.graph.lnl_edges), num_lnl_edges)
-        self.assertEqual(len(self.uni_model.graph.growth_edges), 0)
+        self.assertEqual(len(self.model.graph.edges), num_edges)
+        self.assertEqual(len(self.model.graph.tumor_edges), num_tumor_edges)
+        self.assertEqual(len(self.model.graph.lnl_edges), num_lnl_edges)
+        self.assertEqual(len(self.model.graph.growth_edges), 0)
 
     def test_tumor(self):
         """Make sure the tumor has been initialized correctly."""
-        tumor = self.uni_model.graph.nodes["T"]
+        tumor = self.model.graph.nodes["T"]
         state = tumor.state
         self.assertIsInstance(tumor, Tumor)
         self.assertListEqual(tumor.allowed_states, [state])
 
     def test_lnls(self):
         """Test they are all binary lymph node levels."""
-        for lnl in self.uni_model.graph.lnls.values():
+        for lnl in self.model.graph.lnls.values():
             self.assertIsInstance(lnl, LymphNodeLevel)
             self.assertTrue(lnl.is_binary)
 
     def test_tumor_to_lnl_edges(self):
         """Make sure the tumor to LNL edges have been initialized correctly."""
-        tumor = self.uni_model.graph.nodes["T"]
+        tumor = self.model.graph.nodes["T"]
         receiving_lnls = self.graph_dict[("tumor", "T")]
         connecting_edge_names = [f"{tumor.name}_to_{lnl}" for lnl in receiving_lnls]
 
-        for edge in self.uni_model.graph.tumor_edges.values():
+        for edge in self.model.graph.tumor_edges.values():
             self.assertEqual(edge.parent.name, "T")
             self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
             self.assertIn(edge.name, connecting_edge_names)
 
 
-class DelegationTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
+class DelegationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the delegation of parameters via the `DelegatorMixing`."""
 
     def test_delegation(self):
         """Make sure the specified attributes from graph are delegated upwards."""
         self.assertEqual(
-            self.uni_model.graph.is_binary,
-            self.uni_model.is_binary,
+            self.model.graph.is_binary,
+            self.model.is_binary,
         )
         self.assertEqual(
-            self.uni_model.graph.is_trinary,
-            self.uni_model.is_trinary,
+            self.model.graph.is_trinary,
+            self.model.is_trinary,
         )
         self.assertEqual(
-            self.uni_model.graph.get_state(),
-            self.uni_model.get_state(),
+            self.model.graph.get_state(),
+            self.model.get_state(),
         )
         self.assertEqual(
-            self.uni_model.graph.set_state,
-            self.uni_model.set_state,
+            self.model.graph.set_state,
+            self.model.set_state,
         )
         self.assertEqual(
-            self.uni_model.graph.lnls,
-            self.uni_model.lnls,
+            self.model.graph.lnls,
+            self.model.lnls,
         )
 
 
-class ParameterAssignmentTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
+class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the assignment of parameters in a binary model."""
 
     def test_params_assignment_via_lookup(self):
         """Make sure the spread parameters are assigned correctly."""
-        params_to_set = self.create_random_params(seed=42)
-        edges_and_dists = self.uni_model.graph.edges.copy()
-        edges_and_dists.update(self.uni_model.diag_time_dists)
+        params_to_set = self.create_random_params()
+        edges_and_dists = self.model.graph.edges.copy()
+        edges_and_dists.update(self.model.diag_time_dists)
 
         for param_name, value in params_to_set.items():
             name, type_ = param_name.rsplit("_", maxsplit=1)
@@ -176,11 +109,11 @@ class ParameterAssignmentTestCase(UnilateralModelFixtureMixin, unittest.TestCase
 
     def test_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
-        params_to_set = self.create_random_params(seed=43)
-        self.uni_model.assign_params(**params_to_set)
+        params_to_set = self.create_random_params()
+        self.model.assign_params(**params_to_set)
 
-        edges_and_dists = self.uni_model.graph.edges.copy()
-        edges_and_dists.update(self.uni_model.diag_time_dists)
+        edges_and_dists = self.model.graph.edges.copy()
+        edges_and_dists.update(self.model.diag_time_dists)
 
         for param_name, value in params_to_set.items():
             name, type_ = param_name.rsplit("_", maxsplit=1)
@@ -196,31 +129,29 @@ class ParameterAssignmentTestCase(UnilateralModelFixtureMixin, unittest.TestCase
         changed during the test and the `_transition_matrix` attribute is deleted on
         the wrong instance. I have no clue why, but generally, the method works.
         """
-        first_lnl_name = list(self.uni_model.graph.lnls.values())[0].name
-        _ = self.uni_model.transition_matrix
-        self.assertTrue(hasattr(self.uni_model, "_transition_matrix"))
-        self.uni_model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
-        self.assertFalse(hasattr(self.uni_model, "_transition_matrix"))
+        first_lnl_name = list(self.model.graph.lnls.values())[0].name
+        _ = self.model.transition_matrix
+        self.assertTrue(hasattr(self.model, "_transition_matrix"))
+        self.model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
+        self.assertFalse(hasattr(self.model, "_transition_matrix"))
 
 
-class TransitionMatrixTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
+class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the generation of the transition matrix in a binary model."""
 
     def setUp(self):
         """Initialize a simple binary model."""
         super().setUp()
-
-        params_to_set = self.create_random_params(seed=42)
-        self.uni_model.assign_params(**params_to_set)
+        self.model.assign_params(**self.create_random_params())
 
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
         num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
-        self.assertEqual(self.uni_model.transition_matrix.shape, (2**num_lnls, 2**num_lnls))
+        self.assertEqual(self.model.transition_matrix.shape, (2**num_lnls, 2**num_lnls))
 
     def test_is_probabilistic(self):
         """Make sure the rows of the transition matrix sum to one."""
-        row_sums = np.sum(self.uni_model.transition_matrix, axis=1)
+        row_sums = np.sum(self.model.transition_matrix, axis=1)
         self.assertTrue(np.allclose(row_sums, 1.))
 
     @staticmethod
@@ -241,91 +172,53 @@ class TransitionMatrixTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
 
     def test_is_recusively_upper_triangular(self) -> None:
         """Make sure the transition matrix is recursively upper triangular."""
-        self.assertTrue(self.is_recusively_upper_triangular(self.uni_model.transition_matrix))
+        self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
 
 
-class ObservationMatrixTestCase(UnilateralModelFixtureMixin, unittest.TestCase):
+class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the generation of the observation matrix in a binary model."""
 
     def setUp(self):
         """Initialize a simple binary model."""
         super().setUp()
-        self.uni_model.modalities = self.create_modalities()
+        self.model.modalities = fixtures.MODALITIES
 
     def test_shape(self):
         """Make sure the observation matrix has the correct shape."""
-        num_lnls = len(self.uni_model.graph.lnls)
-        num_modalities = len(self.uni_model.modalities)
+        num_lnls = len(self.model.graph.lnls)
+        num_modalities = len(self.model.modalities)
         expected_shape = (2**num_lnls, 2**(num_lnls * num_modalities))
-        self.assertEqual(self.uni_model.observation_matrix.shape, expected_shape)
+        self.assertEqual(self.model.observation_matrix.shape, expected_shape)
 
     def test_is_probabilistic(self):
         """Make sure the rows of the observation matrix sum to one."""
-        row_sums = np.sum(self.uni_model.observation_matrix, axis=1)
+        row_sums = np.sum(self.model.observation_matrix, axis=1)
         self.assertTrue(np.allclose(row_sums, 1.))
 
 
-class LoadDataFixtureMixin(UnilateralModelFixtureMixin):
-    """Mixin for model with loaded data."""
+class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+    """Test loading the patient data."""
 
     def setUp(self):
+        """Load patient data."""
         super().setUp()
-        self.uni_model.modalities = self.create_modalities()
-
-        test_data_dir = Path(__file__).parent / "data"
-        self.patient_data = pd.read_csv(
-            test_data_dir / "2021-usz-oropharynx.csv",
-            header=[0,1,2],
-        )
-
-        # Don't pollute the test output with performance warnings
-        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-        self.uni_model.load_patient_data(self.patient_data, side="ipsi")
-
-        # Initialize some fixed diagnose time distributions
-        self.init_diag_time_dists(["early", "late", "foo"])
-
-    def init_diag_time_dists(self, t_stages: list[str], seed: int = 42) -> None:
-        """Initialize some fixed diagnose time distributions."""
-        rng = np.random.default_rng(seed)
-        for t_stage in t_stages:
-            self.uni_model.diag_time_dists[t_stage] = rng.uniform(
-                low=0., high=1., size=self.uni_model.max_time + 1
-            )
-
-    def create_frozen_diag_time_dist(self, seed: int = 42) -> np.ndarray:
-        """Create a frozen diagnose time distribution."""
-        rng = np.random.default_rng(seed)
-        unnormalized = rng.uniform(low=0., high=1., size=self.uni_model.max_time + 1)
-        return unnormalized / np.sum(unnormalized)
-
-    def create_parametric_diag_time_dist(self, seed: int = 42) -> diagnose_times.Distribution:
-        """Create a parametric diagnose time distribution."""
-        rng = np.random.default_rng(seed)
-        def _pmf(support: np.ndarray, p: float = rng.uniform()) -> np.ndarray:
-            return sp.stats.binom.pmf(support, p=p, n=self.uni_model.max_time + 1)
-
-        return diagnose_times.Distribution(
-            distribution=_pmf,
-            max_time=self.uni_model.max_time,
-        )
-
-
-class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
-    """Test loading the patient data."""
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric", foo="frozen")
+        self.model.assign_params(**self.create_random_params())
+        self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_load_patient_data(self):
         """Make sure the patient data is loaded correctly."""
-        self.assertEqual(len(self.uni_model.patient_data), len(self.patient_data))
+        self.assertEqual(len(self.model.patient_data), len(self.raw_data))
         self.assertRaises(
-            ValueError, self.uni_model.load_patient_data, self.patient_data, side="foo"
+            ValueError, self.model.load_patient_data, self.raw_data, side="foo"
         )
 
     def test_t_stages(self):
         """Make sure all T-stages are present."""
-        t_stages_in_data = self.uni_model.patient_data["_model", "#" ,"t_stage"].unique()
-        t_stages_in_diag_time_dists = self.uni_model.diag_time_dists.keys()
-        t_stages_in_model = list(self.uni_model.t_stages)
+        t_stages_in_data = self.model.patient_data["_model", "#" ,"t_stage"].unique()
+        t_stages_in_diag_time_dists = self.model.diag_time_dists.keys()
+        t_stages_in_model = list(self.model.t_stages)
         t_stages_intersection = set(t_stages_in_data).intersection(t_stages_in_diag_time_dists)
 
         self.assertNotIn("foo", t_stages_in_model)
@@ -341,16 +234,16 @@ class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""
         for t_stage in ["early", "late"]:
-            has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
+            has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin({
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            data_matrix = self.uni_model.data_matrices[t_stage]
+            data_matrix = self.model.data_matrices[t_stage]
 
-            self.assertTrue(t_stage in self.uni_model.data_matrices)
+            self.assertTrue(t_stage in self.model.data_matrices)
             self.assertEqual(
                 data_matrix.shape[0],
-                self.uni_model.observation_matrix.shape[1],
+                self.model.observation_matrix.shape[1],
             )
             self.assertEqual(
                 data_matrix.shape[1],
@@ -359,22 +252,22 @@ class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
 
         self.assertRaises(
             AttributeError,
-            lambda: setattr(self.uni_model, "data_matrices", "foo")
+            lambda: setattr(self.model, "data_matrices", "foo")
         )
 
     def test_diagnose_matrices(self):
         """Make sure the diagnose matrices are generated correctly."""
         for t_stage in ["early", "late"]:
-            has_t_stage = self.patient_data["tumor", "1", "t_stage"].isin({
+            has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin({
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            diagnose_matrix = self.uni_model.diagnose_matrices[t_stage]
+            diagnose_matrix = self.model.diagnose_matrices[t_stage]
 
-            self.assertTrue(t_stage in self.uni_model.diagnose_matrices)
+            self.assertTrue(t_stage in self.model.diagnose_matrices)
             self.assertEqual(
                 diagnose_matrix.shape[0],
-                self.uni_model.transition_matrix.shape[1],
+                self.model.transition_matrix.shape[1],
             )
             self.assertEqual(
                 diagnose_matrix.shape[1],
@@ -389,27 +282,22 @@ class PatientDataTestCase(LoadDataFixtureMixin, unittest.TestCase):
 
         self.assertRaises(
             AttributeError,
-            lambda: setattr(self.uni_model, "diagnose_matrices", "foo")
+            lambda: setattr(self.model, "diagnose_matrices", "foo")
         )
 
 
-class LikelihoodTestCase(LoadDataFixtureMixin, unittest.TestCase):
+class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the likelihood of a model."""
 
     def setUp(self):
+        """Load patient data."""
         super().setUp()
-        self.uni_model.diag_time_dists["early"] = self.create_frozen_diag_time_dist(seed=42)
-        self.uni_model.diag_time_dists["late"] = self.create_parametric_diag_time_dist(seed=42)
-        self.uni_model.assign_params(**self.create_random_params(seed=42))
-
-    def create_random_params(self, seed: int = 42) -> dict[str, float]:
-        """Create random parameters."""
-        rng = np.random.default_rng(seed)
-        random_params = super().create_random_params(seed=seed)
-        random_params["late_p"] = rng.uniform(low=0., high=1.)
-        return random_params
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.assign_params(**self.create_random_params())
+        self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_likelihood(self):
         """Make sure the likelihood is computed correctly."""
-        likelihood = self.uni_model.likelihood(log=True, mode="HMM")
+        likelihood = self.model.likelihood(log=True, mode="HMM")
         self.assertLess(likelihood, 0.)
