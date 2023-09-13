@@ -206,6 +206,42 @@ class Bilateral(DelegatorMixin):
         )
 
 
+    def get_params(
+        self,
+        param: str | None = None,
+        as_dict: bool = False,
+        nested: bool = False,
+    ) -> float | Iterable[float] | dict[str, float] | dict[str, dict[str, float]]:
+        """Return the parameters of the model.
+
+        If ``nested`` is ``True``, the parameters of the two sides of the neck are
+        returned as a nested dictionary. Otherwise, the parameters are returned as a
+        flat dictionary, with the keys prefixed by ``"ipsi_"`` or ``"contra_"``.
+
+        If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
+        ``param`` is not ``None``, only the value of the parameter with that name is
+        returned. Otherwise, all parameters are returned as a dictionary or a list.
+
+        Note:
+            The arguments ``as_dict`` and ``nested`` are ignored if ``param`` is not
+            ``None``. Also, ``nested`` is ignored if ``as_dict`` is ``False``.
+        """
+        ipsi_params = self.ipsi.get_params(as_dict=True)
+        contra_params = self.contra.get_params(as_dict=True)
+
+        if nested and as_dict and param is None:
+            return {"ipsi": ipsi_params, "contra": contra_params}
+
+        params = {f"ipsi_{k}": v for k, v in ipsi_params.items()}
+        params.update({f"contra_{k}": v for k, v in contra_params.items()})
+
+        if param is not None:
+            return params[param]
+
+        return params if as_dict else params.values()
+
+
+
     def assign_params(
         self,
         *new_params_args,
@@ -213,8 +249,19 @@ class Bilateral(DelegatorMixin):
     ) -> tuple[Iterator[float, dict[str, float]]]:
         """Assign new parameters to the model.
 
-        See Also:
-            :py:meth:`lymph.models.Unilateral.assign_params`
+        This works almost exactly as the unilateral model's
+        :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
+        allows the user to set the parameters of individual sides of the neck by
+        prefixing the parameter name with ``"ipsi_"`` or ``"contra_"``. This is
+        necessary for parameters that are not symmetric between the two sides of the
+        neck. For symmetric parameters, the prefix is not needed as they are directly
+        sent to the ipsilateral side, which then triggers a sync callback.
+
+        Note:
+            When setting the parameters via positional arguments, the order is
+            important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
+            are passed to the ipsilateral side, the remaining ones to the contralateral
+            side.
         """
         ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
         for key, value in new_params_kwargs.items():

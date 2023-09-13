@@ -151,7 +151,7 @@ class Unilateral(DelegatorMixin):
         self,
         param: str | None = None,
         as_dict: bool = False,
-    ) -> dict[str, float]:
+    ) -> float | Iterable[float] | dict[str, float]:
         """Get the parameters of the model.
 
         If ``as_dict`` is ``True``, return a dictionary with the parameters as values.
@@ -166,7 +166,11 @@ class Unilateral(DelegatorMixin):
             for name, value in edge_or_dist_params.items():
                 params[f"{edge_name_or_tstage}_{name}"] = value
 
-        return params if as_dict else params[param]
+        if param is not None:
+            return params[param]
+
+        return params if as_dict else params.values()
+
 
 
     def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:

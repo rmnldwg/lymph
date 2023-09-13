@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import inspect
 import warnings
-from typing import Any
+from typing import Iterable
 
 import numpy as np
 
@@ -146,13 +146,16 @@ class Distribution:
         self,
         param: str | None = None,
         as_dict: bool = False,
-    ) -> Any | dict[str, Any]:
+    ) -> float | Iterable[float] | dict[str, float]:
         """If updateable, return the dist's ``param`` value or all params in a dict."""
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, returning empty dict")
             return {} if as_dict else None
 
-        return self._kwargs[param] if not as_dict else self._kwargs
+        if param is not None:
+            return self._kwargs[param]
+
+        return self._kwargs if as_dict else self._kwargs.values()
 
 
     def set_params(self, **kwargs) -> None:

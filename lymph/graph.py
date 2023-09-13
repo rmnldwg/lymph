@@ -357,17 +357,21 @@ class Edge:
         self,
         param: str | None = None,
         as_dict: bool = False,
-    ) -> float | dict[str, float]:
+    ) -> float | Iterable[float] | dict[str, float]:
         """Return the value of the parameter ``param`` or all params in a dict."""
         if self.is_growth:
-            values = {"growth": self.get_spread_prob()}
-            return values if as_dict else values[param]
+            params = {"growth": self.get_spread_prob()}
+            return params if as_dict else params[param]
 
-        values = {"spread": self.get_spread_prob()}
+        params = {"spread": self.get_spread_prob()}
         if self.child.is_trinary and not self.is_tumor_spread:
-            values["micro"] = self.get_micro_mod()
+            params["micro"] = self.get_micro_mod()
 
-        return values if as_dict else values[param]
+        if param is not None:
+            return params[param]
+
+        return params if as_dict else params.values()
+
 
     def set_params(
         self,
