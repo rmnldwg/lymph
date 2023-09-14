@@ -103,7 +103,9 @@ def create_modality_sync_callback(
             if modality not in other:
                 other[modality] = this[modality]
 
-        for modality in other.keys():
+        # This is necessary to not change the dict while iterating over it.
+        other_keys = set(other.keys())
+        for modality in other_keys:
             if modality not in this:
                 del other[modality]
 
@@ -190,7 +192,6 @@ class Bilateral(DelegatorMixin):
             init_edge_sync(property_names, ipsi_edges, contra_edges)
 
         if self.modalities_symmetric:
-            self.modalities = self.ipsi.modalities
             self.ipsi.modalities.trigger_callbacks.append(
                 create_modality_sync_callback(
                     this=self.ipsi.modalities,
@@ -279,6 +280,34 @@ class Bilateral(DelegatorMixin):
             *remaining_args, **contra_kwargs, **remainings_kwargs
         )
         return remaining_args, remainings_kwargs
+
+
+    @property
+    def modalities(self) -> modalities.ModalitiesUserDict:
+        """Return the set diagnostic modalities of the model.
+
+        See Also:
+            :py:attr:`lymph.models.Unilateral.modalities`
+                The corresponding unilateral attribute.
+            :py:class:`~lymph.descriptors.ModalitiesUserDict`
+                The implementation of the descriptor class.
+        """
+        if not self.modalities_symmetric:
+            raise AttributeError(
+                "The modalities are not symmetric. Please access them via the "
+                "`ipsi` or `contra` attributes."
+            )
+        return self.ipsi.modalities
+
+    @modalities.setter
+    def modalities(self, new_modalities) -> None:
+        """Set the diagnostic modalities of the model."""
+        if not self.modalities_symmetric:
+            raise AttributeError(
+                "The modalities are not symmetric. Please set them via the "
+                "`ipsi` or `contra` attributes."
+            )
+        self.ipsi.modalities = new_modalities
 
 
     def load_patient_data(

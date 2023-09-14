@@ -59,10 +59,51 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         )
 
 
-class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
-    """Test the parameter assignment."""
+class ModalityDelegationTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Make sure the modality is delegated from the ipsi side correctly."""
 
     def setUp(self):
-        res = super().setUp()
-        self.create_random_params(42)
-        return res
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+
+    def test_modality_access(self):
+        """Test that the modality can be accessed."""
+        self.assertEqual(
+            self.model.modalities["CT"].sensitivity,
+            self.model.ipsi.modalities["CT"].sensitivity,
+        )
+        self.assertEqual(
+            self.model.modalities["FNA"].specificity,
+            self.model.ipsi.modalities["FNA"].specificity,
+        )
+
+    def test_modality_delete(self):
+        """Test that the modality can be deleted."""
+        del self.model.modalities["CT"]
+        self.assertNotIn("CT", self.model.modalities)
+        self.assertNotIn("CT", self.model.ipsi.modalities)
+        self.assertNotIn("CT", self.model.contra.modalities)
+
+    def test_modality_update(self):
+        """Test that the modality can be updated."""
+        self.model.modalities["CT"].sensitivity = 0.8
+        self.assertEqual(
+            self.model.modalities["CT"].sensitivity,
+            self.model.ipsi.modalities["CT"].sensitivity,
+        )
+        self.assertEqual(
+            self.model.modalities["CT"].sensitivity,
+            self.model.contra.modalities["CT"].sensitivity,
+        )
+
+    def test_modality_reset(self):
+        """Test resetting the modalities also works."""
+        self.model.modalities = {"foo": Clinical(0.8, 0.9)}
+        self.assertEqual(
+            self.model.modalities["foo"].sensitivity,
+            self.model.ipsi.modalities["foo"].sensitivity,
+        )
+        self.assertEqual(
+            self.model.modalities["foo"].specificity,
+            self.model.contra.modalities["foo"].specificity,
+        )
