@@ -107,3 +107,18 @@ class ModalityDelegationTestCase(fixtures.BilateralModelMixin, unittest.TestCase
             self.model.modalities["foo"].specificity,
             self.model.contra.modalities["foo"].specificity,
         )
+
+
+class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Check that the (log-)likelihood is computed correctly."""
+
+    def setUp(self):
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+        self.load_patient_data()
+
+    def test_compute_likelihood_twice(self):
+        """Test that the likelihood is computed correctly."""
+        first_llh = self.model.likelihood(log=True)
+        second_llh = self.model.likelihood(log=True)
+        self.assertEqual(first_llh, second_llh)

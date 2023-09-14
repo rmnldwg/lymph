@@ -177,7 +177,7 @@ class BilateralModelMixin:
 
     def load_patient_data(
         self,
-        filename: str = "2021-clb-oropharynx.csv",
+        filename: str = "2021-usz-oropharynx.csv",
     ) -> None:
         """Load patient data from a CSV file."""
         filepath = Path(__file__).parent / "data" / filename
