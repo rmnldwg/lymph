@@ -12,6 +12,7 @@ import numpy as np
 
 from lymph import models
 from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
+from lymph.helper import trigger
 
 
 class SupportError(Exception):
@@ -62,6 +63,19 @@ class Distribution:
             self.support = np.arange(max_time + 1)
             self._func = None
             self._frozen = self.normalize(distribution)
+
+
+    def copy(self) -> Distribution:
+        """Return a copy of the distribution.
+
+        Note:
+            This will return a frozen distribution, even if the original distribution
+            was parametrized.
+        """
+        return type(self)(
+            distribution=self.distribution,
+            max_time=self.support[-1],
+        )
 
 
     @staticmethod
@@ -162,6 +176,8 @@ class Distribution:
         """Update distribution by setting its parameters and storing the frozen PMF."""
         params_to_set = set(kwargs.keys()).intersection(self._kwargs.keys())
         if self.is_updateable:
+            if hasattr(self, "_frozen"):
+                del self._frozen
             self._kwargs.update({p: kwargs[p] for p in params_to_set})
         else:
             warnings.warn("Distribution is not updateable, skipping...")
@@ -175,6 +191,7 @@ class Distribution:
 class DistributionsUserDict(AbstractLookupDict):
     """Dictionary with added methods for storing distributions over diagnose times."""
     # pylint: disable=no-member
+    @trigger
     def __setitem__(
         self,
         t_stage: str,
@@ -188,6 +205,11 @@ class DistributionsUserDict(AbstractLookupDict):
 
         super().__setitem__(t_stage, distribution)
 
+    @trigger
+    def __delitem__(self, t_stage: str) -> None:
+        """Delete the distribution for a T-stage."""
+        super().__delitem__(t_stage)
+
 
     @property
     def num_parametric(self) -> int:
@@ -195,6 +217,7 @@ class DistributionsUserDict(AbstractLookupDict):
         return sum(distribution.is_updateable for distribution in self.values())
 
 
+    @trigger
     def set_distribution_params(self, params: list[float] | np.ndarray) -> None:
         """
         Update all marginalizors stored in this instance that are updateable with
@@ -243,5 +266,8 @@ class Distributions(AbstractDictDescriptor):
     """Descriptor that adds a dictionary for storing distributions over diagnose times."""
     def _lazy_pre_get(self, instance: models.Unilateral):
         """Initialize the lookup dictionary."""
-        distribution_dict = DistributionsUserDict(max_time=instance.max_time)
+        distribution_dict = DistributionsUserDict(
+            max_time=instance.max_time,
+            trigger_callbacks=[],
+        )
         setattr(instance, self.private_name, distribution_dict)

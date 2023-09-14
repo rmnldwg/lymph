@@ -36,6 +36,15 @@ class Modality:
         )
 
 
+    def copy(self) -> Modality:
+        """Return a copy of the modality."""
+        return type(self)(
+            specificity=self.specificity,
+            sensitivity=self.sensitivity,
+            is_trinary=self.is_trinary,
+        )
+
+
     def compute_confusion_matrix(self) -> np.ndarray:
         """Compute the confusion matrix of the modality."""
         return np.array([
@@ -207,15 +216,6 @@ class ModalitiesUserDict(AbstractLookupDict):
 
 class ConfusionMatrices(AbstractDictDescriptor):
     """Stores a dictionary of confusion matrices for diagnostic modalities."""
-    def __set__(self, instance, value):
-        # Instead of deleting the entire attribute and the trigger callback functions
-        # with it, here we just delete the `UserDict` subclass's internal dictionary
-        # when the attribute is set with an entire dictionary. This way, the trigger
-        # callbacks are preserved.
-        modalities_dict = self.__get__(instance, type(instance))
-        modalities_dict.clear()
-        modalities_dict.update(value)
-
     def _lazy_pre_get(self, instance: models.Unilateral):
         modalities_dict = ModalitiesUserDict(
             is_trinary=instance.graph.is_trinary,

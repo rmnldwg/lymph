@@ -81,13 +81,26 @@ class DelegationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
             self.model.get_state(),
         )
         self.assertEqual(
-            self.model.graph.set_state,
-            self.model.set_state,
-        )
-        self.assertEqual(
             self.model.graph.lnls,
             self.model.lnls,
         )
+
+    def test_set_state_delegation(self):
+        """Check that the ``set_state`` method is also correctly delegated."""
+        old_state = self.model.get_state()
+        choice = [0,1]
+        if self.model.is_trinary:
+            choice.append(2)
+
+        new_state = self.rng.choice(a=choice, size=len(old_state))
+        self.model.set_state(*new_state)
+        self.assertTrue(np.all(self.model.get_state() == new_state))
+        self.assertTrue(np.all(self.model.graph.get_state() == new_state))
+
+        new_state = self.rng.choice(a=choice, size=len(old_state))
+        self.model.graph.set_state(*new_state)
+        self.assertTrue(np.all(self.model.get_state() == new_state))
+        self.assertTrue(np.all(self.model.graph.get_state() == new_state))
 
 
 class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):

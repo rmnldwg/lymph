@@ -65,11 +65,12 @@ class AbstractDictDescriptor:
 
 
     def __set__(self, instance, value):
-        self.__delete__(instance)
         # This makes sure __get__ is always called and that anything that happens
         # in the UserDict's __setitem__ method is also done when setting the entire
         # attribute at once.
-        self.__get__(instance, type(instance)).update(value)
+        user_dict = self.__get__(instance, type(instance))
+        user_dict.clear()
+        user_dict.update(value)
 
 
     def __delete__(self, instance):

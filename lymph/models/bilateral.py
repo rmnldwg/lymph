@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
 
-from lymph import graph, models
+from lymph import descriptors, graph, models
 from lymph.descriptors import matrix, modalities
 from lymph.helper import (
     DelegatorMixin,
@@ -76,40 +76,19 @@ def init_edge_sync(
         )
 
 
-def create_modality_sync_callback(
-    this: modalities.ModalitiesUserDict,
-    other: modalities.ModalitiesUserDict,
-) -> None:
-    """Create a callback func to synchronizes the modalities of ``this`` and ``other``.
-
-    The callback goes through the keys of ``this`` and check if any of the modalities
-    is missing in ``other``. If so, it adds the missing modality to ``other`` and
-    initializes it with the same values as in ``this``.
-
-    It also checks if there are any keys present in ``other`` that are not in ``this``.
-    In that case, the respective item is removed from ``other``.
-
-    Note:
-        This is a one-way sync. Meaning that any changes to the modalities of ``other``
-        are not reflected in ``this`` and get overwritten the next time this callback
-        is triggered.
-
-        But this should not be a problem, since for a :py:class:`Bilateral` model with
-        symmetric modalities, only the modalities of the ipsilateral side should be
-        accessed directly.
-    """
+def create_user_dict_sync_callback(
+    this: descriptors.AbstractLookupDict,
+    other: descriptors.AbstractLookupDict,
+) -> Callable:
+    """Create a callback func to synchronizes the content of ``this`` and ``other``."""
     def sync():
-        for modality in this.keys():
-            if modality not in other:
-                other[modality] = this[modality]
+        other.clear()
 
-        # This is necessary to not change the dict while iterating over it.
-        other_keys = set(other.keys())
-        for modality in other_keys:
-            if modality not in this:
-                del other[modality]
+        for key, value in this.items():
+            other[key] = value.copy()
 
-    logger.debug("Created modality sync callback.")
+    cls = this.__class__.__name__
+    logger.debug(f"Created sync callback for a {cls} instance.")
     return sync
 
 
@@ -191,9 +170,16 @@ class Bilateral(DelegatorMixin):
             )
             init_edge_sync(property_names, ipsi_edges, contra_edges)
 
+        self.ipsi.diag_time_dists.trigger_callbacks.append(
+            create_user_dict_sync_callback(
+                this=self.ipsi.diag_time_dists,
+                other=self.contra.diag_time_dists,
+            )
+        )
+
         if self.modalities_symmetric:
             self.ipsi.modalities.trigger_callbacks.append(
-                create_modality_sync_callback(
+                create_user_dict_sync_callback(
                     this=self.ipsi.modalities,
                     other=self.contra.modalities,
                 )
