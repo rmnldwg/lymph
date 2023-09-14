@@ -160,8 +160,9 @@ class Distribution:
 
     def set_params(self, **kwargs) -> None:
         """Update distribution by setting its parameters and storing the frozen PMF."""
+        params_to_set = set(kwargs.keys()).intersection(self._kwargs.keys())
         if self.is_updateable:
-            self._kwargs.update({k: kwargs[k] for k in self._kwargs.keys()})
+            self._kwargs.update({p: kwargs[p] for p in params_to_set})
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 
