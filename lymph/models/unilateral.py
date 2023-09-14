@@ -93,7 +93,6 @@ class Unilateral(DelegatorMixin):
         if 0 >= max_time:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
-        self.max_time = max_time
         self.is_micro_mod_shared = is_micro_mod_shared
         self.is_growth_shared = is_growth_shared
 
@@ -104,6 +103,14 @@ class Unilateral(DelegatorMixin):
                 "lnls",
             ],
         )
+
+        self.modalities = modalities.ModalitiesUserDict(
+            is_trinary=self.is_trinary,
+            trigger_callbacks=[self.delete_obs_list_and_matrix],
+        )
+        self.diag_time_dists = diagnose_times.DistributionsUserDict(max_time=max_time)
+        self.data_matrices = matrix.DataEncodingUserDict(model=self)
+        self.diagnose_matrices = matrix.DiagnoseUserDict(model=self)
 
 
     @classmethod
@@ -134,17 +141,6 @@ class Unilateral(DelegatorMixin):
             + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
         )
         print(string)
-
-
-    diag_time_dists = diagnose_times.Distributions()
-    """Mapping of T-categories to the corresponding distributions over diagnose times.
-
-    Every distribution is represented by a
-    :py:class:`~diagnose_times.Distributions` object, which holds the
-    parametrized and frozen versions of the probability mass function over the diagnose
-    times. They are used to marginalize over the (generally unknown) diagnose times
-    when computing e.g. the likelihood.
-    """
 
 
     def get_params(
@@ -344,23 +340,6 @@ class Unilateral(DelegatorMixin):
         return trans_prob
 
 
-    modalities = modalities.ConfusionMatrices()
-    """Dictionary storing diagnostic modalities and their specificity/sensitivity.
-
-    The keys are the names of the modalities, e.g. "CT" or "pathology", the values are
-    instances of the :py:class:`~lymph.descriptors.modalities.Modality` class. When
-    setting the modality, the value can be a
-    :py:class:`~lymph.descriptors.modalities.Modality` (or subclass) instance, a
-    confusion matrix (``np.ndarray``) or a list/tuple with specificity and sensitivity.
-    One can then access the confusion matrix of a modality.
-
-    See Also:
-        :py:class:`lymph.descriptors.modalities`
-            The module managing this descriptor and the dictionary of modalities
-            behind it.
-    """
-
-
     def comp_diagnose_prob(
         self,
         diagnoses: pd.Series | dict[str, dict[str, bool]]
@@ -493,27 +472,11 @@ class Unilateral(DelegatorMixin):
         del self.observation_matrix
         del self.obs_list
 
-    data_matrices = matrix.DataEncodings()
-    """Dictionary with T-stages as keys and corresponding data matrices as values.
 
-    A data matrix is a binary encding of which of the possible observational states
-    agrees with the seen diagnosis of a patient. It accounts for missing involvement
-    information on some LNLs and/or diagnostic modalities and thereby allows to
-    marginalize over them.
-
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.DataEncodings`
-    """
-
-    diagnose_matrices = matrix.Diagnoses()
-    """Dictionary with T-stages as keys and corresponding diagnose matrices as values.
-
-    Diagnose matrices are simply the dot product of the :py:attr:`~observation_matrix`
-    and the :py:attr:`~data_matrices` for a given T-stage.
-
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.Diagnoses`
-    """
+    @property
+    def max_time(self) -> int:
+        """The latest possible diagnose time."""
+        return self.diag_time_dists.max_time
 
 
     @property
@@ -595,8 +558,8 @@ class Unilateral(DelegatorMixin):
         # Changes to the patient data require a recomputation of the data and
         # diagnose matrices. Deleting them will trigger this when they are next
         # accessed.
-        del self.data_matrices
-        del self.diagnose_matrices
+        self.data_matrices.clear()
+        self.diagnose_matrices.clear()
         self._patient_data = patient_data
 
 

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from lymph import models
-from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
+from lymph.descriptors import AbstractLookupDict
 from lymph.helper import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
 
@@ -257,17 +257,6 @@ class DataEncodingUserDict(AbstractLookupDict):
         return self[t_stage]
 
 
-class DataEncodings(AbstractDictDescriptor):
-    """Allows accessing the data matrix of every T-category separately."""
-    def _lazy_pre_get(self, instance: models.Unilateral):
-        """Add ``instance`` as ``model`` attribute to the descriptor."""
-        data_encoding_dict = DataEncodingUserDict(model=instance)
-        setattr(instance, self.private_name, data_encoding_dict)
-
-    def __set__(self, instance, value):
-        raise AttributeError("Cannot set data matrix lookup dict.")
-
-
 class DiagnoseUserDict(AbstractLookupDict):
     """``UserDict`` that dynamically generates the diagnose matrices for each T-stage.
 
@@ -289,14 +278,3 @@ class DiagnoseUserDict(AbstractLookupDict):
             self.model.observation_matrix @ self.model.data_matrices[t_stage]
         )
         return self[t_stage]
-
-
-class Diagnoses(AbstractDictDescriptor):
-    """Descriptor that instantiates and manages the :py:class:`~DiagnoseUserDict`."""
-    def _lazy_pre_get(self, instance: models.Unilateral):
-        """Add ``instance`` as ``model`` attribute to the descriptor."""
-        diagnose_dict = DiagnoseUserDict(model=instance)
-        setattr(instance, self.private_name, diagnose_dict)
-
-    def __set__(self, instance, value):
-        raise AttributeError("Cannot set diagnose matrices lookup dict.")

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
 
-from lymph import descriptors, graph, models
+from lymph import graph, models
 from lymph.descriptors import matrix, modalities
 from lymph.helper import (
     DelegatorMixin,
@@ -74,22 +74,6 @@ def init_edge_sync(
                 other=this_edge,
             )
         )
-
-
-def create_user_dict_sync_callback(
-    this: descriptors.AbstractLookupDict,
-    other: descriptors.AbstractLookupDict,
-) -> Callable:
-    """Create a callback func to synchronizes the content of ``this`` and ``other``."""
-    def sync():
-        other.clear()
-
-        for key, value in this.items():
-            other[key] = value.copy()
-
-    cls = this.__class__.__name__
-    logger.debug(f"Created sync callback for a {cls} instance.")
-    return sync
 
 
 
@@ -170,27 +154,17 @@ class Bilateral(DelegatorMixin):
             )
             init_edge_sync(property_names, ipsi_edges, contra_edges)
 
-        self.ipsi.diag_time_dists.trigger_callbacks.append(
-            create_user_dict_sync_callback(
-                this=self.ipsi.diag_time_dists,
-                other=self.contra.diag_time_dists,
-            )
-        )
+        delegated_attrs = [
+            "max_time", "t_stages", "diag_time_dists",
+            "is_binary", "is_trinary",
+        ]
 
         if self.modalities_symmetric:
-            self.ipsi.modalities.trigger_callbacks.append(
-                create_user_dict_sync_callback(
-                    this=self.ipsi.modalities,
-                    other=self.contra.modalities,
-                )
-            )
+            delegated_attrs.append("modalities")
+            self.contra.modalities = self.ipsi.modalities
 
-        self.init_delegation(
-            ipsi=[
-                "max_time", "t_stages", "diag_time_dists",
-                "is_binary", "is_trinary",
-            ],
-        )
+        self.init_delegation(ipsi=delegated_attrs)
+        self.contra.diag_time_dists = self.diag_time_dists
 
 
     def get_params(

@@ -15,7 +15,7 @@ class AbstractLookupDict(UserDict):
     method that returns the value for the given key and raises a ``KeyError`` if
     the value for a key cannot be computed.
     """
-    def __init__(self, dict=None, /, **kwargs):
+    def __init__(self, dict=None, /, trigger_callbacks=None, **kwargs):
         """Use keyword arguments to set attributes of the instance.
 
         In contrast to the default ``UserDict`` constructor, this one instantiates
@@ -23,6 +23,12 @@ class AbstractLookupDict(UserDict):
         into the dictionary itself.
         """
         super().__init__(dict)
+
+        if trigger_callbacks is None:
+            trigger_callbacks = []
+
+        kwargs.update(trigger_callbacks=trigger_callbacks)
+
         for attr_name, attr_value in kwargs.items():
             if hasattr(self, attr_name):
                 raise AttributeError("Cannot set attribute that already exists.")
@@ -37,47 +43,3 @@ class AbstractLookupDict(UserDict):
             except KeyError:
                 return False
         return super().__contains__(key)
-
-
-class AbstractDictDescriptor:
-    """Descriptor that constructs itself when the attribute it manages is missing.
-
-    It expects the attribute to be dict-like and implements the ``__get__``,
-    ``__set__`` and ``__delete__`` methods. When the attribute is missing, it
-    calls the ``_get_callback`` method to construct the attribute. This method
-    must be implemented by subclasses.
-
-    It allows to lazily and dynamically construct the attribute it manages when the
-    attribute is accessed but not present. This is useful for attributes that
-    are expensive to compute and may need recomputation when the state of the
-    instance changes. In that case, one only has to delete the attribute and
-    the next time it is accessed, it will be recomputed automatically.
-    """
-    def __set_name__(self, owner, name):
-        self.private_name = '_' + name
-
-
-    def __get__(self, instance, _cls=None):
-        if not hasattr(instance, self.private_name):
-            self._lazy_pre_get(instance)
-
-        return getattr(instance, self.private_name)
-
-
-    def __set__(self, instance, value):
-        # This makes sure __get__ is always called and that anything that happens
-        # in the UserDict's __setitem__ method is also done when setting the entire
-        # attribute at once.
-        user_dict = self.__get__(instance, type(instance))
-        user_dict.clear()
-        user_dict.update(value)
-
-
-    def __delete__(self, instance):
-        if hasattr(instance, self.private_name):
-            delattr(instance, self.private_name)
-
-
-    def _lazy_pre_get(self, instance):
-        """Perform lazy dynamic stuff when ``__get__`` is called."""
-        raise NotImplementedError("Subclasses must implement this method.")

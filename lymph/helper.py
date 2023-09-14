@@ -94,8 +94,7 @@ class DelegatorMixin:
 
             return wrapper
 
-        cls_name = self.__class__.__name__
-        raise AttributeError(f"'{cls_name}' object has no attribute '{name}'")
+        return super().__getattribute__(name)
 
 
 def check_unique_names(graph: dict):
