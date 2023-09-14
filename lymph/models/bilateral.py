@@ -216,8 +216,12 @@ class Bilateral(DelegatorMixin):
         """Return the parameters of the model.
 
         If ``nested`` is ``True``, the parameters of the two sides of the neck are
-        returned as a nested dictionary. Otherwise, the parameters are returned as a
-        flat dictionary, with the keys prefixed by ``"ipsi_"`` or ``"contra_"``.
+        returned as a nested dictionary in addition to one dictionary storing the
+        parameters of the parametric distributions for marginalizing over diagnose
+        times. Otherwise, the parameters are returned as a flat dictionary, with the
+        keys prefixed by ``"ipsi_"`` or ``"contra_"``. The parameters of the parametric
+        distributions are only prefixed by their corresponding T-stage, e.g.
+        ``"early_p"``.
 
         If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
         ``param`` is not ``None``, only the value of the parameter with that name is
@@ -227,14 +231,20 @@ class Bilateral(DelegatorMixin):
             The arguments ``as_dict`` and ``nested`` are ignored if ``param`` is not
             ``None``. Also, ``nested`` is ignored if ``as_dict`` is ``False``.
         """
-        ipsi_params = self.ipsi.get_params(as_dict=True)
-        contra_params = self.contra.get_params(as_dict=True)
+        ipsi_params = self.ipsi.get_params(as_dict=True, with_dists=False)
+        contra_params = self.contra.get_params(as_dict=True, with_dists=False)
+        dist_params = self.ipsi.get_params(as_dict=True, with_edges=False)
 
         if nested and as_dict and param is None:
-            return {"ipsi": ipsi_params, "contra": contra_params}
+            return {
+                "ipsi": ipsi_params,
+                "contra": contra_params,
+                "diag_time_dists": dist_params,
+            }
 
         params = {f"ipsi_{k}": v for k, v in ipsi_params.items()}
         params.update({f"contra_{k}": v for k, v in contra_params.items()})
+        params.update(dist_params)
 
         if param is not None:
             return params[param]

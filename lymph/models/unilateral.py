@@ -151,17 +151,28 @@ class Unilateral(DelegatorMixin):
         self,
         param: str | None = None,
         as_dict: bool = False,
+        with_edges: bool = True,
+        with_dists: bool = True,
     ) -> float | Iterable[float] | dict[str, float]:
         """Get the parameters of the model.
 
         If ``as_dict`` is ``True``, return a dictionary with the parameters as values.
         Otherwise, return the value of the parameter ``param``.
+
+        Using the keyword arguments ``with_edges`` and ``with_dists``, one can control
+        whether the parameters of the edges and the distributions over diagnose times
+        should be included in the returned parameters. By default, both are included.
         """
+        iterator = []
         params = {}
-        for edge_name_or_tstage, edge_or_dist in itertools.chain(
-            self.graph.edges.items(),
-            self.diag_time_dists.items(),
-        ):
+
+        if with_edges:
+            iterator = itertools.chain(iterator, self.graph.edges.items())
+
+        if with_dists:
+            iterator = itertools.chain(iterator, self.diag_time_dists.items())
+
+        for edge_name_or_tstage, edge_or_dist in iterator:
             edge_or_dist_params = edge_or_dist.get_params(as_dict=True)
             for name, value in edge_or_dist_params.items():
                 params[f"{edge_name_or_tstage}_{name}"] = value
