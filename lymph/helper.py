@@ -79,11 +79,20 @@ class DelegatorMixin:
                     warnings.warn(
                         f"Attribute '{sub_attr}' already delegated. Overwriting."
                     )
-                self._delegated[sub_attr] = getattr(attr_obj, sub_attr)
+                self._delegated[sub_attr] = (attr_obj, sub_attr)
 
     def __getattr__(self, name):
         if name in self._delegated:
-            return self._delegated[name]
+            attr = getattr(*self._delegated[name])
+
+            if not callable(attr):
+                return attr
+
+            @wraps(attr)
+            def wrapper(*args, **kwargs):
+                return attr(*args, **kwargs)
+
+            return wrapper
 
         cls_name = self.__class__.__name__
         raise AttributeError(f"'{cls_name}' object has no attribute '{name}'")

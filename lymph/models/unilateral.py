@@ -183,7 +183,6 @@ class Unilateral(DelegatorMixin):
         return params if as_dict else params.values()
 
 
-
     def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
         """Assign parameters to egdes and to distributions via positional arguments."""
         for edge_or_dist in itertools.chain(
