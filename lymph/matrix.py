@@ -1,5 +1,5 @@
 """
-Methods and classes to manage the matrices of the :py:class:`~models.Unilateral` class.
+Methods & classes to manage matrices of the :py:class:`~lymph.models.Unilateral` class.
 """
 # pylint: disable=too-few-public-methods
 from __future__ import annotations

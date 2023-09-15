@@ -1,4 +1,11 @@
-"""This module implements the managing descriptor for the diagnostic modalities."""
+"""
+Module implementing management of the diagnostic modalities.
+
+This allows the user to define diagnostic modalities and their sensitivity/specificity
+values. This is necessary to compute the likelihood of a dataset (that was created by
+recoding the output of diagnostic modalities), given the model and its parameters
+(which we want to learn).
+"""
 from __future__ import annotations
 
 import warnings
