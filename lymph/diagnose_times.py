@@ -10,9 +10,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph import models
-from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
-from lymph.helper import trigger
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class SupportError(Exception):
@@ -190,7 +188,8 @@ class Distribution:
 
 class DistributionsUserDict(AbstractLookupDict):
     """Dictionary with added methods for storing distributions over diagnose times."""
-    # pylint: disable=no-member
+    max_time: int
+
     @trigger
     def __setitem__(
         self,
@@ -260,14 +259,3 @@ class DistributionsUserDict(AbstractLookupDict):
         drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
 
         return drawn_t_stages, drawn_diag_times
-
-
-class Distributions(AbstractDictDescriptor):
-    """Descriptor that adds a dictionary for storing distributions over diagnose times."""
-    def _lazy_pre_get(self, instance: models.Unilateral):
-        """Initialize the lookup dictionary."""
-        distribution_dict = DistributionsUserDict(
-            max_time=instance.max_time,
-            trigger_callbacks=[],
-        )
-        setattr(instance, self.private_name, distribution_dict)

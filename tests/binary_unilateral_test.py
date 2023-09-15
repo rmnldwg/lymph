@@ -144,9 +144,9 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         """
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
         _ = self.model.transition_matrix
-        self.assertTrue(hasattr(self.model, "_transition_matrix"))
+        self.assertTrue("transition_matrix" in self.model.__dict__)
         self.model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
-        self.assertFalse(hasattr(self.model, "_transition_matrix"))
+        self.assertFalse("transition_matrix" in self.model.__dict__)
 
 
 class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -263,10 +263,6 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 has_t_stage.sum(),
             )
 
-        self.assertRaises(
-            AttributeError,
-            lambda: setattr(self.model, "data_matrices", "foo")
-        )
 
     def test_diagnose_matrices(self):
         """Make sure the diagnose matrices are generated correctly."""
@@ -292,11 +288,6 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 np.isclose(diagnose_matrix, 1.)
                 | np.less_equal(diagnose_matrix, 1.)
             ))
-
-        self.assertRaises(
-            AttributeError,
-            lambda: setattr(self.model, "diagnose_matrices", "foo")
-        )
 
 
 class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):

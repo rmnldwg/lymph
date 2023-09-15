@@ -6,9 +6,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
-from lymph import models
-from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
-from lymph.helper import trigger
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class Modality:
@@ -33,15 +31,6 @@ class Modality:
             f"specificity={self.specificity!r}, "
             f"sensitivity={self.sensitivity!r}, "
             f"is_trinary={self.is_trinary!r})"
-        )
-
-
-    def copy(self) -> Modality:
-        """Return a copy of the modality."""
-        return type(self)(
-            specificity=self.specificity,
-            sensitivity=self.sensitivity,
-            is_trinary=self.is_trinary,
         )
 
 
@@ -212,13 +201,3 @@ class ModalitiesUserDict(AbstractLookupDict):
     @trigger
     def __delitem__(self, key: str) -> None:
         return super().__delitem__(key)
-
-
-class ConfusionMatrices(AbstractDictDescriptor):
-    """Stores a dictionary of confusion matrices for diagnostic modalities."""
-    def _lazy_pre_get(self, instance: models.Unilateral):
-        modalities_dict = ModalitiesUserDict(
-            is_trinary=instance.graph.is_trinary,
-            trigger_callbacks=[instance.delete_obs_list_and_matrix],
-        )
-        setattr(instance, self.private_name, modalities_dict)

@@ -6,7 +6,7 @@ import unittest
 import fixtures
 import numpy as np
 
-from lymph.descriptors.modalities import Clinical
+from lymph.modalities import Clinical
 
 
 class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
