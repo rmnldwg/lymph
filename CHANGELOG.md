@@ -10,6 +10,8 @@ Third alpha release. I am pretty confident that the `lymph.models.Unilateral` cl
 
 The `lymph.models.Bilateral` class is presumably finished now as well, although there may still be issues with that. It does however compute a likelihood if asked to do so, and the results don't look implausible. So, it might be worth giving it a spin.
 
+Also, I am now quite satisfied with the look and usability of the new API. Hopefully, this means only minor changes from here on.
+
 ### Bug Fixes
 
 - (**bi**) Sync callback was wrong way around
