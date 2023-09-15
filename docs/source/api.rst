@@ -11,7 +11,7 @@ Detailed API
 
     graph
     models
-    descriptors
+    components
     helper
 
 
