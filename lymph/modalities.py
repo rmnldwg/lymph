@@ -6,9 +6,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
-from lymph import models
-from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
-from lymph.helper import trigger
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class Modality:
@@ -200,11 +198,6 @@ class ModalitiesUserDict(AbstractLookupDict):
         super().__setitem__(name, value)
 
 
-class ConfusionMatrices(AbstractDictDescriptor):
-    """Stores a dictionary of confusion matrices for diagnostic modalities."""
-    def _get_callback(self, instance: models.Unilateral):
-        modalities_dict = ModalitiesUserDict(
-            is_trinary=instance.graph.is_trinary,
-            trigger_callbacks=[instance.delete_observation_matrix],
-        )
-        setattr(instance, self.private_name, modalities_dict)
+    @trigger
+    def __delitem__(self, key: str) -> None:
+        return super().__delitem__(key)

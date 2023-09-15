@@ -3,14 +3,20 @@ from __future__ import annotations
 import itertools
 import warnings
 from itertools import product
-from typing import Generator
+from typing import Any, Callable, Generator, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
 
-from lymph import graph
-from lymph.descriptors import diagnose_times, matrix, modalities, params
-from lymph.helper import DelegatorMixin, PatternType, early_late_mapping
+from lymph import diagnose_times, graph, matrix, modalities
+from lymph.helper import (
+    DelegatorMixin,
+    DiagnoseType,
+    PatternType,
+    early_late_mapping,
+    not_updateable_cached_property,
+    smart_updating_dict_cached_property,
+)
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -24,12 +30,21 @@ class Unilateral(DelegatorMixin):
     of this class allow to calculate the probability of a certain hidden pattern of
     involvement, given an individual diagnosis of a patient.
     """
+    is_binary: bool
+    is_trinary: bool
+    get_state: Callable
+    set_state: Callable
+    state_list: list[int]
+    lnls: dict[str, graph.LymphNodeLevel]
+
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
+        is_micro_mod_shared: bool = False,
+        is_growth_shared: bool = False,
         **_kwargs,
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
@@ -68,6 +83,11 @@ class Unilateral(DelegatorMixin):
         diagnosis. In the HMM case, the probability disitrubtion over all hidden states
         is evolved from :math:`t=0` to ``max_time``. In the BN case, this parameter has
         no effect.
+
+        The ``is_micro_mod_shared`` and ``is_growth_shared`` parameters determine
+        whether the microscopic involvement and growth parameters are shared among all
+        LNLs. If they are set to ``True``, the parameters are set globally for all LNLs.
+        If they are set to ``False``, the parameters are set individually for each LNL.
         """
         super().__init__()
 
@@ -82,9 +102,15 @@ class Unilateral(DelegatorMixin):
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
         self.max_time = max_time
+        self.is_micro_mod_shared = is_micro_mod_shared
+        self.is_growth_shared = is_growth_shared
 
         self.init_delegation(
-            graph=["is_binary", "is_trinary", "get_state", "set_state", "lnls"],
+            graph=[
+                "is_binary", "is_trinary",
+                "get_state", "set_state", "state_list",
+                "lnls",
+            ],
         )
 
 
@@ -102,113 +128,149 @@ class Unilateral(DelegatorMixin):
 
     def __str__(self) -> str:
         """Print info about the instance."""
-        return f"Unilateral with {len(self.graph._tumors)} tumors and {len(self.graph._lnls)} LNLs"
+        return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
 
 
     def print_info(self):
         """Print detailed information about the instance."""
-        num_tumors = len(self.graph._tumors)
-        num_lnls   = len(self.graph._lnls)
+        num_tumors = len(self.graph.tumors)
+        num_lnls   = len(self.graph.lnls)
         string = (
             f"Unilateral lymphatic system with {num_tumors} tumor(s) "
             f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph._tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph._lnl_edges])
-            + f"\n the growth probability is: {self.graph._growth_edges[0].spread_prob}" + f" the micro mod is {self.graph._lnl_edges[0].micro_mod}"
+            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.lnl_edges])
+            + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
         )
         print(string)
 
 
-    diag_time_dists = diagnose_times.Distributions()
-    """Mapping of T-categories to the corresponding distributions over diagnose times.
+    def get_params(
+        self,
+        param: str | None = None,
+        as_dict: bool = False,
+        with_edges: bool = True,
+        with_dists: bool = True,
+    ) -> float | Iterable[float] | dict[str, float]:
+        """Get the parameters of the model.
 
-    Every distribution is represented by a
-    :py:class:`~diagnose_times.Distributions` object, which holds the
-    parametrized and frozen versions of the probability mass function over the diagnose
-    times. They are used to marginalize over the (generally unknown) diagnose times
-    when computing e.g. the likelihood.
-    """
+        If ``as_dict`` is ``True``, return a dictionary with the parameters as values.
+        Otherwise, return the value of the parameter ``param``.
 
-
-    def get_params(self, as_dict: bool = False) -> dict[str, float] | list[float]:
-        """Return a dictionary of all parameters and their currently set values.
-
-        If ``as_dict`` is ``True``, the result is a dictionary with the names of the
-        edge parameters as keys and their values as values. Otherwise, the result is a
-        list of the values of the edge parameters in the order they appear in the
-        graph.
+        Using the keyword arguments ``with_edges`` and ``with_dists``, one can control
+        whether the parameters of the edges and the distributions over diagnose times
+        should be included in the returned parameters. By default, both are included.
         """
-        result = {}
-        for name, param in self.graph.edge_params.items():
-            result[name] = param.get_param()
+        iterator = []
+        params = {}
 
-        for name, dist in self.diag_time_dists.items():
-            for param_name, value in dist.get_params().items():
-                result[f"{name}_{param_name}"] = value
+        if with_edges:
+            iterator = itertools.chain(iterator, self.graph.edges.items())
 
-        return result if as_dict else list(result.values())
+        if with_dists:
+            iterator = itertools.chain(iterator, self.diag_time_dists.items())
+
+        for edge_name_or_tstage, edge_or_dist in iterator:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                edge_or_dist_params = edge_or_dist.get_params(as_dict=True)
+            for name, value in edge_or_dist_params.items():
+                params[f"{edge_name_or_tstage}_{name}"] = value
+
+        if param is not None:
+            return params[param]
+
+        return params if as_dict else params.values()
 
 
-    def _assign_via_args(self, new_params_args):
+    def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
         """Assign parameters to egdes and to distributions via positional arguments."""
-        objects = itertools.chain(
-            (param for param in self.graph.edge_params.values()),
-            (dist for dist in self.diag_time_dists.values()),
-        )
-        new_params_args = iter(new_params_args)
-        while True:
-            try:
-                obj = next(objects)
-                if isinstance(obj, params.Param):
-                    obj.set_param(next(new_params_args))
-                elif isinstance(obj, diagnose_times.Distribution):
-                    kwargs = obj.get_params()
-                    obj.set_params(**{key: next(new_params_args) for key in kwargs})
-            except StopIteration:
-                break
+        for edge_or_dist in itertools.chain(
+            self.graph.edges.values(),
+            self.diag_time_dists.values(),
+        ):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                params = edge_or_dist.get_params(as_dict=True)
+
+            new_params = {}
+            for name in params:
+                try:
+                    new_params[name] = next(new_params_args)
+                except StopIteration:
+                    return new_params_args
+                finally:
+                    edge_or_dist.set_params(**new_params)
+
+        return new_params_args
 
 
-    def _assign_via_kwargs(self, new_params_kwargs):
+    def _assign_via_kwargs(
+        self,
+        new_params_kwargs: dict[str, float],
+    ) -> dict[str, float]:
         """Assign parameters to egdes and to distributions via keyword arguments."""
+        remaining_kwargs = {}
+
+        global_growth_param = new_params_kwargs.pop("growth", None)
+        if self.is_growth_shared and global_growth_param is not None:
+            for growth_edge in self.graph.growth_edges.values():
+                growth_edge.set_spread_prob(global_growth_param)
+
+        global_micro_mod = new_params_kwargs.pop("micro", None)
+        if self.is_micro_mod_shared and global_micro_mod is not None:
+            for lnl_edge in self.graph.lnl_edges.values():
+                lnl_edge.set_micro_mod(global_micro_mod)
+
+        edges_and_dists = self.graph.edges.copy()
+        edges_and_dists.update(self.diag_time_dists)
         for key, value in new_params_kwargs.items():
-            t_stage, param_name = key.split("_", 1)
-            if t_stage in self.diag_time_dists:
-                self.diag_time_dists[t_stage].set_params(**{param_name: value})
+            edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
+            if edge_name_or_tstage in edges_and_dists:
+                edge_or_dist = edges_and_dists[edge_name_or_tstage]
+                edge_or_dist.set_params(**{type_: value})
 
-            elif key == "growth":
-                for edge in self.graph._growth_edges:
-                    edge.spread_prob = value
-
-            elif key == "micro_mod":
-                for edge in self.graph._lnl_edges:
-                    edge.micro_mod = value
-
-            else:
-                self.graph.edge_params[key].set_param(value)
+        return remaining_kwargs
 
 
-    def assign_params(self, *new_params_args, **new_params_kwargs):
+    def assign_params(
+        self,
+        *new_params_args,
+        **new_params_kwargs,
+    ) -> tuple[Iterator[float], dict[str, float]]:
         """Assign new parameters to the model.
 
         The parameters can either be provided with positional arguments or as
         keyword arguments. The positional arguments must be in the following order:
 
         1. All spread probs from tumor to the LNLs
-        2. The spread probs from LNL to LNL. If the model is trinary, the microscopic
-           parameter is set right after the corresponding LNL's spread prob.
-        3. The growth parameters for each trinary LNL. For a binary model,
-           this is skipped.
-        4. The parameters for the marginalizing distributions over diagnose times. Note
-           that a distribution may take more than one parameter. So, if there are e.g.
-           two T-stages with distributions over diagnose times, this step requires four
-           arguments.
+        2. The parameters of arcs from LNL to LNL. For each arc, the parameters are set
+           in the following order:
 
-        The order of the keyword arguments obviously does not matter. If one wants to
-        set the microscopic or growth parameters globally for all LNLs, the keyword
-        arguments ``micro_mod`` and ``growth`` can be used for that.
+            1. The spread probability (or growth probability, if it's a growth edge)
+            2. The microscopic involvement probability, if the model is trinary
+
+        3. The parameters for the marginalizing distributions over diagnose times. Note
+           that a distribution may take more than one parameter. So, if there are e.g.
+           two T-stages with distributions over diagnose times that take two parameters
+           each, this step requires and consumes four arguments.
+
+        If the arguments are not used up, the remaining ones are given back as the first
+        element of the returned tuple.
+
+        When providing keyword arguments, the order of the keyword arguments obviously
+        does not matter. If one wants to set the microscopic or growth parameters
+        globally for all LNLs, the keyword arguments ``micro`` and ``growth`` can
+        be used for that.
+
+        As with the positional arguments, the dictionary of unused keyword arguments is
+        returned as the second element of the tuple.
 
         Note:
             Providing positional arguments does not allow using the global
-            parameters ``micro_mod`` and ``growth``.
+            parameters ``micro`` and ``growth``.
+
+            However, when assigning them via keyword arguments, the global parameters
+            are set first, while still allowing to override them for individual edges.
 
         Since the distributions over diagnose times may take more than one parameter,
         they can be provided as keyword arguments by appending their name to the
@@ -220,12 +282,45 @@ class Unilateral(DelegatorMixin):
             over diagnose times, it is not possible to just use the name of the
             T-stage, even when the distribution only takes one parameter.
 
-        The keyword arguments override the positional arguments.
+        The keyword arguments override the positional arguments, when both are provided.
+
+        Example:
+
+        >>> graph = {
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... }
+        >>> model = Unilateral.trinary(
+        ...     graph_dict=graph,
+        ...     is_micro_mod_shared=True,
+        ...     is_growth_shared=True,
+        ... )
+        >>> _ = model.assign_params(
+        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4
+        ... )
+        >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
+        {'T_to_II_spread': 0.7,
+         'T_to_III_spread': 0.5,
+         'II_growth': 0.3,
+         'II_to_III_spread': 0.2,
+         'II_to_III_micro': 0.1,
+         'III_growth': 0.4}
+        >>> _ = model.assign_params(growth=0.123)
+        >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
+        {'T_to_II_spread': 0.7,
+         'T_to_III_spread': 0.5,
+         'II_growth': 0.123,
+         'II_to_III_spread': 0.2,
+         'II_to_III_micro': 0.1,
+         'III_growth': 0.123}
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
-            self._assign_via_args(new_params_args)
-            self._assign_via_kwargs(new_params_kwargs)
+            remaining_args = self._assign_via_args(iter(new_params_args))
+            remainig_kwargs = self._assign_via_kwargs(new_params_kwargs)
+
+        return remaining_args, remainig_kwargs
 
 
     def comp_transition_prob(
@@ -240,7 +335,7 @@ class Unilateral(DelegatorMixin):
         the model using the method :py:meth:`~Unilateral.assign_states`.
         """
         trans_prob = 1
-        for i, lnl in enumerate(self.graph._lnls):
+        for i, lnl in enumerate(self.graph.lnls):
             trans_prob *= lnl.comp_trans_prob(new_state = newstate[i])
             if trans_prob == 0:
                 break
@@ -249,23 +344,6 @@ class Unilateral(DelegatorMixin):
             self.graph.set_state(newstate)
 
         return trans_prob
-
-
-    modalities = modalities.ConfusionMatrices()
-    """Dictionary storing diagnostic modalities and their specificity/sensitivity.
-
-    The keys are the names of the modalities, e.g. "CT" or "pathology", the values are
-    instances of the :py:class:`~lymph.descriptors.modalities.Modality` class. When
-    setting the modality, the value can be a
-    :py:class:`~lymph.descriptors.modalities.Modality` (or subclass) instance, a
-    confusion matrix (``np.ndarray``) or a list/tuple with specificity and sensitivity.
-    One can then access the confusion matrix of a modality.
-
-    See Also:
-        :py:class:`lymph.descriptors.modalities`
-            The module managing this descriptor and the dictionary of modalities
-            behind it.
-    """
 
 
     def comp_diagnose_prob(
@@ -286,7 +364,7 @@ class Unilateral(DelegatorMixin):
         for name, modality in self.modalities.items():
             if name in diagnoses:
                 mod_diagnose = diagnoses[name]
-                for lnl in self.graph._lnls:
+                for lnl in self.graph.lnls:
                     try:
                         lnl_diagnose = mod_diagnose[lnl.name]
                     except KeyError:
@@ -299,53 +377,12 @@ class Unilateral(DelegatorMixin):
         return prob
 
 
-    def _gen_state_list(self):
-        """Generates the list of (hidden) states."""
-        allowed_states_list = []
-        for lnl in self.graph._lnls:
-            allowed_states_list.append(lnl.allowed_states)
-
-        self._state_list = np.array(list(product(*allowed_states_list)))
-
-    @property
-    def state_list(self):
-        """Return list of all possible hidden states.
-
-        E.g., for three binary LNLs I, II, III, the first state would be where all LNLs
-        are in state 0. The second state would be where LNL III is in state 1 and all
-        others are in state 0, etc. The third represents the case where LNL II is in
-        state 1 and all others are in state 0, etc. Essentially, it looks like binary
-        counting:
-
-        >>> model = Unilateral(graph={
-        ...     ("tumor", "T"): ["I", "II" , "III"],
-        ...     ("lnl", "I"): [],
-        ...     ("lnl", "II"): ["I", "III"],
-        ...     ("lnl", "III"): [],
-        ... })
-        >>> model.state_list
-        array([[0, 0, 0],
-               [0, 0, 1],
-               [0, 1, 0],
-               [0, 1, 1],
-               [1, 0, 0],
-               [1, 0, 1],
-               [1, 1, 0],
-               [1, 1, 1]])
-        """
-        try:
-            return self._state_list
-        except AttributeError:
-            self._gen_state_list()
-            return self._state_list
-
-
     def _gen_obs_list(self):
         """Generates the list of possible observations."""
         possible_obs_list = []
         for modality in self.modalities.values():
             possible_obs = np.arange(modality.confusion_matrix.shape[1])
-            for _ in self.graph._lnls:
+            for _ in self.graph.lnls:
                 possible_obs_list.append(possible_obs.copy())
 
         self._obs_list = np.array(list(product(*possible_obs_list)))
@@ -358,7 +395,7 @@ class Unilateral(DelegatorMixin):
         additionally by modality. E.g., for two LNLs II, III and two modalities CT,
         pathology, the list would look like this:
 
-        >>> model = Unilateral(graph={
+        >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["II" , "III"],
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
@@ -387,74 +424,126 @@ class Unilateral(DelegatorMixin):
             self._gen_obs_list()
             return self._obs_list
 
+    @obs_list.deleter
+    def obs_list(self):
+        """Delete the observation list. Necessary to pass as callback."""
+        if hasattr(self, "_obs_list"):
+            del self._obs_list
 
-    transition_matrix = matrix.Transition()
-    """The matrix encoding the probabilities to transition from one state to another.
 
-    This is the crucial object for modelling the evolution of the probabilistic
-    system in the context of the hidden Markov model. It has the shape
-    :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
-    The :math:`i`-th row and :math:`j`-th column encodes the probability to transition
-    from the :math:`i`-th state to the :math:`j`-th state. The states are ordered as
-    in the `state_list`.
+    @not_updateable_cached_property
+    def transition_matrix(self) -> np.ndarray:
+        """Matrix encoding the probabilities to transition from one state to another.
 
-    This matrix is recomputed every time the parameters along the edges of the graph
-    are changed.
+        This is the crucial object for modelling the evolution of the probabilistic
+        system in the context of the hidden Markov model. It has the shape
+        :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
+        The :math:`i`-th row and :math:`j`-th column encodes the probability to
+        transition from the :math:`i`-th state to the :math:`j`-th state. The states
+        are ordered as in the :py:attr:`lymph.graph.state_list`.
 
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.Transition`
-            The class that implements the descriptor for the transition matrix.
+        This matrix is deleted every time the parameters along the edges of the graph
+        are changed. It is lazily computed when it is next accessed.
 
-    Example:
+        See Also:
+            :py:func:`~lymph.descriptors.matrix.generate_transition`
+                The function actually computing the transition matrix.
 
-    >>> model = Unilateral(graph={
-    ...     ("tumor", "T"): ["II", "III"],
-    ...     ("lnl", "II"): ["III"],
-    ...     ("lnl", "III"): [],
-    ... })
-    >>> model.assign_params(0.7, 0.3, 0.2)
-    >>> model.transition_matrix
-    array([[0.21, 0.09, 0.49, 0.21],
-           [0.  , 0.3 , 0.  , 0.7 ],
-           [0.  , 0.  , 0.56, 0.44],
-           [0.  , 0.  , 0.  , 1.  ]])
-    """
+        Example:
+
+        >>> model = Unilateral(graph_dict={
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.assign_params(0.7, 0.3, 0.2)
+        >>> model.transition_matrix
+        array([[0.21, 0.09, 0.49, 0.21],
+            [0.  , 0.3 , 0.  , 0.7 ],
+            [0.  , 0.  , 0.56, 0.44],
+            [0.  , 0.  , 0.  , 1.  ]])
+        """
+        return matrix.generate_transition(self)
+
     def delete_transition_matrix(self):
         """Delete the transition matrix. Necessary to pass as callback."""
         del self.transition_matrix
 
-    observation_matrix = matrix.Observation()
-    """The matrix encoding the probabilities to observe a certain diagnosis.
 
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.Observation`
-            The class that implements the descriptor for the observation matrix.
-    """
-    def delete_observation_matrix(self):
+    @smart_updating_dict_cached_property
+    def modalities(self) -> modalities.ModalitiesUserDict:
+        """Dictionary of diagnostic modalities and their confusion matrices.
+
+        This must be set by the user. For example, if one wanted to add the modality
+        "CT" with a sensitivity of 80% and a specificity of 90%, one would do:
+
+        >>> model = Unilateral(graph_dict={
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.modalities["CT"] = (0.8, 0.9)
+
+        See Also:
+            :py:class:`~lymph.descriptors.modalities.ModalitiesUserDict`
+            :py:class:`~lymph.descriptors.modalities.Modality`
+        """
+        return modalities.ModalitiesUserDict(
+            is_trinary=self.is_trinary,
+            trigger_callbacks=[self.delete_obs_list_and_matrix],
+        )
+
+
+    @not_updateable_cached_property
+    def observation_matrix(self) -> np.ndarray:
+        """The matrix encoding the probabilities to observe a certain diagnosis.
+
+        Every element in this matrix holds a probability to observe a certain diagnosis
+        (or combination of diagnoses, when using multiple diagnostic modalities) given
+        the current state of the system. It has the shape
+        :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes in
+        the graph and :math:`M` is the number of diagnostic modalities.
+
+        See Also:
+            :py:func:`~lymph.descriptors.matrix.generate_observation`
+                The function actually computing the observation matrix.
+        """
+        return matrix.generate_observation(self)
+
+    def delete_obs_list_and_matrix(self):
         """Delete the observation matrix. Necessary to pass as callback."""
         del self.observation_matrix
+        del self.obs_list
 
-    data_matrices = matrix.DataEncodings()
-    """Dictionary with T-stages as keys and corresponding data matrices as values.
 
-    A data matrix is a binary encding of which of the possible observational states
-    agrees with the seen diagnosis of a patient. It accounts for missing involvement
-    information on some LNLs and/or diagnostic modalities and thereby allows to
-    marginalize over them.
+    @smart_updating_dict_cached_property
+    def data_matrices(self) -> matrix.DataEncodingUserDict:
+        """Holds the data encoding in matrix form for every T-stage.
 
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.DataEncodings`
-    """
+        See Also:
+            :py:class:`~lymph.descriptors.matrix.DataEncodingUserDict`
+        """
+        return matrix.DataEncodingUserDict(model=self)
 
-    diagnose_matrices = matrix.Diagnoses()
-    """Dictionary with T-stages as keys and corresponding diagnose matrices as values.
 
-    Diagnose matrices are simply the dot product of the :py:attr:`~observation_matrix`
-    and the :py:attr:`~data_matrices` for a given T-stage.
+    @smart_updating_dict_cached_property
+    def diagnose_matrices(self) -> matrix.DiagnoseUserDict:
+        """Holds the probability of a patient's diagnosis, given any hidden state.
 
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.Diagnoses`
-    """
+        Essentially, this is just the data encoding matrix of a certain T-stage
+        multiplied with the observation matrix. It is thus also a dictionary with
+        keys of T-stages and values of matrices.
+
+        See Also:
+            :py:class:`~lymph.descriptors.matrix.DiagnoseUserDict`
+        """
+        return matrix.DiagnoseUserDict(model=self)
+
+
+    @smart_updating_dict_cached_property
+    def diag_time_dists(self) -> diagnose_times.DistributionsUserDict:
+        """Dictionary of distributions over diagnose times for each T-stage."""
+        return diagnose_times.DistributionsUserDict(max_time=self.max_time)
 
 
     @property
@@ -519,11 +608,15 @@ class Unilateral(DelegatorMixin):
             if side not in patient_data[modality_name]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
-            for lnl in self.graph._lnls:
-                if lnl.name not in patient_data[modality_name, side]:
-                    raise ValueError(f"Involvement data for LNL {lnl} not found.")
-                column = patient_data[modality_name, side, lnl.name]
-                patient_data["_model", modality_name, lnl.name] = column
+            for name in self.graph.lnls:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+                    modality_side_data = patient_data[modality_name, side]
+
+                if name not in modality_side_data:
+                    raise ValueError(f"Involvement data for LNL {name} not found.")
+                column = patient_data[modality_name, side, name]
+                patient_data["_model", modality_name, name] = column
 
         patient_data["_model", "#", "t_stage"] = patient_data.apply(
             lambda row: mapping(row["tumor", "1", "t_stage"]), axis=1
@@ -534,10 +627,10 @@ class Unilateral(DelegatorMixin):
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
         # Changes to the patient data require a recomputation of the data and
-        # diagnose matrices. Deleting them will trigger this when they are next
+        # diagnose matrices. Clearing them will trigger this when they are next
         # accessed.
-        del self.data_matrices
-        del self.diagnose_matrices
+        self.data_matrices.clear()
+        self.diagnose_matrices.clear()
         self._patient_data = patient_data
 
 
@@ -588,7 +681,7 @@ class Unilateral(DelegatorMixin):
         state_dists = np.zeros(shape=(self.max_time + 1, len(self.state_list)))
         state_dists[0, 0] = 1.
 
-        for t in range(1, self.max_time):
+        for t in range(1, self.max_time + 1):
             state_dists[t] = self.evolve_dist(state_dists[t-1], num_steps=1)
 
         return state_dists
@@ -616,14 +709,14 @@ class Unilateral(DelegatorMixin):
             state_dist = np.ones(shape=(len(self.state_list),), dtype=float)
 
             for i, state in enumerate(self.state_list):
-                self.graph.set_state(state)
-                for node in self.graph._lnls:
+                self.set_state(*state)
+                for node in self.graph.lnls.values():
                     state_dist[i] *= node.comp_bayes_net_prob()
 
             return state_dist
 
 
-    def comp_obs_dist(self, t_stage: str) -> np.ndarray:
+    def comp_obs_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
         """Compute the distribution over all possible observations for a given T-stage.
 
         Returns an array of probabilities for each possible complete observation. This
@@ -635,39 +728,37 @@ class Unilateral(DelegatorMixin):
         :py:attr:`~diagnose_matrices` from the :py:attr:`~observation_matrix` and
         the :py:attr:`~data_matrices` and use these to compute the likelihood.
         """
-        state_dist = self.comp_state_dist(t_stage)
+        state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         return state_dist @ self.observation_matrix
 
 
-    def _likelihood(
-        self,
-        mode: str = "HMM",
-        log: bool = True,
-    ) -> float:
-        """Compute the (log-)likelihood of stored data, using the stored params."""
-        if mode == "HMM":    # hidden Markov model
-            evolved_model = self.comp_dist_evolution()
-            llh = 0. if log else 1.
+    def _bn_likelihood(self, log: bool = True) -> float:
+        """Compute the BN likelihood, using the stored params."""
+        state_dist = self.comp_state_dist(mode="BN")
+        patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
 
-            for t_stage in self.t_stages:
-                patient_likelihoods = (
-                    self.diag_time_dists[t_stage].distribution
-                    @ evolved_model
-                    @ self.diagnose_matrices[t_stage]
-                )
-                if log:
-                    llh += np.sum(np.log(patient_likelihoods))
-                else:
-                    llh *= np.prod(patient_likelihoods)
+        if log:
+            llh = np.sum(np.log(patient_likelihoods))
+        else:
+            llh = np.prod(patient_likelihoods)
+        return llh
 
-        elif mode == "BN":   # likelihood for the Bayesian network
-            state_dist = self.comp_state_dist(mode=mode)
-            patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
 
+    def _hmm_likelihood(self, log: bool = True) -> float:
+        """Compute the HMM likelihood, using the stored params."""
+        evolved_model = self.comp_dist_evolution()
+        llh = 0. if log else 1.
+
+        for t_stage in self.t_stages:
+            patient_likelihoods = (
+                self.diag_time_dists[t_stage].distribution
+                @ evolved_model
+                @ self.diagnose_matrices[t_stage]
+            )
             if log:
-                llh = np.sum(np.log(patient_likelihoods))
+                llh += np.sum(np.log(patient_likelihoods))
             else:
-                llh = np.prod(patient_likelihoods)
+                llh *= np.prod(patient_likelihoods)
 
         return llh
 
@@ -675,19 +766,22 @@ class Unilateral(DelegatorMixin):
     def likelihood(
         self,
         data: pd.DataFrame | None = None,
-        given_params: list[float] | np.ndarray | dict[str, float] | None = None,
-        load_data_kwargs: dict | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
+        load_data_kwargs: dict[str, Any] | None = None,
         log: bool = True,
         mode: str = "HMM"
     ) -> float:
         """Compute the (log-)likelihood of the ``data`` given the model (and params).
 
-        If neither ``data`` nor the ``given_params`` are provided, it tries to compute
-        the likelihood for the stored :py:attr:`~patient_data`,
-        :py:attr:`~edge_params`, and the stored :py:attr:`~diag_time_dists`.
+        If the ``data`` is not provided, the previously loaded data is used. One may
+        specify additional ``load_data_kwargs`` to pass to the
+        :py:meth:`~load_patient_data` method when loading the data.
 
-        One may specify additional ``load_data_kwargs`` to pass to the method
-        :py:meth:`~load_patient_data` when loading the data.
+        The parameters of the model can be set via ``given_param_args`` and
+        ``given_param_kwargs``. Both arguments are used to call the
+        :py:meth:`~assign_params` method. If the parameters are not provided, the
+        previously assigned parameters are used.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
         determines whether the likelihood is computed for the hidden Markov model
@@ -698,26 +792,46 @@ class Unilateral(DelegatorMixin):
                 load_data_kwargs = {}
             self.load_patient_data(data, **load_data_kwargs)
 
-        if given_params is None:
-            return self._likelihood(mode, log)
+        if given_param_args is None:
+            given_param_args = []
+
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
 
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if isinstance(given_params, dict):
-                self.assign_params(**given_params)
-            else:
-                self.assign_params(*given_params)
+            self.assign_params(*given_param_args, **given_param_kwargs)
         except ValueError:
             return -np.inf if log else 0.
 
-        return self._likelihood(mode, log)
+        return self._hmm_likelihood(log) if mode == "HMM" else self._bn_likelihood(log)
+
+
+    def comp_diagnose_encoding(
+        self,
+        given_diagnoses: DiagnoseType | None = None,
+    ) -> np.ndarray:
+        """Compute one-hot vector encoding of a given diagnosis."""
+        diagnose_encoding = np.array([True], dtype=bool)
+
+        for modality in self.modalities.keys():
+            diagnose_encoding = np.kron(
+                diagnose_encoding,
+                matrix.compute_encoding(
+                    lnls=[lnl.name for lnl in self.graph.lnls],
+                    pattern=given_diagnoses.get(modality, {}),
+                ),
+            )
+
+        return diagnose_encoding
 
 
     def comp_posterior_state_dist(
         self,
-        given_params: dict | None = None,
-        given_diagnoses: PatternType | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
+        given_diagnoses: DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
     ) -> np.ndarray:
@@ -737,22 +851,27 @@ class Unilateral(DelegatorMixin):
         computed. The ``mode`` parameter determines whether the posterior is computed
         for the hidden Markov model (``"HMM"``) or the Bayesian network (``"BN"``).
         In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
+
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
         """
-        if given_params is not None:
-            self.assign_params(**given_params)
+        if given_param_args is None:
+            given_param_args = []
+
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
+
+        # in contrast to when computing the likelihood, we do want to raise an error
+        # here if the parameters are invalid, since we want to know if the user
+        # provided invalid parameters. In the likelihood, we rather return a zero
+        # likelihood to tell the inference algorithm that the parameters are invalid.
+        self.assign_params(*given_param_args, **given_param_kwargs)
 
         if given_diagnoses is None:
             given_diagnoses = {}
 
-        diagnose_encoding = np.array([True], dtype=bool)
-        for modality in self.modalities.keys():
-            diagnose_encoding = np.kron(
-                diagnose_encoding,
-                matrix.compute_encoding(
-                    lnls=[lnl.name for lnl in self.graph._lnls],
-                    pattern=given_diagnoses.get(modality, {}),
-                ),
-            )
+        diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
         diagnose_given_state = diagnose_encoding @ self.observation_matrix
 
@@ -770,7 +889,8 @@ class Unilateral(DelegatorMixin):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: dict | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
@@ -779,18 +899,22 @@ class Unilateral(DelegatorMixin):
         """Compute risk of a certain involvement, given a patient's diagnosis.
 
         If an ``involvement`` pattern of interest is provided, this method computes
-        the risk of seeing just that pattern for the set of ``given_params`` and a
+        the risk of seeing just that pattern for the set of given parameters and a
         dictionary of diagnoses for each modality.
 
         Using the ``mode`` parameter, the risk can be computed either for the hidden
         Markov model (``"HMM"``) or the Bayesian network (``"BN"``). In case of the
         Bayesian network mode, the ``t_stage`` parameter is ignored.
 
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
+
         See Also:
             :py:meth:`comp_posterior_state_dist`
         """
         posterior_state_dist = self.comp_posterior_state_dist(
-            given_params, given_diagnoses, t_stage, mode,
+            given_param_args, given_param_kwargs, given_diagnoses, t_stage, mode,
         )
 
         if involvement is None:
@@ -800,7 +924,7 @@ class Unilateral(DelegatorMixin):
         # resulting vector of hidden states to match that involvement of
         # interest
         marginalize_over_states = matrix.compute_encoding(
-            lnls=[lnl.name for lnl in self.graph._lnls],
+            lnls=[lnl.name for lnl in self.graph.lnls],
             pattern=involvement,
         )
         return marginalize_over_states @ posterior_state_dist
@@ -853,7 +977,7 @@ class Unilateral(DelegatorMixin):
 
         # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.graph._lnls]
+        lnl_names = [lnl.name for lnl in self.graph.lnls]
         multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
         # create DataFrame

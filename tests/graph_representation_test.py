@@ -48,8 +48,8 @@ class ConstructBinaryGraphRepresentationTestCase(unittest.TestCase):
         self.assertEqual(len(self.graph_repr.nodes), len(self.graph_dict))
         node_names = {tpl[1] for tpl in self.graph_dict.keys()}
 
-        for node in self.graph_repr.nodes:
-            self.assertIn(node.name, node_names)
+        for name, node in self.graph_repr.nodes.items():
+            self.assertIn(name, node_names)
             if isinstance(node, graph.Tumor):
                 self.assertFalse(hasattr(node, "inc"))
                 self.assertTrue(hasattr(node, "out"))
@@ -63,17 +63,6 @@ class ConstructBinaryGraphRepresentationTestCase(unittest.TestCase):
             num_edges += len(set(children))
         self.assertEqual(len(self.graph_repr.edges), num_edges)
 
-        for edge in self.graph_repr.edges:
+        for edge in self.graph_repr.edges.values():
             self.assertTrue(isinstance(edge.parent, graph.AbstractNode))
             self.assertTrue(isinstance(edge.child, graph.AbstractNode))
-
-    def test_get_and_set_params(self) -> None:
-        """Test the `edge_params` descriptor."""
-        for edge in self.graph_repr.edges:
-            self.assertIn(f"spread_{edge.name}", self.graph_repr.edge_params)
-            value = self.rng.uniform()
-            self.graph_repr.edge_params[f"spread_{edge.name}"].set_param(value)
-            self.assertEqual(
-                self.graph_repr.edge_params[f"spread_{edge.name}"].get_param(),
-                value,
-            )

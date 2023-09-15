@@ -1,13 +1,17 @@
 """Module containing supporting classes and functions."""
 import warnings
-from functools import lru_cache, wraps
-from typing import List, Optional
+from collections import UserDict
+from functools import cached_property, lru_cache, wraps
+from typing import Any, Callable
 
 import numpy as np
 from pandas._libs.missing import NAType
 
 PatternType = dict[str, bool | NAType | None]
 """Type alias for an involvement pattern."""
+
+DiagnoseType = dict[str, PatternType]
+"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
 
 
 class DelegatorMixin:
@@ -31,14 +35,18 @@ class DelegatorMixin:
         >>> class Delegate:
         ...     def __init__(self):
         ...         self.fancy_attr = "foo"
+        ...     @property
+        ...     def property_attr(self):
+        ...         return "bar"
         >>> class A(DelegatorMixin):
         ...     def __init__(self):
+        ...         super().__init__()
         ...         self.delegated = "hello world"
         ...         self.also_delegated = Delegate()
         ...         self.normal_attr = 42
         ...         self.init_delegation(
         ...             delegated=["count"],
-        ...             also_delegated=["fancy_attr"],
+        ...             also_delegated=["fancy_attr", "property_attr"],
         ...         )
         >>> a = A()
         >>> a.delegated.count("l")
@@ -49,6 +57,10 @@ class DelegatorMixin:
         'foo'
         >>> a.fancy_attr
         'foo'
+        >>> a.also_delegated.property_attr
+        'bar'
+        >>> a.property_attr
+        'bar'
         >>> a.normal_attr
         42
         >>> a.non_existent
@@ -69,14 +81,22 @@ class DelegatorMixin:
                     warnings.warn(
                         f"Attribute '{sub_attr}' already delegated. Overwriting."
                     )
-                self._delegated[sub_attr] = getattr(attr_obj, sub_attr)
+                self._delegated[sub_attr] = (attr_obj, sub_attr)
 
     def __getattr__(self, name):
         if name in self._delegated:
-            return self._delegated[name]
+            attr = getattr(*self._delegated[name])
 
-        cls_name = self.__class__.__name__
-        raise AttributeError(f"'{cls_name}' object has no attribute '{name}'")
+            if not callable(attr):
+                return attr
+
+            @wraps(attr)
+            def wrapper(*args, **kwargs):
+                return attr(*args, **kwargs)
+
+            return wrapper
+
+        return super().__getattribute__(name)
 
 
 def check_unique_names(graph: dict):
@@ -96,7 +116,7 @@ def check_unique_names(graph: dict):
         raise ValueError("Node names are not unique")
 
 
-def check_spsn(spsn: List[float]):
+def check_spsn(spsn: list[float]):
     """Private method that checks whether specificity and sensitvity
     are valid.
 
@@ -120,7 +140,7 @@ def change_base(
     number: int,
     base: int,
     reverse: bool = False,
-    length: Optional[int] = None
+    length: int | None = None
 ) -> str:
     """Convert an integer into another base.
 
@@ -295,8 +315,8 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
            [2, 2, 2, 2, 2, 2, 2, 2, 2]])
     """
     indices = np.arange(num_states).reshape(num_states, -1)
-    row = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
-    return np.repeat(row, num_states ** (num_lnls - lnl_idx - 1), axis=0)
+    block = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
+    return np.repeat(block, num_states ** (num_lnls - lnl_idx - 1), axis=0)
 
 
 def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -341,3 +361,77 @@ def trigger(func: callable) -> callable:
             callback()
         return result
     return wrapper
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+
+
+class AbstractLookupDict(UserDict):
+    """Abstract ``UserDict`` subclass that can lazily and dynamically return values.
+
+    This class is meant to be subclassed. If one wants to use the functionality
+    of lazy and dynamic value retrieval, the subclass must implement a ``__missing__``
+    method that returns the value for the given key and raises a ``KeyError`` if
+    the value for a key cannot be computed.
+    """
+    trigger_callbacks: list[Callable]
+
+    def __init__(self, dict=None, /, trigger_callbacks=None, **kwargs):
+        """Use keyword arguments to set attributes of the instance.
+
+        In contrast to the default ``UserDict`` constructor, this one instantiates
+        any keyword arguments as attributes of the instance and does not put them
+        into the dictionary itself.
+        """
+        super().__init__(dict)
+
+        if trigger_callbacks is None:
+            trigger_callbacks = []
+
+        self.trigger_callbacks = trigger_callbacks
+
+        for attr_name, attr_value in kwargs.items():
+            if hasattr(self, attr_name):
+                raise AttributeError("Cannot set attribute that already exists.")
+            setattr(self, attr_name, attr_value)
+
+
+    def __contains__(self, key: object) -> bool:
+        """This exists to trigger ``__missing__`` when checking ``is in``."""
+        if super().__contains__(key):
+            return True
+
+        if hasattr(self.__class__, "__missing__"):
+            try:
+                self.__class__.__missing__(self, key)
+                return True
+            except KeyError:
+                return False
+
+        return False
+
+
+class not_updateable_cached_property(cached_property):
+    """Not updateable, but deletable (for recomputiation) cached property."""
+    def __set__(self, instance: object, value: Any) -> None:
+        raise AttributeError("Cannot set attribute.")
+
+    def __delete__(self, instance: object) -> None:
+        try:
+            del instance.__dict__[self.attrname]
+        except KeyError:
+            pass
+
+
+class smart_updating_dict_cached_property(cached_property):
+    """Allows setting/deleting dict-like attrs by updating/clearing them."""
+    def __set__(self, instance: object, value: Any) -> None:
+        dict_like = self.__get__(instance)
+        dict_like.clear()
+        dict_like.update(value)
+
+    def __delete__(self, instance: object) -> None:
+        dict_like = self.__get__(instance)
+        dict_like.clear()
