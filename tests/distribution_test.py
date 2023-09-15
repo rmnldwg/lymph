@@ -1,13 +1,11 @@
 """Check functionality of the distribution over diagnose times."""
 import unittest
+import warnings
 
 import numpy as np
 import scipy as sp
 
-from lymph.descriptors.diagnose_times import (
-    Distribution,
-    DistributionsUserDict,
-)
+from lymph.diagnose_times import Distribution, DistributionsUserDict
 
 
 class FixtureMixin:
@@ -26,7 +24,9 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
         """Test the creation of a frozen distribution without providing a max time."""
         dist = Distribution(self.array_arg)
         self.assertFalse(dist.is_updateable)
-        self.assertEqual({}, dist.get_params())
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
@@ -35,7 +35,9 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
         """Test the creation of a frozen distribution where we provide the max_time."""
         dist = Distribution(self.array_arg)
         self.assertFalse(dist.is_updateable)
-        self.assertEqual({}, dist.get_params())
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
@@ -63,7 +65,10 @@ class DistributionDictTestCase(FixtureMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.rng = np.random.default_rng(42)
-        self.dist_dict = DistributionsUserDict(max_time=self.max_time)
+        self.dist_dict = DistributionsUserDict(
+            max_time=self.max_time,
+            trigger_callbacks=[],
+        )
 
     def test_setitem_distribution_from_array(self):
         """Test setting a distribution created from an array."""
@@ -99,5 +104,5 @@ class DistributionDictTestCase(FixtureMixin, unittest.TestCase):
             self.assertTrue(self.dist_dict[f"test_{i}"].is_updateable)
             param = self.rng.uniform()
             self.dist_dict[f"test_{i}"].set_params(p=param)
-            returned_param = self.dist_dict[f"test_{i}"].get_params()
+            returned_param = self.dist_dict[f"test_{i}"].get_params(as_dict=True)
             self.assertTrue(np.allclose(param, returned_param["p"]))

@@ -1,4 +1,11 @@
-"""This module implements the managing descriptor for the diagnostic modalities."""
+"""
+Module implementing management of the diagnostic modalities.
+
+This allows the user to define diagnostic modalities and their sensitivity/specificity
+values. This is necessary to compute the likelihood of a dataset (that was created by
+recoding the output of diagnostic modalities), given the model and its parameters
+(which we want to learn).
+"""
 from __future__ import annotations
 
 import warnings
@@ -6,9 +13,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
-from lymph import models
-from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
-from lymph.helper import trigger
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class Modality:
@@ -200,11 +205,6 @@ class ModalitiesUserDict(AbstractLookupDict):
         super().__setitem__(name, value)
 
 
-class ConfusionMatrices(AbstractDictDescriptor):
-    """Stores a dictionary of confusion matrices for diagnostic modalities."""
-    def _get_callback(self, instance: models.Unilateral):
-        modalities_dict = ModalitiesUserDict(
-            is_trinary=instance.graph.is_trinary,
-            trigger_callbacks=[instance.delete_observation_matrix],
-        )
-        setattr(instance, self.private_name, modalities_dict)
+    @trigger
+    def __delitem__(self, key: str) -> None:
+        return super().__delitem__(key)

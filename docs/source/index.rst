@@ -17,7 +17,7 @@ Documentation
     :caption: Content
 
     install
-    quickstart
+    quickstart_unilateral
     sampling
     api
     license

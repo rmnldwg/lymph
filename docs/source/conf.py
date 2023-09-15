@@ -28,6 +28,7 @@ except DistributionNotFound:
 project = 'lymph'
 copyright = '2022, Roman Ludwig'
 author = 'Roman Ludwig'
+gh_username = 'rmnldwg'
 
 version = __version__
 # The full version, including alpha/beta/rc tags
@@ -76,10 +77,11 @@ autodoc_typehints = 'signature'
 # a list of builtin themes.
 #
 
-html_theme = 'alabaster'
+html_theme = 'sphinx_book_theme'
 html_theme_options = {
-    "fixed_sidebar": True,
-    "page_width": "1200px",
+    "repository_url": f"https://github.com/{gh_username}/{project}",
+    "repository_branch": "main",
+    "use_repository_button": True,
 }
 
 # import sphinx_modern_theme

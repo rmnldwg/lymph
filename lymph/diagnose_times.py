@@ -1,17 +1,25 @@
 """
-Module that defines helper classes for marginalizing over diagnose times in the
-model classes.
+Module for marginalizing over diagnose times.
+
+The hidden Markov model we implement assumes that every patient started off with a
+healthy neck, meaning no lymph node levels harboured any metastases. This is a valid
+assumption, but brings with it the issue of determining *how long ago* this likely was.
+
+This module allows the user to define a distribution over abstract time-steps that
+indicate for different T-categories how probable a diagnosis at this time-step was.
+That allows us to treat T1 and T4 patients fundamentally in the same way, even with the
+same parameters, except for the parametrization of their respective distribution over
+the time of diagnosis.
 """
 from __future__ import annotations
 
 import inspect
 import warnings
-from typing import Any
+from typing import Iterable
 
 import numpy as np
 
-from lymph import models
-from lymph.descriptors import AbstractDictDescriptor, AbstractLookupDict
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class SupportError(Exception):
@@ -62,6 +70,19 @@ class Distribution:
             self.support = np.arange(max_time + 1)
             self._func = None
             self._frozen = self.normalize(distribution)
+
+
+    def copy(self) -> Distribution:
+        """Return a copy of the distribution.
+
+        Note:
+            This will return a frozen distribution, even if the original distribution
+            was parametrized.
+        """
+        return type(self)(
+            distribution=self.distribution,
+            max_time=self.support[-1],
+        )
 
 
     @staticmethod
@@ -142,19 +163,29 @@ class Distribution:
         return self._func is not None
 
 
-    def get_params(self) -> dict[str, Any]:
-        """If the distribution is updateable, return the current parameters as dict."""
+    def get_params(
+        self,
+        param: str | None = None,
+        as_dict: bool = False,
+    ) -> float | Iterable[float] | dict[str, float]:
+        """If updateable, return the dist's ``param`` value or all params in a dict."""
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, returning empty dict")
-            return {}
+            return {} if as_dict else None
 
-        return self._kwargs
+        if param is not None:
+            return self._kwargs[param]
+
+        return self._kwargs if as_dict else self._kwargs.values()
 
 
     def set_params(self, **kwargs) -> None:
         """Update distribution by setting its parameters and storing the frozen PMF."""
+        params_to_set = set(kwargs.keys()).intersection(self._kwargs.keys())
         if self.is_updateable:
-            self._kwargs.update({k: kwargs[k] for k in self._kwargs.keys()})
+            if hasattr(self, "_frozen"):
+                del self._frozen
+            self._kwargs.update({p: kwargs[p] for p in params_to_set})
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 
@@ -166,7 +197,9 @@ class Distribution:
 
 class DistributionsUserDict(AbstractLookupDict):
     """Dictionary with added methods for storing distributions over diagnose times."""
-    # pylint: disable=no-member
+    max_time: int
+
+    @trigger
     def __setitem__(
         self,
         t_stage: str,
@@ -180,6 +213,11 @@ class DistributionsUserDict(AbstractLookupDict):
 
         super().__setitem__(t_stage, distribution)
 
+    @trigger
+    def __delitem__(self, t_stage: str) -> None:
+        """Delete the distribution for a T-stage."""
+        super().__delitem__(t_stage)
+
 
     @property
     def num_parametric(self) -> int:
@@ -187,6 +225,7 @@ class DistributionsUserDict(AbstractLookupDict):
         return sum(distribution.is_updateable for distribution in self.values())
 
 
+    @trigger
     def set_distribution_params(self, params: list[float] | np.ndarray) -> None:
         """
         Update all marginalizors stored in this instance that are updateable with
@@ -229,11 +268,3 @@ class DistributionsUserDict(AbstractLookupDict):
         drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
 
         return drawn_t_stages, drawn_diag_times
-
-
-class Distributions(AbstractDictDescriptor):
-    """Descriptor that adds a dictionary for storing distributions over diagnose times."""
-    def _get_callback(self, instance: models.Unilateral):
-        """Initialize the lookup dictionary."""
-        distribution_dict = DistributionsUserDict(max_time=instance.max_time)
-        setattr(instance, self.private_name, distribution_dict)

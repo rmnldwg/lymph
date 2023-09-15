@@ -1,13 +1,104 @@
-"""Module containing supporting classes and functions."""
+"""
+Module containing supporting classes and functions used accross the project.
+"""
 import warnings
-from functools import lru_cache, wraps
-from typing import List, Optional
+from collections import UserDict
+from functools import cached_property, lru_cache, wraps
+from typing import Any, Callable
 
 import numpy as np
 from pandas._libs.missing import NAType
 
 PatternType = dict[str, bool | NAType | None]
 """Type alias for an involvement pattern."""
+
+DiagnoseType = dict[str, PatternType]
+"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
+
+
+class DelegatorMixin:
+    """Mixin class that allows the delegation of attributes from another object."""
+    def __init__(self):
+        self._delegated = {}
+
+
+    def init_delegation(self, **from_to) -> None:
+        """Initialize the delegation of attributes.
+
+        For each keyword argument that is an attribute of ``self``, the value is a
+        list of attributes to delegate to ``self``.
+
+        Inspiration from this came from the `delegation pattern`_.
+
+        .. _delegation pattern: https://github.com/faif/python-patterns/blob/master/patterns/fundamental/delegation_pattern.py
+
+        Example:
+
+        >>> class Delegate:
+        ...     def __init__(self):
+        ...         self.fancy_attr = "foo"
+        ...     @property
+        ...     def property_attr(self):
+        ...         return "bar"
+        >>> class A(DelegatorMixin):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.delegated = "hello world"
+        ...         self.also_delegated = Delegate()
+        ...         self.normal_attr = 42
+        ...         self.init_delegation(
+        ...             delegated=["count"],
+        ...             also_delegated=["fancy_attr", "property_attr"],
+        ...         )
+        >>> a = A()
+        >>> a.delegated.count("l")
+        3
+        >>> a.count("l")
+        3
+        >>> a.also_delegated.fancy_attr
+        'foo'
+        >>> a.fancy_attr
+        'foo'
+        >>> a.also_delegated.property_attr
+        'bar'
+        >>> a.property_attr
+        'bar'
+        >>> a.normal_attr
+        42
+        >>> a.non_existent
+        Traceback (most recent call last):
+        ...
+        AttributeError: 'A' object has no attribute 'non_existent'
+        """
+        for attr, sub_attrs in from_to.items():
+            attr_obj = getattr(self, attr)
+
+            for sub_attr in sub_attrs:
+                if not hasattr(attr_obj, sub_attr):
+                    raise AttributeError(
+                        f"Attribute '{sub_attr}' not found in '{attr_obj}'"
+                    )
+
+                if sub_attr in self._delegated:
+                    warnings.warn(
+                        f"Attribute '{sub_attr}' already delegated. Overwriting."
+                    )
+                self._delegated[sub_attr] = (attr_obj, sub_attr)
+
+    def __getattr__(self, name):
+        if name in self._delegated:
+            attr = getattr(*self._delegated[name])
+
+            if not callable(attr):
+                return attr
+
+            @wraps(attr)
+            def wrapper(*args, **kwargs):
+                return attr(*args, **kwargs)
+
+            return wrapper
+
+        return super().__getattribute__(name)
 
 
 def check_unique_names(graph: dict):
@@ -27,9 +118,7 @@ def check_unique_names(graph: dict):
         raise ValueError("Node names are not unique")
 
 
-
-
-def check_spsn(spsn: List[float]):
+def check_spsn(spsn: list[float]):
     """Private method that checks whether specificity and sensitvity
     are valid.
 
@@ -53,7 +142,7 @@ def change_base(
     number: int,
     base: int,
     reverse: bool = False,
-    length: Optional[int] = None
+    length: int | None = None
 ) -> str:
     """Convert an integer into another base.
 
@@ -171,7 +260,10 @@ def tile_and_repeat(
     tile: tuple[int, int],
     repeat: tuple[int, int],
 ) -> np.ndarray:
-    """Tile and repeat a matrix.
+    """Apply the numpy functions `tile`_ and `repeat`_ successively to ``mat``.
+
+    .. _tile: https://numpy.org/doc/stable/reference/generated/numpy.tile.html
+    .. _repeat: https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
 
     Example:
 
@@ -200,7 +292,7 @@ def tile_and_repeat(
 
 @lru_cache
 def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
-    """Return the indices for the transition tensor correpsonding to `lnl_idx`.
+    """Return the indices for the transition tensor correpsonding to ``lnl_idx``.
 
     Example:
 
@@ -225,12 +317,14 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
            [2, 2, 2, 2, 2, 2, 2, 2, 2]])
     """
     indices = np.arange(num_states).reshape(num_states, -1)
-    row = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
-    return np.repeat(row, num_states ** (num_lnls - lnl_idx - 1), axis=0)
+    block = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
+    return np.repeat(block, num_states ** (num_lnls - lnl_idx - 1), axis=0)
 
 
 def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Compute the kronecker product of two matrices row-wise.
+    """Compute the `kronecker product`_ of two matrices row-wise.
+
+    .. _kronecker product: https://en.wikipedia.org/wiki/Kronecker_product
 
     Example:
 
@@ -261,7 +355,7 @@ def early_late_mapping(t_stage: int | str) -> str:
 
 
 def trigger(func: callable) -> callable:
-    """Method decorator that runs instance's `trigger()` when the method is called."""
+    """Method decorator that runs instance's ``trigger()`` when the method is called."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
@@ -269,3 +363,77 @@ def trigger(func: callable) -> callable:
             callback()
         return result
     return wrapper
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+
+
+class AbstractLookupDict(UserDict):
+    """Abstract ``UserDict`` subclass that can lazily and dynamically return values.
+
+    This class is meant to be subclassed. If one wants to use the functionality
+    of lazy and dynamic value retrieval, the subclass must implement a ``__missing__``
+    method that returns the value for the given key and raises a ``KeyError`` if
+    the value for a key cannot be computed.
+    """
+    trigger_callbacks: list[Callable]
+
+    def __init__(self, dict=None, /, trigger_callbacks=None, **kwargs):
+        """Use keyword arguments to set attributes of the instance.
+
+        In contrast to the default ``UserDict`` constructor, this one instantiates
+        any keyword arguments as attributes of the instance and does not put them
+        into the dictionary itself.
+        """
+        super().__init__(dict)
+
+        if trigger_callbacks is None:
+            trigger_callbacks = []
+
+        self.trigger_callbacks = trigger_callbacks
+
+        for attr_name, attr_value in kwargs.items():
+            if hasattr(self, attr_name):
+                raise AttributeError("Cannot set attribute that already exists.")
+            setattr(self, attr_name, attr_value)
+
+
+    def __contains__(self, key: object) -> bool:
+        """This exists to trigger ``__missing__`` when checking ``is in``."""
+        if super().__contains__(key):
+            return True
+
+        if hasattr(self.__class__, "__missing__"):
+            try:
+                self.__class__.__missing__(self, key)
+                return True
+            except KeyError:
+                return False
+
+        return False
+
+
+class not_updateable_cached_property(cached_property):
+    """Not updateable, but deletable (for recomputiation) cached property."""
+    def __set__(self, instance: object, value: Any) -> None:
+        raise AttributeError("Cannot set attribute.")
+
+    def __delete__(self, instance: object) -> None:
+        try:
+            del instance.__dict__[self.attrname]
+        except KeyError:
+            pass
+
+
+class smart_updating_dict_cached_property(cached_property):
+    """Allows setting/deleting dict-like attrs by updating/clearing them."""
+    def __set__(self, instance: object, value: Any) -> None:
+        dict_like = self.__get__(instance)
+        dict_like.clear()
+        dict_like.update(value)
+
+    def __delete__(self, instance: object) -> None:
+        dict_like = self.__get__(instance)
+        dict_like.clear()
