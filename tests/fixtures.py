@@ -33,10 +33,11 @@ def get_graph(size: str = "large") -> dict[tuple[str, str], list[str]]:
 
     if size == "medium":
         return {
-            ("tumor", "T"): ["II", "III", "V"],
-            ("lnl", "II"): ["III", "V"],
-            ("lnl", "III"): ["V"],
-            ("lnl", "V"): [],
+            ("tumor", "T"): ["I", "II", "III", "IV"],
+            ("lnl", "I"): ["II"],
+            ("lnl", "II"): ["III"],
+            ("lnl", "III"): ["IV"],
+            ("lnl", "IV"): [],
         }
 
     if size == "large":

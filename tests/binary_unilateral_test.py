@@ -301,7 +301,19 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         self.model.assign_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
-    def test_likelihood(self):
-        """Make sure the likelihood is computed correctly."""
+    def test_log_likelihood_smaller_zero(self):
+        """Make sure the log-likelihood is csmaller than zero."""
         likelihood = self.model.likelihood(log=True, mode="HMM")
         self.assertLess(likelihood, 0.)
+
+    def test_likelihood_invalid_params_isinf(self):
+        """Make sure the likelihood is `-np.inf` for invalid parameters."""
+        random_params = self.create_random_params()
+        for name in random_params:
+            random_params[name] += 1.
+        likelihood = self.model.likelihood(
+            given_param_kwargs=random_params,
+            log=True,
+            mode="HMM",
+        )
+        self.assertEqual(likelihood, -np.inf)
