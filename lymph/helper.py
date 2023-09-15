@@ -2,7 +2,7 @@
 import warnings
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from pandas._libs.missing import NAType
@@ -376,6 +376,8 @@ class AbstractLookupDict(UserDict):
     method that returns the value for the given key and raises a ``KeyError`` if
     the value for a key cannot be computed.
     """
+    trigger_callbacks: list[Callable]
+
     def __init__(self, dict=None, /, trigger_callbacks=None, **kwargs):
         """Use keyword arguments to set attributes of the instance.
 
@@ -388,7 +390,7 @@ class AbstractLookupDict(UserDict):
         if trigger_callbacks is None:
             trigger_callbacks = []
 
-        kwargs.update(trigger_callbacks=trigger_callbacks)
+        self.trigger_callbacks = trigger_callbacks
 
         for attr_name, attr_value in kwargs.items():
             if hasattr(self, attr_name):
@@ -427,6 +429,7 @@ class smart_updating_dict_cached_property(cached_property):
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
     def __set__(self, instance: object, value: Any) -> None:
         dict_like = self.__get__(instance)
+        dict_like.clear()
         dict_like.update(value)
 
     def __delete__(self, instance: object) -> None:

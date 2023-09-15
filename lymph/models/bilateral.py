@@ -9,6 +9,7 @@ import pandas as pd
 
 from lymph import graph, matrix, modalities, models
 from lymph.helper import (
+    AbstractLookupDict,
     DelegatorMixin,
     DiagnoseType,
     PatternType,
@@ -74,6 +75,17 @@ def init_edge_sync(
             )
         )
 
+
+def init_dict_sync(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> None:
+    """Add callback to ``this`` to sync with ``other``."""
+    def sync():
+        other.clear()
+        other.update(this)
+
+    this.trigger_callbacks.append(sync)
 
 
 class Bilateral(DelegatorMixin):
@@ -158,9 +170,17 @@ class Bilateral(DelegatorMixin):
             "is_binary", "is_trinary",
         ]
 
+        init_dict_sync(
+            this=self.ipsi.diag_time_dists,
+            other=self.contra.diag_time_dists,
+        )
+
         if self.modalities_symmetric:
             delegated_attrs.append("modalities")
-            self.contra.modalities = self.ipsi.modalities
+            init_dict_sync(
+                this=self.ipsi.modalities,
+                other=self.contra.modalities,
+            )
 
         self.init_delegation(ipsi=delegated_attrs)
         self.contra.diag_time_dists = self.diag_time_dists
