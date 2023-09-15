@@ -1,6 +1,8 @@
 """Module containing supporting classes and functions."""
 import warnings
-from functools import lru_cache, wraps
+from collections import UserDict
+from functools import cached_property, lru_cache, wraps
+from typing import Any
 
 import numpy as np
 from pandas._libs.missing import NAType
@@ -364,3 +366,69 @@ def trigger(func: callable) -> callable:
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
+
+
+class AbstractLookupDict(UserDict):
+    """Abstract ``UserDict`` subclass that can lazily and dynamically return values.
+
+    This class is meant to be subclassed. If one wants to use the functionality
+    of lazy and dynamic value retrieval, the subclass must implement a ``__missing__``
+    method that returns the value for the given key and raises a ``KeyError`` if
+    the value for a key cannot be computed.
+    """
+    def __init__(self, dict=None, /, trigger_callbacks=None, **kwargs):
+        """Use keyword arguments to set attributes of the instance.
+
+        In contrast to the default ``UserDict`` constructor, this one instantiates
+        any keyword arguments as attributes of the instance and does not put them
+        into the dictionary itself.
+        """
+        super().__init__(dict)
+
+        if trigger_callbacks is None:
+            trigger_callbacks = []
+
+        kwargs.update(trigger_callbacks=trigger_callbacks)
+
+        for attr_name, attr_value in kwargs.items():
+            if hasattr(self, attr_name):
+                raise AttributeError("Cannot set attribute that already exists.")
+            setattr(self, attr_name, attr_value)
+
+
+    def __contains__(self, key: object) -> bool:
+        """This exists to trigger ``__missing__`` when checking ``is in``."""
+        if super().__contains__(key):
+            return True
+
+        if hasattr(self.__class__, "__missing__"):
+            try:
+                self.__class__.__missing__(self, key)
+                return True
+            except KeyError:
+                return False
+
+        return False
+
+
+class not_updateable_cached_property(cached_property):
+    """Not updateable, but deletable (for recomputiation) cached property."""
+    def __set__(self, instance: object, value: Any) -> None:
+        raise AttributeError("Cannot set attribute.")
+
+    def __delete__(self, instance: object) -> None:
+        try:
+            del instance.__dict__[self.attrname]
+        except KeyError:
+            pass
+
+
+class smart_updating_dict_cached_property(cached_property):
+    """Allows setting/deleting dict-like attrs by updating/clearing them."""
+    def __set__(self, instance: object, value: Any) -> None:
+        dict_like = self.__get__(instance)
+        dict_like.update(value)
+
+    def __delete__(self, instance: object) -> None:
+        dict_like = self.__get__(instance)
+        dict_like.clear()

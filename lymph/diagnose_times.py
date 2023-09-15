@@ -10,8 +10,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.descriptors import AbstractLookupDict
-from lymph.helper import trigger
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class SupportError(Exception):
@@ -189,7 +188,8 @@ class Distribution:
 
 class DistributionsUserDict(AbstractLookupDict):
     """Dictionary with added methods for storing distributions over diagnose times."""
-    # pylint: disable=no-member
+    max_time: int
+
     @trigger
     def __setitem__(
         self,

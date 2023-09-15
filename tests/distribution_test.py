@@ -4,10 +4,7 @@ import unittest
 import numpy as np
 import scipy as sp
 
-from lymph.descriptors.diagnose_times import (
-    Distribution,
-    DistributionsUserDict,
-)
+from lymph.diagnose_times import Distribution, DistributionsUserDict
 
 
 class FixtureMixin:

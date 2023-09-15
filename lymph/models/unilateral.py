@@ -3,18 +3,19 @@ from __future__ import annotations
 import itertools
 import warnings
 from itertools import product
-from typing import Any, Generator, Iterable, Iterator
+from typing import Any, Callable, Generator, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
 
-from lymph import graph
-from lymph.descriptors import diagnose_times, matrix, modalities
+from lymph import diagnose_times, graph, matrix, modalities
 from lymph.helper import (
     DelegatorMixin,
     DiagnoseType,
     PatternType,
     early_late_mapping,
+    not_updateable_cached_property,
+    smart_updating_dict_cached_property,
 )
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
@@ -29,6 +30,13 @@ class Unilateral(DelegatorMixin):
     of this class allow to calculate the probability of a certain hidden pattern of
     involvement, given an individual diagnosis of a patient.
     """
+    is_binary: bool
+    is_trinary: bool
+    get_state: Callable
+    set_state: Callable
+    state_list: list[int]
+    lnls: dict[str, graph.LymphNodeLevel]
+
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
@@ -93,6 +101,7 @@ class Unilateral(DelegatorMixin):
         if 0 >= max_time:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
+        self.max_time = max_time
         self.is_micro_mod_shared = is_micro_mod_shared
         self.is_growth_shared = is_growth_shared
 
@@ -103,14 +112,6 @@ class Unilateral(DelegatorMixin):
                 "lnls",
             ],
         )
-
-        self.modalities = modalities.ModalitiesUserDict(
-            is_trinary=self.is_trinary,
-            trigger_callbacks=[self.delete_obs_list_and_matrix],
-        )
-        self.diag_time_dists = diagnose_times.DistributionsUserDict(max_time=max_time)
-        self.data_matrices = matrix.DataEncodingUserDict(model=self)
-        self.diagnose_matrices = matrix.DiagnoseUserDict(model=self)
 
 
     @classmethod
@@ -425,58 +426,119 @@ class Unilateral(DelegatorMixin):
             del self._obs_list
 
 
-    transition_matrix = matrix.Transition()
-    """The matrix encoding the probabilities to transition from one state to another.
+    @not_updateable_cached_property
+    def transition_matrix(self) -> np.ndarray:
+        """Matrix encoding the probabilities to transition from one state to another.
 
-    This is the crucial object for modelling the evolution of the probabilistic
-    system in the context of the hidden Markov model. It has the shape
-    :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
-    The :math:`i`-th row and :math:`j`-th column encodes the probability to transition
-    from the :math:`i`-th state to the :math:`j`-th state. The states are ordered as
-    in the `state_list`.
+        This is the crucial object for modelling the evolution of the probabilistic
+        system in the context of the hidden Markov model. It has the shape
+        :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
+        The :math:`i`-th row and :math:`j`-th column encodes the probability to
+        transition from the :math:`i`-th state to the :math:`j`-th state. The states
+        are ordered as in the :py:attr:`lymph.graph.state_list`.
 
-    This matrix is recomputed every time the parameters along the edges of the graph
-    are changed.
+        This matrix is deleted every time the parameters along the edges of the graph
+        are changed. It is lazily computed when it is next accessed.
 
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.Transition`
-            The class that implements the descriptor for the transition matrix.
+        See Also:
+            :py:func:`~lymph.descriptors.matrix.generate_transition`
+                The function actually computing the transition matrix.
 
-    Example:
+        Example:
 
-    >>> model = Unilateral(graph_dict={
-    ...     ("tumor", "T"): ["II", "III"],
-    ...     ("lnl", "II"): ["III"],
-    ...     ("lnl", "III"): [],
-    ... })
-    >>> model.assign_params(0.7, 0.3, 0.2)
-    >>> model.transition_matrix
-    array([[0.21, 0.09, 0.49, 0.21],
-           [0.  , 0.3 , 0.  , 0.7 ],
-           [0.  , 0.  , 0.56, 0.44],
-           [0.  , 0.  , 0.  , 1.  ]])
-    """
+        >>> model = Unilateral(graph_dict={
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.assign_params(0.7, 0.3, 0.2)
+        >>> model.transition_matrix
+        array([[0.21, 0.09, 0.49, 0.21],
+            [0.  , 0.3 , 0.  , 0.7 ],
+            [0.  , 0.  , 0.56, 0.44],
+            [0.  , 0.  , 0.  , 1.  ]])
+        """
+        return matrix.generate_transition(self)
+
     def delete_transition_matrix(self):
         """Delete the transition matrix. Necessary to pass as callback."""
         del self.transition_matrix
 
-    observation_matrix = matrix.Observation()
-    """The matrix encoding the probabilities to observe a certain diagnosis.
 
-    See Also:
-        :py:class:`~lymph.descriptors.matrix.Observation`
-            The class that implements the descriptor for the observation matrix.
-    """
+    @smart_updating_dict_cached_property
+    def modalities(self) -> modalities.ModalitiesUserDict:
+        """Dictionary of diagnostic modalities and their confusion matrices.
+
+        This must be set by the user. For example, if one wanted to add the modality
+        "CT" with a sensitivity of 80% and a specificity of 90%, one would do:
+
+        >>> model = Unilateral(graph_dict={
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.modalities["CT"] = (0.8, 0.9)
+
+        See Also:
+            :py:class:`~lymph.descriptors.modalities.ModalitiesUserDict`
+            :py:class:`~lymph.descriptors.modalities.Modality`
+        """
+        return modalities.ModalitiesUserDict(
+            is_trinary=self.is_trinary,
+            trigger_callbacks=[self.delete_obs_list_and_matrix],
+        )
+
+
+    @not_updateable_cached_property
+    def observation_matrix(self) -> np.ndarray:
+        """The matrix encoding the probabilities to observe a certain diagnosis.
+
+        Every element in this matrix holds a probability to observe a certain diagnosis
+        (or combination of diagnoses, when using multiple diagnostic modalities) given
+        the current state of the system. It has the shape
+        :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes in
+        the graph and :math:`M` is the number of diagnostic modalities.
+
+        See Also:
+            :py:func:`~lymph.descriptors.matrix.generate_observation`
+                The function actually computing the observation matrix.
+        """
+        return matrix.generate_observation(self)
+
     def delete_obs_list_and_matrix(self):
         """Delete the observation matrix. Necessary to pass as callback."""
         del self.observation_matrix
         del self.obs_list
 
 
-    @property
-    def max_time(self) -> int:
-        """The latest possible diagnose time."""
-        return self.diag_time_dists.max_time
+    @smart_updating_dict_cached_property
+    def data_matrices(self) -> matrix.DataEncodingUserDict:
+        """Holds the data encoding in matrix form for every T-stage.
+
+        See Also:
+            :py:class:`~lymph.descriptors.matrix.DataEncodingUserDict`
+        """
+        return matrix.DataEncodingUserDict(model=self)
+
+
+    @smart_updating_dict_cached_property
+    def diagnose_matrices(self) -> matrix.DiagnoseUserDict:
+        """Holds the probability of a patient's diagnosis, given any hidden state.
+
+        Essentially, this is just the data encoding matrix of a certain T-stage
+        multiplied with the observation matrix. It is thus also a dictionary with
+        keys of T-stages and values of matrices.
+
+        See Also:
+            :py:class:`~lymph.descriptors.matrix.DiagnoseUserDict`
+        """
+        return matrix.DiagnoseUserDict(model=self)
+
+
+    @smart_updating_dict_cached_property
+    def diag_time_dists(self) -> diagnose_times.DistributionsUserDict:
+        """Dictionary of distributions over diagnose times for each T-stage."""
+        return diagnose_times.DistributionsUserDict(max_time=self.max_time)
 
 
     @property
@@ -556,7 +618,7 @@ class Unilateral(DelegatorMixin):
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
         # Changes to the patient data require a recomputation of the data and
-        # diagnose matrices. Deleting them will trigger this when they are next
+        # diagnose matrices. Clearing them will trigger this when they are next
         # accessed.
         self.data_matrices.clear()
         self.diagnose_matrices.clear()

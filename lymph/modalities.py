@@ -6,8 +6,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
-from lymph.descriptors import AbstractLookupDict
-from lymph.helper import trigger
+from lymph.helper import AbstractLookupDict, trigger
 
 
 class Modality:

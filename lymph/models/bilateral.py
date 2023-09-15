@@ -7,8 +7,7 @@ from typing import Any, Iterable, Iterator
 import numpy as np
 import pandas as pd
 
-from lymph import graph, models
-from lymph.descriptors import matrix, modalities
+from lymph import graph, matrix, modalities, models
 from lymph.helper import (
     DelegatorMixin,
     DiagnoseType,

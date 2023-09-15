@@ -4,51 +4,15 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from lymph.descriptors.modalities import Clinical, Modality, Pathological
-from lymph.models import Unilateral
+from tests.fixtures import TrinaryFixtureMixin
 
 
-class TrinaryFixtureMixin:
-    """Mixin class for simple trinary model fixture creation."""
+class TrinaryInitTestCase(TrinaryFixtureMixin, unittest.TestCase):
+    """Testing the basic initialization of a trinary model."""
 
-    def setUp(self):
-        """Initialize a simple trinary model."""
-        self.graph = {
-            ("tumor", "T"): ["I", "II", "III", "IV"],
-            ("lnl", "I"): [],
-            ("lnl", "II"): ["I", "III"],
-            ("lnl", "III"): ["IV"],
-            ("lnl", "IV"): [],
-        }
-        self.model = Unilateral(graph_dict=self.graph, allowed_states=[0,1,2])
-
-    def create_random_params(self, seed: int = 42) -> dict[str, float]:
-        """Create random parameters for the model."""
-        rng = np.random.default_rng(seed)
-        params = {
-            f"{name}_{type_}": rng.random()
-            for name, edge in self.model.graph.edges.items()
-            for type_ in edge.get_params(as_dict=True).keys()
-        }
-        params.update({
-            f"{t_stage}_{type_}": rng.random()
-            for t_stage, dist in self.model.diag_time_dists.items()
-            for type_ in dist.get_params(as_dict=True).keys()
-        })
-        return params
-
-    def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
-        """Create a dictionary of modalities."""
-        modalities_in_data = {
-            "CT": Clinical(specificity=0.76, sensitivity=0.81),
-            "MRI": Clinical(specificity=0.63, sensitivity=0.81),
-            "PET": Clinical(specificity=0.86, sensitivity=0.79),
-            "FNA": Pathological(specificity=0.98, sensitivity=0.80),
-            "diagnostic_consensus": Clinical(specificity=0.86, sensitivity=0.81),
-            "pathology": Pathological(specificity=1.0, sensitivity=1.0),
-            "pCT": Clinical(specificity=0.86, sensitivity=0.81),
-        }
-        return {name: modalities_in_data[name] for name in names}
+    def test_is_trinary(self) -> None:
+        """Test if the model is trinary."""
+        self.assertTrue(self.model.is_trinary)
 
 
 class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
@@ -56,7 +20,7 @@ class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        params_to_set = self.create_random_params(seed=123)
+        params_to_set = self.create_random_params()
         self.model.assign_params(**params_to_set)
 
     def test_edge_transition_tensors(self) -> None:
