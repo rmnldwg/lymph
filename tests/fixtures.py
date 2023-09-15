@@ -2,6 +2,7 @@
 Fxitures for tests.
 """
 import logging
+import warnings
 from pathlib import Path
 from typing import Callable
 
@@ -109,7 +110,7 @@ class BinaryUnilateralModelMixin:
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph(size="large")
         self.model = Unilateral.binary(graph_dict=self.graph_dict)
-        self.logger = get_logger(level=logging.DEBUG)
+        self.logger = get_logger(level=logging.INFO)
 
 
     def create_random_params(self) -> dict[str, float]:
@@ -119,11 +120,13 @@ class BinaryUnilateralModelMixin:
             for name, edge in self.model.graph.edges.items()
             for type_ in edge.get_params(as_dict=True).keys()
         }
-        params.update({
-            f"{t_stage}_{type_}": self.rng.random()
-            for t_stage, dist in self.model.diag_time_dists.items()
-            for type_ in dist.get_params(as_dict=True).keys()
-        })
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            params.update({
+                f"{t_stage}_{type_}": self.rng.random()
+                for t_stage, dist in self.model.diag_time_dists.items()
+                for type_ in dist.get_params(as_dict=True).keys()
+            })
         return params
 
 
@@ -155,6 +158,7 @@ class BilateralModelMixin:
         self.model = lymph.models.Bilateral(graph_dict=self.graph_dict)
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.assign_params(**self.create_random_params())
+        self.logger = get_logger(level=logging.INFO)
 
 
     def init_diag_time_dists(self, **dists) -> None:
@@ -193,6 +197,7 @@ class TrinaryFixtureMixin:
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph(size="large")
         self.model = Unilateral(graph_dict=self.graph_dict, allowed_states=[0,1,2])
+        self.logger = get_logger(level=logging.INFO)
 
     def create_random_params(self) -> dict[str, float]:
         """Create random parameters for the model."""
@@ -201,11 +206,14 @@ class TrinaryFixtureMixin:
             for name, edge in self.model.graph.edges.items()
             for type_ in edge.get_params(as_dict=True).keys()
         }
-        params.update({
-            f"{t_stage}_{type_}": self.rng.random()
-            for t_stage, dist in self.model.diag_time_dists.items()
-            for type_ in dist.get_params(as_dict=True).keys()
-        })
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            params.update({
+                f"{t_stage}_{type_}": self.rng.random()
+                for t_stage, dist in self.model.diag_time_dists.items()
+                for type_ in dist.get_params(as_dict=True).keys()
+            })
+
         return params
 
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:

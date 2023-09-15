@@ -170,7 +170,9 @@ class Unilateral(DelegatorMixin):
             iterator = itertools.chain(iterator, self.diag_time_dists.items())
 
         for edge_name_or_tstage, edge_or_dist in iterator:
-            edge_or_dist_params = edge_or_dist.get_params(as_dict=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                edge_or_dist_params = edge_or_dist.get_params(as_dict=True)
             for name, value in edge_or_dist_params.items():
                 params[f"{edge_name_or_tstage}_{name}"] = value
 
@@ -186,7 +188,10 @@ class Unilateral(DelegatorMixin):
             self.graph.edges.values(),
             self.diag_time_dists.values(),
         ):
-            params = edge_or_dist.get_params(as_dict=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                params = edge_or_dist.get_params(as_dict=True)
+
             new_params = {}
             for name in params:
                 try:
@@ -604,7 +609,11 @@ class Unilateral(DelegatorMixin):
                 raise ValueError(f"{side}lateral involvement data not found.")
 
             for name in self.graph.lnls:
-                if name not in patient_data[modality_name, side]:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+                    modality_side_data = patient_data[modality_name, side]
+
+                if name not in modality_side_data:
                     raise ValueError(f"Involvement data for LNL {name} not found.")
                 column = patient_data[modality_name, side, name]
                 patient_data["_model", modality_name, name] = column

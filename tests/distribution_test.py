@@ -1,5 +1,6 @@
 """Check functionality of the distribution over diagnose times."""
 import unittest
+import warnings
 
 import numpy as np
 import scipy as sp
@@ -23,7 +24,9 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
         """Test the creation of a frozen distribution without providing a max time."""
         dist = Distribution(self.array_arg)
         self.assertFalse(dist.is_updateable)
-        self.assertEqual({}, dist.get_params(as_dict=True))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
@@ -32,7 +35,9 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
         """Test the creation of a frozen distribution where we provide the max_time."""
         dist = Distribution(self.array_arg)
         self.assertFalse(dist.is_updateable)
-        self.assertEqual({}, dist.get_params(as_dict=True))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
