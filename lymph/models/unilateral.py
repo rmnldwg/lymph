@@ -681,7 +681,7 @@ class Unilateral(DelegatorMixin):
         state_dists = np.zeros(shape=(self.max_time + 1, len(self.state_list)))
         state_dists[0, 0] = 1.
 
-        for t in range(1, self.max_time):
+        for t in range(1, self.max_time + 1):
             state_dists[t] = self.evolve_dist(state_dists[t-1], num_steps=1)
 
         return state_dists
