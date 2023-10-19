@@ -44,7 +44,9 @@ class Distribution:
         function must return a list of probabilities for each diagnose time.
 
         Note:
-            All arguments except ``support`` must have default values.
+            All arguments except ``support`` must have default values and if some
+            parameters have bounds (like the binomial distribution's ``p``), the
+            function must raise a ``ValueError`` if the parameter is invalid.
 
         Since ``max_time`` specifies the support of the distribution (rangin from 0 to
         ``max_time``), it must be provided if a parametrized function is passed. If a
