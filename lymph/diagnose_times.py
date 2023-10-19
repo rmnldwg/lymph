@@ -197,8 +197,10 @@ class Distribution:
                 self._frozen = self.normalize(
                     self._func(self.support, **new_kwargs)
                 )
-            except ValueError:
-                raise ValueError("Invalid params for distribution over diagnose times")
+            except ValueError as val_err:
+                raise ValueError(
+                    "Invalid parameter(s) provided to distribution over diagnose times"
+                ) from val_err
 
             self._kwargs = new_kwargs
         else:

@@ -11,10 +11,27 @@ from lymph.diagnose_times import Distribution, DistributionsUserDict
 class FixtureMixin:
     """Mixin that provides fixtures for the tests."""
 
+    @staticmethod
+    def binom_pmf(
+        support: np.ndarray,
+        max_time: int = 10,
+        p: float = 0.5,
+    ) -> np.ndarray:
+        """Binomial probability mass function."""
+        if max_time <= 0:
+            raise ValueError("max_time must be a positive integer.")
+        if len(support) != max_time + 1:
+            raise ValueError("support must have length max_time + 1.")
+        if not 0. <= p <= 1.:
+            raise ValueError("p must be between 0 and 1.")
+
+        return sp.stats.binom.pmf(support, max_time, p)
+
+
     def setUp(self):
         self.max_time = 10
         self.array_arg = np.random.uniform(size=self.max_time + 1, low=0., high=10.)
-        self.func_arg = lambda support, p=0.5: sp.stats.binom.pmf(support, self.max_time, p)
+        self.func_arg = lambda support, p=0.5: self.binom_pmf(support, self.max_time, p)
 
 
 class DistributionTestCase(FixtureMixin, unittest.TestCase):
@@ -57,6 +74,12 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.distribution) == self.max_time + 1)
         self.assertTrue(np.allclose(sum(dist.distribution), 1.))
+
+    def test_updateable_distribution_raises_value_error(self):
+        """Check that an invalid parameter raises a ValueError."""
+        dist = Distribution(self.func_arg, max_time=self.max_time)
+        self.assertTrue(dist.is_updateable)
+        self.assertRaises(ValueError, dist.set_params, p=1.5)
 
 
 class DistributionDictTestCase(FixtureMixin, unittest.TestCase):
