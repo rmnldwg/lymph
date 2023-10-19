@@ -1,5 +1,13 @@
 """
 Module defining the nodes and edges of the graph representing the lymphatic system.
+
+Anything related to the network of nodes and edges is defined here. This includes the
+nodes themselves (either :py:class:`~Tumor` or :py:class:`~LymphNodeLevel`), the edges
+(:py:class:`~Edge`), and the graph (:py:class:`~Representation`).
+
+The nodes and edges are used to define the structure of the graph, which may then be
+accessed via the :py:class:`~Representation` class. This in turn is then used to
+compute e.g. the transition matrix of the model.
 """
 from __future__ import annotations
 

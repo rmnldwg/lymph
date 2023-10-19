@@ -1,4 +1,6 @@
-"""Module containing supporting classes and functions."""
+"""
+Module containing supporting classes and functions used accross the project.
+"""
 import warnings
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
