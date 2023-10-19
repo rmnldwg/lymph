@@ -180,12 +180,27 @@ class Distribution:
 
 
     def set_params(self, **kwargs) -> None:
-        """Update distribution by setting its parameters and storing the frozen PMF."""
+        """Update distribution by setting its parameters and storing the frozen PMF.
+
+        To work during inference using e.g. MCMC sampling, it needs to throw a
+        ``ValueError`` if the parameters are invalid. To this end, it expects the
+        underlying function to raise a ``ValueError`` if one of the parameters is
+        invalid. If the parameters are valid, the frozen PMF is stored and can be
+        retrieved via the :py:meth:`distribution` property.
+        """
         params_to_set = set(kwargs.keys()).intersection(self._kwargs.keys())
         if self.is_updateable:
-            if hasattr(self, "_frozen"):
-                del self._frozen
-            self._kwargs.update({p: kwargs[p] for p in params_to_set})
+            new_kwargs = self._kwargs.copy()
+            new_kwargs.update({p: kwargs[p] for p in params_to_set})
+
+            try:
+                self._frozen = self.normalize(
+                    self._func(self.support, **new_kwargs)
+                )
+            except ValueError:
+                raise ValueError("Invalid params for distribution over diagnose times")
+
+            self._kwargs = new_kwargs
         else:
             warnings.warn("Distribution is not updateable, skipping...")
 
