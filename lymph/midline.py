@@ -501,6 +501,8 @@ class MidlineBilateral:
         data: Optional[pd.DataFrame] = None,
         given_params: Optional[np.ndarray] = None,
         log: bool = True,
+        t_stages: Optional[List] = None,
+        prevalence_calc: bool = False
     ) -> float:
         """Compute the (log-)likelihood of data, using the stored spread probs and
         fixed distributions for marginalizing over diagnose times.
@@ -510,15 +512,15 @@ class MidlineBilateral:
         """
         if data is not None:
             self.patient_data = data
-
+        
         try:
             self.check_and_assign(given_params)
         except ValueError:
             return -np.inf if log else 0.
-
-        stored_t_stages = set(self.ext.ipsi.diagnose_matrices.keys())
-        provided_t_stages = set(self.ext.ipsi.diag_time_dists.keys())
-        t_stages = list(stored_t_stages.intersection(provided_t_stages))
+        if t_stages is None:
+            stored_t_stages = set(self.ext.ipsi.diagnose_matrices.keys())
+            provided_t_stages = set(self.ext.ipsi.diag_time_dists.keys())
+            t_stages = list(stored_t_stages.intersection(provided_t_stages))
 
         max_t = self.diag_time_dists.max_t
         llh = 0. if log else 1.
@@ -526,7 +528,6 @@ class MidlineBilateral:
         # state_probs_midext = self._evolve_midext()
         state_probs_ipsi = self.ext.ipsi._evolve(t_last=max_t)
         state_probs_contra_nox, state_probs_contra_ex = self._evolve_contra(t_last=max_t)
-
         for stage in t_stages:
             # the two `joint_state_probs` below together represent the joint probability
             # of any ipsi- AND contralateral state AND any midline extension state
@@ -541,7 +542,6 @@ class MidlineBilateral:
                 @ np.diag(self.ext.ipsi.diag_time_dists[stage].pmf)
                 @ state_probs_contra_ex
             )
-
             joint_diag_probs_nox = np.sum(
                 self.noext.ipsi.diagnose_matrices[stage]
                 * (joint_state_probs_nox
@@ -559,12 +559,13 @@ class MidlineBilateral:
             stage_llh = (
                 joint_diag_probs * self.diagnose_matrices_midext[stage].T
             ).sum(axis=0)
-
             if log:
                 llh += np.sum(np.log(stage_llh))
             else:
-                llh *= np.prod(stage_llh)
-
+                if prevalence_calc:
+                    llh = stage_llh
+                else:
+                    llh *= np.prod(stage_llh)
         return llh
 
 
