@@ -924,7 +924,7 @@ class Unilateral(DelegatorMixin):
         # resulting vector of hidden states to match that involvement of
         # interest
         marginalize_over_states = matrix.compute_encoding(
-            lnls=[lnl.name for lnl in self.graph.lnls],
+            lnls=self.graph.lnls.keys(),
             pattern=involvement,
         )
         return marginalize_over_states @ posterior_state_dist
@@ -977,7 +977,7 @@ class Unilateral(DelegatorMixin):
 
         # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.graph.lnls]
+        lnl_names = self.graph.lnls.keys()
         multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
         # create DataFrame

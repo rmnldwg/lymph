@@ -144,7 +144,7 @@ def generate_data_encoding(model: models.Unilateral, t_stage: str) -> np.ndarray
             if modality_name not in patient_row:
                 continue
             diagnose_encoding = compute_encoding(
-                lnls=[name for name in model.graph.lnls],
+                lnls=model.graph.lnls.keys(),
                 pattern=patient_row[modality_name],
             )
             patient_encoding = np.kron(patient_encoding, diagnose_encoding)

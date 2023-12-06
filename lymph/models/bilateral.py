@@ -514,6 +514,9 @@ class Bilateral(DelegatorMixin):
 
         diagnose_given_state = {}
         for side in ["ipsi", "contra"]:
+            if side not in given_diagnoses:
+                warnings.warn(f"No diagnoses given for {side}lateral side.")
+
             diagnose_encoding = getattr(self, side).comp_diagnose_encoding(
                 given_diagnoses.get(side, {})
             )
@@ -575,8 +578,9 @@ class Bilateral(DelegatorMixin):
 
         marginalize_over_states = {}
         for side in ["ipsi", "contra"]:
+            side_graph = getattr(self, side).graph
             marginalize_over_states[side] = matrix.compute_encoding(
-                lnls=[lnl.name for lnl in self.graph.lnls],
+                lnls=side_graph.lnls.keys(),
                 pattern=involvement[side],
             )
         return (
