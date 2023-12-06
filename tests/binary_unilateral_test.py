@@ -331,20 +331,22 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
     def create_random_diagnoses(self):
         """Create a random diagnosis for each modality and LNL."""
-        self.diagnoses = {}
+        lnl_names = list(self.model.graph.lnls.keys())
+        diagnoses = {}
 
         for modality in self.model.modalities:
-            self.diagnoses[modality] = {}
-            for lnl in self.model.graph.lnls.keys():
-                self.diagnoses[modality][lnl] = self.rng.choice([True, False, None])
+            diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
+
+        return diagnoses
+
 
     def test_comp_diagnose_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
-        self.create_random_diagnoses()
+        random_diagnoses = self.create_random_diagnoses()
         num_lnls, num_mods = len(self.model.graph.lnls), len(self.model.modalities)
         num_posible_diagnoses = 2**(num_lnls * num_mods)
 
-        diagnose_encoding = self.model.comp_diagnose_encoding(self.diagnoses)
+        diagnose_encoding = self.model.comp_diagnose_encoding(random_diagnoses)
         self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
         self.assertEqual(diagnose_encoding.dtype, bool)
 

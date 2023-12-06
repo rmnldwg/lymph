@@ -135,10 +135,12 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         """Create a random diagnosis for each modality and LNL."""
         diagnoses = {}
 
-        for modality in self.model.modalities:
-            diagnoses[modality] = {}
-            for lnl in self.model.ipsi.graph.lnls.keys():
-                diagnoses[modality][lnl] = self.rng.choice([True, False, None])
+        for side in ["ipsi", "contra"]:
+            diagnoses[side] = {}
+            side_model = getattr(self.model, side)
+            lnl_names = side_model.graph.lnls.keys()
+            for modality in side_model.modalities:
+                diagnoses[side][modality] = fixtures.create_random_pattern(lnl_names)
 
         return diagnoses
 
@@ -155,3 +157,20 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         self.assertEqual(posterior.shape, (num_states, num_states))
         self.assertEqual(posterior.dtype, float)
         self.assertTrue(np.isclose(posterior.sum(), 1.))
+
+    def test_risk(self):
+        """Test that the risk is computed correctly."""
+        random_parameters = self.create_random_params()
+        random_diagnoses = self.create_random_diagnoses()
+        random_pattern = {
+            "ipsi": fixtures.create_random_pattern(self.model.ipsi.graph.lnls.keys()),
+            "contra": fixtures.create_random_pattern(self.model.contra.graph.lnls.keys()),
+        }
+
+        risk = self.model.risk(
+            involvement=random_pattern,
+            given_param_kwargs=random_parameters,
+            given_diagnoses=random_diagnoses,
+        )
+        self.assertLessEqual(risk, 1.)
+        self.assertGreaterEqual(risk, 0.)

@@ -12,6 +12,7 @@ import scipy as sp
 
 import lymph
 from lymph import diagnose_times
+from lymph.helper import PatternType
 from lymph.modalities import Clinical, Modality, Pathological
 from lymph.models import Unilateral
 
@@ -101,6 +102,14 @@ def create_random_dist(
         return _create_random_parametric_dist(max_time=max_time, rng=rng)
 
     raise ValueError(f"Unknown distribution type: {type_}")
+
+
+def create_random_pattern(lnls: list[str]) -> PatternType:
+    """Create a random involvement pattern."""
+    return {
+        lnl: RNG.choice([True, False, None])
+        for lnl in lnls
+    }
 
 
 class BinaryUnilateralModelMixin:
