@@ -89,27 +89,93 @@ def generate_observation(instance: models.Unilateral) -> np.ndarray:
 
 def compute_encoding(
     lnls: list[str],
-    pattern: pd.Series | dict[str, bool],
+    pattern: pd.Series | dict[str, bool | int | str],
+    base: int = 2,
 ) -> np.ndarray:
-    """Compute the binary encoding of a particular ``pattern`` of involvement.
+    """Compute the encoding of a particular ``pattern`` of involvement.
 
-    Here, a ``pattern`` must be indexable with the LNL names in ``lnls`` and return
-    either ``True``, if the respective LNL is involved, or ``False`` if it is healthy.
-    If it contains anything that ``pd.isna()`` considers ``True``, the respective
-    LNL is considered to be unknown.
+    A ``pattern`` holds information about the involvement of each LNL and the function
+    transforms this into a binary encoding which is ``True`` for all possible complete
+    states/diagnoses that are compatible with the given ``pattern``.
+
+    In the binary case (``base=2``), the value behind ``pattern[lnl]`` can be one of
+    the following things:
+    - ``False``: The LNL is healthy.
+    - ``"healthy"``: The LNL is healthy.
+    - ``True``: The LNL is involved.
+    - ``"involved"``: The LNL is involved.
+    - ``pd.isna(pattern[lnl]) == True``: The involvement of the LNL is unknown.
+
+    In the trinary case (``base=3``), the value behind ``pattern[lnl]`` can be one of
+    these things:
+    - ``False``: The LNL is healthy.
+    - ``"healthy"``: The LNL is healthy.
+    - ``True``: The LNL is involved (micro- or macroscopic).
+    - ``"involved"``: The LNL is involved (micro- or macroscopic).
+    - ``"micro"``: The LNL is involved microscopically only.
+    - ``"macro"``: The LNL is involved macroscopically only.
+    - ``"notmacro"``: The LNL is healthy or involved microscopically.
+
+    Missing values are treated as unknown involvement.
+
+    Examples:
+    >>> compute_encoding(["II", "III"], {"II": True, "III": False})
+    array([False, False,  True, False])
+    >>> compute_encoding(["II", "III"], {"II": "involved"})
+    array([False, False,  True,  True])
+    >>> compute_encoding(
+    ...     lnls=["II", "III"],
+    ...     pattern={"II": True, "III": False},
+    ...     base=3,
+    ... )
+    array([False, False, False,  True, False, False,  True, False, False])
+    >>> compute_encoding(
+    ...     lnls=["II", "III"],
+    ...     pattern={"II": "micro", "III": "notmacro"},
+    ...     base=3,
+    ... )
+    array([False, False, False,  True,  True, False, False, False, False])
     """
     num_lnls = len(lnls)
-    encoding = np.ones(shape=2 ** num_lnls, dtype=bool)
+    encoding = np.ones(shape=base ** num_lnls, dtype=bool)
+
+    if base == 2:
+        element_map = {
+            "healthy": np.array([True, False]),
+            False: np.array([True, False]),
+            "involved": np.array([False, True]),
+            True: np.array([False, True]),
+        }
+    elif base == 3:
+        element_map = {
+            "healthy": np.array([True, False, False]),
+            False: np.array([True, False, False]),
+            "involved": np.array([False, True, True]),
+            True: np.array([False, True, True]),
+            "micro": np.array([False, True, False]),
+            "macro": np.array([False, False, True]),
+            "notmacro": np.array([True, True, False]),
+        }
+    else:
+        raise ValueError(f"Invalid base {base}.")
 
     for j, lnl in enumerate(lnls):
         if lnl not in pattern or pd.isna(pattern[lnl]):
             continue
+
+        try:
+            element = element_map[pattern[lnl]]
+        except KeyError as key_err:
+            raise ValueError(
+                f"Invalid pattern for LNL {lnl}: {pattern[lnl]}",
+            ) from key_err
+
         encoding = np.logical_and(
             encoding,
             tile_and_repeat(
-                mat=np.array([not pattern[lnl], pattern[lnl]]),
-                tile=(1, 2 ** j),
-                repeat=(1, 2 ** (num_lnls - j - 1)),
+                mat=element,
+                tile=(1, base ** j),
+                repeat=(1, base ** (num_lnls - j - 1)),
             )[0],
         )
     return encoding
