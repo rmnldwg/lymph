@@ -819,7 +819,7 @@ class Unilateral(DelegatorMixin):
             diagnose_encoding = np.kron(
                 diagnose_encoding,
                 matrix.compute_encoding(
-                    lnls=[lnl.name for lnl in self.graph.lnls],
+                    lnls=self.graph.lnls.keys(),
                     pattern=given_diagnoses.get(modality, {}),
                 ),
             )
