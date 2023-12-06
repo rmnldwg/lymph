@@ -122,3 +122,36 @@ class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         first_llh = self.model.likelihood(log=True)
         second_llh = self.model.likelihood(log=True)
         self.assertEqual(first_llh, second_llh)
+
+
+class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Check that the risk is computed correctly."""
+
+    def setUp(self):
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+
+    def create_random_diagnoses(self):
+        """Create a random diagnosis for each modality and LNL."""
+        diagnoses = {}
+
+        for modality in self.model.modalities:
+            diagnoses[modality] = {}
+            for lnl in self.model.ipsi.graph.lnls.keys():
+                diagnoses[modality][lnl] = self.rng.choice([True, False, None])
+
+        return diagnoses
+
+    def test_posterior_state_dist(self):
+        """Test that the posterior state distribution is computed correctly."""
+        num_states = len(self.model.ipsi.state_list)
+        random_parameters = self.create_random_params()
+        random_diagnoses = self.create_random_diagnoses()
+
+        posterior = self.model.comp_posterior_joint_state_dist(
+            given_param_kwargs=random_parameters,
+            given_diagnoses=random_diagnoses,
+        )
+        self.assertEqual(posterior.shape, (num_states, num_states))
+        self.assertEqual(posterior.dtype, float)
+        self.assertTrue(np.isclose(posterior.sum(), 1.))
