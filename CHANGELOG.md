@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 
 
+<a name="1.0.0.a3"></a>
+## [1.0.0.a3] - 2023-12-06
+
+Fourth alpha release. [@YoelPH](https://github.com/YoelPH) noticed some more bugs that have been fixed now. Most notably, the risk prediction raised exceptions, because of a missing transponed matrix `.T`.
+
+### Bug Fixes
+
+- Raise `ValueError` if diagnose time parameters are invalid (Fixes [#53])
+- Use names of LNLs in unilateral `comp_encoding()` (Fixes [#56])
+- Wrong shape in unilateral posterior computation (missing `.T`) (Fixes [#57])
+- Wrong shape in bilateral joint posterior computation (missing `.T`) (Fixes [#57])
+
+### Documentation
+
+- Add info on diagnose time distribution's `ValueError`
+
+### Testing
+
+- `ValueError` raised in diagnose time distribution's `set_params`
+- Check `comp_encoding_diagnoses()` for shape and dtype
+- Test unilateral posterior state distribution for shape and sum
+- Test bilateral posterior joint state distribution for shape and sum
+
+
 <a name="1.0.0.a2"></a>
 ## [1.0.0.a2] - 2023-09-15
 
@@ -160,7 +184,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a2...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...HEAD
+[1.0.0.a3]: https://github.com/rmnldwg/lymph/compare/1.0.0.a2...1.0.0.a3
 [1.0.0.a2]: https://github.com/rmnldwg/lymph/compare/1.0.0.a1...1.0.0.a2
 [1.0.0.a1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a0...1.0.0.a1
 [1.0.0.a0]: https://github.com/rmnldwg/lymph/compare/0.4.3...1.0.0.a0
@@ -169,6 +194,9 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#57]: https://github.com/rmnldwg/lymph/issues/57
+[#56]: https://github.com/rmnldwg/lymph/issues/56
+[#53]: https://github.com/rmnldwg/lymph/issues/53
 [#46]: https://github.com/rmnldwg/lymph/issues/46
 [#45]: https://github.com/rmnldwg/lymph/issues/45
 [#41]: https://github.com/rmnldwg/lymph/issues/41
