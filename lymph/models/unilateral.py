@@ -873,7 +873,7 @@ class Unilateral(DelegatorMixin):
 
         diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
-        diagnose_given_state = diagnose_encoding @ self.observation_matrix
+        diagnose_given_state = diagnose_encoding @ self.observation_matrix.T
 
         # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
         state_dist = self.comp_state_dist(t_stage, mode=mode)

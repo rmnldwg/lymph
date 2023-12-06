@@ -347,3 +347,14 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         diagnose_encoding = self.model.comp_diagnose_encoding(self.diagnoses)
         self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
         self.assertEqual(diagnose_encoding.dtype, bool)
+
+    def test_posterior_state_dist(self):
+        """Make sure the posterior state dist is correctly computed."""
+        posterior_state_dist = self.model.comp_posterior_state_dist(
+            given_param_kwargs=self.create_random_params(),
+            given_diagnoses=self.create_random_diagnoses(),
+            t_stage=self.rng.choice(["early", "late"]),
+        )
+        self.assertEqual(posterior_state_dist.shape, (2**len(self.model.graph.lnls),))
+        self.assertEqual(posterior_state_dist.dtype, float)
+        self.assertTrue(np.isclose(np.sum(posterior_state_dist), 1.))
