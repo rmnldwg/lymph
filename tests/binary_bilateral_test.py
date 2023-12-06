@@ -166,11 +166,13 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
             "ipsi": fixtures.create_random_pattern(self.model.ipsi.graph.lnls.keys()),
             "contra": fixtures.create_random_pattern(self.model.contra.graph.lnls.keys()),
         }
+        random_t_stage = self.rng.choice(["early", "late"])
 
         risk = self.model.risk(
             involvement=random_pattern,
             given_param_kwargs=random_parameters,
             given_diagnoses=random_diagnoses,
+            t_stage=random_t_stage,
         )
         self.assertLessEqual(risk, 1.)
         self.assertGreaterEqual(risk, 0.)

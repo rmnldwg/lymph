@@ -360,3 +360,20 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         self.assertEqual(posterior_state_dist.shape, (2**len(self.model.graph.lnls),))
         self.assertEqual(posterior_state_dist.dtype, float)
         self.assertTrue(np.isclose(np.sum(posterior_state_dist), 1.))
+
+    def test_risk(self):
+        """Make sure the risk is correctly computed."""
+        random_pattern = fixtures.create_random_pattern(self.model.graph.lnls.keys())
+        random_diagnoses = self.create_random_diagnoses()
+        random_t_stage = self.rng.choice(["early", "late"])
+        random_params = self.create_random_params()
+
+        risk = self.model.risk(
+            involvement=random_pattern,
+            given_param_kwargs=random_params,
+            given_diagnoses=random_diagnoses,
+            t_stage=random_t_stage,
+        )
+        self.assertEqual(risk.dtype, float)
+        self.assertGreaterEqual(risk, 0.)
+        self.assertLessEqual(risk, 1.)
