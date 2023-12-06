@@ -519,7 +519,7 @@ class Bilateral(DelegatorMixin):
             )
             observation_matrix = getattr(self, side).observation_matrix
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
-            diagnose_given_state[side] = diagnose_encoding @ observation_matrix
+            diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
 
         joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.

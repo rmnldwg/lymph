@@ -317,3 +317,44 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
             mode="HMM",
         )
         self.assertEqual(likelihood, -np.inf)
+
+
+class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+    """Test anything related to the risk computation."""
+
+    def setUp(self):
+        """Load params."""
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.assign_params(**self.create_random_params())
+
+    def create_random_diagnoses(self):
+        """Create a random diagnosis for each modality and LNL."""
+        self.diagnoses = {}
+
+        for modality in self.model.modalities:
+            self.diagnoses[modality] = {}
+            for lnl in self.model.graph.lnls.keys():
+                self.diagnoses[modality][lnl] = self.rng.choice([True, False, None])
+
+    def test_comp_diagnose_encoding(self):
+        """Check computation of one-hot encoding of diagnoses."""
+        self.create_random_diagnoses()
+        num_lnls, num_mods = len(self.model.graph.lnls), len(self.model.modalities)
+        num_posible_diagnoses = 2**(num_lnls * num_mods)
+
+        diagnose_encoding = self.model.comp_diagnose_encoding(self.diagnoses)
+        self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
+        self.assertEqual(diagnose_encoding.dtype, bool)
+
+    def test_posterior_state_dist(self):
+        """Make sure the posterior state dist is correctly computed."""
+        posterior_state_dist = self.model.comp_posterior_state_dist(
+            given_param_kwargs=self.create_random_params(),
+            given_diagnoses=self.create_random_diagnoses(),
+            t_stage=self.rng.choice(["early", "late"]),
+        )
+        self.assertEqual(posterior_state_dist.shape, (2**len(self.model.graph.lnls),))
+        self.assertEqual(posterior_state_dist.dtype, float)
+        self.assertTrue(np.isclose(np.sum(posterior_state_dist), 1.))
