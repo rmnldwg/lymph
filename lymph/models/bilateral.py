@@ -106,7 +106,7 @@ class Bilateral(DelegatorMixin):
         self,
         graph_dict: dict[tuple[str], list[str]],
         tumor_spread_symmetric: bool = False,
-        lnl_spread_symmetric: bool = True,
+        lnl_spread_symmetric: bool | None = None,
         modalities_symmetric: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
         ipsilateral_kwargs: dict[str, Any] | None = None,
@@ -148,7 +148,19 @@ class Bilateral(DelegatorMixin):
         self.ipsi   = models.Unilateral(**ipsi_kwargs)
         self.contra = models.Unilateral(**contra_kwargs)
 
-        self.tumor_spread_symmetric  = tumor_spread_symmetric
+        if lnl_spread_symmetric is None:
+            lnl_spread_symmetric = ipsi_kwargs == contra_kwargs
+
+        if (
+            (tumor_spread_symmetric or lnl_spread_symmetric)
+            and ipsi_kwargs != contra_kwargs
+        ):
+            warnings.warn(
+                "The graphs are asymmetric. Syncing spread probabilities "
+                "may not have intended effect."
+            )
+
+        self.tumor_spread_symmetric = tumor_spread_symmetric
         self.lnl_spread_symmetric = lnl_spread_symmetric
         self.modalities_symmetric = modalities_symmetric
 
