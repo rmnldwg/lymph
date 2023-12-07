@@ -206,7 +206,7 @@ class TrinaryFixtureMixin:
         """Initialize a simple trinary model."""
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph(size="large")
-        self.model = Unilateral(graph_dict=self.graph_dict, allowed_states=[0,1,2])
+        self.model = Unilateral.trinary(graph_dict=self.graph_dict)
         self.logger = get_logger(level=logging.INFO)
 
     def create_random_params(self) -> dict[str, float]:
@@ -226,6 +226,13 @@ class TrinaryFixtureMixin:
 
         return params
 
+    def init_diag_time_dists(self, **dists) -> None:
+        """Init the diagnose time distributions."""
+        for t_stage, type_ in dists.items():
+            self.model.diag_time_dists[t_stage] = create_random_dist(
+                type_, self.model.max_time, self.rng
+            )
+
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
         modalities_in_data = {
@@ -238,3 +245,12 @@ class TrinaryFixtureMixin:
             "pCT": Clinical(specificity=0.86, sensitivity=0.81),
         }
         return {name: modalities_in_data[name] for name in names}
+
+    def load_patient_data(
+        self,
+        filename: str = "2021-clb-oropharynx.csv",
+    ) -> None:
+        """Load patient data from a CSV file."""
+        filepath = Path(__file__).parent / "data" / filename
+        self.raw_data = pd.read_csv(filepath, header=[0,1,2])
+        self.model.load_patient_data(self.raw_data, side="ipsi")

@@ -306,7 +306,7 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_log_likelihood_smaller_zero(self):
-        """Make sure the log-likelihood is csmaller than zero."""
+        """Make sure the log-likelihood is smaller than zero."""
         likelihood = self.model.likelihood(log=True, mode="HMM")
         self.assertLess(likelihood, 0.)
 

@@ -1,14 +1,14 @@
 """Test the trinary unilateral system."""
 import unittest
 
+import fixtures
 import numpy as np
 import pandas as pd
 
 from lymph.graph import LymphNodeLevel
-from tests.fixtures import TrinaryFixtureMixin
 
 
-class TrinaryInitTestCase(TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
     """Testing the basic initialization of a trinary model."""
 
     def test_is_trinary(self) -> None:
@@ -26,7 +26,7 @@ class TrinaryInitTestCase(TrinaryFixtureMixin, unittest.TestCase):
             self.assertEqual(lnl.allowed_states, model_allowed_states)
 
 
-class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
     """Test the transition matrix of a trinary model."""
 
     def setUp(self):
@@ -59,7 +59,7 @@ class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
         self.assertTrue(np.allclose(row_sums, 1.0))
 
 
-class TrinaryObservationMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryObservationMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
     """Test the observation matrix of a trinary model."""
 
     def setUp(self):
@@ -79,7 +79,7 @@ class TrinaryObservationMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):
         self.assertTrue(np.allclose(row_sums, 1.0))
 
 
-class TrinaryDiagnoseMatricesTestCase(TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
     """Test the diagnose matrix of a trinary model."""
 
     def setUp(self):
@@ -98,3 +98,32 @@ class TrinaryDiagnoseMatricesTestCase(TrinaryFixtureMixin, unittest.TestCase):
             num_patients = (self.model.patient_data["_model", "#", "t_stage"] == t_stage).sum()
             diagnose_matrix = self.model.diagnose_matrices[t_stage]
             self.assertEqual(diagnose_matrix.shape, (3 ** num_lnls, num_patients))
+
+
+class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+    """Test the likelihood of a trinary model."""
+
+    def setUp(self):
+        """Load patient data."""
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.assign_params(**self.create_random_params())
+        self.load_patient_data(filename="2021-usz-oropharynx.csv")
+
+    def test_log_likelihood_smaller_zero(self):
+        """Make sure the log-likelihood is smaller than zero."""
+        likelihood = self.model.likelihood(log=True, mode="HMM")
+        self.assertLess(likelihood, 0.)
+
+    def test_likelihood_invalid_params_isinf(self):
+        """Make sure the likelihood is `-np.inf` for invalid parameters."""
+        random_params = self.create_random_params()
+        for name in random_params:
+            random_params[name] += 1.
+        likelihood = self.model.likelihood(
+            given_param_kwargs=random_params,
+            log=True,
+            mode="HMM",
+        )
+        self.assertEqual(likelihood, -np.inf)
