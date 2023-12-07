@@ -134,34 +134,14 @@ class Bilateral(DelegatorMixin):
         """
         super().__init__()
 
-        if unilateral_kwargs is None:
-            unilateral_kwargs = {}
-
-        ipsi_kwargs = unilateral_kwargs.copy()
-        ipsi_kwargs["graph_dict"] = graph_dict
-        ipsi_kwargs.update(ipsilateral_kwargs or {})
-
-        contra_kwargs = unilateral_kwargs.copy()
-        contra_kwargs["graph_dict"] = graph_dict
-        contra_kwargs.update(contralateral_kwargs or {})
-
-        self.ipsi   = models.Unilateral(**ipsi_kwargs)
-        self.contra = models.Unilateral(**contra_kwargs)
-
-        if lnl_spread_symmetric is None:
-            lnl_spread_symmetric = ipsi_kwargs == contra_kwargs
-
-        if (
-            (tumor_spread_symmetric or lnl_spread_symmetric)
-            and ipsi_kwargs != contra_kwargs
-        ):
-            warnings.warn(
-                "The graphs are asymmetric. Syncing spread probabilities "
-                "may not have intended effect."
-            )
-
-        self.tumor_spread_symmetric = tumor_spread_symmetric
-        self.lnl_spread_symmetric = lnl_spread_symmetric
+        self.init_models(
+            graph_dict=graph_dict,
+            tumor_spread_symmetric=tumor_spread_symmetric,
+            lnl_spread_symmetric=lnl_spread_symmetric,
+            unilateral_kwargs=unilateral_kwargs,
+            ipsilateral_kwargs=ipsilateral_kwargs,
+            contralateral_kwargs=contralateral_kwargs,
+        )
         self.modalities_symmetric = modalities_symmetric
 
         property_names = ["spread_prob"]
@@ -205,6 +185,46 @@ class Bilateral(DelegatorMixin):
 
         self.init_delegation(ipsi=delegated_attrs)
         self.contra.diag_time_dists = self.diag_time_dists
+
+
+    def init_models(
+        self,
+        graph_dict: dict[tuple[str], list[str]],
+        tumor_spread_symmetric: bool = False,
+        lnl_spread_symmetric: bool | None = None,
+        unilateral_kwargs: dict[str, Any] | None = None,
+        ipsilateral_kwargs: dict[str, Any] | None = None,
+        contralateral_kwargs: dict[str, Any] | None = None,
+    ):
+        """Initialize the two unilateral models."""
+        if unilateral_kwargs is None:
+            unilateral_kwargs = {}
+
+        ipsi_kwargs = unilateral_kwargs.copy()
+        ipsi_kwargs["graph_dict"] = graph_dict
+        ipsi_kwargs.update(ipsilateral_kwargs or {})
+
+        contra_kwargs = unilateral_kwargs.copy()
+        contra_kwargs["graph_dict"] = graph_dict
+        contra_kwargs.update(contralateral_kwargs or {})
+
+        self.ipsi   = models.Unilateral(**ipsi_kwargs)
+        self.contra = models.Unilateral(**contra_kwargs)
+
+        if lnl_spread_symmetric is None:
+            lnl_spread_symmetric = ipsi_kwargs == contra_kwargs
+
+        if (
+            (tumor_spread_symmetric or lnl_spread_symmetric)
+            and ipsi_kwargs != contra_kwargs
+        ):
+            warnings.warn(
+                "The graphs are asymmetric. Syncing spread probabilities "
+                "may not have intended effect."
+            )
+
+        self.tumor_spread_symmetric = tumor_spread_symmetric
+        self.lnl_spread_symmetric = lnl_spread_symmetric
 
 
     @classmethod
