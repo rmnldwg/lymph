@@ -186,15 +186,15 @@ class Bilateral(DelegatorMixin):
             )
             init_edge_sync(property_names, ipsi_edges, contra_edges)
 
-        delegated_attrs = [
-            "max_time", "t_stages", "diag_time_dists",
-            "is_binary", "is_trinary",
-        ]
-
         init_dict_sync(
             this=self.ipsi.diag_time_dists,
             other=self.contra.diag_time_dists,
         )
+
+        delegated_attrs = [
+            "max_time", "t_stages", "diag_time_dists",
+            "is_binary", "is_trinary",
+        ]
 
         if self.modalities_symmetric:
             delegated_attrs.append("modalities")
@@ -617,6 +617,7 @@ class Bilateral(DelegatorMixin):
             marginalize_over_states[side] = matrix.compute_encoding(
                 lnls=side_graph.lnls.keys(),
                 pattern=involvement[side],
+                base=3 if self.is_trinary else 2,
             )
         return (
             marginalize_over_states["ipsi"]

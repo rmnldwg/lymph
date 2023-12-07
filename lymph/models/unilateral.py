@@ -821,6 +821,7 @@ class Unilateral(DelegatorMixin):
                 matrix.compute_encoding(
                     lnls=self.graph.lnls.keys(),
                     pattern=given_diagnoses.get(modality, {}),
+                    base=3 if self.is_trinary else 2,
                 ),
             )
 
@@ -926,6 +927,7 @@ class Unilateral(DelegatorMixin):
         marginalize_over_states = matrix.compute_encoding(
             lnls=self.graph.lnls.keys(),
             pattern=involvement,
+            base=3 if self.is_trinary else 2,
         )
         return marginalize_over_states @ posterior_state_dist
 
