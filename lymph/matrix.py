@@ -212,6 +212,7 @@ def generate_data_encoding(model: models.Unilateral, t_stage: str) -> np.ndarray
             diagnose_encoding = compute_encoding(
                 lnls=model.graph.lnls.keys(),
                 pattern=patient_row[modality_name],
+                base=2,   # observations are always binary!
             )
             patient_encoding = np.kron(patient_encoding, diagnose_encoding)
 

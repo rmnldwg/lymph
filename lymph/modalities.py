@@ -54,6 +54,9 @@ class Modality:
         if not hasattr(self, '_confusion_matrix'):
             self.confusion_matrix = self.compute_confusion_matrix()
 
+        if self.is_trinary and not self._confusion_matrix.shape[0] == 3:
+            self.confusion_matrix = self.compute_confusion_matrix()
+
         return self._confusion_matrix
 
     @confusion_matrix.setter
