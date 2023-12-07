@@ -536,7 +536,7 @@ class Representation:
     @property
     def allowed_states(self) -> list[int]:
         """Return the list of allowed states for each :py:class:`~LymphNodeLevel`."""
-        return self.lnls.values()[0].allowed_states
+        return next(iter(self.lnls.values())).allowed_states
 
     @property
     def is_binary(self) -> bool:
