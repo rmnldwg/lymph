@@ -109,6 +109,8 @@ class Bilateral(DelegatorMixin):
         lnl_spread_symmetric: bool = True,
         modalities_symmetric: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
+        ipsilateral_kwargs: dict[str, Any] | None = None,
+        contralateral_kwargs: dict[str, Any] | None = None,
         **_kwargs,
     ) -> None:
         """Initialize both sides of the neck as :py:class:`~lymph.models.Unilateral`.
@@ -124,20 +126,27 @@ class Bilateral(DelegatorMixin):
         tumor(s) to the LNLs are shared. If ``lnl_spread_symmetric`` is ``True``, the
         spread probabilities between the LNLs are shared.
 
-        The ``unilateral_kwargs`` are passed to both instances of the unilateral model.
+        The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
+        while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
+        ipsi- and contralateral side, respectively. The ipsi- and contralateral kwargs
+        override the unilateral kwargs and may also override the ``graph_dict``. This
+        allows the user to specify different graphs for the two sides of the neck.
         """
         super().__init__()
 
-        # TODO: Implement asymmetric model. This should be relatively straightforward,
-        #       since the transition matrices of the two sides do not need to have the
-        #       same shape. The only thing that needs to be changed is the constructor
-        #       of this class, where the two instances of the unilateral model are
-        #       created.
         if unilateral_kwargs is None:
             unilateral_kwargs = {}
 
-        self.ipsi   = models.Unilateral(graph_dict=graph_dict, **unilateral_kwargs)
-        self.contra = models.Unilateral(graph_dict=graph_dict, **unilateral_kwargs)
+        ipsi_kwargs = unilateral_kwargs.copy()
+        ipsi_kwargs["graph_dict"] = graph_dict
+        ipsi_kwargs.update(ipsilateral_kwargs or {})
+
+        contra_kwargs = unilateral_kwargs.copy()
+        contra_kwargs["graph_dict"] = graph_dict
+        contra_kwargs.update(contralateral_kwargs or {})
+
+        self.ipsi   = models.Unilateral(**ipsi_kwargs)
+        self.contra = models.Unilateral(**contra_kwargs)
 
         self.tumor_spread_symmetric  = tumor_spread_symmetric
         self.lnl_spread_symmetric = lnl_spread_symmetric
@@ -244,7 +253,6 @@ class Bilateral(DelegatorMixin):
             return params[param]
 
         return params if as_dict else params.values()
-
 
 
     def assign_params(
