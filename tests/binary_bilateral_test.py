@@ -6,6 +6,7 @@ import unittest
 import fixtures
 import numpy as np
 
+from lymph import models
 from lymph.modalities import Clinical
 
 
@@ -56,6 +57,33 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         self.assertEqual(
             self.model.ipsi.modalities["foo"].specificity,
             self.model.contra.modalities["foo"].specificity,
+        )
+
+    def test_asymmetric_model(self):
+        """Check if different graphs work for the ipsi and contra side."""
+        ipsi_graph = fixtures.get_graph("medium")
+        contra_graph = fixtures.get_graph("small")
+
+        model = models.Bilateral(
+            graph_dict=ipsi_graph,
+            contralateral_kwargs={"graph_dict": contra_graph},
+        )
+
+        self.assertEqual(
+            list(model.ipsi.graph.nodes.keys()),
+            [key[1] for key in ipsi_graph.keys()],
+        )
+        self.assertEqual(
+            list(model.contra.graph.nodes.keys()),
+            [key[1] for key in contra_graph.keys()],
+        )
+        self.assertEqual(
+            len(model.ipsi.get_params()),
+            sum(len(val) for val in ipsi_graph.values()),
+        )
+        self.assertEqual(
+            len(model.contra.get_params()),
+            sum(len(val) for val in contra_graph.values()),
         )
 
 
