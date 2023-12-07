@@ -415,18 +415,6 @@ class AbstractLookupDict(UserDict):
         return False
 
 
-class not_updateable_cached_property(cached_property):
-    """Not updateable, but deletable (for recomputiation) cached property."""
-    def __set__(self, instance: object, value: Any) -> None:
-        raise AttributeError("Cannot set attribute.")
-
-    def __delete__(self, instance: object) -> None:
-        try:
-            del instance.__dict__[self.attrname]
-        except KeyError:
-            pass
-
-
 class smart_updating_dict_cached_property(cached_property):
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
     def __set__(self, instance: object, value: Any) -> None:

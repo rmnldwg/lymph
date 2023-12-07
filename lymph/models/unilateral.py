@@ -4,6 +4,7 @@ import itertools
 import warnings
 from itertools import product
 from typing import Any, Callable, Generator, Iterable, Iterator
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,6 @@ from lymph.helper import (
     DiagnoseType,
     PatternType,
     early_late_mapping,
-    not_updateable_cached_property,
     smart_updating_dict_cached_property,
 )
 
@@ -431,7 +431,7 @@ class Unilateral(DelegatorMixin):
             del self._obs_list
 
 
-    @not_updateable_cached_property
+    @cached_property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -467,7 +467,10 @@ class Unilateral(DelegatorMixin):
 
     def delete_transition_matrix(self):
         """Delete the transition matrix. Necessary to pass as callback."""
-        del self.transition_matrix
+        try:
+            del self.transition_matrix
+        except AttributeError:
+            pass
 
 
     @smart_updating_dict_cached_property
@@ -494,7 +497,7 @@ class Unilateral(DelegatorMixin):
         )
 
 
-    @not_updateable_cached_property
+    @cached_property
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
@@ -512,7 +515,11 @@ class Unilateral(DelegatorMixin):
 
     def delete_obs_list_and_matrix(self):
         """Delete the observation matrix. Necessary to pass as callback."""
-        del self.observation_matrix
+        try:
+            del self.observation_matrix
+        except AttributeError:
+            pass
+
         del self.obs_list
 
 
