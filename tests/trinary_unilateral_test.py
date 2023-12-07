@@ -4,6 +4,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+from lymph.graph import LymphNodeLevel
 from tests.fixtures import TrinaryFixtureMixin
 
 
@@ -13,6 +14,16 @@ class TrinaryInitTestCase(TrinaryFixtureMixin, unittest.TestCase):
     def test_is_trinary(self) -> None:
         """Test if the model is trinary."""
         self.assertTrue(self.model.is_trinary)
+
+    def test_lnls(self):
+        """Test they are all trinary lymph node levels."""
+        model_allowed_states = self.model.graph.allowed_states
+        self.assertEqual(len(model_allowed_states), 3)
+
+        for lnl in self.model.graph.lnls.values():
+            self.assertIsInstance(lnl, LymphNodeLevel)
+            self.assertTrue(lnl.is_trinary)
+            self.assertEqual(lnl.allowed_states, model_allowed_states)
 
 
 class TrinaryTransitionMatrixTestCase(TrinaryFixtureMixin, unittest.TestCase):

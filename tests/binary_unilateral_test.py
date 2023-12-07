@@ -46,9 +46,13 @@ class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
     def test_lnls(self):
         """Test they are all binary lymph node levels."""
+        model_allowed_states = self.model.graph.allowed_states
+        self.assertEqual(len(model_allowed_states), 2)
+
         for lnl in self.model.graph.lnls.values():
             self.assertIsInstance(lnl, LymphNodeLevel)
             self.assertTrue(lnl.is_binary)
+            self.assertEqual(lnl.allowed_states, model_allowed_states)
 
     def test_tumor_to_lnl_edges(self):
         """Make sure the tumor to LNL edges have been initialized correctly."""
