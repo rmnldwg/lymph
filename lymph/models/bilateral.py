@@ -186,6 +186,21 @@ class Bilateral(DelegatorMixin):
         self.contra.diag_time_dists = self.diag_time_dists
 
 
+    @classmethod
+    def binary(cls, *args, **kwargs) -> Bilateral:
+        """Initialize a binary bilateral model."""
+        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
+        unilateral_kwargs["allowed_states"] = [0, 1]
+        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+
+    @classmethod
+    def trinary(cls, *args, **kwargs) -> Bilateral:
+        """Initialize a trinary bilateral model."""
+        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
+        unilateral_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+
+
     def get_params(
         self,
         param: str | None = None,
