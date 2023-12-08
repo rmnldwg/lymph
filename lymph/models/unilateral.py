@@ -49,7 +49,7 @@ class Unilateral(DelegatorMixin):
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
 
-        The ``graph_dict`` that represents the lymphatic system should given as a
+        The ``graph_dict`` that represents the lymphatic system should be given as a
         dictionary. Its keys are tuples of the form ``("tumor", "<tumor_name>")`` or
         ``("lnl", "<lnl_name>")``. The values are lists of strings that represent the
         names of the nodes that are connected to the node given by the key.

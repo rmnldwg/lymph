@@ -425,3 +425,19 @@ class smart_updating_dict_cached_property(cached_property):
     def __delete__(self, instance: object) -> None:
         dict_like = self.__get__(instance)
         dict_like.clear()
+
+
+def init_dict_sync(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> None:
+    """Add callback to ``this`` to sync with ``other``.
+
+    This implements only a one-way sync, i.e. the keys and values of ``other`` are
+    updated as soon as those of ``this`` change.
+    """
+    def sync():
+        other.clear()
+        other.update(this)
+
+    this.trigger_callbacks.append(sync)

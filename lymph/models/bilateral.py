@@ -9,11 +9,11 @@ import pandas as pd
 
 from lymph import graph, matrix, modalities, models
 from lymph.helper import (
-    AbstractLookupDict,
     DelegatorMixin,
     DiagnoseType,
     PatternType,
     early_late_mapping,
+    init_dict_sync,
 )
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
@@ -78,22 +78,6 @@ def init_edge_sync(
                 other=this_edge,
             )
         )
-
-
-def init_dict_sync(
-    this: AbstractLookupDict,
-    other: AbstractLookupDict,
-) -> None:
-    """Add callback to ``this`` to sync with ``other``.
-
-    This implements only a one-way sync, i.e. the keys and values of ``other`` are
-    updated as soon as those of ``this`` change.
-    """
-    def sync():
-        other.clear()
-        other.update(this)
-
-    this.trigger_callbacks.append(sync)
 
 
 class Bilateral(DelegatorMixin):
