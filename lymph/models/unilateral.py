@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import itertools
 import warnings
+from functools import cached_property
 from itertools import product
 from typing import Any, Callable, Generator, Iterable, Iterator
-from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -828,7 +828,7 @@ class Unilateral(DelegatorMixin):
                 matrix.compute_encoding(
                     lnls=self.graph.lnls.keys(),
                     pattern=given_diagnoses.get(modality, {}),
-                    base=3 if self.is_trinary else 2,
+                    base=2,   # diagnoses are always binary!
                 ),
             )
 
