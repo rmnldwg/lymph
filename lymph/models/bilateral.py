@@ -105,9 +105,7 @@ class Bilateral(DelegatorMixin):
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        tumor_spread_symmetric: bool = False,
-        lnl_spread_symmetric: bool | None = None,
-        modalities_symmetric: bool = True,
+        is_symmetric: dict[str, bool] | None = None,
         unilateral_kwargs: dict[str, Any] | None = None,
         ipsilateral_kwargs: dict[str, Any] | None = None,
         contralateral_kwargs: dict[str, Any] | None = None,
@@ -120,11 +118,17 @@ class Bilateral(DelegatorMixin):
         which in turn pass it to the :py:class:`~lymph.graph.Representation` class that
         stores the graph.
 
-        The ``tumor_spread_symmetric`` and ``lnl_spread_symmetric`` arguments determine
-        which parameters are shared between the two sides of the neck. If
-        ``tumor_spread_symmetric`` is ``True``, the spread probabilities from the
-        tumor(s) to the LNLs are shared. If ``lnl_spread_symmetric`` is ``True``, the
-        spread probabilities between the LNLs are shared.
+        The ``is_symmetric`` dictionary defines which characteristics of the bilateral
+        model should be symmetric. Valid keys are:
+        - ``"modalities"``: Whether the diagnostic modalities of the two neck sides
+            are symmetric (default: ``True``).
+        - ``"tumor_spread"``: Whether the spread probabilities from the tumor(s) to the
+            LNLs are symmetric (default: ``False``). If this is set to ``True`` but
+            the graphs are asymmetric, a warning is issued.
+        - ``"lnl_spread"``: Whether the spread probabilities between the LNLs are
+            symmetric (default: ``True`` if the graphs are symmetric, otherwise
+            ``False``). If this is set to ``True`` but the graphs are asymmetric, a
+            warning is issued.
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
         while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
@@ -136,26 +140,24 @@ class Bilateral(DelegatorMixin):
 
         self.init_models(
             graph_dict=graph_dict,
-            tumor_spread_symmetric=tumor_spread_symmetric,
-            lnl_spread_symmetric=lnl_spread_symmetric,
+            is_symmetric=is_symmetric,
             unilateral_kwargs=unilateral_kwargs,
             ipsilateral_kwargs=ipsilateral_kwargs,
             contralateral_kwargs=contralateral_kwargs,
         )
-        self.modalities_symmetric = modalities_symmetric
 
         property_names = ["spread_prob"]
         if self.ipsi.graph.is_trinary:
             property_names.append("micro_mod")
 
-        if self.tumor_spread_symmetric:
+        if self.is_symmetric["tumor_spread"]:
             init_edge_sync(
                 property_names,
                 list(self.ipsi.graph.tumor_edges.values()),
                 list(self.contra.graph.tumor_edges.values()),
             )
 
-        if self.lnl_spread_symmetric:
+        if self.is_symmetric["lnl_spread"]:
             ipsi_edges = (
                 list(self.ipsi.graph.lnl_edges.values())
                 + list(self.ipsi.graph.growth_edges.values())
@@ -176,7 +178,7 @@ class Bilateral(DelegatorMixin):
             "is_binary", "is_trinary",
         ]
 
-        if self.modalities_symmetric:
+        if self.is_symmetric["modalities"]:
             delegated_attrs.append("modalities")
             init_dict_sync(
                 this=self.ipsi.modalities,
@@ -190,8 +192,7 @@ class Bilateral(DelegatorMixin):
     def init_models(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        tumor_spread_symmetric: bool = False,
-        lnl_spread_symmetric: bool | None = None,
+        is_symmetric: dict[str, bool] | None = None,
         unilateral_kwargs: dict[str, Any] | None = None,
         ipsilateral_kwargs: dict[str, Any] | None = None,
         contralateral_kwargs: dict[str, Any] | None = None,
@@ -211,20 +212,27 @@ class Bilateral(DelegatorMixin):
         self.ipsi   = models.Unilateral(**ipsi_kwargs)
         self.contra = models.Unilateral(**contra_kwargs)
 
-        if lnl_spread_symmetric is None:
-            lnl_spread_symmetric = ipsi_kwargs == contra_kwargs
+        self.is_symmetric = {
+            "modalities": True,
+            "tumor_spread": False,
+            "lnl_spread": ipsi_kwargs == contra_kwargs,
+        }
+        try:
+            self.is_symmetric.update(is_symmetric or {})
+        except TypeError as type_err:
+            raise TypeError(
+                "The `is_symmetric` argument must be a dictionary with possible keys "
+                f"{list(self.is_symmetric.keys())} and boolean values."
+            ) from type_err
 
         if (
-            (tumor_spread_symmetric or lnl_spread_symmetric)
+            (self.is_symmetric["tumor_spread"] or self.is_symmetric["lnl_spread"])
             and ipsi_kwargs != contra_kwargs
         ):
             warnings.warn(
                 "The graphs are asymmetric. Syncing spread probabilities "
                 "may not have intended effect."
             )
-
-        self.tumor_spread_symmetric = tumor_spread_symmetric
-        self.lnl_spread_symmetric = lnl_spread_symmetric
 
 
     @classmethod
@@ -336,7 +344,7 @@ class Bilateral(DelegatorMixin):
             :py:class:`~lymph.descriptors.ModalitiesUserDict`
                 The implementation of the descriptor class.
         """
-        if not self.modalities_symmetric:
+        if not self.is_symmetric["modalities"]:
             raise AttributeError(
                 "The modalities are not symmetric. Please access them via the "
                 "`ipsi` or `contra` attributes."
@@ -346,7 +354,7 @@ class Bilateral(DelegatorMixin):
     @modalities.setter
     def modalities(self, new_modalities) -> None:
         """Set the diagnostic modalities of the model."""
-        if not self.modalities_symmetric:
+        if not self.is_symmetric["modalities"]:
             raise AttributeError(
                 "The modalities are not symmetric. Please set them via the "
                 "`ipsi` or `contra` attributes."
