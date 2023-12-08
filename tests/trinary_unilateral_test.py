@@ -127,3 +127,35 @@ class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase)
             mode="HMM",
         )
         self.assertEqual(likelihood, -np.inf)
+
+
+class TrinaryRiskTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+    """Test the risk of a trinary model."""
+
+    def setUp(self):
+        """Load patient data."""
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.load_patient_data(filename="2021-usz-oropharynx.csv")
+
+    def create_random_diagnoses(self):
+        """Create a random diagnosis for each modality and LNL."""
+        lnl_names = list(self.model.graph.lnls.keys())
+        diagnoses = {}
+
+        for modality in self.model.modalities:
+            diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
+
+        return diagnoses
+
+    def test_risk_is_probability(self):
+        """Make sure the risk is a probability."""
+        risk = self.model.risk(
+            involvement=fixtures.create_random_pattern(lnls=list(self.model.graph.lnls.keys())),
+            given_diagnoses=self.create_random_diagnoses(),
+            given_param_kwargs=self.create_random_params(),
+            t_stage=self.rng.choice(["early", "late"]),
+        )
+        self.assertGreaterEqual(risk, 0.)
+        self.assertLessEqual(risk, 1.)

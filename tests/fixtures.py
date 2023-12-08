@@ -199,6 +199,7 @@ class BilateralModelMixin:
         self.model.load_patient_data(self.raw_data)
 
 
+
 class TrinaryFixtureMixin:
     """Mixin class for simple trinary model fixture creation."""
 
@@ -208,6 +209,7 @@ class TrinaryFixtureMixin:
         self.graph_dict = get_graph(size="large")
         self.model = Unilateral.trinary(graph_dict=self.graph_dict)
         self.logger = get_logger(level=logging.INFO)
+
 
     def create_random_params(self) -> dict[str, float]:
         """Create random parameters for the model."""
@@ -226,12 +228,14 @@ class TrinaryFixtureMixin:
 
         return params
 
+
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnose time distributions."""
         for t_stage, type_ in dists.items():
             self.model.diag_time_dists[t_stage] = create_random_dist(
                 type_, self.model.max_time, self.rng
             )
+
 
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
@@ -245,6 +249,7 @@ class TrinaryFixtureMixin:
             "pCT": Clinical(specificity=0.86, sensitivity=0.81),
         }
         return {name: modalities_in_data[name] for name in names}
+
 
     def load_patient_data(
         self,
