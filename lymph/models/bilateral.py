@@ -45,20 +45,24 @@ def create_property_sync_callback(
 
 def init_edge_sync(
     property_names: list[str],
-    this_edge_list: list[graph.Edge],
-    other_edge_list: list[graph.Edge],
+    this_edges: list[graph.Edge],
+    other_edges: list[graph.Edge],
 ) -> None:
     """Initialize the callbacks to sync properties btw. Edges.
+
+    This is a two-way sync, i.e. the properties of both ``this_edges`` and
+    ``other_edges`` are kept in sync. The ``property_names`` is a list of property
+    names that should be synced.
 
     Implementing this as a separate method allows a user in theory to initialize
     an arbitrary kind of symmetry between the two sides of the neck.
     """
-    this_edge_names = [e.name for e in this_edge_list]
-    other_edge_names = [e.name for e in other_edge_list]
+    this_edge_names = [e.name for e in this_edges]
+    other_edge_names = [e.name for e in other_edges]
 
     for edge_name in set(this_edge_names).intersection(other_edge_names):
-        this_edge = this_edge_list[this_edge_names.index(edge_name)]
-        other_edge = other_edge_list[other_edge_names.index(edge_name)]
+        this_edge = this_edges[this_edge_names.index(edge_name)]
+        other_edge = other_edges[other_edge_names.index(edge_name)]
 
         this_edge.trigger_callbacks.append(
             create_property_sync_callback(
@@ -80,7 +84,11 @@ def init_dict_sync(
     this: AbstractLookupDict,
     other: AbstractLookupDict,
 ) -> None:
-    """Add callback to ``this`` to sync with ``other``."""
+    """Add callback to ``this`` to sync with ``other``.
+
+    This implements only a one-way sync, i.e. the keys and values of ``other`` are
+    updated as soon as those of ``this`` change.
+    """
     def sync():
         other.clear()
         other.update(this)
@@ -146,47 +154,13 @@ class Bilateral(DelegatorMixin):
             contralateral_kwargs=contralateral_kwargs,
         )
 
-        property_names = ["spread_prob"]
-        if self.ipsi.graph.is_trinary:
-            property_names.append("micro_mod")
-
-        if self.is_symmetric["tumor_spread"]:
-            init_edge_sync(
-                property_names,
-                list(self.ipsi.graph.tumor_edges.values()),
-                list(self.contra.graph.tumor_edges.values()),
-            )
-
-        if self.is_symmetric["lnl_spread"]:
-            ipsi_edges = (
-                list(self.ipsi.graph.lnl_edges.values())
-                + list(self.ipsi.graph.growth_edges.values())
-            )
-            contra_edges = (
-                list(self.contra.graph.lnl_edges.values())
-                + list(self.contra.graph.growth_edges.values())
-            )
-            init_edge_sync(property_names, ipsi_edges, contra_edges)
-
-        init_dict_sync(
-            this=self.ipsi.diag_time_dists,
-            other=self.contra.diag_time_dists,
-        )
+        self.init_synchronization()
 
         delegated_attrs = [
             "max_time", "t_stages", "diag_time_dists",
             "is_binary", "is_trinary",
-        ]
-
-        if self.is_symmetric["modalities"]:
-            delegated_attrs.append("modalities")
-            init_dict_sync(
-                this=self.ipsi.modalities,
-                other=self.contra.modalities,
-            )
-
+        ] + ["modalities"] if self.is_symmetric["modalities"] else []
         self.init_delegation(ipsi=delegated_attrs)
-        self.contra.diag_time_dists = self.diag_time_dists
 
 
     def init_models(
@@ -233,6 +207,44 @@ class Bilateral(DelegatorMixin):
                 "The graphs are asymmetric. Syncing spread probabilities "
                 "may not have intended effect."
             )
+
+
+    def init_synchronization(self) -> None:
+        """Initialize the synchronization of edges, modalities, and diagnose times."""
+        # Sync spread probabilities
+        property_names = ["spread_prob", "micro_mod"] if self.ipsi.is_trinary else ["spread_prob"]
+        ipsi_tumor_edges = list(self.ipsi.graph.tumor_edges.values())
+        ipsi_lnl_edges = list(self.ipsi.graph.lnl_edges.values())
+        ipsi_edges = (
+            ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else []
+            + ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else []
+        )
+        contra_tumor_edges = list(self.contra.graph.tumor_edges.values())
+        contra_lnl_edges = list(self.contra.graph.lnl_edges.values())
+        contra_edges = (
+            contra_tumor_edges if self.is_symmetric["tumor_spread"] else []
+            + contra_lnl_edges if self.is_symmetric["lnl_spread"] else []
+        )
+
+        init_edge_sync(
+            property_names=property_names,
+            this_edges=ipsi_edges,
+            other_edges=contra_edges,
+        )
+
+        # Sync modalities
+        if self.is_symmetric["modalities"]:
+            init_dict_sync(
+                this=self.ipsi.modalities,
+                other=self.contra.modalities,
+            )
+
+        # Sync diagnose time distributions
+        init_dict_sync(
+            this=self.ipsi.diag_time_dists,
+            other=self.contra.diag_time_dists,
+        )
+        self.contra.diag_time_dists = self.ipsi.diag_time_dists
 
 
     @classmethod

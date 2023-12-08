@@ -609,7 +609,7 @@ class Representation:
         return {n: e for n, e in self.edges.items() if e.is_tumor_spread}
 
     @property
-    def lnl_edges(self) -> Iterable[Edge]:
+    def lnl_edges(self) -> dict[str, Edge]:
         """List of all LNL :py:class:`~Edge` instances in the graph.
 
         This contains all edges who's parents and children are instances of
@@ -618,7 +618,7 @@ class Representation:
         return {n: e for n, e in self.edges.items() if not (e.is_tumor_spread or e.is_growth)}
 
     @property
-    def growth_edges(self) -> Iterable[Edge]:
+    def growth_edges(self) -> dict[str, Edge]:
         """List of all growth :py:class:`~Edge` instances in the graph.
 
         Growth edges are only present in trinary models and are arcs where the parent
