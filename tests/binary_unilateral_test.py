@@ -1,7 +1,7 @@
 """Test the binary unilateral system."""
 import unittest
 
-import fixtures
+from tests import fixtures
 import numpy as np
 
 from lymph.graph import LymphNodeLevel, Tumor

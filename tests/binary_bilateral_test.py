@@ -3,7 +3,7 @@ Test the bilateral model.
 """
 import unittest
 
-import fixtures
+from tests import fixtures
 import numpy as np
 
 from lymph import models

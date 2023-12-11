@@ -1,7 +1,7 @@
 """Test the trinary unilateral system."""
 import unittest
 
-import fixtures
+from tests import fixtures
 import numpy as np
 import pandas as pd
 

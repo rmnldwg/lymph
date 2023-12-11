@@ -341,7 +341,7 @@ class Bilateral(DelegatorMixin):
             *new_params_args, **ipsi_kwargs, **general_kwargs
         )
         remaining_args, remainings_kwargs = self.contra.assign_params(
-            *remaining_args, **contra_kwargs, **remainings_kwargs
+            *remaining_args, **contra_kwargs, **general_kwargs
         )
         return remaining_args, remainings_kwargs
 
@@ -602,7 +602,7 @@ class Bilateral(DelegatorMixin):
         joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
         joint_diagnose_and_state = (
-            diagnose_given_state["ipsi"].T
+            diagnose_given_state["ipsi"][:, np.newaxis] 
             * joint_state_dist
             * diagnose_given_state["contra"]
         )

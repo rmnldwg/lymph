@@ -1,0 +1,411 @@
+from __future__ import annotations
+from argparse import OPTIONAL
+
+import logging
+import warnings
+from typing import Any, Iterable, Iterator
+
+import numpy as np
+import pandas as pd
+
+from lymph import graph, matrix, modalities, models
+from lymph.helper import (
+    AbstractLookupDict,
+    DelegatorMixin,
+    DiagnoseType,
+    PatternType,
+    early_late_mapping,
+)
+
+warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
+logger = logging.getLogger(__name__)
+
+
+
+def create_property_sync_callback(
+    names: list[str],
+    this: graph.Edge,
+    other: graph.Edge,
+) -> callable:
+    """Return func to sync property values whose name is in ``names`` btw two edges.
+
+    The returned function is meant to be added to the list of callbacks of the
+    :py:class:`Edge` class, such that two edges in a mirrored pair of graphs are kept
+    in sync.
+    """
+    def sync():
+        # We must set the value of `this` property via the private name, otherwise
+        # we would trigger the setter's callbacks and may end up in an infinite loop.
+        for name in names:
+            private_name = f"_{name}"
+            setattr(other, private_name, getattr(this, name))
+
+    logger.debug(f"Created sync callback for properties {names} of {this.name} edge.")
+    return sync
+
+
+def init_edge_sync(
+    property_names: list[str],
+    this_edge_list: list[graph.Edge],
+    other_edge_list: list[graph.Edge],
+) -> None:
+    """Initialize the callbacks to sync properties btw. Edges.
+
+    Implementing this as a separate method allows a user in theory to initialize
+    an arbitrary kind of symmetry between the two sides of the neck.
+    """
+    this_edge_names = [e.name for e in this_edge_list]
+    other_edge_names = [e.name for e in other_edge_list]
+
+    for edge_name in set(this_edge_names).intersection(other_edge_names):
+        this_edge = this_edge_list[this_edge_names.index(edge_name)]
+        other_edge = other_edge_list[other_edge_names.index(edge_name)]
+
+        this_edge.trigger_callbacks.append(
+            create_property_sync_callback(
+                names=property_names,
+                this=this_edge,
+                other=other_edge,
+            )
+        )
+        other_edge.trigger_callbacks.append(
+            create_property_sync_callback(
+                names=property_names,
+                this=other_edge,
+                other=this_edge,
+            )
+        )
+
+
+def init_dict_sync(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> None:
+    """Add callback to ``this`` to sync with ``other``."""
+    def sync():
+        other.clear()
+        other.update(this)
+
+    this.trigger_callbacks.append(sync)
+
+
+class Midline(DelegatorMixin):
+    """Model a bilateral lymphatic system where an additional risk factor can
+    be provided in the data: Whether or not the primary tumor extended over the
+    mid-sagittal line.
+
+    It is reasonable to assume (and supported by data) that such an extension
+    significantly increases the risk for metastatic spread to the contralateral
+    side of the neck. This class attempts to capture this using a simple
+    assumption: We assume that the probability of spread to the contralateral
+    side for patients *with* midline extension is larger than for patients
+    *without* it, but smaller than the probability of spread to the ipsilateral
+    side. Formally:
+
+    .. math::
+        b_c^{\\in} = \\alpha \\cdot b_i + (1 - \\alpha) \\cdot b_c^{\\not\\in}
+
+    where :math:`b_c^{\\in}` is the probability of spread from the primary tumor
+    to the contralateral side for patients with midline extension, and
+    :math:`b_c^{\\not\\in}` for patients without. :math:`\\alpha` is the linear
+    mixing parameter.
+    """
+    def __init__(
+        self,
+        graph_dict: dict[tuple[str], list[str]],
+        use_mixing: bool = True,
+        trans_symmetric: bool = True,
+        **_kwargs
+    ):
+        """The class is constructed in a similar fashion to the
+        :class:`Bilateral`: That class contains one :class:`Unilateral` for
+        each side of the neck, while this class will contain two instances of
+        :class:`Bilateral`, one for the case of a midline extension and one for
+        the case of no midline extension.
+
+        Args:
+            graph: Dictionary of the same kind as for initialization of
+                :class:`System`. This graph will be passed to the constructors of
+                two :class:`System` attributes of this class.
+            use_mixing: Describe the contralateral base spread probabilities for the
+                case of a midline extension as a linear combination between the base
+                spread probs of the ipsilateral side and the ones of the contralateral
+                side when no midline extension is present.
+            trans_symmetric: If ``True``, the spread probabilities among the
+                LNLs will be set symmetrically.
+
+        See Also:
+            :class:`Bilateral`: Two of these are held as attributes by this
+            class. One for the case of a mid-sagittal extension of the primary
+            tumor and one for the case of no such extension.
+        """
+        self.ext   = models.Bilateral(
+            graph_dict=graph, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True,
+        )
+        self.noext = models.Bilateral(
+            graph_dict=graph, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True,
+        )
+        self.use_mixing = use_mixing
+        if self.use_mixing:
+            self.alpha_mix = 0.
+
+        self.noext.diag_time_dists = self.ext.diag_time_dists   
+
+    def get_params(
+        self):
+        """Return the parameters of the model.
+
+        Should be optimized ti fut tge actual code design
+        """
+
+        if self.use_mixing:
+            return np.concatenate([
+                self.ext.ipsi.base_probs,
+                self.noext.contra.base_probs,
+                [self.alpha_mix],])
+        else:
+            return np.concatenate([
+                self.ext.ipsi.base_probs,
+                self.ext.contra.base_probs,
+                self.noext.contra.base_probs,])
+
+
+    def assign_params(
+        self,
+        *new_params_args,
+        **new_params_kwargs,
+    ) -> tuple[Iterator[float, dict[str, float]]]:
+        """Assign new parameters to the model.
+
+        This works almost exactly as the unilateral model's
+        :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
+        allows the user to set the parameters of individual sides of the neck by
+        prefixing the parameter name with ``"ipsi_"`` or ``"contra_"``. This is
+        necessary for parameters that are not symmetric between the two sides of the
+        neck. For symmetric parameters, the prefix is not needed as they are directly
+        sent to the ipsilateral side, which then triggers a sync callback.
+
+        Note:
+            When setting the parameters via positional arguments, the order is
+            important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
+            are passed to the ipsilateral side, the remaining ones to the contralateral
+            side.
+        """
+        if self.use_mixing:
+            ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
+            for key, value in new_params_kwargs.items():
+                if "ipsi_" in key:
+                    ipsi_kwargs[key.replace("ipsi_", "")] = value
+                elif "contra_" in key:
+                    contra_kwargs[key.replace("contra_", "")] = value
+                elif 'mixing' in key:
+                    self.alpha_mix = value
+                else:
+                    general_kwargs[key] = value
+
+            remaining_args, remainings_kwargs = self.ext.ipsi.assign_params(
+                *new_params_args, **ipsi_kwargs, **general_kwargs
+            )
+            remaining_args, remainings_kwargs = self.noext.contra.assign_params(
+                *remaining_args, **contra_kwargs, **remainings_kwargs
+            )
+        else:
+            ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs = {}, {}, {}, {}
+
+            for key, value in new_params_kwargs.items():
+                if "ipsi_" in key:
+                    ipsi_kwargs[key.replace("ipsi_", "")] = value
+                elif "contra_noext" in key:
+                    noext_contra_kwargs[key.replace("contra_noext", "")] = value
+                elif 'contra_ext' in key:
+                    ext_contra_kwargs[key.replace("contra_ext", "")] = value
+
+                else:
+                    general_kwargs[key] = value
+
+            remaining_args, remainings_kwargs = self.ext.ipsi.assign_params(
+                *new_params_args, **ipsi_kwargs, **general_kwargs
+            )
+            remaining_args, remainings_kwargs = self.noext.contra.assign_params(
+                *remaining_args, **noext_contra_kwargs, **remainings_kwargs
+            )
+            remaining_args, remainings_kwargs = self.ext.contra.assign_params(
+                *remaining_args, **ext_contra_kwargs, **remainings_kwargs
+            )
+        return remaining_args, remainings_kwargs
+
+
+    @property
+    def modalities(self) -> modalities.ModalitiesUserDict:
+        """Return the set diagnostic modalities of the model.
+
+        See Also:
+            :py:attr:`lymph.models.Unilateral.modalities`
+                The corresponding unilateral attribute.
+            :py:class:`~lymph.descriptors.ModalitiesUserDict`
+                The implementation of the descriptor class.
+        """
+        if not self.modalities_symmetric:
+            raise AttributeError(
+                "The modalities are not symmetric. Please access them via the "
+                "`ipsi` or `contra` attributes."
+            )
+        return self.ext.modalities
+
+    @modalities.setter
+    def modalities(self, new_modalities) -> None:
+        """Set the diagnostic modalities of the model."""
+        if not self.modalities_symmetric:
+            raise AttributeError(
+                "The modalities are not symmetric. Please set them via the "
+                "`ipsi` or `contra` attributes."
+            )
+        self.ext.modalities = new_modalities
+        self.noext.modalities = new_modalities
+
+
+    def load_patient_data(
+        self,
+        patient_data: pd.DataFrame,
+        mapping: callable = early_late_mapping,
+    ) -> None:
+        """Load patient data into the model.
+
+        This amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
+        method on both models.
+        """
+
+        ext_data = patient_data.loc[patient_data[("info", "tumor", "midline_extension")]]
+        noext_data = patient_data.loc[~patient_data[("info", "tumor", "midline_extension")]]
+
+
+        self.ext.load_patient_data(
+            ext_data)
+        self.noext.load_patient_data(
+            noext_data,)
+        self.ext.load_patient_data(ext_data, mapping)
+        self.noext.load_patient_data(noext_data, mapping)
+
+
+    def likelihood(
+        self,
+        data: OPTIONAL[pd.DataFrame] = None,
+        given_params: OPTIONAL[np.ndarray] = None,
+        log: bool = True,
+    ) -> float:
+        """Compute log-likelihood of (already stored) data, given the spread
+        probabilities and either a discrete diagnose time or a distribution to
+        use for marginalization over diagnose times.
+
+        Args:
+            data: Table with rows of patients and columns of per-LNL involvment. See
+                :meth:`load_data` for more details on how this should look like.
+
+            given_params: The likelihood is a function of these parameters. They mainly
+                consist of the :attr:`spread_probs` of the model. Any excess parameters
+                will be used to update the parametrized distributions used for
+                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
+
+            log: When ``True``, the log-likelihood is returned.
+
+        Returns:
+            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
+            is the data and :math:`\\theta` is the tuple of spread probabilities
+            and diagnose times or distributions over diagnose times.
+
+        See Also:
+            :attr:`spread_probs`: Property for getting and setting the spread
+            probabilities, of which a lymphatic network has as many as it has
+            :class:`Edge` instances (in case no symmetries apply).
+
+            :meth:`Unilateral.likelihood`: The log-likelihood function of
+            the unilateral system.
+
+            :meth:`Bilateral.likelihood`: The (log-)likelihood function of the
+            bilateral system.
+        """
+        if data is not None:
+            self.patient_data = data
+
+        try:
+            self.assign_params(given_params)
+        except ValueError:
+            return -np.inf if log else 0.
+
+        llh = 0. if log else 1.
+
+        llh += self.ext._hmm_likelihood(log=log)
+        llh += self.noext._hmm_likelihood(log=log)
+
+
+        return llh
+
+
+    def risk(
+        self,
+        involvement: PatternType | None = None,
+        given_param_args: Iterable[float] | None = None,
+        given_param_kwargs: dict[str, float] | None = None,
+        given_diagnoses: dict[str, DiagnoseType] | None = None,
+        t_stage: str = "early",
+        midline_extension: bool = False,
+        mode: str = "HMM",
+    ) -> float:
+        """Compute the risk of nodal involvement given a specific diagnose.
+
+        Args:
+            spread_probs: Set ot new spread parameters. This also contains the
+                mixing parameter alpha in the last position.
+            midline_extension: Whether or not the patient's tumor extends over
+                the mid-sagittal line.
+
+        See Also:
+            :meth:`Bilateral.risk`: Depending on whether or not the patient's
+            tumor does extend over the midline, the risk function of the
+            respective :class:`Bilateral` instance gets called.
+        """
+        if given_param_args is not None:
+            self.assign_params(*given_param_args)
+        if given_param_kwargs is not None:
+            self.assign_params(**given_param_kwargs)
+
+        if midline_extension:
+            return self.ext.risk(given_diagnoses,t_stage = t_stage, involvement = involvement)
+        else:
+            return self.noext.risk(given_diagnoses,t_stage = t_stage, involvement = involvement)    
+        
+        
+
+    # def generate_dataset(
+    #     self,
+    #     num_patients: int,
+    #     stage_dist: dict[str, float],
+    # ) -> pd.DataFrame:
+    #     """Generate/sample a pandas :class:`DataFrame` from the defined network.
+
+    #     Args:
+    #         num_patients: Number of patients to generate.
+    #         stage_dist: Probability to find a patient in a certain T-stage.
+    #     """
+    #     # TODO: check if this still works
+    #     drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
+    #         dist=stage_dist, size=num_patients
+    #     )
+
+    #     drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)
+    #     drawn_obs_contra = self.contra._draw_patient_diagnoses(drawn_diag_times)
+    #     drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
+
+    #     # construct MultiIndex for dataset from stored modalities
+    #     sides = ["ipsi", "contra"]
+    #     modalities = list(self.modalities.keys())
+    #     lnl_names = [lnl.name for lnl in self.ipsi.graph._lnls]
+    #     multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
+
+    #     # create DataFrame
+    #     dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
+    #     dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
+    #     dataset = dataset.sort_index(axis="columns", level=0)
+    #     dataset[('info', 'tumor', 't_stage')] = drawn_t_stages
+
+    #     return dataset
