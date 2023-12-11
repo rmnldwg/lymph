@@ -114,7 +114,9 @@ class Midline(DelegatorMixin):
         self,
         graph_dict: dict[tuple[str], list[str]],
         use_mixing: bool = True,
+        modalities_symmetric: bool = True,
         trans_symmetric: bool = True,
+        unilateral_kwargs: dict[str, Any] | None = None,
         **_kwargs
     ):
         """The class is constructed in a similar fashion to the
@@ -139,17 +141,39 @@ class Midline(DelegatorMixin):
             class. One for the case of a mid-sagittal extension of the primary
             tumor and one for the case of no such extension.
         """
+        super().__init__()
         self.ext   = models.Bilateral(
-            graph_dict=graph, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True,
-        )
+            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True, unilateral_kwargs=unilateral_kwargs)
         self.noext = models.Bilateral(
-            graph_dict=graph, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True,
-        )
+            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True, unilateral_kwargs=unilateral_kwargs)
         self.use_mixing = use_mixing
+        self.diag_time_dists = {}
         if self.use_mixing:
             self.alpha_mix = 0.
 
-        self.noext.diag_time_dists = self.ext.diag_time_dists   
+        self.modalities_symmetric = modalities_symmetric
+        property_names = ["spread_prob"]
+        if self.ext.ipsi.graph.is_trinary:
+            property_names.append("micro_mod")
+        delegated_attrs = [
+            "max_time", "t_stages",
+            "is_binary", "is_trinary",
+        ]
+
+        init_dict_sync(
+            this=self.ext.ipsi.diag_time_dists,
+            other=self.noext.ipsi.diag_time_dists,
+        )
+
+
+        if self.modalities_symmetric:
+            delegated_attrs.append("modalities")
+            init_dict_sync(
+                this=self.ext.modalities,
+                other=self.noext.modalities,
+            )
+
+        self.init_delegation(ext=delegated_attrs)
 
     def get_params(
         self):
@@ -159,15 +183,14 @@ class Midline(DelegatorMixin):
         """
 
         if self.use_mixing:
-            return np.concatenate([
-                self.ext.ipsi.base_probs,
-                self.noext.contra.base_probs,
-                [self.alpha_mix],])
+            return {'ipsi': self.ext.ipsi.get_params(as_dict=True),
+                'no extension contra':self.noext.contra.get_params(as_dict=True),
+                'mixing':self.alpha_mix}
         else:
-            return np.concatenate([
-                self.ext.ipsi.base_probs,
-                self.ext.contra.base_probs,
-                self.noext.contra.base_probs,])
+            return {
+                'ipsi':self.ext.ipsi.get_params(as_dict=True),
+                'extension contra':self.ext.contra.get_params(as_dict=True),
+                'no extension contra':self.noext.contra.get_params(as_dict=True)}
 
 
     def assign_params(
@@ -192,23 +215,21 @@ class Midline(DelegatorMixin):
             side.
         """
         if self.use_mixing:
-            ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
+            extension_kwargs = {}
+            no_extension_kwargs = {}
             for key, value in new_params_kwargs.items():
-                if "ipsi_" in key:
-                    ipsi_kwargs[key.replace("ipsi_", "")] = value
-                elif "contra_" in key:
-                    contra_kwargs[key.replace("contra_", "")] = value
-                elif 'mixing' in key:
+                if 'mixing' in key:
                     self.alpha_mix = value
                 else:
-                    general_kwargs[key] = value
+                    no_extension_kwargs[key] = value
+            remaining_args, remainings_kwargs = self.noext.assign_params(*new_params_args, **no_extension_kwargs)
+            for key in no_extension_kwargs.keys():
+                if 'contra_primary' in key:
+                    extension_kwargs[key] = self.alpha_mix * extension_kwargs[(key.replace("contra", "ipsi"))] + (1. - self.alpha_mix) * no_extension_kwargs[key]
+                else:
+                    extension_kwargs[key] = no_extension_kwargs[key]
+            remaining_args, remainings_kwargs = self.ext.assign_params(*remaining_args, **extension_kwargs)
 
-            remaining_args, remainings_kwargs = self.ext.ipsi.assign_params(
-                *new_params_args, **ipsi_kwargs, **general_kwargs
-            )
-            remaining_args, remainings_kwargs = self.noext.contra.assign_params(
-                *remaining_args, **contra_kwargs, **remainings_kwargs
-            )
         else:
             ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs = {}, {}, {}, {}
 
@@ -275,14 +296,9 @@ class Midline(DelegatorMixin):
         method on both models.
         """
 
-        ext_data = patient_data.loc[patient_data[("info", "tumor", "midline_extension")]]
-        noext_data = patient_data.loc[~patient_data[("info", "tumor", "midline_extension")]]
+        ext_data = patient_data.loc[patient_data[("tumor", "1", "extension")]]
+        noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
 
-
-        self.ext.load_patient_data(
-            ext_data)
-        self.noext.load_patient_data(
-            noext_data,)
         self.ext.load_patient_data(ext_data, mapping)
         self.noext.load_patient_data(noext_data, mapping)
 
@@ -290,7 +306,7 @@ class Midline(DelegatorMixin):
     def likelihood(
         self,
         data: OPTIONAL[pd.DataFrame] = None,
-        given_params: OPTIONAL[np.ndarray] = None,
+        given_param_kwargs: dict[str, float] | None = None,
         log: bool = True,
     ) -> float:
         """Compute log-likelihood of (already stored) data, given the spread
@@ -327,15 +343,18 @@ class Midline(DelegatorMixin):
         if data is not None:
             self.patient_data = data
 
+        if given_param_kwargs is None:
+            given_param_kwargs = {}
+
         try:
-            self.assign_params(given_params)
+            self.assign_params(**given_param_kwargs)
         except ValueError:
             return -np.inf if log else 0.
 
         llh = 0. if log else 1.
+        llh += self.ext.likelihood(log = log)
+        llh += self.noext.likelihood(log=log)
 
-        llh += self.ext._hmm_likelihood(log=log)
-        llh += self.noext._hmm_likelihood(log=log)
 
 
         return llh
@@ -368,11 +387,10 @@ class Midline(DelegatorMixin):
             self.assign_params(*given_param_args)
         if given_param_kwargs is not None:
             self.assign_params(**given_param_kwargs)
-
         if midline_extension:
-            return self.ext.risk(given_diagnoses,t_stage = t_stage, involvement = involvement)
+            return self.ext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
         else:
-            return self.noext.risk(given_diagnoses,t_stage = t_stage, involvement = involvement)    
+            return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)    
         
         
 
