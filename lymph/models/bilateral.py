@@ -601,11 +601,10 @@ class Bilateral(DelegatorMixin):
 
         joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
-        joint_diagnose_and_state = (
-            diagnose_given_state["ipsi"].T
-            * joint_state_dist
-            * diagnose_given_state["contra"]
-        )
+        joint_diagnose_and_state = np.outer(
+            diagnose_given_state["ipsi"],
+            diagnose_given_state["contra"],
+        ) * joint_state_dist
         # Following Bayes' theorem, this is P(Xi,Xc|Zi=zi,Zc=zc) which is given by
         # P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) / P(Zi=zi,Zc=zc)
         return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
