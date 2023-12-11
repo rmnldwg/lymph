@@ -136,6 +136,64 @@ class ModalityDelegationTestCase(fixtures.BilateralModelMixin, unittest.TestCase
             self.model.contra.modalities["foo"].specificity,
         )
 
+    def test_diag_time_dists_delegation(self):
+        """Test that the diagnose time distributions are delegated."""
+        self.assertTrue(np.allclose(
+            list(self.model.diag_time_dists["early"].distribution),
+            list(self.model.ipsi.diag_time_dists["early"].distribution),
+        ))
+        self.assertTrue(np.allclose(
+            list(self.model.diag_time_dists["late"].get_params()),
+            list(self.model.ipsi.diag_time_dists["late"].get_params()),
+        ))
+        self.assertTrue(np.allclose(
+            list(self.model.diag_time_dists["early"].distribution),
+            list(self.model.contra.diag_time_dists["early"].distribution),
+        ))
+        self.assertTrue(np.allclose(
+            list(self.model.diag_time_dists["late"].get_params()),
+            list(self.model.contra.diag_time_dists["late"].get_params()),
+        ))
+
+
+class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Test the parameter assignment."""
+
+    def setUp(self):
+        self.model_kwargs = {
+            "is_symmetric": {
+                "tumor_spread": False,
+                "lnl_spread": False,
+                "modalities": True,
+            }
+        }
+        super().setUp()
+
+    def test_get_params_as_args(self):
+        """Test that the parameters can be retrieved."""
+        ipsi_args = self.model.ipsi.get_params()
+        contra_args = self.model.contra.get_params()
+        self.assertEqual(len(ipsi_args), len(contra_args))
+
+    def test_get_params_as_dict(self):
+        """Test that the parameters can be retrieved."""
+        ipsi_dict = self.model.ipsi.get_params(as_dict=True)
+        contra_dict = self.model.contra.get_params(as_dict=True)
+        self.assertEqual(ipsi_dict.keys(), contra_dict.keys())
+
+    def test_assign_params_as_args(self):
+        """Test that the parameters can be assigned."""
+        ipsi_args = self.rng.uniform(size=len(self.model.ipsi.get_params()))
+        contra_args = self.rng.uniform(size=len(self.model.contra.get_params()))
+        _ = self.model.assign_params(*ipsi_args, *contra_args)
+        self.assertTrue(np.allclose(ipsi_args, list(self.model.ipsi.get_params())))
+        self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
+
+        self.assertEqual(
+            self.model.ipsi.diag_time_dists["late"].get_params(),
+            self.model.contra.diag_time_dists["late"].get_params(),
+        )
+
 
 class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
     """Check that the (log-)likelihood is computed correctly."""

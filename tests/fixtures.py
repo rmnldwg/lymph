@@ -4,7 +4,7 @@ Fxitures for tests.
 import logging
 import warnings
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -160,12 +160,16 @@ class BinaryUnilateralModelMixin:
 
 class BilateralModelMixin:
     """Mixin for testing the bilateral model."""
+    model_kwargs: dict[str, Any] | None = None
 
     def setUp(self):
+        if self.model_kwargs is None:
+            self.model_kwargs = {}
+
         super().setUp()
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph("large")
-        self.model = lymph.models.Bilateral(graph_dict=self.graph_dict)
+        self.model = lymph.models.Bilateral(graph_dict=self.graph_dict, **self.model_kwargs)
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.assign_params(**self.create_random_params())
         self.logger = get_logger(level=logging.INFO)
