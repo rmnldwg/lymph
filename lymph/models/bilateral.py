@@ -311,22 +311,30 @@ class Bilateral(DelegatorMixin):
         self,
         *new_params_args,
         **new_params_kwargs,
-    ) -> tuple[Iterator[float, dict[str, float]]]:
+    ) -> tuple[Iterator[float, dict[str, dict[str, float]]]]:
         """Assign new parameters to the model.
 
         This works almost exactly as the unilateral model's
         :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
         allows the user to set the parameters of individual sides of the neck by
-        prefixing the parameter name with ``"ipsi_"`` or ``"contra_"``. This is
-        necessary for parameters that are not symmetric between the two sides of the
-        neck. For symmetric parameters, the prefix is not needed as they are directly
-        sent to the ipsilateral side, which then triggers a sync callback.
+        prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``. This
+        is necessary for parameters that are not symmetric between the two sides of the
+        neck.
+
+        Anything not prefixed by ``"ipsi_"`` or ``"contra_"`` is passed to both sides
+        of the neck.
 
         Note:
             When setting the parameters via positional arguments, the order is
             important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
             are passed to the ipsilateral side, the remaining ones to the contralateral
             side.
+
+            When still some remain after that, they are returned as the first element
+            of the returned tuple.
+
+        Similar to the unilateral method, this returns a tuple of the remaining args
+        and a dictionary with the remaining `"ipsi"` and `"contra"` kwargs.
         """
         ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
         for key, value in new_params_kwargs.items():
@@ -337,13 +345,13 @@ class Bilateral(DelegatorMixin):
             else:
                 general_kwargs[key] = value
 
-        remaining_args, remainings_kwargs = self.ipsi.assign_params(
+        remaining_args, rem_ipsi_kwargs = self.ipsi.assign_params(
             *new_params_args, **ipsi_kwargs, **general_kwargs
         )
-        remaining_args, remainings_kwargs = self.contra.assign_params(
-            *remaining_args, **contra_kwargs, **remainings_kwargs
+        remaining_args, rem_contra_kwargs = self.contra.assign_params(
+            *remaining_args, **contra_kwargs, **general_kwargs
         )
-        return remaining_args, remainings_kwargs
+        return remaining_args, {"ipsi": rem_ipsi_kwargs, "contra": rem_contra_kwargs}
 
 
     @property
