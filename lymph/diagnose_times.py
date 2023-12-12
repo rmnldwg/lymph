@@ -173,7 +173,14 @@ class Distribution:
         param: str | None = None,
         as_dict: bool = False,
     ) -> float | Iterable[float] | dict[str, float]:
-        """If updateable, return the dist's ``param`` value or all params in a dict."""
+        """If updateable, return the dist's ``param`` value or all params in a dict.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Unilateral.get_params`
+            :py:meth:`lymph.models.Bilateral.get_params`
+        """
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, returning empty dict")
             return {} if as_dict else None
@@ -195,6 +202,10 @@ class Distribution:
 
         Note:
             Parameters whose values are ``None`` are ignored.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.set_params`
+            :py:meth:`lymph.graph.Edge.set_params`
         """
         params_to_set = {}
         for name, value in kwargs.items():
@@ -302,7 +313,6 @@ class DistributionsUserDict(AbstractLookupDict):
         See Also:
             :py:meth:`lymph.diagnose_times.Distribution.set_params`
             :py:meth:`lymph.graph.Edge.set_params`
-            :py:meth:`lymph.models.Bilateral.set_params`
         """
         nested_params = {
             t_stage: {} for t_stage, dist in self.items()

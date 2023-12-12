@@ -162,7 +162,7 @@ class Unilateral(DelegatorMixin):
 
         See Also:
             :py:meth:`lymph.diagnose_times.Distribution.get_params`
-            :py:meth:`lymph.diagnose_times.DistributionUserDict.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
             :py:meth:`lymph.graph.Edge.get_params`
             :py:meth:`lymph.models.Bilateral.get_params`
         """

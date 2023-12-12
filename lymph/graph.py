@@ -370,7 +370,7 @@ class Edge:
 
         See Also:
             :py:meth:`lymph.diagnose_times.Distribution.get_params`
-            :py:meth:`lymph.diagnose_times.DistributionUserDict.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
             :py:meth:`lymph.models.Unilateral.get_params`
             :py:meth:`lymph.models.Bilateral.get_params`
         """
@@ -398,8 +398,7 @@ class Edge:
 
         See Also:
             :py:meth:`lymph.diagnose_times.Distribution.set_params`
-            :py:meth:`lymph.diagnose_times.DistributionUserDict.set_params`
-            :py:meth:`lymph.models.Bilateral.set_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.set_params`
         """
         if self.is_growth:
             return self.set_spread_prob(growth) if growth is not None else None
