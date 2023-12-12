@@ -189,11 +189,19 @@ class Distribution:
         underlying function to raise a ``ValueError`` if one of the parameters is
         invalid. If the parameters are valid, the frozen PMF is stored and can be
         retrieved via the :py:meth:`distribution` property.
+
+        Note:
+            Parameters whose values are ``None`` are ignored.
         """
-        params_to_set = set(kwargs.keys()).intersection(self._kwargs.keys())
+        params_to_set = {}
+        for name, value in kwargs.items():
+            if name not in self._kwargs or value is None:
+                continue
+            params_to_set[name] = value
+
         if self.is_updateable:
             new_kwargs = self._kwargs.copy()
-            new_kwargs.update({p: kwargs[p] for p in params_to_set})
+            new_kwargs.update(params_to_set)
 
             try:
                 self._frozen = self.normalize(

@@ -80,20 +80,38 @@ def init_edge_sync(
         )
 
 
+def create_lookupdict_sync_callback(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> callable:
+    """Return func to sync content of ``this`` lookup dict to ``other``.
+
+    The returned function is meant to be added to the list of callbacks of the lookup
+    dict class, such that two dicts in a mirrored pair of graphs are kept in sync.
+    """
+    def sync():
+        other.clear_without_trigger()
+        other.update_without_trigger(this)
+
+    logger.debug(f"Created sync callback from {this} lookup dict to {other}.")
+    return sync
+
+
 def init_dict_sync(
     this: AbstractLookupDict,
     other: AbstractLookupDict,
 ) -> None:
-    """Add callback to ``this`` to sync with ``other``.
+    """Initialize the callbacks to sync two lookup dicts.
 
-    This implements only a one-way sync, i.e. the keys and values of ``other`` are
-    updated as soon as those of ``this`` change.
+    This is a two-way sync, i.e. the dicts are kept in sync in both directions.
     """
-    def sync():
-        other.clear()
-        other.update(this)
+    this.trigger_callbacks.append(
+        create_lookupdict_sync_callback(this=this, other=other)
+    )
+    other.trigger_callbacks.append(
+        create_lookupdict_sync_callback(this=other, other=this)
+    )
 
-    this.trigger_callbacks.append(sync)
 
 
 class Bilateral(DelegatorMixin):
@@ -244,7 +262,6 @@ class Bilateral(DelegatorMixin):
             this=self.ipsi.diag_time_dists,
             other=self.contra.diag_time_dists,
         )
-        self.contra.diag_time_dists = self.ipsi.diag_time_dists
 
 
     @classmethod

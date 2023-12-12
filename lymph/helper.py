@@ -422,6 +422,15 @@ class AbstractLookupDict(UserDict):
         return False
 
 
+    def clear_without_trigger(self) -> None:
+        """Clear the dictionary without triggering the callbacks."""
+        self.__dict__["data"].clear()
+
+    def update_without_trigger(self, other=(), /, **kwargs):
+        """Update the dictionary without triggering the callbacks."""
+        self.__dict__["data"].update(other, **kwargs)
+
+
 class smart_updating_dict_cached_property(cached_property):
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
     def __set__(self, instance: object, value: Any) -> None:
