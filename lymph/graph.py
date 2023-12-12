@@ -366,7 +366,14 @@ class Edge:
         param: str | None = None,
         as_dict: bool = False,
     ) -> float | Iterable[float] | dict[str, float]:
-        """Return the value of the parameter ``param`` or all params in a dict."""
+        """Return the value of the parameter ``param`` or all params in a dict.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.models.Unilateral.get_params`
+            :py:meth:`lymph.models.Bilateral.get_params`
+        """
         if self.is_growth:
             params = {"growth": self.get_spread_prob()}
             return params if as_dict else params[param]
@@ -387,7 +394,12 @@ class Edge:
         spread: float | None = None,
         micro: float | None = None,
     ) -> None:
-        """Set the values of the edge's parameters."""
+        """Set the values of the edge's parameters.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.set_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.set_params`
+        """
         if self.is_growth:
             return self.set_spread_prob(growth) if growth is not None else None
 
@@ -536,7 +548,7 @@ class Representation:
     @property
     def allowed_states(self) -> list[int]:
         """Return the list of allowed states for each :py:class:`~LymphNodeLevel`."""
-        return self.lnls.values()[0].allowed_states
+        return next(iter(self.lnls.values())).allowed_states
 
     @property
     def is_binary(self) -> bool:
@@ -609,7 +621,7 @@ class Representation:
         return {n: e for n, e in self.edges.items() if e.is_tumor_spread}
 
     @property
-    def lnl_edges(self) -> Iterable[Edge]:
+    def lnl_edges(self) -> dict[str, Edge]:
         """List of all LNL :py:class:`~Edge` instances in the graph.
 
         This contains all edges who's parents and children are instances of
@@ -618,7 +630,7 @@ class Representation:
         return {n: e for n, e in self.edges.items() if not (e.is_tumor_spread or e.is_growth)}
 
     @property
-    def growth_edges(self) -> Iterable[Edge]:
+    def growth_edges(self) -> dict[str, Edge]:
         """List of all growth :py:class:`~Edge` instances in the graph.
 
         Growth edges are only present in trinary models and are arcs where the parent

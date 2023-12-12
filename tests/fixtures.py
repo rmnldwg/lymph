@@ -4,7 +4,7 @@ Fxitures for tests.
 import logging
 import warnings
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,7 @@ import scipy as sp
 
 import lymph
 from lymph import diagnose_times
+from lymph.helper import PatternType
 from lymph.modalities import Clinical, Modality, Pathological
 from lymph.models import Unilateral
 
@@ -103,6 +104,14 @@ def create_random_dist(
     raise ValueError(f"Unknown distribution type: {type_}")
 
 
+def create_random_pattern(lnls: list[str]) -> PatternType:
+    """Create a random involvement pattern."""
+    return {
+        lnl: RNG.choice([True, False, None])
+        for lnl in lnls
+    }
+
+
 class BinaryUnilateralModelMixin:
     """Mixin class for simple binary model fixture creation."""
 
@@ -151,12 +160,16 @@ class BinaryUnilateralModelMixin:
 
 class BilateralModelMixin:
     """Mixin for testing the bilateral model."""
+    model_kwargs: dict[str, Any] | None = None
 
     def setUp(self):
+        if self.model_kwargs is None:
+            self.model_kwargs = {}
+
         super().setUp()
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph("large")
-        self.model = lymph.models.Bilateral(graph_dict=self.graph_dict)
+        self.model = lymph.models.Bilateral(graph_dict=self.graph_dict, **self.model_kwargs)
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.assign_params(**self.create_random_params())
         self.logger = get_logger(level=logging.INFO)
@@ -190,6 +203,7 @@ class BilateralModelMixin:
         self.model.load_patient_data(self.raw_data)
 
 
+
 class TrinaryFixtureMixin:
     """Mixin class for simple trinary model fixture creation."""
 
@@ -197,8 +211,9 @@ class TrinaryFixtureMixin:
         """Initialize a simple trinary model."""
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph(size="large")
-        self.model = Unilateral(graph_dict=self.graph_dict, allowed_states=[0,1,2])
+        self.model = Unilateral.trinary(graph_dict=self.graph_dict)
         self.logger = get_logger(level=logging.INFO)
+
 
     def create_random_params(self) -> dict[str, float]:
         """Create random parameters for the model."""
@@ -217,6 +232,15 @@ class TrinaryFixtureMixin:
 
         return params
 
+
+    def init_diag_time_dists(self, **dists) -> None:
+        """Init the diagnose time distributions."""
+        for t_stage, type_ in dists.items():
+            self.model.diag_time_dists[t_stage] = create_random_dist(
+                type_, self.model.max_time, self.rng
+            )
+
+
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
         modalities_in_data = {
@@ -229,3 +253,13 @@ class TrinaryFixtureMixin:
             "pCT": Clinical(specificity=0.86, sensitivity=0.81),
         }
         return {name: modalities_in_data[name] for name in names}
+
+
+    def load_patient_data(
+        self,
+        filename: str = "2021-clb-oropharynx.csv",
+    ) -> None:
+        """Load patient data from a CSV file."""
+        filepath = Path(__file__).parent / "data" / filename
+        self.raw_data = pd.read_csv(filepath, header=[0,1,2])
+        self.model.load_patient_data(self.raw_data, side="ipsi")

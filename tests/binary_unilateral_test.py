@@ -46,9 +46,13 @@ class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
     def test_lnls(self):
         """Test they are all binary lymph node levels."""
+        model_allowed_states = self.model.graph.allowed_states
+        self.assertEqual(len(model_allowed_states), 2)
+
         for lnl in self.model.graph.lnls.values():
             self.assertIsInstance(lnl, LymphNodeLevel)
             self.assertTrue(lnl.is_binary)
+            self.assertEqual(lnl.allowed_states, model_allowed_states)
 
     def test_tumor_to_lnl_edges(self):
         """Make sure the tumor to LNL edges have been initialized correctly."""
@@ -302,7 +306,7 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_log_likelihood_smaller_zero(self):
-        """Make sure the log-likelihood is csmaller than zero."""
+        """Make sure the log-likelihood is smaller than zero."""
         likelihood = self.model.likelihood(log=True, mode="HMM")
         self.assertLess(likelihood, 0.)
 
@@ -331,20 +335,22 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
     def create_random_diagnoses(self):
         """Create a random diagnosis for each modality and LNL."""
-        self.diagnoses = {}
+        lnl_names = list(self.model.graph.lnls.keys())
+        diagnoses = {}
 
         for modality in self.model.modalities:
-            self.diagnoses[modality] = {}
-            for lnl in self.model.graph.lnls.keys():
-                self.diagnoses[modality][lnl] = self.rng.choice([True, False, None])
+            diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
+
+        return diagnoses
+
 
     def test_comp_diagnose_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
-        self.create_random_diagnoses()
+        random_diagnoses = self.create_random_diagnoses()
         num_lnls, num_mods = len(self.model.graph.lnls), len(self.model.modalities)
         num_posible_diagnoses = 2**(num_lnls * num_mods)
 
-        diagnose_encoding = self.model.comp_diagnose_encoding(self.diagnoses)
+        diagnose_encoding = self.model.comp_diagnose_encoding(random_diagnoses)
         self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
         self.assertEqual(diagnose_encoding.dtype, bool)
 
@@ -358,3 +364,20 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         self.assertEqual(posterior_state_dist.shape, (2**len(self.model.graph.lnls),))
         self.assertEqual(posterior_state_dist.dtype, float)
         self.assertTrue(np.isclose(np.sum(posterior_state_dist), 1.))
+
+    def test_risk(self):
+        """Make sure the risk is correctly computed."""
+        random_pattern = fixtures.create_random_pattern(self.model.graph.lnls.keys())
+        random_diagnoses = self.create_random_diagnoses()
+        random_t_stage = self.rng.choice(["early", "late"])
+        random_params = self.create_random_params()
+
+        risk = self.model.risk(
+            involvement=random_pattern,
+            given_param_kwargs=random_params,
+            given_diagnoses=random_diagnoses,
+            t_stage=random_t_stage,
+        )
+        self.assertEqual(risk.dtype, float)
+        self.assertGreaterEqual(risk, 0.)
+        self.assertLessEqual(risk, 1.)

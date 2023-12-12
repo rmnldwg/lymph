@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import warnings
+from functools import cached_property
 from itertools import product
 from typing import Any, Callable, Generator, Iterable, Iterator
 
@@ -14,7 +15,6 @@ from lymph.helper import (
     DiagnoseType,
     PatternType,
     early_late_mapping,
-    not_updateable_cached_property,
     smart_updating_dict_cached_property,
 )
 
@@ -159,6 +159,12 @@ class Unilateral(DelegatorMixin):
         Using the keyword arguments ``with_edges`` and ``with_dists``, one can control
         whether the parameters of the edges and the distributions over diagnose times
         should be included in the returned parameters. By default, both are included.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Bilateral.get_params`
         """
         iterator = []
         params = {}
@@ -431,7 +437,7 @@ class Unilateral(DelegatorMixin):
             del self._obs_list
 
 
-    @not_updateable_cached_property
+    @cached_property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -467,7 +473,10 @@ class Unilateral(DelegatorMixin):
 
     def delete_transition_matrix(self):
         """Delete the transition matrix. Necessary to pass as callback."""
-        del self.transition_matrix
+        try:
+            del self.transition_matrix
+        except AttributeError:
+            pass
 
 
     @smart_updating_dict_cached_property
@@ -494,7 +503,7 @@ class Unilateral(DelegatorMixin):
         )
 
 
-    @not_updateable_cached_property
+    @cached_property
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
@@ -512,7 +521,11 @@ class Unilateral(DelegatorMixin):
 
     def delete_obs_list_and_matrix(self):
         """Delete the observation matrix. Necessary to pass as callback."""
-        del self.observation_matrix
+        try:
+            del self.observation_matrix
+        except AttributeError:
+            pass
+
         del self.obs_list
 
 
@@ -821,6 +834,7 @@ class Unilateral(DelegatorMixin):
                 matrix.compute_encoding(
                     lnls=self.graph.lnls.keys(),
                     pattern=given_diagnoses.get(modality, {}),
+                    base=2,   # diagnoses are always binary!
                 ),
             )
 
@@ -924,8 +938,9 @@ class Unilateral(DelegatorMixin):
         # resulting vector of hidden states to match that involvement of
         # interest
         marginalize_over_states = matrix.compute_encoding(
-            lnls=[lnl.name for lnl in self.graph.lnls],
+            lnls=self.graph.lnls.keys(),
             pattern=involvement,
+            base=3 if self.is_trinary else 2,
         )
         return marginalize_over_states @ posterior_state_dist
 
@@ -977,7 +992,7 @@ class Unilateral(DelegatorMixin):
 
         # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.graph.lnls]
+        lnl_names = self.graph.lnls.keys()
         multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
         # create DataFrame

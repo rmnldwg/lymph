@@ -3,6 +3,58 @@
 All notable changes to this project will be documented in this file.
 
 
+## [Unreleased]
+
+
+<a name="1.0.0.a4"></a>
+## [1.0.0.a4] - 2023-12-12
+
+### Bug Fixes
+
+- Use `lnls.keys()` consistently everywhere
+- Warn about symmetric params in asymmetric graph
+- Make `allowed_states` accessible
+- Provide `base` keyword argument to `compute_encoding()`. This is necessary for the trinary model (see [#45])
+- Ensure confusion matrix of trinary diagnostic modality has correct shape
+- Make diagnostic encoding always binary
+- Correct joint state/diagnose matrix (fixes [#61])
+- Send kwargs to both `assign_params` methods (fixes [#60])
+- Enable two-way sync between lookup dicts (fixes [#62])
+
+### Documentation
+
+- Add "see also" to get/set methods, thereby making them reference each other
+
+### Features
+
+- Add trinary & keywords in encoding: When computing the risk for a certain pattern in a trinary model, one may now provide different kewords like `"macro"` to differentiate between different involvements of interest.
+- Add convenience constructors to create `binary` and `trinary` bilateral models
+- Allow bilateral model with an asymmetric graph structure
+- Add get/set methods to `DistributionsUserDict`, which makes all `get_params()` and `set_params()` methods consistent across their occurences
+
+### Refactor
+
+- Pull initialization of ipsi- & contralateral models out of `Bilateral` model's `__init__()`
+- Restructure `Bilateral` model's `__init__()` method slightly
+
+### Testing
+
+- Cover bilateral risk computation
+- Cover unilateral risk method
+- Check asymmetric model implementation
+- Check binary/trinary & `allowed_states`
+- Add trinary likelihood test
+- Add risk check for trinary model
+- Add checks for delegation of attrbutes & setting of params
+- Check `cached_property` delegation works
+- Check param assign thoroughly
+
+### Change
+
+- Don't use custom subclass of `cached_property` that forbids setting and use the default `cached_property` instead
+- Encode symmetries of `Bilateral` model in a special dict called `is_summetric` with keys `"tumor_spread"`, `"lnl_spread"`, and `"modalities"`
+
+
 <a name="1.0.0.a3"></a>
 ## [1.0.0.a3] - 2023-12-06
 
@@ -184,7 +236,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...HEAD
+[1.0.0.a4]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...1.0.0.a4
 [1.0.0.a3]: https://github.com/rmnldwg/lymph/compare/1.0.0.a2...1.0.0.a3
 [1.0.0.a2]: https://github.com/rmnldwg/lymph/compare/1.0.0.a1...1.0.0.a2
 [1.0.0.a1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a0...1.0.0.a1
@@ -194,6 +247,9 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#62]: https://github.com/rmnldwg/lymph/issues/62
+[#61]: https://github.com/rmnldwg/lymph/issues/61
+[#60]: https://github.com/rmnldwg/lymph/issues/60
 [#57]: https://github.com/rmnldwg/lymph/issues/57
 [#56]: https://github.com/rmnldwg/lymph/issues/56
 [#53]: https://github.com/rmnldwg/lymph/issues/53

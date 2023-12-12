@@ -45,20 +45,24 @@ def create_property_sync_callback(
 
 def init_edge_sync(
     property_names: list[str],
-    this_edge_list: list[graph.Edge],
-    other_edge_list: list[graph.Edge],
+    this_edges: list[graph.Edge],
+    other_edges: list[graph.Edge],
 ) -> None:
     """Initialize the callbacks to sync properties btw. Edges.
+
+    This is a two-way sync, i.e. the properties of both ``this_edges`` and
+    ``other_edges`` are kept in sync. The ``property_names`` is a list of property
+    names that should be synced.
 
     Implementing this as a separate method allows a user in theory to initialize
     an arbitrary kind of symmetry between the two sides of the neck.
     """
-    this_edge_names = [e.name for e in this_edge_list]
-    other_edge_names = [e.name for e in other_edge_list]
+    this_edge_names = [e.name for e in this_edges]
+    other_edge_names = [e.name for e in other_edges]
 
     for edge_name in set(this_edge_names).intersection(other_edge_names):
-        this_edge = this_edge_list[this_edge_names.index(edge_name)]
-        other_edge = other_edge_list[other_edge_names.index(edge_name)]
+        this_edge = this_edges[this_edge_names.index(edge_name)]
+        other_edge = other_edges[other_edge_names.index(edge_name)]
 
         this_edge.trigger_callbacks.append(
             create_property_sync_callback(
@@ -76,16 +80,38 @@ def init_edge_sync(
         )
 
 
+def create_lookupdict_sync_callback(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> callable:
+    """Return func to sync content of ``this`` lookup dict to ``other``.
+
+    The returned function is meant to be added to the list of callbacks of the lookup
+    dict class, such that two dicts in a mirrored pair of graphs are kept in sync.
+    """
+    def sync():
+        other.clear_without_trigger()
+        other.update_without_trigger(this)
+
+    logger.debug(f"Created sync callback from {this} lookup dict to {other}.")
+    return sync
+
+
 def init_dict_sync(
     this: AbstractLookupDict,
     other: AbstractLookupDict,
 ) -> None:
-    """Add callback to ``this`` to sync with ``other``."""
-    def sync():
-        other.clear()
-        other.update(this)
+    """Initialize the callbacks to sync two lookup dicts.
 
-    this.trigger_callbacks.append(sync)
+    This is a two-way sync, i.e. the dicts are kept in sync in both directions.
+    """
+    this.trigger_callbacks.append(
+        create_lookupdict_sync_callback(this=this, other=other)
+    )
+    other.trigger_callbacks.append(
+        create_lookupdict_sync_callback(this=other, other=this)
+    )
+
 
 
 class Bilateral(DelegatorMixin):
@@ -105,10 +131,10 @@ class Bilateral(DelegatorMixin):
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        tumor_spread_symmetric: bool = False,
-        lnl_spread_symmetric: bool = True,
-        modalities_symmetric: bool = True,
+        is_symmetric: dict[str, bool] | None = None,
         unilateral_kwargs: dict[str, Any] | None = None,
+        ipsilateral_kwargs: dict[str, Any] | None = None,
+        contralateral_kwargs: dict[str, Any] | None = None,
         **_kwargs,
     ) -> None:
         """Initialize both sides of the neck as :py:class:`~lymph.models.Unilateral`.
@@ -118,72 +144,139 @@ class Bilateral(DelegatorMixin):
         which in turn pass it to the :py:class:`~lymph.graph.Representation` class that
         stores the graph.
 
-        The ``tumor_spread_symmetric`` and ``lnl_spread_symmetric`` arguments determine
-        which parameters are shared between the two sides of the neck. If
-        ``tumor_spread_symmetric`` is ``True``, the spread probabilities from the
-        tumor(s) to the LNLs are shared. If ``lnl_spread_symmetric`` is ``True``, the
-        spread probabilities between the LNLs are shared.
+        The ``is_symmetric`` dictionary defines which characteristics of the bilateral
+        model should be symmetric. Valid keys are:
+        - ``"modalities"``: Whether the diagnostic modalities of the two neck sides
+            are symmetric (default: ``True``).
+        - ``"tumor_spread"``: Whether the spread probabilities from the tumor(s) to the
+            LNLs are symmetric (default: ``False``). If this is set to ``True`` but
+            the graphs are asymmetric, a warning is issued.
+        - ``"lnl_spread"``: Whether the spread probabilities between the LNLs are
+            symmetric (default: ``True`` if the graphs are symmetric, otherwise
+            ``False``). If this is set to ``True`` but the graphs are asymmetric, a
+            warning is issued.
 
-        The ``unilateral_kwargs`` are passed to both instances of the unilateral model.
+        The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
+        while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
+        ipsi- and contralateral side, respectively. The ipsi- and contralateral kwargs
+        override the unilateral kwargs and may also override the ``graph_dict``. This
+        allows the user to specify different graphs for the two sides of the neck.
         """
         super().__init__()
 
-        # TODO: Implement asymmetric model. This should be relatively straightforward,
-        #       since the transition matrices of the two sides do not need to have the
-        #       same shape. The only thing that needs to be changed is the constructor
-        #       of this class, where the two instances of the unilateral model are
-        #       created.
-        if unilateral_kwargs is None:
-            unilateral_kwargs = {}
+        self.init_models(
+            graph_dict=graph_dict,
+            is_symmetric=is_symmetric,
+            unilateral_kwargs=unilateral_kwargs,
+            ipsilateral_kwargs=ipsilateral_kwargs,
+            contralateral_kwargs=contralateral_kwargs,
+        )
 
-        self.ipsi   = models.Unilateral(graph_dict=graph_dict, **unilateral_kwargs)
-        self.contra = models.Unilateral(graph_dict=graph_dict, **unilateral_kwargs)
-
-        self.tumor_spread_symmetric  = tumor_spread_symmetric
-        self.lnl_spread_symmetric = lnl_spread_symmetric
-        self.modalities_symmetric = modalities_symmetric
-
-        property_names = ["spread_prob"]
-        if self.ipsi.graph.is_trinary:
-            property_names.append("micro_mod")
-
-        if self.tumor_spread_symmetric:
-            init_edge_sync(
-                property_names,
-                list(self.ipsi.graph.tumor_edges.values()),
-                list(self.contra.graph.tumor_edges.values()),
-            )
-
-        if self.lnl_spread_symmetric:
-            ipsi_edges = (
-                list(self.ipsi.graph.lnl_edges.values())
-                + list(self.ipsi.graph.growth_edges.values())
-            )
-            contra_edges = (
-                list(self.contra.graph.lnl_edges.values())
-                + list(self.contra.graph.growth_edges.values())
-            )
-            init_edge_sync(property_names, ipsi_edges, contra_edges)
+        self.init_synchronization()
 
         delegated_attrs = [
             "max_time", "t_stages", "diag_time_dists",
             "is_binary", "is_trinary",
-        ]
+        ] + ["modalities"] if self.is_symmetric["modalities"] else []
+        self.init_delegation(ipsi=delegated_attrs)
 
-        init_dict_sync(
-            this=self.ipsi.diag_time_dists,
-            other=self.contra.diag_time_dists,
+
+    def init_models(
+        self,
+        graph_dict: dict[tuple[str], list[str]],
+        is_symmetric: dict[str, bool] | None = None,
+        unilateral_kwargs: dict[str, Any] | None = None,
+        ipsilateral_kwargs: dict[str, Any] | None = None,
+        contralateral_kwargs: dict[str, Any] | None = None,
+    ):
+        """Initialize the two unilateral models."""
+        if unilateral_kwargs is None:
+            unilateral_kwargs = {}
+
+        ipsi_kwargs = unilateral_kwargs.copy()
+        ipsi_kwargs["graph_dict"] = graph_dict
+        ipsi_kwargs.update(ipsilateral_kwargs or {})
+
+        contra_kwargs = unilateral_kwargs.copy()
+        contra_kwargs["graph_dict"] = graph_dict
+        contra_kwargs.update(contralateral_kwargs or {})
+
+        self.ipsi   = models.Unilateral(**ipsi_kwargs)
+        self.contra = models.Unilateral(**contra_kwargs)
+
+        self.is_symmetric = {
+            "modalities": True,
+            "tumor_spread": False,
+            "lnl_spread": ipsi_kwargs == contra_kwargs,
+        }
+        try:
+            self.is_symmetric.update(is_symmetric or {})
+        except TypeError as type_err:
+            raise TypeError(
+                "The `is_symmetric` argument must be a dictionary with possible keys "
+                f"{list(self.is_symmetric.keys())} and boolean values."
+            ) from type_err
+
+        if (
+            (self.is_symmetric["tumor_spread"] or self.is_symmetric["lnl_spread"])
+            and ipsi_kwargs != contra_kwargs
+        ):
+            warnings.warn(
+                "The graphs are asymmetric. Syncing spread probabilities "
+                "may not have intended effect."
+            )
+
+
+    def init_synchronization(self) -> None:
+        """Initialize the synchronization of edges, modalities, and diagnose times."""
+        # Sync spread probabilities
+        property_names = ["spread_prob", "micro_mod"] if self.ipsi.is_trinary else ["spread_prob"]
+        ipsi_tumor_edges = list(self.ipsi.graph.tumor_edges.values())
+        ipsi_lnl_edges = list(self.ipsi.graph.lnl_edges.values())
+        ipsi_edges = (
+            ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else []
+            + ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else []
+        )
+        contra_tumor_edges = list(self.contra.graph.tumor_edges.values())
+        contra_lnl_edges = list(self.contra.graph.lnl_edges.values())
+        contra_edges = (
+            contra_tumor_edges if self.is_symmetric["tumor_spread"] else []
+            + contra_lnl_edges if self.is_symmetric["lnl_spread"] else []
         )
 
-        if self.modalities_symmetric:
-            delegated_attrs.append("modalities")
+        init_edge_sync(
+            property_names=property_names,
+            this_edges=ipsi_edges,
+            other_edges=contra_edges,
+        )
+
+        # Sync modalities
+        if self.is_symmetric["modalities"]:
             init_dict_sync(
                 this=self.ipsi.modalities,
                 other=self.contra.modalities,
             )
 
-        self.init_delegation(ipsi=delegated_attrs)
-        self.contra.diag_time_dists = self.diag_time_dists
+        # Sync diagnose time distributions
+        init_dict_sync(
+            this=self.ipsi.diag_time_dists,
+            other=self.contra.diag_time_dists,
+        )
+
+
+    @classmethod
+    def binary(cls, *args, **kwargs) -> Bilateral:
+        """Initialize a binary bilateral model."""
+        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
+        unilateral_kwargs["allowed_states"] = [0, 1]
+        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+
+    @classmethod
+    def trinary(cls, *args, **kwargs) -> Bilateral:
+        """Initialize a trinary bilateral model."""
+        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
+        unilateral_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
 
 
     def get_params(
@@ -209,6 +302,12 @@ class Bilateral(DelegatorMixin):
         Note:
             The arguments ``as_dict`` and ``nested`` are ignored if ``param`` is not
             ``None``. Also, ``nested`` is ignored if ``as_dict`` is ``False``.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Unilateral.get_params`
         """
         ipsi_params = self.ipsi.get_params(as_dict=True, with_dists=False)
         contra_params = self.contra.get_params(as_dict=True, with_dists=False)
@@ -231,27 +330,34 @@ class Bilateral(DelegatorMixin):
         return params if as_dict else params.values()
 
 
-
     def assign_params(
         self,
         *new_params_args,
         **new_params_kwargs,
-    ) -> tuple[Iterator[float, dict[str, float]]]:
+    ) -> tuple[Iterator[float, dict[str, dict[str, float]]]]:
         """Assign new parameters to the model.
 
         This works almost exactly as the unilateral model's
         :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
         allows the user to set the parameters of individual sides of the neck by
-        prefixing the parameter name with ``"ipsi_"`` or ``"contra_"``. This is
-        necessary for parameters that are not symmetric between the two sides of the
-        neck. For symmetric parameters, the prefix is not needed as they are directly
-        sent to the ipsilateral side, which then triggers a sync callback.
+        prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``. This
+        is necessary for parameters that are not symmetric between the two sides of the
+        neck.
+
+        Anything not prefixed by ``"ipsi_"`` or ``"contra_"`` is passed to both sides
+        of the neck.
 
         Note:
             When setting the parameters via positional arguments, the order is
             important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
             are passed to the ipsilateral side, the remaining ones to the contralateral
             side.
+
+            When still some remain after that, they are returned as the first element
+            of the returned tuple.
+
+        Similar to the unilateral method, this returns a tuple of the remaining args
+        and a dictionary with the remaining `"ipsi"` and `"contra"` kwargs.
         """
         ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
         for key, value in new_params_kwargs.items():
@@ -262,13 +368,13 @@ class Bilateral(DelegatorMixin):
             else:
                 general_kwargs[key] = value
 
-        remaining_args, remainings_kwargs = self.ipsi.assign_params(
+        remaining_args, rem_ipsi_kwargs = self.ipsi.assign_params(
             *new_params_args, **ipsi_kwargs, **general_kwargs
         )
-        remaining_args, remainings_kwargs = self.contra.assign_params(
-            *remaining_args, **contra_kwargs, **remainings_kwargs
+        remaining_args, rem_contra_kwargs = self.contra.assign_params(
+            *remaining_args, **contra_kwargs, **general_kwargs
         )
-        return remaining_args, remainings_kwargs
+        return remaining_args, {"ipsi": rem_ipsi_kwargs, "contra": rem_contra_kwargs}
 
 
     @property
@@ -281,7 +387,7 @@ class Bilateral(DelegatorMixin):
             :py:class:`~lymph.descriptors.ModalitiesUserDict`
                 The implementation of the descriptor class.
         """
-        if not self.modalities_symmetric:
+        if not self.is_symmetric["modalities"]:
             raise AttributeError(
                 "The modalities are not symmetric. Please access them via the "
                 "`ipsi` or `contra` attributes."
@@ -291,7 +397,7 @@ class Bilateral(DelegatorMixin):
     @modalities.setter
     def modalities(self, new_modalities) -> None:
         """Set the diagnostic modalities of the model."""
-        if not self.modalities_symmetric:
+        if not self.is_symmetric["modalities"]:
             raise AttributeError(
                 "The modalities are not symmetric. Please set them via the "
                 "`ipsi` or `contra` attributes."
@@ -514,6 +620,9 @@ class Bilateral(DelegatorMixin):
 
         diagnose_given_state = {}
         for side in ["ipsi", "contra"]:
+            if side not in given_diagnoses:
+                warnings.warn(f"No diagnoses given for {side}lateral side.")
+
             diagnose_encoding = getattr(self, side).comp_diagnose_encoding(
                 given_diagnoses.get(side, {})
             )
@@ -523,11 +632,10 @@ class Bilateral(DelegatorMixin):
 
         joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
-        joint_diagnose_and_state = (
-            diagnose_given_state["ipsi"].T
-            * joint_state_dist
-            * diagnose_given_state["contra"]
-        )
+        joint_diagnose_and_state = np.outer(
+            diagnose_given_state["ipsi"],
+            diagnose_given_state["contra"],
+        ) * joint_state_dist
         # Following Bayes' theorem, this is P(Xi,Xc|Zi=zi,Zc=zc) which is given by
         # P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) / P(Zi=zi,Zc=zc)
         return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
@@ -575,9 +683,11 @@ class Bilateral(DelegatorMixin):
 
         marginalize_over_states = {}
         for side in ["ipsi", "contra"]:
+            side_graph = getattr(self, side).graph
             marginalize_over_states[side] = matrix.compute_encoding(
-                lnls=[lnl.name for lnl in self.graph.lnls],
+                lnls=side_graph.lnls.keys(),
                 pattern=involvement[side],
+                base=3 if self.is_trinary else 2,
             )
         return (
             marginalize_over_states["ipsi"]

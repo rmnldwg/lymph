@@ -40,6 +40,9 @@ class DelegatorMixin:
         ...     @property
         ...     def property_attr(self):
         ...         return "bar"
+        ...     @cached_property
+        ...     def cached_attr(self):
+        ...         return "baz"
         >>> class A(DelegatorMixin):
         ...     def __init__(self):
         ...         super().__init__()
@@ -48,7 +51,7 @@ class DelegatorMixin:
         ...         self.normal_attr = 42
         ...         self.init_delegation(
         ...             delegated=["count"],
-        ...             also_delegated=["fancy_attr", "property_attr"],
+        ...             also_delegated=["fancy_attr", "property_attr", "cached_attr"],
         ...         )
         >>> a = A()
         >>> a.delegated.count("l")
@@ -63,6 +66,10 @@ class DelegatorMixin:
         'bar'
         >>> a.property_attr
         'bar'
+        >>> a.also_delegated.cached_attr
+        'baz'
+        >>> a.cached_attr
+        'baz'
         >>> a.normal_attr
         42
         >>> a.non_existent
@@ -415,16 +422,13 @@ class AbstractLookupDict(UserDict):
         return False
 
 
-class not_updateable_cached_property(cached_property):
-    """Not updateable, but deletable (for recomputiation) cached property."""
-    def __set__(self, instance: object, value: Any) -> None:
-        raise AttributeError("Cannot set attribute.")
+    def clear_without_trigger(self) -> None:
+        """Clear the dictionary without triggering the callbacks."""
+        self.__dict__["data"].clear()
 
-    def __delete__(self, instance: object) -> None:
-        try:
-            del instance.__dict__[self.attrname]
-        except KeyError:
-            pass
+    def update_without_trigger(self, other=(), /, **kwargs):
+        """Update the dictionary without triggering the callbacks."""
+        self.__dict__["data"].update(other, **kwargs)
 
 
 class smart_updating_dict_cached_property(cached_property):
