@@ -302,6 +302,12 @@ class Bilateral(DelegatorMixin):
         Note:
             The arguments ``as_dict`` and ``nested`` are ignored if ``param`` is not
             ``None``. Also, ``nested`` is ignored if ``as_dict`` is ``False``.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionUserDict.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Unilateral.get_params`
         """
         ipsi_params = self.ipsi.get_params(as_dict=True, with_dists=False)
         contra_params = self.contra.get_params(as_dict=True, with_dists=False)
