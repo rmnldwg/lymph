@@ -185,13 +185,31 @@ class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCas
         """Test that the parameters can be assigned."""
         ipsi_args = self.rng.uniform(size=len(self.model.ipsi.get_params()))
         contra_args = self.rng.uniform(size=len(self.model.contra.get_params()))
-        _ = self.model.assign_params(*ipsi_args, *contra_args)
-        self.assertTrue(np.allclose(ipsi_args, list(self.model.ipsi.get_params())))
-        self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
+        none_args = [None] * len(ipsi_args)
 
+        # Assigning only the ipsi side
+        self.model.assign_params(*ipsi_args, *none_args)
+        self.assertTrue(np.allclose(ipsi_args, list(self.model.ipsi.get_params())))
         self.assertEqual(
-            self.model.ipsi.diag_time_dists["late"].get_params(),
-            self.model.contra.diag_time_dists["late"].get_params(),
+            list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
+            list(self.model.contra.diag_time_dists["late"].get_params())[0],
+        )
+
+        # Assigning only the contra side
+        self.model.assign_params(*none_args, *contra_args)
+        self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
+        self.assertEqual(
+            list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
+            list(self.model.contra.diag_time_dists["late"].get_params())[0],
+        )
+
+        # Assigning both sides
+        self.model.assign_params(*ipsi_args, *contra_args)
+        self.assertTrue(np.allclose(ipsi_args[:-1], list(self.model.ipsi.get_params())[:-1]))
+        self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
+        self.assertEqual(
+            list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
+            list(self.model.contra.diag_time_dists["late"].get_params())[0],
         )
 
 
