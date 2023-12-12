@@ -14,12 +14,15 @@ the time of diagnosis.
 from __future__ import annotations
 
 import inspect
+import logging
 import warnings
 from typing import Iterable
 
 import numpy as np
 
 from lymph.helper import AbstractLookupDict, trigger
+
+logger = logging.getLogger(__name__)
 
 
 class SupportError(Exception):
@@ -252,23 +255,68 @@ class DistributionsUserDict(AbstractLookupDict):
         return sum(distribution.is_updateable for distribution in self.values())
 
 
+    def get_params(
+        self,
+        param: str | None = None,
+        as_dict: bool = False,
+    ) -> float | Iterable[float] | dict[str, float]:
+        """Return the parameter(s) of parametrized distributions.
+
+        If ``param`` is provided, return the value of that particular parameter. Note
+        that the parameter name must be of the form ``{t_stage}_{param}``, where
+        ``t_stage`` is the T-stage and ``param`` is the name of the parameter.
+
+        If ``param`` is ``None`` and ``as_dict`` is ``False``, return an iterable of
+        all parameter values. If ``as_dict`` is ``True``, return a dictionary with the
+        parameter names as keys and the parameter values as values.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Unilateral.get_params`
+            :py:meth:`lymph.models.Bilateral.get_params`
+        """
+        params = {}
+
+        for t_stage, distribution in self.items():
+            if not distribution.is_updateable:
+                continue
+
+            for name, value in distribution.get_params(as_dict=True).items():
+                params[f"{t_stage}_{name}"] = value
+
+        if param is not None:
+            return params[param]
+
+        return params if as_dict else params.values()
+
+
     @trigger
-    def set_distribution_params(self, params: list[float] | np.ndarray) -> None:
-        """
-        Update all marginalizors stored in this instance that are updateable with
-        values from the ``params`` argument.
+    def set_params(self, **kwargs) -> None:
+        """Update all parametrized distributions via keyword arguments.
 
-        Use ``stop_quietly`` to avoid raising an error when too few parameters are
-        provided to update all distributions.
-        """
-        if len(params) < self.num_parametric:
-            warnings.warn("Not enough parameters to update all distributions.")
-        elif len(params) > self.num_parametric:
-            warnings.warn("More parameters than distributions to update.")
+        The keys must be of the form ``{t_stage}_{param}``, where ``t_stage`` is the
+        T-stage and ``param`` is the name of the parameter to update. The values are
+        the new parameter values.
 
-        for param, distribution in zip(params, self.values()):
-            if distribution.is_updateable:
-                distribution.set_param(param)
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.set_params`
+            :py:meth:`lymph.graph.Edge.set_params`
+            :py:meth:`lymph.models.Bilateral.set_params`
+        """
+        nested_params = {
+            t_stage: {} for t_stage, dist in self.items()
+            if dist.is_updateable
+        }
+        for key, value in kwargs.items():
+            t_stage, param = key.split("_", maxsplit=1)
+            if t_stage not in nested_params:
+                logger.debug(
+                    f"Skipping parameter {param} for T-stage {t_stage} "
+                    "because it doesn't have a parametrized distribution"
+                )
+                continue
+            nested_params[t_stage][param] = value
 
 
     def draw(
