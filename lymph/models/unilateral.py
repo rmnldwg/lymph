@@ -159,6 +159,12 @@ class Unilateral(DelegatorMixin):
         Using the keyword arguments ``with_edges`` and ``with_dists``, one can control
         whether the parameters of the edges and the distributions over diagnose times
         should be included in the returned parameters. By default, both are included.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Bilateral.get_params`
         """
         iterator = []
         params = {}

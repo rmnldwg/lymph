@@ -80,20 +80,38 @@ def init_edge_sync(
         )
 
 
+def create_lookupdict_sync_callback(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> callable:
+    """Return func to sync content of ``this`` lookup dict to ``other``.
+
+    The returned function is meant to be added to the list of callbacks of the lookup
+    dict class, such that two dicts in a mirrored pair of graphs are kept in sync.
+    """
+    def sync():
+        other.clear_without_trigger()
+        other.update_without_trigger(this)
+
+    logger.debug(f"Created sync callback from {this} lookup dict to {other}.")
+    return sync
+
+
 def init_dict_sync(
     this: AbstractLookupDict,
     other: AbstractLookupDict,
 ) -> None:
-    """Add callback to ``this`` to sync with ``other``.
+    """Initialize the callbacks to sync two lookup dicts.
 
-    This implements only a one-way sync, i.e. the keys and values of ``other`` are
-    updated as soon as those of ``this`` change.
+    This is a two-way sync, i.e. the dicts are kept in sync in both directions.
     """
-    def sync():
-        other.clear()
-        other.update(this)
+    this.trigger_callbacks.append(
+        create_lookupdict_sync_callback(this=this, other=other)
+    )
+    other.trigger_callbacks.append(
+        create_lookupdict_sync_callback(this=other, other=this)
+    )
 
-    this.trigger_callbacks.append(sync)
 
 
 class Bilateral(DelegatorMixin):
@@ -244,7 +262,6 @@ class Bilateral(DelegatorMixin):
             this=self.ipsi.diag_time_dists,
             other=self.contra.diag_time_dists,
         )
-        self.contra.diag_time_dists = self.ipsi.diag_time_dists
 
 
     @classmethod
@@ -285,6 +302,12 @@ class Bilateral(DelegatorMixin):
         Note:
             The arguments ``as_dict`` and ``nested`` are ignored if ``param`` is not
             ``None``. Also, ``nested`` is ignored if ``as_dict`` is ``False``.
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.get_params`
+            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.graph.Edge.get_params`
+            :py:meth:`lymph.models.Unilateral.get_params`
         """
         ipsi_params = self.ipsi.get_params(as_dict=True, with_dists=False)
         contra_params = self.contra.get_params(as_dict=True, with_dists=False)
@@ -311,22 +334,30 @@ class Bilateral(DelegatorMixin):
         self,
         *new_params_args,
         **new_params_kwargs,
-    ) -> tuple[Iterator[float, dict[str, float]]]:
+    ) -> tuple[Iterator[float, dict[str, dict[str, float]]]]:
         """Assign new parameters to the model.
 
         This works almost exactly as the unilateral model's
         :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
         allows the user to set the parameters of individual sides of the neck by
-        prefixing the parameter name with ``"ipsi_"`` or ``"contra_"``. This is
-        necessary for parameters that are not symmetric between the two sides of the
-        neck. For symmetric parameters, the prefix is not needed as they are directly
-        sent to the ipsilateral side, which then triggers a sync callback.
+        prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``. This
+        is necessary for parameters that are not symmetric between the two sides of the
+        neck.
+
+        Anything not prefixed by ``"ipsi_"`` or ``"contra_"`` is passed to both sides
+        of the neck.
 
         Note:
             When setting the parameters via positional arguments, the order is
             important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
             are passed to the ipsilateral side, the remaining ones to the contralateral
             side.
+
+            When still some remain after that, they are returned as the first element
+            of the returned tuple.
+
+        Similar to the unilateral method, this returns a tuple of the remaining args
+        and a dictionary with the remaining `"ipsi"` and `"contra"` kwargs.
         """
         ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
         for key, value in new_params_kwargs.items():
@@ -337,13 +368,13 @@ class Bilateral(DelegatorMixin):
             else:
                 general_kwargs[key] = value
 
-        remaining_args, remainings_kwargs = self.ipsi.assign_params(
+        remaining_args, rem_ipsi_kwargs = self.ipsi.assign_params(
             *new_params_args, **ipsi_kwargs, **general_kwargs
         )
-        remaining_args, remainings_kwargs = self.contra.assign_params(
-            *remaining_args, **contra_kwargs, **remainings_kwargs
+        remaining_args, rem_contra_kwargs = self.contra.assign_params(
+            *remaining_args, **contra_kwargs, **general_kwargs
         )
-        return remaining_args, remainings_kwargs
+        return remaining_args, {"ipsi": rem_ipsi_kwargs, "contra": rem_contra_kwargs}
 
 
     @property
