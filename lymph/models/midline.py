@@ -143,9 +143,11 @@ class Midline(DelegatorMixin):
         """
         super().__init__()
         self.ext   = models.Bilateral(
-            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True, unilateral_kwargs=unilateral_kwargs)
+            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = modalities_symmetric, unilateral_kwargs=unilateral_kwargs)
         self.noext = models.Bilateral(
-            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = True, unilateral_kwargs=unilateral_kwargs)
+            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = modalities_symmetric, unilateral_kwargs=unilateral_kwargs)
+        self.central = models.Bilateral(
+            graph_dict=graph_dict, tumor_spread_symmetric=True, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = modalities_symmetric, unilateral_kwargs=unilateral_kwargs)
         self.use_mixing = use_mixing
         self.diag_time_dists = {}
         if self.use_mixing:
@@ -164,13 +166,21 @@ class Midline(DelegatorMixin):
             this=self.ext.ipsi.diag_time_dists,
             other=self.noext.ipsi.diag_time_dists,
         )
-
+        init_dict_sync(
+            this=self.ext.ipsi.diag_time_dists,
+            other=self.central.ipsi.diag_time_dists
+            )
 
         if self.modalities_symmetric:
             delegated_attrs.append("modalities")
             init_dict_sync(
                 this=self.ext.modalities,
                 other=self.noext.modalities,
+            )
+            delegated_attrs.append("modalities")
+            init_dict_sync(
+                this=self.ext.modalities,
+                other=self.central.modalities,
             )
 
         self.init_delegation(ext=delegated_attrs)
