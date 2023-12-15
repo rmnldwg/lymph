@@ -142,12 +142,10 @@ class Midline(DelegatorMixin):
             tumor and one for the case of no such extension.
         """
         super().__init__()
-        self.ext   = models.Bilateral(
-            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = modalities_symmetric, unilateral_kwargs=unilateral_kwargs)
-        self.noext = models.Bilateral(
-            graph_dict=graph_dict, tumor_spread_symmetric=False, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = modalities_symmetric, unilateral_kwargs=unilateral_kwargs)
-        self.central = models.Bilateral(
-            graph_dict=graph_dict, tumor_spread_symmetric=True, lnl_spread_symmetric = trans_symmetric, modalities_symmetric = modalities_symmetric, unilateral_kwargs=unilateral_kwargs)
+        self.ext   = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
+        self.noext = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
+        self.central = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
+
         self.use_mixing = use_mixing
         self.diag_time_dists = {}
         if self.use_mixing:
@@ -167,7 +165,7 @@ class Midline(DelegatorMixin):
             other=self.noext.ipsi.diag_time_dists,
         )
         init_dict_sync(
-            this=self.ext.ipsi.diag_time_dists,
+            this=self.noext.ipsi.diag_time_dists,
             other=self.central.ipsi.diag_time_dists
             )
 
@@ -179,7 +177,7 @@ class Midline(DelegatorMixin):
             )
             delegated_attrs.append("modalities")
             init_dict_sync(
-                this=self.ext.modalities,
+                this=self.noext.modalities,
                 other=self.central.modalities,
             )
 
@@ -227,6 +225,7 @@ class Midline(DelegatorMixin):
         if self.use_mixing:
             extension_kwargs = {}
             no_extension_kwargs = {}
+            central_kwargs = {}
             for key, value in new_params_kwargs.items():
                 if 'mixing' in key:
                     self.alpha_mix = value
@@ -239,7 +238,12 @@ class Midline(DelegatorMixin):
                 else:
                     extension_kwargs[key] = no_extension_kwargs[key]
             remaining_args, remainings_kwargs = self.ext.assign_params(*remaining_args, **extension_kwargs)
+            for key in no_extension_kwargs.keys():
+                if 'contra' not in key:
+                    central_kwargs[key] = no_extension_kwargs[key]
+            remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
 
+#this part is not tested yet or properly implemented
         else:
             ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs = {}, {}, {}, {}
 
@@ -250,6 +254,7 @@ class Midline(DelegatorMixin):
                     noext_contra_kwargs[key.replace("contra_noext", "")] = value
                 elif 'contra_ext' in key:
                     ext_contra_kwargs[key.replace("contra_ext", "")] = value
+
 
                 else:
                     general_kwargs[key] = value
@@ -293,6 +298,7 @@ class Midline(DelegatorMixin):
             )
         self.ext.modalities = new_modalities
         self.noext.modalities = new_modalities
+        self.central.modalities = new_modalities
 
 
     def load_patient_data(
@@ -306,11 +312,13 @@ class Midline(DelegatorMixin):
         method on both models.
         """
 
-        ext_data = patient_data.loc[patient_data[("tumor", "1", "extension")]]
+        ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True) & (patient_data[("tumor", "1", "central")] != True)]
         noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
+        central = patient_data[patient_data[("tumor", "1", "central")].notna() & patient_data[("tumor", "1", "central")]]
 
         self.ext.load_patient_data(ext_data, mapping)
         self.noext.load_patient_data(noext_data, mapping)
+        self.central.load_patient_data(central, mapping)
 
 
     def likelihood(
@@ -363,7 +371,8 @@ class Midline(DelegatorMixin):
 
         llh = 0. if log else 1.
         llh += self.ext.likelihood(log = log)
-        llh += self.noext.likelihood(log=log)
+        llh += self.noext.likelihood(log = log)
+        llh += self.central.likelihood(log = log)
 
 
 
@@ -378,6 +387,7 @@ class Midline(DelegatorMixin):
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
         midline_extension: bool = False,
+        central: bool = False,
         mode: str = "HMM",
     ) -> float:
         """Compute the risk of nodal involvement given a specific diagnose.
@@ -397,10 +407,11 @@ class Midline(DelegatorMixin):
             self.assign_params(*given_param_args)
         if given_param_kwargs is not None:
             self.assign_params(**given_param_kwargs)
+        if central: 
+            return self.central.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
         if midline_extension:
             return self.ext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
-        else:
-            return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)    
+        return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)    
         
         
 
