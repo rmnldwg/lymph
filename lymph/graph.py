@@ -661,7 +661,7 @@ class Representation:
         mermaid_graph = "flowchart TD\n"
 
         for idx, node in enumerate(self.nodes):
-            for edge in self.nodes[idx].out:
+            for edge in self.nodes[node].out:
                 mermaid_graph += f"\t{node.name}-->|{edge.spread_prob:.0%}| {edge.child.name}\n"
 
         return mermaid_graph

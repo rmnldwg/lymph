@@ -43,7 +43,7 @@ def create_property_sync_callback(
     logger.debug(f"Created sync callback for properties {names} of {this.name} edge.")
     return sync
 
-
+# this here could probably be used to sync the edges for the different bilateral classes if we want to keep on using it
 def init_edge_sync(
     property_names: list[str],
     this_edge_list: list[graph.Edge],
@@ -117,6 +117,7 @@ class Midline(DelegatorMixin):
         modalities_symmetric: bool = True,
         trans_symmetric: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
+        central_enabled: bool = True,
         **_kwargs
     ):
         """The class is constructed in a similar fashion to the
@@ -142,9 +143,11 @@ class Midline(DelegatorMixin):
             tumor and one for the case of no such extension.
         """
         super().__init__()
+        self.central_enabled = central_enabled
         self.ext   = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
         self.noext = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
-        self.central = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
+        if self.central_enabled:
+            self.central = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
 
         self.use_mixing = use_mixing
         self.diag_time_dists = {}
@@ -164,10 +167,11 @@ class Midline(DelegatorMixin):
             this=self.ext.ipsi.diag_time_dists,
             other=self.noext.ipsi.diag_time_dists,
         )
-        init_dict_sync(
-            this=self.noext.ipsi.diag_time_dists,
-            other=self.central.ipsi.diag_time_dists
-            )
+        if central_enabled:
+            init_dict_sync(
+                this=self.noext.ipsi.diag_time_dists,
+                other=self.central.ipsi.diag_time_dists
+                )
 
         if self.modalities_symmetric:
             delegated_attrs.append("modalities")
@@ -175,13 +179,50 @@ class Midline(DelegatorMixin):
                 this=self.ext.modalities,
                 other=self.noext.modalities,
             )
-            delegated_attrs.append("modalities")
-            init_dict_sync(
-                this=self.noext.modalities,
-                other=self.central.modalities,
-            )
-
+            if central_enabled:
+                delegated_attrs.append("modalities")
+                init_dict_sync(
+                    this=self.noext.modalities,
+                    other=self.central.modalities,
+                )
+        self.init_synchronization()
         self.init_delegation(ext=delegated_attrs)
+
+    def init_synchronization(self) -> None:
+        """Initialize the synchronization of edges, modalities, and diagnose times."""
+        # Sync spread probabilities
+        property_names = ["spread_prob", "micro_mod"] if self.noext.ipsi.is_trinary else ["spread_prob"]
+        noext_ipsi_tumor_edges = list(self.noext.ipsi.graph.tumor_edges.values())
+        noext_ipsi_lnl_edges = list(self.noext.ipsi.graph.lnl_edges.values())
+        noext_ipsi_edges = (
+            noext_ipsi_tumor_edges + noext_ipsi_lnl_edges 
+        )
+        ext_ipsi_tumor_edges = list(self.ext.ipsi.graph.tumor_edges.values())
+        ext_ipsi_lnl_edges = list(self.ext.ipsi.graph.lnl_edges.values())
+        ext_ipsi_edges = (
+            ext_ipsi_tumor_edges 
+            + ext_ipsi_lnl_edges 
+        )
+
+
+        init_edge_sync(
+            property_names=property_names,
+            this_edges=noext_ipsi_edges,
+            other_edges=ext_ipsi_edges,
+        )
+        
+        if self.central_enabled:
+            central_ipsi_tumor_edges = list(self.central.ipsi.graph.tumor_edges.values())
+            central_ipsi_lnl_edges = list(self.central.ipsi.graph.lnl_edges.values())
+            central_ipsi_edges = (
+                central_ipsi_tumor_edges 
+                + central_ipsi_lnl_edges 
+            )
+            init_edge_sync(
+                property_names=property_names,
+                this_edges=noext_ipsi_edges,
+                other_edges=central_ipsi_edges,
+            )
 
     def get_params(
         self):
@@ -208,19 +249,11 @@ class Midline(DelegatorMixin):
     ) -> tuple[Iterator[float, dict[str, float]]]:
         """Assign new parameters to the model.
 
-        This works almost exactly as the unilateral model's
-        :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
-        allows the user to set the parameters of individual sides of the neck by
-        prefixing the parameter name with ``"ipsi_"`` or ``"contra_"``. This is
-        necessary for parameters that are not symmetric between the two sides of the
-        neck. For symmetric parameters, the prefix is not needed as they are directly
-        sent to the ipsilateral side, which then triggers a sync callback.
-
-        Note:
-            When setting the parameters via positional arguments, the order is
-            important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
-            are passed to the ipsilateral side, the remaining ones to the contralateral
-            side.
+        This works almost exactly as the bilateral model's
+        :py:meth:`~lymph.models.Bilateral.assign_params` method. However the assignment of parametrs
+        with an array is disabled as it gets to messy with such a large parameter space.
+        For universal parameters, the prefix is not needed as they are directly
+        sent to the noextension ipsilateral side, which then triggers a sync callback.
         """
         if self.use_mixing:
             extension_kwargs = {}
@@ -238,10 +271,11 @@ class Midline(DelegatorMixin):
                 else:
                     extension_kwargs[key] = no_extension_kwargs[key]
             remaining_args, remainings_kwargs = self.ext.assign_params(*remaining_args, **extension_kwargs)
-            for key in no_extension_kwargs.keys():
-                if 'contra' not in key:
-                    central_kwargs[key] = no_extension_kwargs[key]
-            remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
+            if self.central_enabled:
+                for key in no_extension_kwargs.keys():
+                    if 'contra' not in key:
+                        central_kwargs[key] = no_extension_kwargs[key]
+                remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
 
 #this part is not tested yet or properly implemented
         else:
@@ -254,8 +288,6 @@ class Midline(DelegatorMixin):
                     noext_contra_kwargs[key.replace("contra_noext", "")] = value
                 elif 'contra_ext' in key:
                     ext_contra_kwargs[key.replace("contra_ext", "")] = value
-
-
                 else:
                     general_kwargs[key] = value
 
