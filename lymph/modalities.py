@@ -130,12 +130,12 @@ class ModalitiesUserDict(AbstractLookupDict):
 
     Examples:
 
-    >>> binary_modalities = ModalityDict(is_trinary=False)
+    >>> binary_modalities = ModalitiesUserDict(is_trinary=False)
     >>> binary_modalities["test"] = Modality(0.9, 0.8)
     >>> binary_modalities["test"].confusion_matrix
     array([[0.9, 0.1],
            [0.2, 0.8]])
-    >>> modalities = ModalityDict(is_trinary=True)
+    >>> modalities = ModalitiesUserDict(is_trinary=True)
     >>> modalities["CT"] = Clinical(specificity=0.9, sensitivity=0.8)
     >>> modalities["CT"].confusion_matrix
     array([[0.9, 0.1],

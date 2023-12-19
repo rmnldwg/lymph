@@ -641,11 +641,23 @@ class Representation:
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
-        """Returns graph representing this instance's nodes and egdes as dictionary."""
+        """Returns graph representing this instance's nodes and egdes as dictionary.
+
+        Example:
+
+        >>> graph_dict = {
+        ...    ('tumor', 'T'): ['II', 'III'],
+        ...    ('lnl', 'II'): ['III'],
+        ...    ('lnl', 'III'): [],
+        ... }
+        >>> graph = Representation(graph_dict)
+        >>> graph.to_dict() == graph_dict
+        True
+        """
         res = {}
-        for node in self.nodes:
+        for node in self.nodes.values():
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
-            res[(node_type, node.name)] = {o.child.name for o in node.out}
+            res[(node_type, node.name)] = [o.child.name for o in node.out]
         return res
 
 
@@ -655,14 +667,14 @@ class Representation:
         Example:
 
         >>> graph_dict = {
-        ...    ("tumor", "T"): ["II", "III"],
-        ...    ("lnl", "II"): ["III"],
-        ...    ("lnl", "III"): [],
+        ...    ('tumor', 'T'): ['II', 'III'],
+        ...    ('lnl', 'II'): ['III'],
+        ...    ('lnl', 'III'): [],
         ... }
         >>> graph = Representation(graph_dict)
-        >>> graph.edge_params["spread_T_to_II"].set_param(0.1)
-        >>> graph.edge_params["spread_T_to_III"].set_param(0.2)
-        >>> graph.edge_params["spread_II_to_III"].set_param(0.3)
+        >>> graph.edges["T_to_II"].spread_prob = 0.1
+        >>> graph.edges["T_to_III"].spread_prob = 0.2
+        >>> graph.edges["II_to_III"].spread_prob = 0.3
         >>> print(graph.get_mermaid())  # doctest: +NORMALIZE_WHITESPACE
         flowchart TD
             T-->|10%| II
@@ -672,8 +684,8 @@ class Representation:
         """
         mermaid_graph = "flowchart TD\n"
 
-        for idx, node in enumerate(self.nodes):
-            for edge in self.nodes[idx].out:
+        for node in self.nodes.values():
+            for edge in node.out:
                 mermaid_graph += f"\t{node.name}-->|{edge.spread_prob:.0%}| {edge.child.name}\n"
 
         return mermaid_graph
@@ -741,7 +753,8 @@ class Representation:
         state 1 and all others are in state 0, etc. Essentially, it looks like binary
         counting:
 
-        >>> model = Unilateral(graph={
+        >>> from lymph.models import Unilateral
+        >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["I", "II" , "III"],
         ...     ("lnl", "I"): [],
         ...     ("lnl", "II"): ["I", "III"],
