@@ -641,7 +641,19 @@ class Representation:
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
-        """Returns graph representing this instance's nodes and egdes as dictionary."""
+        """Returns graph representing this instance's nodes and egdes as dictionary.
+
+        Example:
+
+        >>> graph_dict = {
+        ...    ("tumor", "T"): ["II", "III"],
+        ...    ("lnl", "II"): ["III"],
+        ...    ("lnl", "III"): [],
+        ... }
+        >>> graph = Representation(graph_dict)
+        >>> graph.to_dict() == graph_dict
+        True
+        """
         res = {}
         for node in self.nodes:
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
@@ -741,7 +753,8 @@ class Representation:
         state 1 and all others are in state 0, etc. Essentially, it looks like binary
         counting:
 
-        >>> model = Unilateral(graph={
+        >>> from lymph.models import Unilateral
+        >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["I", "II" , "III"],
         ...     ("lnl", "I"): [],
         ...     ("lnl", "II"): ["I", "III"],
