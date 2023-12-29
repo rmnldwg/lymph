@@ -35,6 +35,7 @@ dynamic = ["version"]
 [project.optional-dependencies]
 test = [
     "scipy < 2",
+    "coverage < 8",
 ]
 dev = [
     "pre-commit",
