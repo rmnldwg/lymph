@@ -146,15 +146,18 @@ class Bilateral(DelegatorMixin):
 
         The ``is_symmetric`` dictionary defines which characteristics of the bilateral
         model should be symmetric. Valid keys are:
-        - ``"modalities"``: Whether the diagnostic modalities of the two neck sides
-            are symmetric (default: ``True``).
-        - ``"tumor_spread"``: Whether the spread probabilities from the tumor(s) to the
-            LNLs are symmetric (default: ``False``). If this is set to ``True`` but
-            the graphs are asymmetric, a warning is issued.
-        - ``"lnl_spread"``: Whether the spread probabilities between the LNLs are
-            symmetric (default: ``True`` if the graphs are symmetric, otherwise
-            ``False``). If this is set to ``True`` but the graphs are asymmetric, a
-            warning is issued.
+
+        - ``"modalities"``:
+            Whether the diagnostic modalities of the two neck sides are symmetric
+            (default: ``True``).
+        - ``"tumor_spread"``:
+            Whether the spread probabilities from the tumor(s) to the LNLs are
+            symmetric (default: ``False``). If this is set to ``True`` but the graphs
+            are asymmetric, a warning is issued.
+        - ``"lnl_spread"``:
+            Whether the spread probabilities between the LNLs are symmetric
+            (default: ``True`` if the graphs are symmetric, otherwise ``False``). If
+            this is set to ``True`` but the graphs are asymmetric, a warning is issued.
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
         while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
@@ -384,7 +387,7 @@ class Bilateral(DelegatorMixin):
         See Also:
             :py:attr:`lymph.models.Unilateral.modalities`
                 The corresponding unilateral attribute.
-            :py:class:`~lymph.descriptors.ModalitiesUserDict`
+            :py:class:`~lymph.modalities.ModalitiesUserDict`
                 The implementation of the descriptor class.
         """
         if not self.is_symmetric["modalities"]:

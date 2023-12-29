@@ -110,21 +110,22 @@ class Pathological(Modality):
 ModalityDef = Union[Modality, np.ndarray, Tuple[float, float], List[float]]
 
 class ModalitiesUserDict(AbstractLookupDict):
-    """Dictionary storing instances of a diagnostic `Modality` for a lymph model.
+    """Dictionary storing instances of :py:class:`Modality` for a lymph model.
 
     This class allows the user to specify the diagnostic modalities of a lymph model
-    in a convenient way. The user may pass an instance of `Modality` - or one of its
-    subclasses - directly. Especially for trinary models, it is recommended to use the
-    subclasses `Clinical` and `Pathological` to avoid ambiguities.
+    in a convenient way. The user may pass an instance of :py:class:`Modality` - or one
+    of its subclasses - directly. Especially for trinary models, it is recommended to
+    use the subclasses :py:class:`Clinical` and :py:class:`Pathological` to avoid
+    ambiguities.
 
     Alternatively, a simple tuple or list of floats may be passed, from which the first
     two entries are interpreted as the specificity and sensitivity, respectively. For
-    trinary models, we assume the modality to be `Clinical`.
+    trinary models, we assume the modality to be :py:class:`Clinical`.
 
     For completely custom confusion matrices, the user may pass a numpy array directly.
-    In the binary case, a valid `Modality` instance is constructed from the array. For
-    trinary models, the array must have three rows, and is not possible anymore to
-    infer the type of the modality or unambiguouse values for sensitivity and
+    In the binary case, a valid :py:class:`Modality` instance is constructed from the
+    array. For trinary models, the array must have three rows, and is not possible
+    anymore to infer the type of the modality or unambiguouse values for sensitivity and
     specificity. This may lead to unexpected results when the confusion matrix is
     recomputed accidentally at some point.
 

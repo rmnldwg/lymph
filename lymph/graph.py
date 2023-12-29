@@ -31,9 +31,9 @@ class AbstractNode:
     ) -> None:
         """Make a new node.
 
-        Upon initialization, the `name` and `state` of the node must be provided. The
-        `state` must be one of the `allowed_states`. The constructor makes sure that
-        the `allowed_states` are a list of ints, even when, e.g., a tuple of floats
+        Upon initialization, the ``name`` and ``state`` of the node must be provided.
+        The ``state`` must be one of the ``allowed_states``. The constructor makes sure that
+        the ``allowed_states`` are a list of ints, even when, e.g., a tuple of floats
         is provided.
         """
         self.name = name
@@ -103,9 +103,9 @@ class AbstractNode:
         obs_table: np.ndarray,
         log: bool = False,
     ) -> float:
-        """Compute the probability of the diagnosis `obs`, given the current state.
+        """Compute the probability of the diagnosis ``obs``, given the current state.
 
-        The `obs_table` is a 2D array with the rows corresponding to the states and
+        The ``obs_table`` is a 2D array with the rows corresponding to the states and
         the columns corresponding to the observations. It encodes for each state and
         diagnosis the corresponding probability.
         """
@@ -192,7 +192,7 @@ class LymphNodeLevel(AbstractNode):
 
 
     def comp_trans_prob(self, new_state: int) -> float:
-        """Compute the hidden Markov model's transition probability to a `new_state`."""
+        """Compute the hidden Markov model's transition probability to a ``new_state``."""
         if new_state == self.state:
             stay_prob = 1.
             for edge in self.inc:

@@ -141,12 +141,7 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
             )
 
     def test_transition_matrix_deletion(self):
-        """Check if the transition matrix gets deleted when a parameter is set.
-
-        NOTE: This test is disabled because apparently, the `model` instance is
-        changed during the test and the `_transition_matrix` attribute is deleted on
-        the wrong instance. I have no clue why, but generally, the method works.
-        """
+        """Check if the transition matrix gets deleted when a parameter is set."""
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
         _ = self.model.transition_matrix
         self.assertTrue("transition_matrix" in self.model.__dict__)
@@ -248,7 +243,6 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
             self.assertIn(t_stage, t_stages_in_data)
             self.assertIn(t_stage, t_stages_in_diag_time_dists)
 
-
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""
         for t_stage in ["early", "late"]:
@@ -267,7 +261,6 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 data_matrix.shape[1],
                 has_t_stage.sum(),
             )
-
 
     def test_diagnose_matrices(self):
         """Make sure the diagnose matrices are generated correctly."""
@@ -344,7 +337,6 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
         return diagnoses
 
-
     def test_comp_diagnose_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
         random_diagnoses = self.create_random_diagnoses()
@@ -394,7 +386,6 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.assign_params(**self.create_random_params())
 
-
     def test_generate_early_patients(self):
         """Check that generating only early T-stage patients works."""
         early_patients = self.model.draw_patients(
@@ -407,7 +398,6 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
         self.assertIn(("CT", "ipsi", "II"), early_patients.columns)
         self.assertIn(("FNA", "ipsi", "III"), early_patients.columns)
 
-
     def test_generate_late_patients(self):
         """Check that generating only late T-stage patients works."""
         late_patients = self.model.draw_patients(
@@ -419,7 +409,6 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
         self.assertEqual(sum(late_patients["tumor", "1", "t_stage"] == "late"), 100)
         self.assertIn(("CT", "ipsi", "II"), late_patients.columns)
         self.assertIn(("FNA", "ipsi", "III"), late_patients.columns)
-
 
     def test_distribution_of_patients(self):
         """Check that the distribution of LNL involvement is correct."""
