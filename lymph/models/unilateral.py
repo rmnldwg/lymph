@@ -975,7 +975,7 @@ class Unilateral(DelegatorMixin):
         seed: int = 42,
         **_kwargs,
     ) -> pd.DataFrame:
-        """Draw a ``num`` random patients from the model.
+        """Draw ``num`` random patients from the model.
 
         For this, a ``stage_dist``, i.e., a distribution over the T-stages, needs to
         be defined. This must be an iterable of probabilities with as many elements as
@@ -983,6 +983,14 @@ class Unilateral(DelegatorMixin):
 
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).
+
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.draw_diag_times`
+                Method to draw diagnose times from a distribution.
+            :py:meth:`lymph.models.Unilateral.draw_diagnoses`
+                Method to draw individual diagnoses.
+            :py:meth:`lymph.models.Bilateral.draw_patients`
+                The corresponding bilateral method.
         """
         if rng is None:
             rng = np.random.default_rng(seed)
@@ -1001,14 +1009,12 @@ class Unilateral(DelegatorMixin):
             for t_stage in drawn_t_stages
         ]
 
-        drawn_obs = self.draw_diagnoses(drawn_diag_times)
+        drawn_obs = self.draw_diagnoses(drawn_diag_times, rng=rng)
 
-        # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
         lnl_names = list(self.graph.lnls.keys())
         multi_cols = pd.MultiIndex.from_product([modality_names, ["ipsi"], lnl_names])
 
-        # create DataFrame
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
         dataset[("tumor", "1", "t_stage")] = drawn_t_stages
 
