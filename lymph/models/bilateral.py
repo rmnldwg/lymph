@@ -712,8 +712,8 @@ class Bilateral(DelegatorMixin):
             dist=stage_dist, size=num_patients
         )
 
-        drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)
-        drawn_obs_contra = self.contra._draw_patient_diagnoses(drawn_diag_times)
+        drawn_obs_ipsi = self.ipsi.draw_diagnoses(drawn_diag_times)
+        drawn_obs_contra = self.contra.draw_diagnoses(drawn_diag_times)
         drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
 
         # construct MultiIndex for dataset from stored modalities
