@@ -280,3 +280,33 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         )
         self.assertLessEqual(risk, 1.)
         self.assertGreaterEqual(risk, 0.)
+
+
+class DataGenerationTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Check the binary model's data generation method."""
+
+    def setUp(self):
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.assign_params(**self.create_random_params())
+
+    def test_generate_data(self):
+        """Check bilateral data generation."""
+        dataset = self.model.draw_patients(
+            num=10000,
+            stage_dist=[0.5, 0.5],
+            rng=self.rng,
+        )
+
+        for mod in self.model.modalities.keys():
+            self.assertIn(mod, dataset)
+            for side in ["ipsi", "contra"]:
+                self.assertIn(side, dataset[mod])
+                for lnl in self.model.ipsi.graph.lnls.keys():
+                    self.assertIn(lnl, dataset[mod][side])
+
+        self.assertAlmostEqual(
+            (dataset["tumor", "1", "t_stage"] == "early").mean(), 0.5,
+            delta=0.02
+        )
