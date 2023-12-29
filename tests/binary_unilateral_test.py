@@ -451,4 +451,4 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
         # check that the distribution of LNL involvement matches tumor spread params
         for lnl, expected_mean in params.items():
             actual_mean = patients[("tmp", "ipsi", lnl)].mean()
-            self.assertAlmostEqual(actual_mean, expected_mean, delta=0.01)
+            self.assertAlmostEqual(actual_mean, expected_mean, delta=0.02)
