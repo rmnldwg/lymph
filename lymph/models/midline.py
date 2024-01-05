@@ -144,8 +144,8 @@ class Midline(DelegatorMixin):
         """
         super().__init__()
         self.central_enabled = central_enabled
-        self.ext   = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
-        self.noext = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
+        self.ext   = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':False, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
+        self.noext = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':False, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
         if self.central_enabled:
             self.central = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
 
@@ -207,8 +207,8 @@ class Midline(DelegatorMixin):
 
         init_edge_sync(
             property_names=property_names,
-            this_edges=noext_ipsi_edges,
-            other_edges=ext_ipsi_edges,
+            this_edge_list=noext_ipsi_edges,
+            other_edge_list=ext_ipsi_edges,
         )
         
         if self.central_enabled:
@@ -220,8 +220,8 @@ class Midline(DelegatorMixin):
             )
             init_edge_sync(
                 property_names=property_names,
-                this_edges=noext_ipsi_edges,
-                other_edges=central_ipsi_edges,
+                this_edge_list=noext_ipsi_edges,
+                other_edge_list=central_ipsi_edges,
             )
 
     def get_params(
@@ -232,7 +232,7 @@ class Midline(DelegatorMixin):
         """
 
         if self.use_mixing:
-            return {'ipsi': self.ext.ipsi.get_params(as_dict=True),
+            return {'ipsi': self.noext.ipsi.get_params(as_dict=True),
                 'no extension contra':self.noext.contra.get_params(as_dict=True),
                 'mixing':self.alpha_mix}
         else:
