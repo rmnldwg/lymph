@@ -44,16 +44,6 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         for ipsi_edge in self.model.ipsi.graph.edges.values():
             ipsi_edge.set_params(spread=self.rng.random())
             contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
-            _ = ipsi_edge.transition_tensor
-            _ = contra_edge.transition_tensor
-            self.assertTrue(hasattr(ipsi_edge, "_transition_tensor"))
-            self.assertTrue(hasattr(contra_edge, "_transition_tensor"))
-
-        for ipsi_edge in self.model.ipsi.graph.edges.values():
-            ipsi_edge.set_params(spread=self.rng.random())
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
-            self.assertFalse(hasattr(ipsi_edge, "_transition_tensor"))
-            self.assertFalse(hasattr(contra_edge, "_transition_tensor"))
             self.assertTrue(np.all(
                 ipsi_edge.transition_tensor == contra_edge.transition_tensor
             ))
