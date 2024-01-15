@@ -18,7 +18,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import check_unique_names, trigger
+from lymph.helper import check_unique_names, comp_transition_tensor, trigger
 
 
 class AbstractNode:
@@ -225,7 +225,7 @@ class Edge:
         spread to the next LNL. The ``micro_mod`` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
-        self.trigger_callbacks = [self.delete_transition_tensor]
+        self.trigger_callbacks = []
         if callbacks is not None:
             self.trigger_callbacks += callbacks
 
@@ -409,78 +409,21 @@ class Edge:
             self.set_micro_mod(micro)
 
 
-    def comp_transition_tensor(self) -> np.ndarray:
-        """Compute the transition factors of the edge.
+    @property
+    def transition_tensor(self) -> np.ndarray:
+        """Return the transition tensor of the edge.
 
-        The returned array is of shape (p,c,c), where p is the number of states of the
-        parent node and c is the number of states of the child node.
-
-        Essentially, the tensors computed here contain most of the parametrization of
-        the model. They are used to compute the transition matrix.
+        See Also:
+            :py:function:`lymph.helper.comp_transition_tensor`
         """
-        num_parent = len(self.parent.allowed_states)
-        num_child = len(self.child.allowed_states)
-        tensor = np.stack([np.eye(num_child)] * num_parent)
-
-        # this should allow edges from trinary nodes to binary nodes
-        pad = [0.] * (num_child - 2)
-
-        if self.is_tumor_spread:
-            # NOTE: Here we define how tumors spread to LNLs
-            tensor[0, 0, :] = np.array([1. - self.spread_prob, self.spread_prob, *pad])
-            return tensor
-
-        if self.is_growth:
-            # In the growth case, we can assume that two things:
-            # 1. parent and child state are the same
-            # 2. the child node is trinary
-            tensor[1, 1, :] = np.array([0., (1 - self.spread_prob), self.spread_prob])
-            return tensor
-
-        if self.parent.is_trinary:
-            # NOTE: here we define how the micro_mod affects the spread probability
-            micro_spread = self.spread_prob * self.micro_mod
-            tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
-
-            macro_spread = self.spread_prob
-            tensor[2,0,:] = np.array([1. - macro_spread, macro_spread, *pad])
-
-            return tensor
-
-        tensor[1,0,:] = np.array([1. - self.spread_prob, self.spread_prob, *pad])
-        return tensor
-
-
-    def get_transition_tensor(self) -> np.ndarray:
-        """Return the transition tensor of the edge."""
-        if not hasattr(self, "_transition_tensor"):
-            self._transition_tensor = self.comp_transition_tensor()
-
-        return self._transition_tensor
-
-
-    def delete_transition_tensor(self) -> None:
-        """Delete the transition tensor of the edge."""
-        if hasattr(self, "_transition_tensor"):
-            del self._transition_tensor
-
-
-    transition_tensor = property(
-        fget=get_transition_tensor,
-        fdel=delete_transition_tensor,
-        doc="""
-        This tensor of the shape (s,e,e) contains the transition probabilities for the
-        :py:class:`~LymphNodeLevel` at this instance's end to transition from any
-        starting state to any new state, given any possible state of the
-        :py:class:`~AbstractNode` instance at the start of this edge.
-
-        The correct term can be accessed like this:
-
-        .. code-block:: python
-
-            edge.transition_tensor[parent_state, child_state, new_child_state]
-        """
-    )
+        return comp_transition_tensor(
+            num_parent=len(self.parent.allowed_states),
+            num_child=len(self.child.allowed_states),
+            is_tumor_spread=self.is_tumor_spread,
+            is_growth=self.is_growth,
+            spread_prob=self.spread_prob,
+            micro_mod=self.micro_mod,
+        )
 
 
 class Representation:
