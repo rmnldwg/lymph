@@ -196,6 +196,58 @@ def change_base(
         return pad + result[::-1]
 
 
+@lru_cache
+def comp_transition_tensor(
+    num_parent: int,
+    num_child: int,
+    is_tumor_spread: bool,
+    is_growth: bool,
+    spread_prob: float,
+    micro_mod: float,
+) -> np.ndarray:
+    """Compute the transition factors of the edge.
+
+    The returned array is of shape (p,c,c), where p is the number of states of the
+    parent node and c is the number of states of the child node.
+
+    Essentially, the tensors computed here contain most of the parametrization of
+    the model. They are used to compute the transition matrix.
+
+    This function globally computes and caches the transition tensors, such that we
+    do not need to worry about deleting and recomputing them when the parameters of the
+    edge change.
+    """
+    tensor = np.stack([np.eye(num_child)] * num_parent)
+
+    # this should allow edges from trinary nodes to binary nodes
+    pad = [0.] * (num_child - 2)
+
+    if is_tumor_spread:
+        # NOTE: Here we define how tumors spread to LNLs
+        tensor[0, 0, :] = np.array([1. - spread_prob, spread_prob, *pad])
+        return tensor
+
+    if is_growth:
+        # In the growth case, we can assume that two things:
+        # 1. parent and child state are the same
+        # 2. the child node is trinary
+        tensor[1, 1, :] = np.array([0., (1 - spread_prob), spread_prob])
+        return tensor
+
+    if num_parent == 3:
+        # NOTE: here we define how the micro_mod affects the spread probability
+        micro_spread = spread_prob * micro_mod
+        tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
+
+        macro_spread = spread_prob
+        tensor[2,0,:] = np.array([1. - macro_spread, macro_spread, *pad])
+
+        return tensor
+
+    tensor[1,0,:] = np.array([1. - spread_prob, spread_prob, *pad])
+    return tensor
+
+
 def check_modality(modality: str, spsn: list):
     """Private method that checks whether all inserted values
     are valid for a confusion matrix.

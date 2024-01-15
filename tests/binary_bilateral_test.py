@@ -24,36 +24,35 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
 
     def test_delegation(self):
         """Test that the unilateral model delegates the attributes."""
-        self.assertEqual(
-            self.model.is_binary, self.model.ipsi.is_binary
-        )
-        self.assertEqual(
-            self.model.is_trinary, self.model.ipsi.is_trinary
-        )
-        self.assertEqual(
-            self.model.max_time, self.model.ipsi.max_time
-        )
-        self.assertEqual(
-            list(self.model.t_stages), list(self.model.ipsi.t_stages)
-        )
+        self.assertEqual(self.model.is_binary, self.model.ipsi.is_binary)
+        self.assertEqual(self.model.is_trinary, self.model.ipsi.is_trinary)
+        self.assertEqual(self.model.max_time, self.model.ipsi.max_time)
+        self.assertEqual(list(self.model.t_stages), list(self.model.ipsi.t_stages))
 
     def test_edge_sync(self):
         """Check if synced edges update their respective parameters."""
-        rng = np.random.default_rng(42)
         for ipsi_edge in self.model.ipsi.graph.edges.values():
             contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
-            ipsi_edge.set_params(spread=rng.random())
+            ipsi_edge.set_params(spread=self.rng.random())
             self.assertEqual(
                 ipsi_edge.get_params("spread"),
                 contra_edge.get_params("spread"),
             )
 
+    def test_tensor_sync(self):
+        """Check the transition tensors of the edges get deleted and updated properly."""
+        for ipsi_edge in self.model.ipsi.graph.edges.values():
+            ipsi_edge.set_params(spread=self.rng.random())
+            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
+            self.assertTrue(np.all(
+                ipsi_edge.transition_tensor == contra_edge.transition_tensor
+            ))
+
     def test_modality_sync(self):
         """Make sure the modalities are synced between the two sides."""
-        rng = np.random.default_rng(42)
         self.model.ipsi.modalities = {"foo": Clinical(
-            specificity=rng.uniform(),
-            sensitivity=rng.uniform(),
+            specificity=self.rng.uniform(),
+            sensitivity=self.rng.uniform(),
         )}
         self.assertEqual(
             self.model.ipsi.modalities["foo"].sensitivity,
