@@ -237,14 +237,14 @@ class Bilateral(DelegatorMixin):
         ipsi_tumor_edges = list(self.ipsi.graph.tumor_edges.values())
         ipsi_lnl_edges = list(self.ipsi.graph.lnl_edges.values())
         ipsi_edges = (
-            ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else []
-            + ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else []
+            (ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else [])
+            + (ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else [])
         )
         contra_tumor_edges = list(self.contra.graph.tumor_edges.values())
         contra_lnl_edges = list(self.contra.graph.lnl_edges.values())
         contra_edges = (
-            contra_tumor_edges if self.is_symmetric["tumor_spread"] else []
-            + contra_lnl_edges if self.is_symmetric["lnl_spread"] else []
+            (contra_tumor_edges if self.is_symmetric["tumor_spread"] else [])
+            + (contra_lnl_edges if self.is_symmetric["lnl_spread"] else [])
         )
 
         init_edge_sync(
