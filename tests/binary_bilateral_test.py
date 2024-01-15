@@ -14,6 +14,11 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
     """Test the delegation of attrs from the unilateral class to the bilateral one."""
 
     def setUp(self):
+        self.model_kwargs = {"is_symmetric": {
+            "tumor_spread": True,
+            "lnl_spread": True,
+            "modalities": True,
+        }}
         super().setUp()
         self.load_patient_data()
 
@@ -32,11 +37,11 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
             list(self.model.t_stages), list(self.model.ipsi.t_stages)
         )
 
-    def test_lnl_edge_sync(self):
-        """Check if synced LNL edges update their respective parameters."""
+    def test_edge_sync(self):
+        """Check if synced edges update their respective parameters."""
         rng = np.random.default_rng(42)
-        for ipsi_edge in self.model.ipsi.graph.lnl_edges.values():
-            contra_edge = self.model.contra.graph.lnl_edges[ipsi_edge.name]
+        for ipsi_edge in self.model.ipsi.graph.edges.values():
+            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
             ipsi_edge.set_params(spread=rng.random())
             self.assertEqual(
                 ipsi_edge.get_params("spread"),
