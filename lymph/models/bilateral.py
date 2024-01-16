@@ -156,15 +156,18 @@ class Bilateral(DelegatorMixin):
 
         The ``is_symmetric`` dictionary defines which characteristics of the bilateral
         model should be symmetric. Valid keys are:
-        - ``"modalities"``: Whether the diagnostic modalities of the two neck sides
-            are symmetric (default: ``True``).
-        - ``"tumor_spread"``: Whether the spread probabilities from the tumor(s) to the
-            LNLs are symmetric (default: ``False``). If this is set to ``True`` but
-            the graphs are asymmetric, a warning is issued.
-        - ``"lnl_spread"``: Whether the spread probabilities between the LNLs are
-            symmetric (default: ``True`` if the graphs are symmetric, otherwise
-            ``False``). If this is set to ``True`` but the graphs are asymmetric, a
-            warning is issued.
+
+        - ``"modalities"``:
+            Whether the diagnostic modalities of the two neck sides are symmetric
+            (default: ``True``).
+        - ``"tumor_spread"``:
+            Whether the spread probabilities from the tumor(s) to the LNLs are
+            symmetric (default: ``False``). If this is set to ``True`` but the graphs
+            are asymmetric, a warning is issued.
+        - ``"lnl_spread"``:
+            Whether the spread probabilities between the LNLs are symmetric
+            (default: ``True`` if the graphs are symmetric, otherwise ``False``). If
+            this is set to ``True`` but the graphs are asymmetric, a warning is issued.
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
         while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
@@ -393,7 +396,7 @@ class Bilateral(DelegatorMixin):
         See Also:
             :py:attr:`lymph.models.Unilateral.modalities`
                 The corresponding unilateral attribute.
-            :py:class:`~lymph.descriptors.ModalitiesUserDict`
+            :py:class:`~lymph.modalities.ModalitiesUserDict`
                 The implementation of the descriptor class.
         """
         if not self.is_symmetric["modalities"]:
@@ -705,36 +708,57 @@ class Bilateral(DelegatorMixin):
         )
 
 
-    def generate_dataset(
+    def draw_patients(
         self,
-        num_patients: int,
-        stage_dist: dict[str, float],
+        num: int,
+        stage_dist: Iterable[float],
+        rng: np.random.Generator | None = None,
+        seed: int = 42,
+        **_kwargs,
     ) -> pd.DataFrame:
-        """Generate/sample a pandas :class:`DataFrame` from the defined network.
+        """Draw ``num`` random patients from the parametrized model.
 
-        Args:
-            num_patients: Number of patients to generate.
-            stage_dist: Probability to find a patient in a certain T-stage.
+        See Also:
+            :py:meth:`lymph.diagnose_times.Distribution.draw_diag_times`
+                Method to draw diagnose times from a distribution.
+            :py:meth:`lymph.models.Unilateral.draw_diagnoses`
+                Method to draw individual diagnoses from a unilateral model.
+            :py:meth:`lymph.models.Unilateral.draw_patients`
+                The unilateral method to draw a synthetic dataset.
         """
-        # TODO: check if this still works
-        drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
-            dist=stage_dist, size=num_patients
-        )
+        if rng is None:
+            rng = np.random.default_rng(seed)
 
-        drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)
-        drawn_obs_contra = self.contra._draw_patient_diagnoses(drawn_diag_times)
+        if sum(stage_dist) != 1.:
+            warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
+            stage_dist = np.array(stage_dist) / sum(stage_dist)
+
+        drawn_t_stages = rng.choice(
+            a=list(self.diag_time_dists.keys()),
+            p=stage_dist,
+            size=num,
+        )
+        drawn_diag_times = [
+            self.diag_time_dists[t_stage].draw_diag_times(rng=rng)
+            for t_stage in drawn_t_stages
+        ]
+
+        drawn_obs_ipsi = self.ipsi.draw_diagnoses(drawn_diag_times, rng=rng)
+        drawn_obs_contra = self.contra.draw_diagnoses(drawn_diag_times, rng=rng)
         drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
 
-        # construct MultiIndex for dataset from stored modalities
+        # construct MultiIndex with "ipsi" and "contra" at top level to allow
+        # concatenation of the two separate drawn diagnoses
         sides = ["ipsi", "contra"]
-        modalities = list(self.modalities.keys())
-        lnl_names = [lnl.name for lnl in self.ipsi.graph._lnls]
-        multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
+        modality_names = list(self.modalities.keys())
+        lnl_names = [lnl for lnl in self.ipsi.graph.lnls.keys()]
+        multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
 
-        # create DataFrame
+        # reorder the column levels and thus also the individual columns to match the
+        # LyProX format without mixing up the data
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset[('info', 'tumor', 't_stage')] = drawn_t_stages
+        dataset[('tumor', '1', 't_stage')] = drawn_t_stages
 
         return dataset

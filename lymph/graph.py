@@ -18,7 +18,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import check_unique_names, trigger
+from lymph.helper import check_unique_names, comp_transition_tensor, trigger
 
 
 class AbstractNode:
@@ -31,9 +31,9 @@ class AbstractNode:
     ) -> None:
         """Make a new node.
 
-        Upon initialization, the `name` and `state` of the node must be provided. The
-        `state` must be one of the `allowed_states`. The constructor makes sure that
-        the `allowed_states` are a list of ints, even when, e.g., a tuple of floats
+        Upon initialization, the ``name`` and ``state`` of the node must be provided.
+        The ``state`` must be one of the ``allowed_states``. The constructor makes sure that
+        the ``allowed_states`` are a list of ints, even when, e.g., a tuple of floats
         is provided.
         """
         self.name = name
@@ -103,9 +103,9 @@ class AbstractNode:
         obs_table: np.ndarray,
         log: bool = False,
     ) -> float:
-        """Compute the probability of the diagnosis `obs`, given the current state.
+        """Compute the probability of the diagnosis ``obs``, given the current state.
 
-        The `obs_table` is a 2D array with the rows corresponding to the states and
+        The ``obs_table`` is a 2D array with the rows corresponding to the states and
         the columns corresponding to the observations. It encodes for each state and
         diagnosis the corresponding probability.
         """
@@ -192,7 +192,7 @@ class LymphNodeLevel(AbstractNode):
 
 
     def comp_trans_prob(self, new_state: int) -> float:
-        """Compute the hidden Markov model's transition probability to a `new_state`."""
+        """Compute the hidden Markov model's transition probability to a ``new_state``."""
         if new_state == self.state:
             stay_prob = 1.
             for edge in self.inc:
@@ -225,7 +225,7 @@ class Edge:
         spread to the next LNL. The ``micro_mod`` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
-        self.trigger_callbacks = [self.delete_transition_tensor]
+        self.trigger_callbacks = []
         if callbacks is not None:
             self.trigger_callbacks += callbacks
 
@@ -409,78 +409,21 @@ class Edge:
             self.set_micro_mod(micro)
 
 
-    def comp_transition_tensor(self) -> np.ndarray:
-        """Compute the transition factors of the edge.
+    @property
+    def transition_tensor(self) -> np.ndarray:
+        """Return the transition tensor of the edge.
 
-        The returned array is of shape (p,c,c), where p is the number of states of the
-        parent node and c is the number of states of the child node.
-
-        Essentially, the tensors computed here contain most of the parametrization of
-        the model. They are used to compute the transition matrix.
+        See Also:
+            :py:function:`lymph.helper.comp_transition_tensor`
         """
-        num_parent = len(self.parent.allowed_states)
-        num_child = len(self.child.allowed_states)
-        tensor = np.stack([np.eye(num_child)] * num_parent)
-
-        # this should allow edges from trinary nodes to binary nodes
-        pad = [0.] * (num_child - 2)
-
-        if self.is_tumor_spread:
-            # NOTE: Here we define how tumors spread to LNLs
-            tensor[0, 0, :] = np.array([1. - self.spread_prob, self.spread_prob, *pad])
-            return tensor
-
-        if self.is_growth:
-            # In the growth case, we can assume that two things:
-            # 1. parent and child state are the same
-            # 2. the child node is trinary
-            tensor[1, 1, :] = np.array([0., (1 - self.spread_prob), self.spread_prob])
-            return tensor
-
-        if self.parent.is_trinary:
-            # NOTE: here we define how the micro_mod affects the spread probability
-            micro_spread = self.spread_prob * self.micro_mod
-            tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
-
-            macro_spread = self.spread_prob
-            tensor[2,0,:] = np.array([1. - macro_spread, macro_spread, *pad])
-
-            return tensor
-
-        tensor[1,0,:] = np.array([1. - self.spread_prob, self.spread_prob, *pad])
-        return tensor
-
-
-    def get_transition_tensor(self) -> np.ndarray:
-        """Return the transition tensor of the edge."""
-        if not hasattr(self, "_transition_tensor"):
-            self._transition_tensor = self.comp_transition_tensor()
-
-        return self._transition_tensor
-
-
-    def delete_transition_tensor(self) -> None:
-        """Delete the transition tensor of the edge."""
-        if hasattr(self, "_transition_tensor"):
-            del self._transition_tensor
-
-
-    transition_tensor = property(
-        fget=get_transition_tensor,
-        fdel=delete_transition_tensor,
-        doc="""
-        This tensor of the shape (s,e,e) contains the transition probabilities for the
-        :py:class:`~LymphNodeLevel` at this instance's end to transition from any
-        starting state to any new state, given any possible state of the
-        :py:class:`~AbstractNode` instance at the start of this edge.
-
-        The correct term can be accessed like this:
-
-        .. code-block:: python
-
-            edge.transition_tensor[parent_state, child_state, new_child_state]
-        """
-    )
+        return comp_transition_tensor(
+            num_parent=len(self.parent.allowed_states),
+            num_child=len(self.child.allowed_states),
+            is_tumor_spread=self.is_tumor_spread,
+            is_growth=self.is_growth,
+            spread_prob=self.spread_prob,
+            micro_mod=self.micro_mod,
+        )
 
 
 class Representation:
@@ -641,11 +584,23 @@ class Representation:
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
-        """Returns graph representing this instance's nodes and egdes as dictionary."""
+        """Returns graph representing this instance's nodes and egdes as dictionary.
+
+        Example:
+
+        >>> graph_dict = {
+        ...    ('tumor', 'T'): ['II', 'III'],
+        ...    ('lnl', 'II'): ['III'],
+        ...    ('lnl', 'III'): [],
+        ... }
+        >>> graph = Representation(graph_dict)
+        >>> graph.to_dict() == graph_dict
+        True
+        """
         res = {}
-        for node in self.nodes:
+        for node in self.nodes.values():
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
-            res[(node_type, node.name)] = {o.child.name for o in node.out}
+            res[(node_type, node.name)] = [o.child.name for o in node.out]
         return res
 
 
@@ -655,14 +610,14 @@ class Representation:
         Example:
 
         >>> graph_dict = {
-        ...    ("tumor", "T"): ["II", "III"],
-        ...    ("lnl", "II"): ["III"],
-        ...    ("lnl", "III"): [],
+        ...    ('tumor', 'T'): ['II', 'III'],
+        ...    ('lnl', 'II'): ['III'],
+        ...    ('lnl', 'III'): [],
         ... }
         >>> graph = Representation(graph_dict)
-        >>> graph.edge_params["spread_T_to_II"].set_param(0.1)
-        >>> graph.edge_params["spread_T_to_III"].set_param(0.2)
-        >>> graph.edge_params["spread_II_to_III"].set_param(0.3)
+        >>> graph.edges["T_to_II"].spread_prob = 0.1
+        >>> graph.edges["T_to_III"].spread_prob = 0.2
+        >>> graph.edges["II_to_III"].spread_prob = 0.3
         >>> print(graph.get_mermaid())  # doctest: +NORMALIZE_WHITESPACE
         flowchart TD
             T-->|10%| II
@@ -672,8 +627,8 @@ class Representation:
         """
         mermaid_graph = "flowchart TD\n"
 
-        for idx, node in enumerate(self.nodes):
-            for edge in self.nodes[node].out:
+        for node in self.nodes.values():
+            for edge in node.out:
                 mermaid_graph += f"\t{node.name}-->|{edge.spread_prob:.0%}| {edge.child.name}\n"
 
         return mermaid_graph
@@ -741,7 +696,8 @@ class Representation:
         state 1 and all others are in state 0, etc. Essentially, it looks like binary
         counting:
 
-        >>> model = Unilateral(graph={
+        >>> from lymph.models import Unilateral
+        >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["I", "II" , "III"],
         ...     ("lnl", "I"): [],
         ...     ("lnl", "II"): ["I", "III"],

@@ -40,15 +40,15 @@ class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
         NOTE: I am using this only in debug mode to look a the tensors. I am not sure
         how to test them yet.
         """
-        base_edge_tensor = list(self.model.graph.tumor_edges.values())[0].comp_transition_tensor()
+        base_edge_tensor = list(self.model.graph.tumor_edges.values())[0].transition_tensor
         row_sums = base_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        lnl_edge_tensor = list(self.model.graph.lnl_edges.values())[0].comp_transition_tensor()
+        lnl_edge_tensor = list(self.model.graph.lnl_edges.values())[0].transition_tensor
         row_sums = lnl_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        growth_edge_tensor = list(self.model.graph.growth_edges.values())[0].comp_transition_tensor()
+        growth_edge_tensor = list(self.model.graph.growth_edges.values())[0].transition_tensor
         row_sums = growth_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
