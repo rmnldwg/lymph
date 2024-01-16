@@ -180,7 +180,7 @@ class Midline(DelegatorMixin):
                 other=self.noext.modalities,
             )
             if central_enabled:
-                delegated_attrs.append("modalities")
+                # delegated_attrs.append("modalities")
                 init_dict_sync(
                     this=self.noext.modalities,
                     other=self.central.modalities,
@@ -211,18 +211,18 @@ class Midline(DelegatorMixin):
             other_edge_list=ext_ipsi_edges,
         )
         
-        if self.central_enabled:
-            central_ipsi_tumor_edges = list(self.central.ipsi.graph.tumor_edges.values())
-            central_ipsi_lnl_edges = list(self.central.ipsi.graph.lnl_edges.values())
-            central_ipsi_edges = (
-                central_ipsi_tumor_edges 
-                + central_ipsi_lnl_edges 
-            )
-            init_edge_sync(
-                property_names=property_names,
-                this_edge_list=noext_ipsi_edges,
-                other_edge_list=central_ipsi_edges,
-            )
+        # if self.central_enabled:
+        #     central_ipsi_tumor_edges = list(self.central.ipsi.graph.tumor_edges.values())
+        #     central_ipsi_lnl_edges = list(self.central.ipsi.graph.lnl_edges.values())
+        #     central_ipsi_edges = (
+        #         central_ipsi_tumor_edges 
+        #         + central_ipsi_lnl_edges 
+        #     )
+        #     init_edge_sync(
+        #         property_names=property_names,
+        #         this_edge_list=noext_ipsi_edges,
+        #         other_edge_list=central_ipsi_edges,
+        #     )
 
     def get_params(
         self):
@@ -274,7 +274,7 @@ class Midline(DelegatorMixin):
             if self.central_enabled:
                 for key in no_extension_kwargs.keys():
                     if 'contra' not in key:
-                        central_kwargs[key] = no_extension_kwargs[key]
+                        central_kwargs[(key.replace("ipsi_", ""))] = no_extension_kwargs[key]
                 remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
 
 #this part is not tested yet or properly implemented
