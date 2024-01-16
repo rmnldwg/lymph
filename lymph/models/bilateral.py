@@ -112,6 +112,16 @@ def init_dict_sync(
         create_lookupdict_sync_callback(this=other, other=this)
     )
 
+def init_dict_sync2(
+    this: AbstractLookupDict,
+    other: AbstractLookupDict,
+) -> None:
+    """Add callback to ``this`` to sync with ``other``."""
+    def sync():
+        other.clear()
+        other.update(this)
+
+    this.trigger_callbacks.append(sync)
 
 
 class Bilateral(DelegatorMixin):
@@ -234,16 +244,15 @@ class Bilateral(DelegatorMixin):
         ipsi_tumor_edges = list(self.ipsi.graph.tumor_edges.values())
         ipsi_lnl_edges = list(self.ipsi.graph.lnl_edges.values())
         ipsi_edges = (
-            ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else []
-            + ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else []
+            (ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else [])
+            + (ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else [])
         )
         contra_tumor_edges = list(self.contra.graph.tumor_edges.values())
         contra_lnl_edges = list(self.contra.graph.lnl_edges.values())
         contra_edges = (
-            contra_tumor_edges if self.is_symmetric["tumor_spread"] else []
-            + contra_lnl_edges if self.is_symmetric["lnl_spread"] else []
+            (contra_tumor_edges if self.is_symmetric["tumor_spread"] else [])
+            + (contra_lnl_edges if self.is_symmetric["lnl_spread"] else [])
         )
-
         init_edge_sync(
             property_names=property_names,
             this_edges=ipsi_edges,
@@ -252,7 +261,7 @@ class Bilateral(DelegatorMixin):
 
         # Sync modalities
         if self.is_symmetric["modalities"]:
-            init_dict_sync(
+            init_dict_sync2(
                 this=self.ipsi.modalities,
                 other=self.contra.modalities,
             )
