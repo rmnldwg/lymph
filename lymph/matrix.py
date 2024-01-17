@@ -20,11 +20,12 @@ from lymph.helper import (
 
 def generate_transition(instance: models.Unilateral) -> np.ndarray:
     """Compute the transition matrix of the lymph model."""
-    num_lnls = len(instance.graph.lnls)
+    lnls_list = list(instance.graph.lnls.values())
+    num_lnls = len(lnls_list)
     num_states = 3 if instance.graph.is_trinary else 2
     transition_matrix = np.ones(shape=(num_states**num_lnls, num_states**num_lnls))
 
-    for i, lnl in enumerate(instance.graph.lnls.values()):
+    for i, lnl in enumerate(lnls_list):
         current_state_idx = get_state_idx_matrix(
             lnl_idx=i,
             num_lnls=num_lnls,
@@ -43,7 +44,7 @@ def generate_transition(instance: models.Unilateral) -> np.ndarray:
                     0, current_state_idx, new_state_idx
                 ]
             else:
-                parent_node_i = list(instance.graph.lnls.values()).index(edge.parent)
+                parent_node_i = lnls_list.index(edge.parent)
                 parent_state_idx = get_state_idx_matrix(
                     lnl_idx=parent_node_i,
                     num_lnls=num_lnls,
