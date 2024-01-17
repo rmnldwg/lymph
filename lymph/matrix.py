@@ -8,10 +8,12 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from cachetools import LRUCache
 
 from lymph import models
 from lymph.helper import (
     AbstractLookupDict,
+    arg0_cache,
     get_state_idx_matrix,
     row_wise_kron,
     tile_and_repeat,
@@ -69,6 +71,15 @@ def generate_transition(instance: models.Unilateral) -> np.ndarray:
         transition_matrix *= lnl_transition_matrix
 
     return transition_matrix
+
+
+cached_generate_transition = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_transition)
+"""Cached version of :py:func:`generate_transition`.
+
+This expects the first argument to be a hashable object that is used instrad of the
+``instance`` argument of :py:func:`generate_transition`. It is intended to be used with
+the :py:meth:`~lymph.graph.Representation._parameter_hash` method of the graph.
+"""
 
 
 def generate_observation(instance: models.Unilateral) -> np.ndarray:

@@ -95,7 +95,6 @@ class Unilateral(DelegatorMixin):
             graph_dict=graph_dict,
             tumor_state=tumor_state,
             allowed_states=allowed_states,
-            on_edge_change=[self.delete_transition_matrix],
         )
 
         if 0 >= max_time:
@@ -437,7 +436,7 @@ class Unilateral(DelegatorMixin):
             del self._obs_list
 
 
-    @cached_property
+    @property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -447,9 +446,6 @@ class Unilateral(DelegatorMixin):
         The :math:`i`-th row and :math:`j`-th column encodes the probability to
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
         are ordered as in the :py:attr:`lymph.graph.state_list`.
-
-        This matrix is deleted every time the parameters along the edges of the graph
-        are changed. It is lazily computed when it is next accessed.
 
         See Also:
             :py:func:`~lymph.descriptors.matrix.generate_transition`
@@ -462,21 +458,15 @@ class Unilateral(DelegatorMixin):
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
         ... })
-        >>> model.assign_params(0.7, 0.3, 0.2)
+        >>> model.assign_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
+        (..., {})
         >>> model.transition_matrix
         array([[0.21, 0.09, 0.49, 0.21],
-            [0.  , 0.3 , 0.  , 0.7 ],
-            [0.  , 0.  , 0.56, 0.44],
-            [0.  , 0.  , 0.  , 1.  ]])
+               [0.  , 0.3 , 0.  , 0.7 ],
+               [0.  , 0.  , 0.56, 0.44],
+               [0.  , 0.  , 0.  , 1.  ]])
         """
-        return matrix.generate_transition(self)
-
-    def delete_transition_matrix(self):
-        """Delete the transition matrix. Necessary to pass as callback."""
-        try:
-            del self.transition_matrix
-        except AttributeError:
-            pass
+        return matrix.cached_generate_transition(self.graph.parameter_hash(), self)
 
 
     @smart_updating_dict_cached_property
