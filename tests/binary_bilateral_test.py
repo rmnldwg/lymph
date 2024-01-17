@@ -49,7 +49,7 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
             ))
 
     def test_transition_matrix_sync(self):
-        """Make sure the transition matrix gets recomputed correctly."""
+        """Make sure contra transition matrix gets recomputed when ipsi param is set."""
         ipsi_trans_mat = self.model.ipsi.transition_matrix
         contra_trans_mat = self.model.contra.transition_matrix
         rand_ipsi_param = self.rng.choice(list(
