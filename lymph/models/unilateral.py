@@ -95,7 +95,6 @@ class Unilateral(DelegatorMixin):
             graph_dict=graph_dict,
             tumor_state=tumor_state,
             allowed_states=allowed_states,
-            on_edge_change=[self.delete_transition_matrix],
         )
 
         if 0 >= max_time:
@@ -383,16 +382,6 @@ class Unilateral(DelegatorMixin):
         return prob
 
 
-    def _gen_obs_list(self):
-        """Generates the list of possible observations."""
-        possible_obs_list = []
-        for modality in self.modalities.values():
-            possible_obs = np.arange(modality.confusion_matrix.shape[1])
-            for _ in self.graph.lnls:
-                possible_obs_list.append(possible_obs.copy())
-
-        self._obs_list = np.array(list(product(*possible_obs_list)))
-
     @property
     def obs_list(self):
         """Return the list of all possible observations.
@@ -424,20 +413,16 @@ class Unilateral(DelegatorMixin):
         modality CT, the second two columns correspond to the same LNLs under the
         pathology modality.
         """
-        try:
-            return self._obs_list
-        except AttributeError:
-            self._gen_obs_list()
-            return self._obs_list
+        possible_obs_list = []
+        for modality in self.modalities.values():
+            possible_obs = np.arange(modality.confusion_matrix.shape[1])
+            for _ in self.graph.lnls:
+                possible_obs_list.append(possible_obs.copy())
 
-    @obs_list.deleter
-    def obs_list(self):
-        """Delete the observation list. Necessary to pass as callback."""
-        if hasattr(self, "_obs_list"):
-            del self._obs_list
+        return np.array(list(product(*possible_obs_list)))
 
 
-    @cached_property
+    @property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -447,9 +432,6 @@ class Unilateral(DelegatorMixin):
         The :math:`i`-th row and :math:`j`-th column encodes the probability to
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
         are ordered as in the :py:attr:`lymph.graph.state_list`.
-
-        This matrix is deleted every time the parameters along the edges of the graph
-        are changed. It is lazily computed when it is next accessed.
 
         See Also:
             :py:func:`~lymph.descriptors.matrix.generate_transition`
@@ -462,21 +444,15 @@ class Unilateral(DelegatorMixin):
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
         ... })
-        >>> model.assign_params(0.7, 0.3, 0.2)
+        >>> model.assign_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
+        (..., {})
         >>> model.transition_matrix
         array([[0.21, 0.09, 0.49, 0.21],
-            [0.  , 0.3 , 0.  , 0.7 ],
-            [0.  , 0.  , 0.56, 0.44],
-            [0.  , 0.  , 0.  , 1.  ]])
+               [0.  , 0.3 , 0.  , 0.7 ],
+               [0.  , 0.  , 0.56, 0.44],
+               [0.  , 0.  , 0.  , 1.  ]])
         """
-        return matrix.generate_transition(self)
-
-    def delete_transition_matrix(self):
-        """Delete the transition matrix. Necessary to pass as callback."""
-        try:
-            del self.transition_matrix
-        except AttributeError:
-            pass
+        return matrix.cached_generate_transition(self.graph.parameter_hash(), self)
 
 
     @smart_updating_dict_cached_property
@@ -497,10 +473,7 @@ class Unilateral(DelegatorMixin):
             :py:class:`~lymph.descriptors.modalities.ModalitiesUserDict`
             :py:class:`~lymph.descriptors.modalities.Modality`
         """
-        return modalities.ModalitiesUserDict(
-            is_trinary=self.is_trinary,
-            trigger_callbacks=[self.delete_obs_list_and_matrix],
-        )
+        return modalities.ModalitiesUserDict(is_trinary=self.is_trinary)
 
 
     @cached_property
@@ -517,16 +490,9 @@ class Unilateral(DelegatorMixin):
             :py:func:`~lymph.descriptors.matrix.generate_observation`
                 The function actually computing the observation matrix.
         """
-        return matrix.generate_observation(self)
-
-    def delete_obs_list_and_matrix(self):
-        """Delete the observation matrix. Necessary to pass as callback."""
-        try:
-            del self.observation_matrix
-        except AttributeError:
-            pass
-
-        del self.obs_list
+        return matrix.cached_generate_observation(
+            self.modalities.confusion_matrices_hash(), self
+        )
 
 
     @smart_updating_dict_cached_property
@@ -621,7 +587,7 @@ class Unilateral(DelegatorMixin):
             if side not in patient_data[modality_name]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
-            for name in self.graph.lnls:
+            for name in self.graph.lnls.keys():
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
                     modality_side_data = patient_data[modality_name, side]
@@ -639,12 +605,27 @@ class Unilateral(DelegatorMixin):
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
-        # Changes to the patient data require a recomputation of the data and
-        # diagnose matrices. Clearing them will trigger this when they are next
-        # accessed.
-        self.data_matrices.clear()
-        self.diagnose_matrices.clear()
         self._patient_data = patient_data
+        # Changes to the patient data require a recomputation of the data and
+        # diagnose matrices. For the data matrix, it is enough to clear the respective
+        # ``UserDict``. For the diagnose matrices, we need to delete the hash value of
+        # the patient data, so that the next time it is requested, a cache miss occurs
+        # and they are recomputed.
+        self.data_matrices.clear()
+        try:
+            del self.patient_data_hash
+        except AttributeError:
+            pass
+
+
+    @cached_property
+    def patient_data_hash(self) -> int:
+        """Hash of the patient data.
+
+        This is used to check if the patient data has changed since the last time
+        the data and diagnose matrices were computed. If so, they are recomputed.
+        """
+        return hash(self.patient_data.to_numpy().tobytes())
 
 
     @property

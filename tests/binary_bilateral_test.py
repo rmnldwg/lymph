@@ -48,6 +48,21 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
                 ipsi_edge.transition_tensor == contra_edge.transition_tensor
             ))
 
+    def test_transition_matrix_sync(self):
+        """Make sure contra transition matrix gets recomputed when ipsi param is set."""
+        ipsi_trans_mat = self.model.ipsi.transition_matrix
+        contra_trans_mat = self.model.contra.transition_matrix
+        rand_ipsi_param = self.rng.choice(list(
+            self.model.ipsi.get_params(as_dict=True).keys()
+        ))
+        self.model.assign_params(**{f"ipsi_{rand_ipsi_param}": self.rng.random()})
+        self.assertFalse(np.all(
+            ipsi_trans_mat == self.model.ipsi.transition_matrix
+        ))
+        self.assertFalse(np.all(
+            contra_trans_mat == self.model.contra.transition_matrix
+        ))
+
     def test_modality_sync(self):
         """Make sure the modalities are synced between the two sides."""
         self.model.ipsi.modalities = {"foo": Clinical(

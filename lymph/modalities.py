@@ -212,3 +212,23 @@ class ModalitiesUserDict(AbstractLookupDict):
     @trigger
     def __delitem__(self, key: str) -> None:
         return super().__delitem__(key)
+
+
+    def confusion_matrices_hash(self) -> int:
+        """Compute a kind of hash from all confusion matrices.
+
+        Note:
+            This is used to check if some modalities have changed and the observation
+            matrix needs to be recomputed. It should not be used as a replacement for
+            the ``__hash__`` method, for two reasons:
+
+            1. It may change over the lifetime of the object, whereas ``__hash__``
+                should be constant.
+            2. It only takes into account the ``confusion_matric`` of the modality,
+                nothing else.
+        """
+        confusion_mat_bytes = b""
+        for modality in self.values():
+            confusion_mat_bytes += modality.confusion_matrix.tobytes()
+
+        return hash(confusion_mat_bytes)
