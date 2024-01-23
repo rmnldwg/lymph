@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "numpy < 2",
     "pandas < 3",
+    "cachetools < 6",
 ]
 dynamic = ["version"]
 

@@ -84,12 +84,12 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
 
     def setUp(self):
         super().setUp()
-        self.model.load_patient_data(self.get_patient_data(), side="ipsi")
-        _ = self.model.diagnose_matrices
+        self.model.modalities = fixtures.MODALITIES
+        self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def get_patient_data(self) -> pd.DataFrame:
         """Load an example dataset that has both clinical and pathology data."""
-        return pd.read_csv("tests/data/2021-clb-oropharynx.csv", header=[0, 1, 2])
+        return pd.read_csv("tests/data/2021-usz-oropharynx.csv", header=[0, 1, 2])
 
     def test_diagnose_matrices_shape(self) -> None:
         """Test the diagnose matrix of the model."""

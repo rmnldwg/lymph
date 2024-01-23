@@ -583,6 +583,46 @@ class Representation:
         return {n: e for n, e in self.edges.items() if e.is_growth}
 
 
+    def parameter_hash(self) -> int:
+        """Compute a hash of the graph.
+
+        Note:
+            This is used to check if the graph has changed and the transition matrix
+            needs to be recomputed. It should not be used as a replacement for the
+            ``__hash__`` method, for two reasons:
+
+            1. It may change over the lifetime of the object, whereas ``__hash__``
+                should be constant.
+            2. It only takes into account the ``transition_tensor`` of the edges,
+                nothing else.
+
+        Example:
+
+        >>> graph_dict = {
+        ...    ('tumor', 'T'): ['II', 'III'],
+        ...    ('lnl', 'II'): ['III'],
+        ...    ('lnl', 'III'): [],
+        ... }
+        >>> one_graph = Representation(graph_dict)
+        >>> another_graph = Representation(graph_dict)
+        >>> rng = np.random.default_rng(42)
+        >>> for one_edge, another_edge in zip(
+        ...     one_graph.edges.values(), another_graph.edges.values()
+        ... ):
+        ...     params_dict = one_edge.get_params(as_dict=True)
+        ...     params_to_set = {k: rng.uniform() for k in params_dict}
+        ...     one_edge.set_params(**params_to_set)
+        ...     another_edge.set_params(**params_to_set)
+        >>> one_graph.parameter_hash() == another_graph.parameter_hash()
+        True
+        """
+        tensor_bytes = b""
+        for edge in self.edges.values():
+            tensor_bytes += edge.transition_tensor.tobytes()
+
+        return hash(tensor_bytes)
+
+
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
         """Returns graph representing this instance's nodes and egdes as dictionary.
 
@@ -696,14 +736,13 @@ class Representation:
         state 1 and all others are in state 0, etc. Essentially, it looks like binary
         counting:
 
-        >>> from lymph.models import Unilateral
-        >>> model = Unilateral(graph_dict={
+        >>> graph = Representation(graph_dict={
         ...     ("tumor", "T"): ["I", "II" , "III"],
         ...     ("lnl", "I"): [],
         ...     ("lnl", "II"): ["I", "III"],
         ...     ("lnl", "III"): [],
         ... })
-        >>> model.state_list
+        >>> graph.state_list
         array([[0, 0, 0],
                [0, 0, 1],
                [0, 1, 0],

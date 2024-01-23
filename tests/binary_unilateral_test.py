@@ -143,10 +143,11 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
     def test_transition_matrix_deletion(self):
         """Check if the transition matrix gets deleted when a parameter is set."""
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
-        _ = self.model.transition_matrix
-        self.assertTrue("transition_matrix" in self.model.__dict__)
+        trans_mat = self.model.transition_matrix
         self.model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
-        self.assertFalse("transition_matrix" in self.model.__dict__)
+        self.assertFalse(np.all(
+            trans_mat == self.model.transition_matrix
+        ))
 
 
 class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
