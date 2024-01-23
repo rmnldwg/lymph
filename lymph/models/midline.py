@@ -92,7 +92,7 @@ def init_dict_sync(
 class Midline(DelegatorMixin):
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
-    mid-sagittal line.
+    mid-sagittal line, or is located on the mid-saggital line.
 
     It is reasonable to assume (and supported by data) that such an extension
     significantly increases the risk for metastatic spread to the contralateral
@@ -122,9 +122,9 @@ class Midline(DelegatorMixin):
     ):
         """The class is constructed in a similar fashion to the
         :class:`Bilateral`: That class contains one :class:`Unilateral` for
-        each side of the neck, while this class will contain two instances of
-        :class:`Bilateral`, one for the case of a midline extension and one for
-        the case of no midline extension.
+        each side of the neck, while this class will contain two/three instances of
+        :class:`Bilateral`, one for the case of a midline extension, one for
+        the case of no midline extension and one for the tumors on the midline.
 
         Args:
             graph: Dictionary of the same kind as for initialization of
@@ -180,7 +180,6 @@ class Midline(DelegatorMixin):
                 other=self.noext.modalities,
             )
             if central_enabled:
-                # delegated_attrs.append("modalities")
                 init_dict_sync(
                     this=self.noext.modalities,
                     other=self.central.modalities,
@@ -211,6 +210,8 @@ class Midline(DelegatorMixin):
             other_edge_list=ext_ipsi_edges,
         )
         
+        #The syncing below does not work properly. The ipsilateral central side is synced, but the contralateral central side is not synced. It seems like no callback is initiated when syncing in this manner
+
         # if self.central_enabled:
         #     central_ipsi_tumor_edges = list(self.central.ipsi.graph.tumor_edges.values())
         #     central_ipsi_lnl_edges = list(self.central.ipsi.graph.lnl_edges.values())
@@ -227,8 +228,7 @@ class Midline(DelegatorMixin):
     def get_params(
         self):
         """Return the parameters of the model.
-
-        Should be optimized ti fut tge actual code design
+        Parameters are only returned as dictionary.
         """
 
         if self.use_mixing:
@@ -271,15 +271,16 @@ class Midline(DelegatorMixin):
                 else:
                     extension_kwargs[key] = no_extension_kwargs[key]
             remaining_args, remainings_kwargs = self.ext.assign_params(*remaining_args, **extension_kwargs)
+            # If the syncing of the edges works properly, this below can be deleted.
             if self.central_enabled:
                 for key in no_extension_kwargs.keys():
                     if 'contra' not in key:
                         central_kwargs[(key.replace("ipsi_", ""))] = no_extension_kwargs[key]
                 remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
 
-#this part is not tested yet or properly implemented
+#this part is not fully tested yet
         else:
-            ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs = {}, {}, {}, {}
+            ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs, central_kwargs = {}, {}, {}, {}, {}
 
             for key, value in new_params_kwargs.items():
                 if "ipsi_" in key:
@@ -289,7 +290,12 @@ class Midline(DelegatorMixin):
                 elif 'contra_ext' in key:
                     ext_contra_kwargs[key.replace("contra_ext", "")] = value
                 else:
-                    general_kwargs[key] = value
+                    if 'contra' in key:
+                        warnings.warn(
+                "'contra' keys were assigned without 'ext' or 'noext' defined. For a non-mixture model" 
+                "For a non mixture model these values have no meaning.")   
+                    else:
+                        general_kwargs[key] = value
 
             remaining_args, remainings_kwargs = self.ext.ipsi.assign_params(
                 *new_params_args, **ipsi_kwargs, **general_kwargs
@@ -300,6 +306,13 @@ class Midline(DelegatorMixin):
             remaining_args, remainings_kwargs = self.ext.contra.assign_params(
                 *remaining_args, **ext_contra_kwargs, **remainings_kwargs
             )
+            if self.central_enabled:
+                for key in ipsi_kwargs.keys():
+                        central_kwargs[(key.replace("ipsi_", ""))] = ipsi_kwargs[key]
+                print(ipsi_kwargs)
+                print(general_kwargs)
+                remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs, **general_kwargs)
+
         return remaining_args, remainings_kwargs
 
 
@@ -329,8 +342,6 @@ class Midline(DelegatorMixin):
                 "`ipsi` or `contra` attributes."
             )
         self.ext.modalities = new_modalities
-        self.noext.modalities = new_modalities
-        self.central.modalities = new_modalities
 
 
     def load_patient_data(
@@ -343,14 +354,16 @@ class Midline(DelegatorMixin):
         This amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
         method on both models.
         """
-
-        ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True) & (patient_data[("tumor", "1", "central")] != True)]
-        noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
-        central = patient_data[patient_data[("tumor", "1", "central")].notna() & patient_data[("tumor", "1", "central")]]
-
+        if self.central_enabled:
+            ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True) & (patient_data[("tumor", "1", "central")] != True)]
+            noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
+            central = patient_data[patient_data[("tumor", "1", "central")].notna() & patient_data[("tumor", "1", "central")]]
+            self.central.load_patient_data(central, mapping)
+        else:
+            ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True)]
+            noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
         self.ext.load_patient_data(ext_data, mapping)
         self.noext.load_patient_data(noext_data, mapping)
-        self.central.load_patient_data(central, mapping)
 
 
     def likelihood(
@@ -358,6 +371,7 @@ class Midline(DelegatorMixin):
         data: OPTIONAL[pd.DataFrame] = None,
         given_param_kwargs: dict[str, float] | None = None,
         log: bool = True,
+        mode: str = 'HMM'
     ) -> float:
         """Compute log-likelihood of (already stored) data, given the spread
         probabilities and either a discrete diagnose time or a distribution to
@@ -402,11 +416,16 @@ class Midline(DelegatorMixin):
             return -np.inf if log else 0.
 
         llh = 0. if log else 1.
-        llh += self.ext.likelihood(log = log)
-        llh += self.noext.likelihood(log = log)
-        llh += self.central.likelihood(log = log)
-
-
+        if log:
+            llh += self.ext.likelihood(log = log, mode = mode)
+            llh += self.noext.likelihood(log = log, mode = mode)
+            if self.central_enabled:
+                llh += self.central.likelihood(log = log, mode = mode)
+        else:
+            llh *= self.ext.likelihood(log = log, mode = mode)
+            llh *= self.noext.likelihood(log = log, mode = mode)
+            if self.central_enabled:
+                llh *= self.central.likelihood(log = log, mode = mode)
 
         return llh
 
