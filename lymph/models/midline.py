@@ -285,10 +285,10 @@ class Midline(DelegatorMixin):
             for key, value in new_params_kwargs.items():
                 if "ipsi_" in key:
                     ipsi_kwargs[key.replace("ipsi_", "")] = value
-                elif "contra_noext" in key:
-                    noext_contra_kwargs[key.replace("contra_noext", "")] = value
-                elif 'contra_ext' in key:
-                    ext_contra_kwargs[key.replace("contra_ext", "")] = value
+                elif "noext" in key:
+                    noext_contra_kwargs[key.replace("contra_noext_", "")] = value
+                elif 'ext' in key:
+                    ext_contra_kwargs[key.replace("contra_ext_", "")] = value
                 else:
                     if 'contra' in key:
                         warnings.warn(
@@ -301,10 +301,10 @@ class Midline(DelegatorMixin):
                 *new_params_args, **ipsi_kwargs, **general_kwargs
             )
             remaining_args, remainings_kwargs = self.noext.contra.assign_params(
-                *remaining_args, **noext_contra_kwargs, **remainings_kwargs
+                *remaining_args, **noext_contra_kwargs, **remainings_kwargs, **general_kwargs
             )
             remaining_args, remainings_kwargs = self.ext.contra.assign_params(
-                *remaining_args, **ext_contra_kwargs, **remainings_kwargs
+                *remaining_args, **ext_contra_kwargs, **remainings_kwargs, **general_kwargs
             )
             if self.central_enabled:
                 for key in ipsi_kwargs.keys():
