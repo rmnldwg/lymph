@@ -476,7 +476,7 @@ class Unilateral(DelegatorMixin):
         return modalities.ModalitiesUserDict(is_trinary=self.is_trinary)
 
 
-    @cached_property
+    @property
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
