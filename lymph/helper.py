@@ -7,6 +7,7 @@ from functools import cached_property, lru_cache, wraps
 from typing import Any, Callable
 
 import numpy as np
+from cachetools import LRUCache
 from pandas._libs.missing import NAType
 
 PatternType = dict[str, bool | NAType | None]
@@ -194,6 +195,58 @@ def change_base(
         return result + pad
     else:
         return pad + result[::-1]
+
+
+@lru_cache
+def comp_transition_tensor(
+    num_parent: int,
+    num_child: int,
+    is_tumor_spread: bool,
+    is_growth: bool,
+    spread_prob: float,
+    micro_mod: float,
+) -> np.ndarray:
+    """Compute the transition factors of the edge.
+
+    The returned array is of shape (p,c,c), where p is the number of states of the
+    parent node and c is the number of states of the child node.
+
+    Essentially, the tensors computed here contain most of the parametrization of
+    the model. They are used to compute the transition matrix.
+
+    This function globally computes and caches the transition tensors, such that we
+    do not need to worry about deleting and recomputing them when the parameters of the
+    edge change.
+    """
+    tensor = np.stack([np.eye(num_child)] * num_parent)
+
+    # this should allow edges from trinary nodes to binary nodes
+    pad = [0.] * (num_child - 2)
+
+    if is_tumor_spread:
+        # NOTE: Here we define how tumors spread to LNLs
+        tensor[0, 0, :] = np.array([1. - spread_prob, spread_prob, *pad])
+        return tensor
+
+    if is_growth:
+        # In the growth case, we can assume that two things:
+        # 1. parent and child state are the same
+        # 2. the child node is trinary
+        tensor[1, 1, :] = np.array([0., (1 - spread_prob), spread_prob])
+        return tensor
+
+    if num_parent == 3:
+        # NOTE: here we define how the micro_mod affects the spread probability
+        micro_spread = spread_prob * micro_mod
+        tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
+
+        macro_spread = spread_prob
+        tensor[2,0,:] = np.array([1. - macro_spread, macro_spread, *pad])
+
+        return tensor
+
+    tensor[1,0,:] = np.array([1. - spread_prob, spread_prob, *pad])
+    return tensor
 
 
 def check_modality(modality: str, spsn: list):
@@ -441,3 +494,28 @@ class smart_updating_dict_cached_property(cached_property):
     def __delete__(self, instance: object) -> None:
         dict_like = self.__get__(instance)
         dict_like.clear()
+
+
+def arg0_cache(maxsize: int = 128, cache_class = LRUCache) -> callable:
+    """Cache a function only based on its first argument.
+
+    One may choose which ``cache_class`` to use. This will be created with the
+    argument ``maxsize``.
+
+    Note:
+        The first argument is not passed on to the decorated function. It is basically
+        used as a key for the cache and it trusts the user to be sure that this is
+        sufficient.
+    """
+    def decorator(func: callable) -> callable:
+        cache = cache_class(maxsize=maxsize)
+
+        @wraps(func)
+        def wrapper(arg0, *args, **kwargs):
+            if arg0 not in cache:
+                cache[arg0] = func(*args, **kwargs)
+            return cache[arg0]
+
+        return wrapper
+
+    return decorator

@@ -5,6 +5,7 @@ import fixtures
 import numpy as np
 
 from lymph.graph import LymphNodeLevel, Tumor
+from lymph.modalities import Pathological
 
 
 class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -140,17 +141,13 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
             )
 
     def test_transition_matrix_deletion(self):
-        """Check if the transition matrix gets deleted when a parameter is set.
-
-        NOTE: This test is disabled because apparently, the `model` instance is
-        changed during the test and the `_transition_matrix` attribute is deleted on
-        the wrong instance. I have no clue why, but generally, the method works.
-        """
+        """Check if the transition matrix gets deleted when a parameter is set."""
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
-        _ = self.model.transition_matrix
-        self.assertTrue("transition_matrix" in self.model.__dict__)
+        trans_mat = self.model.transition_matrix()
         self.model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
-        self.assertFalse("transition_matrix" in self.model.__dict__)
+        self.assertFalse(np.all(
+            trans_mat == self.model.transition_matrix()
+        ))
 
 
 class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -164,11 +161,11 @@ class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Tes
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
         num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
-        self.assertEqual(self.model.transition_matrix.shape, (2**num_lnls, 2**num_lnls))
+        self.assertEqual(self.model.transition_matrix().shape, (2**num_lnls, 2**num_lnls))
 
     def test_is_probabilistic(self):
         """Make sure the rows of the transition matrix sum to one."""
-        row_sums = np.sum(self.model.transition_matrix, axis=1)
+        row_sums = np.sum(self.model.transition_matrix(), axis=1)
         self.assertTrue(np.allclose(row_sums, 1.))
 
     @staticmethod
@@ -189,7 +186,7 @@ class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Tes
 
     def test_is_recusively_upper_triangular(self) -> None:
         """Make sure the transition matrix is recursively upper triangular."""
-        self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix))
+        self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix()))
 
 
 class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -205,11 +202,11 @@ class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Te
         num_lnls = len(self.model.graph.lnls)
         num_modalities = len(self.model.modalities)
         expected_shape = (2**num_lnls, 2**(num_lnls * num_modalities))
-        self.assertEqual(self.model.observation_matrix.shape, expected_shape)
+        self.assertEqual(self.model.observation_matrix().shape, expected_shape)
 
     def test_is_probabilistic(self):
         """Make sure the rows of the observation matrix sum to one."""
-        row_sums = np.sum(self.model.observation_matrix, axis=1)
+        row_sums = np.sum(self.model.observation_matrix(), axis=1)
         self.assertTrue(np.allclose(row_sums, 1.))
 
 
@@ -247,7 +244,6 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
             self.assertIn(t_stage, t_stages_in_data)
             self.assertIn(t_stage, t_stages_in_diag_time_dists)
 
-
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""
         for t_stage in ["early", "late"]:
@@ -260,13 +256,12 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
             self.assertTrue(t_stage in self.model.data_matrices)
             self.assertEqual(
                 data_matrix.shape[0],
-                self.model.observation_matrix.shape[1],
+                self.model.observation_matrix().shape[1],
             )
             self.assertEqual(
                 data_matrix.shape[1],
                 has_t_stage.sum(),
             )
-
 
     def test_diagnose_matrices(self):
         """Make sure the diagnose matrices are generated correctly."""
@@ -280,7 +275,7 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
             self.assertTrue(t_stage in self.model.diagnose_matrices)
             self.assertEqual(
                 diagnose_matrix.shape[0],
-                self.model.transition_matrix.shape[1],
+                self.model.transition_matrix().shape[1],
             )
             self.assertEqual(
                 diagnose_matrix.shape[1],
@@ -343,7 +338,6 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
         return diagnoses
 
-
     def test_comp_diagnose_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
         random_diagnoses = self.create_random_diagnoses()
@@ -381,3 +375,70 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         self.assertEqual(risk.dtype, float)
         self.assertGreaterEqual(risk, 0.)
         self.assertLessEqual(risk, 1.)
+
+
+class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+    """Check the data generation utilities."""
+
+    def setUp(self):
+        """Load params."""
+        super().setUp()
+        self.model.modalities = fixtures.MODALITIES
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.assign_params(**self.create_random_params())
+
+    def test_generate_early_patients(self):
+        """Check that generating only early T-stage patients works."""
+        early_patients = self.model.draw_patients(
+            num=100,
+            stage_dist=[1., 0.],
+            rng=self.rng,
+        )
+        self.assertEqual(len(early_patients), 100)
+        self.assertEqual(sum(early_patients["tumor", "1", "t_stage"] == "early"), 100)
+        self.assertIn(("CT", "ipsi", "II"), early_patients.columns)
+        self.assertIn(("FNA", "ipsi", "III"), early_patients.columns)
+
+    def test_generate_late_patients(self):
+        """Check that generating only late T-stage patients works."""
+        late_patients = self.model.draw_patients(
+            num=100,
+            stage_dist=[0., 1.],
+            rng=self.rng,
+        )
+        self.assertEqual(len(late_patients), 100)
+        self.assertEqual(sum(late_patients["tumor", "1", "t_stage"] == "late"), 100)
+        self.assertIn(("CT", "ipsi", "II"), late_patients.columns)
+        self.assertIn(("FNA", "ipsi", "III"), late_patients.columns)
+
+    def test_distribution_of_patients(self):
+        """Check that the distribution of LNL involvement is correct."""
+        # set spread params all to 0
+        for lnl_edge in self.model.graph.lnl_edges.values():
+            lnl_edge.set_spread_prob(0.)
+
+        # make all patients diagnosed after exactly one time-step
+        self.model.diag_time_dists["early"] = [0,1,0,0,0,0,0,0,0,0,0]
+
+        # assign only one pathology modality
+        self.model.modalities = {"tmp": Pathological(specificity=1., sensitivity=1.)}
+
+        # extract the tumor spread parameters
+        params = self.model.get_params(as_dict=True)
+        params = {
+            key.replace("T_to_", "").replace("_spread", ""): value
+            for key, value in params.items()
+            if "T_to_" in key
+        }
+
+        # draw large enough amount of patients
+        patients = self.model.draw_patients(
+            num=10000,
+            stage_dist=[1., 0.],
+            rng=self.rng,
+        )
+
+        # check that the distribution of LNL involvement matches tumor spread params
+        for lnl, expected_mean in params.items():
+            actual_mean = patients[("tmp", "ipsi", lnl)].mean()
+            self.assertAlmostEqual(actual_mean, expected_mean, delta=0.02)

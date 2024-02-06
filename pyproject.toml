@@ -17,36 +17,31 @@ requires-python = ">=3.10"
 keywords = ["cancer", "metastasis", "lymphatic progression", "model"]
 license = {text = "MIT"}
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
     "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    "numpy",
-    "scipy",
-    "pandas",
-    "emcee",
-    "h5py",
-    "tables",
-    "tqdm",
+    "numpy < 2",
+    "pandas < 3",
+    "cachetools < 6",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
 test = [
-    "pytest",
-    "coverage",
-    "hypothesis",
+    "scipy < 2",
+    "coverage < 8",
 ]
 dev = [
     "pre-commit",
-    "isort",
-    "pycln",
     "pylint",
+    "git-cliff",
 ]
 docs = [
     "sphinx",
@@ -55,6 +50,7 @@ docs = [
     "myst-nb",
     "ipython",
     "matplotlib",
+    "scipy",
 ]
 
 [project.urls]
@@ -136,7 +132,7 @@ commit_preprocessors = [
 commit_parsers = [
   { message = "^feat", group = "Features" },
   { message = "^fix", group = "Bug Fixes" },
-  { message = "^doc", group = "Documentation" },
+  { message = "^docs", group = "Documentation" },
   { message = "^perf", group = "Performance" },
   { message = "^refactor", group = "Refactor" },
   { message = "^style", group = "Styling" },
