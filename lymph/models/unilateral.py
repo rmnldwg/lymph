@@ -422,7 +422,6 @@ class Unilateral(DelegatorMixin):
         return np.array(list(product(*possible_obs_list)))
 
 
-    @property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -446,7 +445,7 @@ class Unilateral(DelegatorMixin):
         ... })
         >>> model.assign_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
         (..., {})
-        >>> model.transition_matrix
+        >>> model.transition_matrix()
         array([[0.21, 0.09, 0.49, 0.21],
                [0.  , 0.3 , 0.  , 0.7 ],
                [0.  , 0.  , 0.56, 0.44],
@@ -656,7 +655,7 @@ class Unilateral(DelegatorMixin):
         is the number of steps ``num_steps``.
         """
         for _ in range(num_steps):
-            state_dist = state_dist @ self.transition_matrix
+            state_dist = state_dist @ self.transition_matrix()
 
         return state_dist
 
