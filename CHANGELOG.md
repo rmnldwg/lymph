@@ -2,8 +2,70 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.0.0.a5"></a>
+## [1.0.0.a5] - 2024-02-06
 
-## [Unreleased]
+In this alpha release we fixed more bugs and issues that emerged during more rigorous testing.
+
+Most notably, we backed away from storing the transition matrix in a model's instance. Because it created opaque and confusion calls to functions trying to delete them when parameters were updated.
+
+Instead, the function computing the transition matrix is now globally cached using a hash function from the graph representation. This has the drawback of slightly more computation time when calculating the hash. But the advantage is that e.g. in a bilateral symmetric model, the transition matrix of the two sides is only ever computed once when (synched) parameters are updated.
+
+### Bug Fixes
+
+- (**graph**) Assume `nodes` is dictionary, not a list. Fixes [#64].
+- (**uni**) Update `draw_patients()` method to output LyProX style data. Fixes [#65].
+- (**bi**) Update bilateral data generation method to also generate LyProX style data. Fixes [#65].
+- (**bi**) Syntax error in `init_synchronization`. Fixes [#69].
+- (**uni**) Remove need for transition matrix deletion via a global cache. Fixes [#68].
+- (**uni**) Use cached matrices & simplify stuff. Fixes [#68].
+- (**uni**) Observation matrix only property, not cached anymore
+
+### Documentation
+
+- Fix typos & formatting errors in docstrings
+
+### Features
+
+- (**graph**) Implement graph hash for global cache of transition matrix
+- (**helper**) Add an `arg0` cache decorator that caches based on the first argument only
+- (**matrix**) Use cache for observation & diagnose matrices. Fixes [#68].
+
+### Miscellaneous Tasks
+
+- Update dependencies & classifiers
+
+### Refactor
+
+- Variables inside `generate_transition()`
+
+### Testing
+
+- Make doctests discoverable by unittest
+- Update tests to changed API
+- (**uni**) Assert format & distribution of drawn patients
+- (**uni**) Allow larger delta for synthetic data distribution
+- (**bi**) Check bilateral data generation method
+- Check the bilateral model with symmetric tumor spread
+- Make sure delete & recompute synced edges' tensor work
+- Adapt tests to changed `Edge` API
+- (**bi**) Evaluate transition matrix recomputation
+- Update tests to match new transition matrix code
+- Update trinary unilateral tests
+
+### Change
+
+- ⚠ **BREAKING** Compute transition tensor globally. Fixes [#69].
+- ⚠ **BREAKING** Make transition matrix a method instead of a property. Fixes [#40].
+- ⚠ **BREAKING** Make observation matrix a method instead of a property. Fixes [#40].
+
+### Ci
+
+- Add coverage test dependency back into project
+
+### Remove
+
+- Unused files and directories
 
 
 <a name="1.0.0.a4"></a>
@@ -236,7 +298,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...HEAD
+[1.0.0.a5]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...1.0.0.a5
 [1.0.0.a4]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...1.0.0.a4
 [1.0.0.a3]: https://github.com/rmnldwg/lymph/compare/1.0.0.a2...1.0.0.a3
 [1.0.0.a2]: https://github.com/rmnldwg/lymph/compare/1.0.0.a1...1.0.0.a2
@@ -247,6 +310,10 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#69]: https://github.com/rmnldwg/lymph/issues/69
+[#68]: https://github.com/rmnldwg/lymph/issues/68
+[#65]: https://github.com/rmnldwg/lymph/issues/65
+[#64]: https://github.com/rmnldwg/lymph/issues/64
 [#62]: https://github.com/rmnldwg/lymph/issues/62
 [#61]: https://github.com/rmnldwg/lymph/issues/61
 [#60]: https://github.com/rmnldwg/lymph/issues/60
