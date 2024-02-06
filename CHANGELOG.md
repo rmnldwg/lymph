@@ -13,12 +13,12 @@ Instead, the function computing the transition matrix is now globally cached usi
 
 ### Bug Fixes
 
-- (**graph**) Assume `nodes` is dictionary, not a list
-- (**uni**) Update `draw_patients()` method to output LyProX style data
-- (**bi**) Update bilateral data generation method to also generate LyProX style data
-- (**bi**) Syntax error in `init_synchronization`
-- (**uni**) Remove need for transition matrix deletion via a global cache
-- (**uni**) Use cached matrices & simplify stuff
+- (**graph**) Assume `nodes` is dictionary, not a list. Fixes [#64].
+- (**uni**) Update `draw_patients()` method to output LyProX style data. Fixes [#65].
+- (**bi**) Update bilateral data generation method to also generate LyProX style data. Fixes [#65].
+- (**bi**) Syntax error in `init_synchronization`. Fixes [#69].
+- (**uni**) Remove need for transition matrix deletion via a global cache. Fixes [#68].
+- (**uni**) Use cached matrices & simplify stuff. Fixes [#68].
 - (**uni**) Observation matrix only property, not cached anymore
 
 ### Documentation
@@ -29,7 +29,7 @@ Instead, the function computing the transition matrix is now globally cached usi
 
 - (**graph**) Implement graph hash for global cache of transition matrix
 - (**helper**) Add an `arg0` cache decorator that caches based on the first argument only
-- (**matrix**) Use cache for observation & diagnose matrices
+- (**matrix**) Use cache for observation & diagnose matrices. Fixes [#68].
 
 ### Miscellaneous Tasks
 
@@ -55,9 +55,9 @@ Instead, the function computing the transition matrix is now globally cached usi
 
 ### Change
 
-- ⚠ **BREAKING** Compute transition tensor globally
-- ⚠ **BREAKING** Make transition matrix a method instead of a property
-- ⚠ **BREAKING** Make observation matrix a method instead of a property
+- ⚠ **BREAKING** Compute transition tensor globally. Fixes [#69].
+- ⚠ **BREAKING** Make transition matrix a method instead of a property. Fixes [#40].
+- ⚠ **BREAKING** Make observation matrix a method instead of a property. Fixes [#40].
 
 ### Ci
 
@@ -298,7 +298,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...HEAD
+[1.0.0.a5]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...1.0.0.a5
 [1.0.0.a4]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...1.0.0.a4
 [1.0.0.a3]: https://github.com/rmnldwg/lymph/compare/1.0.0.a2...1.0.0.a3
 [1.0.0.a2]: https://github.com/rmnldwg/lymph/compare/1.0.0.a1...1.0.0.a2
@@ -309,6 +310,10 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#69]: https://github.com/rmnldwg/lymph/issues/69
+[#68]: https://github.com/rmnldwg/lymph/issues/68
+[#65]: https://github.com/rmnldwg/lymph/issues/65
+[#64]: https://github.com/rmnldwg/lymph/issues/64
 [#62]: https://github.com/rmnldwg/lymph/issues/62
 [#61]: https://github.com/rmnldwg/lymph/issues/61
 [#60]: https://github.com/rmnldwg/lymph/issues/60
