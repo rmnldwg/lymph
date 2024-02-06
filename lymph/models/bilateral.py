@@ -474,9 +474,9 @@ class Bilateral(DelegatorMixin):
         """
         joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
         return (
-            self.ipsi.observation_matrix.T
+            self.ipsi.observation_matrix().T
             @ joint_state_dist
-            @ self.contra.observation_matrix
+            @ self.contra.observation_matrix()
         )
 
 
@@ -629,7 +629,7 @@ class Bilateral(DelegatorMixin):
             diagnose_encoding = getattr(self, side).comp_diagnose_encoding(
                 given_diagnoses.get(side, {})
             )
-            observation_matrix = getattr(self, side).observation_matrix
+            observation_matrix = getattr(self, side).observation_matrix()
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
             diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
 

@@ -202,11 +202,11 @@ class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Te
         num_lnls = len(self.model.graph.lnls)
         num_modalities = len(self.model.modalities)
         expected_shape = (2**num_lnls, 2**(num_lnls * num_modalities))
-        self.assertEqual(self.model.observation_matrix.shape, expected_shape)
+        self.assertEqual(self.model.observation_matrix().shape, expected_shape)
 
     def test_is_probabilistic(self):
         """Make sure the rows of the observation matrix sum to one."""
-        row_sums = np.sum(self.model.observation_matrix, axis=1)
+        row_sums = np.sum(self.model.observation_matrix(), axis=1)
         self.assertTrue(np.allclose(row_sums, 1.))
 
 
@@ -256,7 +256,7 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
             self.assertTrue(t_stage in self.model.data_matrices)
             self.assertEqual(
                 data_matrix.shape[0],
-                self.model.observation_matrix.shape[1],
+                self.model.observation_matrix().shape[1],
             )
             self.assertEqual(
                 data_matrix.shape[1],

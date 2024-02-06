@@ -475,7 +475,6 @@ class Unilateral(DelegatorMixin):
         return modalities.ModalitiesUserDict(is_trinary=self.is_trinary)
 
 
-    @property
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
@@ -722,7 +721,7 @@ class Unilateral(DelegatorMixin):
         the :py:attr:`~data_matrices` and use these to compute the likelihood.
         """
         state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
-        return state_dist @ self.observation_matrix
+        return state_dist @ self.observation_matrix()
 
 
     def _bn_likelihood(self, log: bool = True) -> float:
@@ -867,7 +866,7 @@ class Unilateral(DelegatorMixin):
 
         diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
-        diagnose_given_state = diagnose_encoding @ self.observation_matrix.T
+        diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
 
         # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
         state_dist = self.comp_state_dist(t_stage, mode=mode)
@@ -936,7 +935,7 @@ class Unilateral(DelegatorMixin):
             rng = np.random.default_rng(seed)
 
         state_probs_given_time = self.comp_dist_evolution()[diag_times]
-        obs_probs_given_time = state_probs_given_time @ self.observation_matrix
+        obs_probs_given_time = state_probs_given_time @ self.observation_matrix()
 
         obs_indices = np.arange(len(self.obs_list))
         drawn_obs_idx = [
