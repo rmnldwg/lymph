@@ -40,21 +40,21 @@ class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
         NOTE: I am using this only in debug mode to look a the tensors. I am not sure
         how to test them yet.
         """
-        base_edge_tensor = list(self.model.graph.tumor_edges.values())[0].transition_tensor
+        base_edge_tensor = list(self.model.graph.tumor_edges.values())[0].comp_transition_tensor()
         row_sums = base_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        lnl_edge_tensor = list(self.model.graph.lnl_edges.values())[0].transition_tensor
+        lnl_edge_tensor = list(self.model.graph.lnl_edges.values())[0].comp_transition_tensor()
         row_sums = lnl_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        growth_edge_tensor = list(self.model.graph.growth_edges.values())[0].transition_tensor
+        growth_edge_tensor = list(self.model.graph.growth_edges.values())[0].comp_transition_tensor()
         row_sums = growth_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
     def test_transition_matrix(self) -> None:
         """Test the transition matrix of the model."""
-        transition_matrix = self.model.transition_matrix()
+        transition_matrix = self.model.transition_matrix
         row_sums = transition_matrix.sum(axis=1)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
@@ -72,7 +72,7 @@ class TrinaryObservationMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Te
         """Test the observation matrix of the model."""
         num_lnls = len(self.model.graph.lnls)
         num = num_lnls * len(self.model.modalities)
-        observation_matrix = self.model.observation_matrix()
+        observation_matrix = self.model.observation_matrix
         self.assertEqual(observation_matrix.shape, (3 ** num_lnls, 2 ** num))
 
         row_sums = observation_matrix.sum(axis=1)
@@ -84,12 +84,12 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
-        self.load_patient_data(filename="2021-usz-oropharynx.csv")
+        self.model.load_patient_data(self.get_patient_data(), side="ipsi")
+        _ = self.model.diagnose_matrices
 
     def get_patient_data(self) -> pd.DataFrame:
         """Load an example dataset that has both clinical and pathology data."""
-        return pd.read_csv("tests/data/2021-usz-oropharynx.csv", header=[0, 1, 2])
+        return pd.read_csv("tests/data/2021-clb-oropharynx.csv", header=[0, 1, 2])
 
     def test_diagnose_matrices_shape(self) -> None:
         """Test the diagnose matrix of the model."""

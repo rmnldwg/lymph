@@ -14,60 +14,41 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
     """Test the delegation of attrs from the unilateral class to the bilateral one."""
 
     def setUp(self):
-        self.model_kwargs = {"is_symmetric": {
-            "tumor_spread": True,
-            "lnl_spread": True,
-            "modalities": True,
-        }}
         super().setUp()
         self.load_patient_data()
 
     def test_delegation(self):
         """Test that the unilateral model delegates the attributes."""
-        self.assertEqual(self.model.is_binary, self.model.ipsi.is_binary)
-        self.assertEqual(self.model.is_trinary, self.model.ipsi.is_trinary)
-        self.assertEqual(self.model.max_time, self.model.ipsi.max_time)
-        self.assertEqual(list(self.model.t_stages), list(self.model.ipsi.t_stages))
+        self.assertEqual(
+            self.model.is_binary, self.model.ipsi.is_binary
+        )
+        self.assertEqual(
+            self.model.is_trinary, self.model.ipsi.is_trinary
+        )
+        self.assertEqual(
+            self.model.max_time, self.model.ipsi.max_time
+        )
+        self.assertEqual(
+            list(self.model.t_stages), list(self.model.ipsi.t_stages)
+        )
 
-    def test_edge_sync(self):
-        """Check if synced edges update their respective parameters."""
-        for ipsi_edge in self.model.ipsi.graph.edges.values():
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
-            ipsi_edge.set_params(spread=self.rng.random())
+    def test_lnl_edge_sync(self):
+        """Check if synced LNL edges update their respective parameters."""
+        rng = np.random.default_rng(42)
+        for ipsi_edge in self.model.ipsi.graph.lnl_edges.values():
+            contra_edge = self.model.contra.graph.lnl_edges[ipsi_edge.name]
+            ipsi_edge.set_params(spread=rng.random())
             self.assertEqual(
                 ipsi_edge.get_params("spread"),
                 contra_edge.get_params("spread"),
             )
 
-    def test_tensor_sync(self):
-        """Check the transition tensors of the edges get deleted and updated properly."""
-        for ipsi_edge in self.model.ipsi.graph.edges.values():
-            ipsi_edge.set_params(spread=self.rng.random())
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
-            self.assertTrue(np.all(
-                ipsi_edge.transition_tensor == contra_edge.transition_tensor
-            ))
-
-    def test_transition_matrix_sync(self):
-        """Make sure contra transition matrix gets recomputed when ipsi param is set."""
-        ipsi_trans_mat = self.model.ipsi.transition_matrix()
-        contra_trans_mat = self.model.contra.transition_matrix()
-        rand_ipsi_param = self.rng.choice(list(
-            self.model.ipsi.get_params(as_dict=True).keys()
-        ))
-        self.model.assign_params(**{f"ipsi_{rand_ipsi_param}": self.rng.random()})
-        self.assertFalse(np.all(
-            ipsi_trans_mat == self.model.ipsi.transition_matrix()
-        ))
-        self.assertFalse(np.all(
-            contra_trans_mat == self.model.contra.transition_matrix()
-        ))
-
     def test_modality_sync(self):
         """Make sure the modalities are synced between the two sides."""
+        rng = np.random.default_rng(42)
         self.model.ipsi.modalities = {"foo": Clinical(
-            specificity=self.rng.uniform(),
-            sensitivity=self.rng.uniform(),
+            specificity=rng.uniform(),
+            sensitivity=rng.uniform(),
         )}
         self.assertEqual(
             self.model.ipsi.modalities["foo"].sensitivity,
@@ -299,33 +280,3 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         )
         self.assertLessEqual(risk, 1.)
         self.assertGreaterEqual(risk, 0.)
-
-
-class DataGenerationTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
-    """Check the binary model's data generation method."""
-
-    def setUp(self):
-        super().setUp()
-        self.model.modalities = fixtures.MODALITIES
-        self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
-
-    def test_generate_data(self):
-        """Check bilateral data generation."""
-        dataset = self.model.draw_patients(
-            num=10000,
-            stage_dist=[0.5, 0.5],
-            rng=self.rng,
-        )
-
-        for mod in self.model.modalities.keys():
-            self.assertIn(mod, dataset)
-            for side in ["ipsi", "contra"]:
-                self.assertIn(side, dataset[mod])
-                for lnl in self.model.ipsi.graph.lnls.keys():
-                    self.assertIn(lnl, dataset[mod][side])
-
-        self.assertAlmostEqual(
-            (dataset["tumor", "1", "t_stage"] == "early").mean(), 0.5,
-            delta=0.02
-        )

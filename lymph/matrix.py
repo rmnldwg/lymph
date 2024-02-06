@@ -5,16 +5,13 @@ Methods & classes to manage matrices of the :py:class:`~lymph.models.Unilateral`
 from __future__ import annotations
 
 import warnings
-from typing import Any
 
 import numpy as np
 import pandas as pd
-from cachetools import LRUCache
 
 from lymph import models
 from lymph.helper import (
     AbstractLookupDict,
-    arg0_cache,
     get_state_idx_matrix,
     row_wise_kron,
     tile_and_repeat,
@@ -23,12 +20,11 @@ from lymph.helper import (
 
 def generate_transition(instance: models.Unilateral) -> np.ndarray:
     """Compute the transition matrix of the lymph model."""
-    lnls_list = list(instance.graph.lnls.values())
-    num_lnls = len(lnls_list)
+    num_lnls = len(instance.graph.lnls)
     num_states = 3 if instance.graph.is_trinary else 2
     transition_matrix = np.ones(shape=(num_states**num_lnls, num_states**num_lnls))
 
-    for i, lnl in enumerate(lnls_list):
+    for i, lnl in enumerate(instance.graph.lnls.values()):
         current_state_idx = get_state_idx_matrix(
             lnl_idx=i,
             num_lnls=num_lnls,
@@ -47,7 +43,7 @@ def generate_transition(instance: models.Unilateral) -> np.ndarray:
                     0, current_state_idx, new_state_idx
                 ]
             else:
-                parent_node_i = lnls_list.index(edge.parent)
+                parent_node_i = list(instance.graph.lnls.values()).index(edge.parent)
                 parent_state_idx = get_state_idx_matrix(
                     lnl_idx=parent_node_i,
                     num_lnls=num_lnls,
@@ -74,15 +70,6 @@ def generate_transition(instance: models.Unilateral) -> np.ndarray:
     return transition_matrix
 
 
-cached_generate_transition = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_transition)
-"""Cached version of :py:func:`generate_transition`.
-
-This expects the first argument to be a hashable object that is used instrad of the
-``instance`` argument of :py:func:`generate_transition`. It is intended to be used with
-the :py:meth:`~lymph.graph.Representation.parameter_hash` method of the graph.
-"""
-
-
 def generate_observation(instance: models.Unilateral) -> np.ndarray:
     """Generate the observation matrix of the lymph model."""
     num_lnls = len(instance.graph.lnls)
@@ -98,16 +85,6 @@ def generate_observation(instance: models.Unilateral) -> np.ndarray:
         observation_matrix = row_wise_kron(observation_matrix, mod_obs_matrix)
 
     return observation_matrix
-
-
-cached_generate_observation = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_observation)
-"""Cached version of :py:func:`generate_observation`.
-
-This expects the first argument to be a hashable object that is used instrad of the
-``instance`` argument of :py:func:`generate_observation`. It is intended to be used
-with the hash of all confusion matrices of the model's modalities, which is returned
-by the method :py:meth:`~lymph.modalities.ModalitiesUserDict.confusion_matrices_hash`.
-"""
 
 
 def compute_encoding(
@@ -223,7 +200,7 @@ def generate_data_encoding(model: models.Unilateral, t_stage: str) -> np.ndarray
     patients_with_t_stage = model.patient_data[has_t_stage]
 
     result = np.ones(
-        shape=(model.observation_matrix().shape[1], len(patients_with_t_stage)),
+        shape=(model.observation_matrix.shape[1], len(patients_with_t_stage)),
         dtype=bool,
     )
 
@@ -273,27 +250,6 @@ class DataEncodingUserDict(AbstractLookupDict):
         return self[t_stage]
 
 
-def generate_diagnose(model: models.Unilateral, t_stage: str) -> np.ndarray:
-    """Generate the diagnose matrix for a specific T-stage.
-
-    The diagnose matrix is the product of the observation matrix and the data matrix
-    for the given ``t_stage``.
-    """
-    return model.observation_matrix() @ model.data_matrices[t_stage]
-
-
-cached_generate_diagnose = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_diagnose)
-"""Cached version of :py:func:`generate_diagnose`.
-
-The decorated function expects an additional first argument that should be unique for
-the combination of modalities and patient data. It is intended to be used with the
-joint hash of the modalities
-(:py:meth:`~lymph.modalities.ModalitiesUserDict.confusion_matrices_hash`) and the
-patient data hash that is always precomputed when a new dataset is loaded into the
-model (:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
-"""
-
-
 class DiagnoseUserDict(AbstractLookupDict):
     """``UserDict`` that dynamically generates the diagnose matrices for each T-stage.
 
@@ -311,12 +267,9 @@ class DiagnoseUserDict(AbstractLookupDict):
     def __setitem__(self, __key, __value) -> None:
         warnings.warn("Setting the diagnose matrices is not supported.")
 
-    def __getitem__(self, key: Any) -> Any:
-        modalities_hash = self.model.modalities.confusion_matrices_hash()
-        patient_data_hash = self.model.patient_data_hash
-        joint_hash = hash((modalities_hash, patient_data_hash, key))
-        return cached_generate_diagnose(joint_hash, self.model, key)
-
-    def __missing__(self, t_stage: str):
-        """Create the diagnose matrix for a specific T-stage if necessary."""
+    def __missing__(self, t_stage: str) -> np.ndarray:
+        """If the matrix for a ``t_stage`` is missing, try to generate it lazily."""
+        self.data[t_stage] = (
+            self.model.observation_matrix @ self.model.data_matrices[t_stage]
+        )
         return self[t_stage]

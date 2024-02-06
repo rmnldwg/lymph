@@ -110,33 +110,32 @@ class Pathological(Modality):
 ModalityDef = Union[Modality, np.ndarray, Tuple[float, float], List[float]]
 
 class ModalitiesUserDict(AbstractLookupDict):
-    """Dictionary storing instances of :py:class:`Modality` for a lymph model.
+    """Dictionary storing instances of a diagnostic `Modality` for a lymph model.
 
     This class allows the user to specify the diagnostic modalities of a lymph model
-    in a convenient way. The user may pass an instance of :py:class:`Modality` - or one
-    of its subclasses - directly. Especially for trinary models, it is recommended to
-    use the subclasses :py:class:`Clinical` and :py:class:`Pathological` to avoid
-    ambiguities.
+    in a convenient way. The user may pass an instance of `Modality` - or one of its
+    subclasses - directly. Especially for trinary models, it is recommended to use the
+    subclasses `Clinical` and `Pathological` to avoid ambiguities.
 
     Alternatively, a simple tuple or list of floats may be passed, from which the first
     two entries are interpreted as the specificity and sensitivity, respectively. For
-    trinary models, we assume the modality to be :py:class:`Clinical`.
+    trinary models, we assume the modality to be `Clinical`.
 
     For completely custom confusion matrices, the user may pass a numpy array directly.
-    In the binary case, a valid :py:class:`Modality` instance is constructed from the
-    array. For trinary models, the array must have three rows, and is not possible
-    anymore to infer the type of the modality or unambiguouse values for sensitivity and
+    In the binary case, a valid `Modality` instance is constructed from the array. For
+    trinary models, the array must have three rows, and is not possible anymore to
+    infer the type of the modality or unambiguouse values for sensitivity and
     specificity. This may lead to unexpected results when the confusion matrix is
     recomputed accidentally at some point.
 
     Examples:
 
-    >>> binary_modalities = ModalitiesUserDict(is_trinary=False)
+    >>> binary_modalities = ModalityDict(is_trinary=False)
     >>> binary_modalities["test"] = Modality(0.9, 0.8)
     >>> binary_modalities["test"].confusion_matrix
     array([[0.9, 0.1],
            [0.2, 0.8]])
-    >>> modalities = ModalitiesUserDict(is_trinary=True)
+    >>> modalities = ModalityDict(is_trinary=True)
     >>> modalities["CT"] = Clinical(specificity=0.9, sensitivity=0.8)
     >>> modalities["CT"].confusion_matrix
     array([[0.9, 0.1],
@@ -212,23 +211,3 @@ class ModalitiesUserDict(AbstractLookupDict):
     @trigger
     def __delitem__(self, key: str) -> None:
         return super().__delitem__(key)
-
-
-    def confusion_matrices_hash(self) -> int:
-        """Compute a kind of hash from all confusion matrices.
-
-        Note:
-            This is used to check if some modalities have changed and the observation
-            matrix needs to be recomputed. It should not be used as a replacement for
-            the ``__hash__`` method, for two reasons:
-
-            1. It may change over the lifetime of the object, whereas ``__hash__``
-                should be constant.
-            2. It only takes into account the ``confusion_matric`` of the modality,
-                nothing else.
-        """
-        confusion_mat_bytes = b""
-        for modality in self.values():
-            confusion_mat_bytes += modality.confusion_matrix.tobytes()
-
-        return hash(confusion_mat_bytes)

@@ -231,21 +231,9 @@ class Distribution:
             warnings.warn("Distribution is not updateable, skipping...")
 
 
-    def draw_diag_times(
-        self,
-        num: int | None = None,
-        rng: np.random.Generator | None = None,
-        seed: int = 42,
-    ) -> np.ndarray:
-        """Draw ``num`` samples of diagnose times from the stored PMF.
-
-        A random number generator can be provided as ``rng``. If ``None``, a new one
-        is initialized with the given ``seed`` (or ``42``, by default).
-        """
-        if rng is None:
-            rng = np.random.default_rng(seed)
-
-        return rng.choice(a=self.support, p=self.distribution, size=num)
+    def draw(self) -> np.ndarray:
+        """Draw sample of diagnose times from the PMF."""
+        return np.random.choice(a=self.support, p=self.distribution)
 
 
 class DistributionsUserDict(AbstractLookupDict):

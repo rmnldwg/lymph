@@ -45,6 +45,9 @@ class BinaryEdgeTestCase(unittest.TestCase):
         """Test if the callback function is called."""
         self.edge.spread_prob = 0.5
         self.assertTrue(self.was_called)
+        self.assertFalse(hasattr(self.edge, "_transition_tensor"))
+        _ = self.edge.transition_tensor
+        self.assertTrue(hasattr(self.edge, "_transition_tensor"))
 
     def test_graph_change(self) -> None:
         """Check if the callback also works when parent/child nodes are changed."""

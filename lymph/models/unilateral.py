@@ -95,6 +95,7 @@ class Unilateral(DelegatorMixin):
             graph_dict=graph_dict,
             tumor_state=tumor_state,
             allowed_states=allowed_states,
+            on_edge_change=[self.delete_transition_matrix],
         )
 
         if 0 >= max_time:
@@ -382,6 +383,16 @@ class Unilateral(DelegatorMixin):
         return prob
 
 
+    def _gen_obs_list(self):
+        """Generates the list of possible observations."""
+        possible_obs_list = []
+        for modality in self.modalities.values():
+            possible_obs = np.arange(modality.confusion_matrix.shape[1])
+            for _ in self.graph.lnls:
+                possible_obs_list.append(possible_obs.copy())
+
+        self._obs_list = np.array(list(product(*possible_obs_list)))
+
     @property
     def obs_list(self):
         """Return the list of all possible observations.
@@ -413,15 +424,20 @@ class Unilateral(DelegatorMixin):
         modality CT, the second two columns correspond to the same LNLs under the
         pathology modality.
         """
-        possible_obs_list = []
-        for modality in self.modalities.values():
-            possible_obs = np.arange(modality.confusion_matrix.shape[1])
-            for _ in self.graph.lnls:
-                possible_obs_list.append(possible_obs.copy())
+        try:
+            return self._obs_list
+        except AttributeError:
+            self._gen_obs_list()
+            return self._obs_list
 
-        return np.array(list(product(*possible_obs_list)))
+    @obs_list.deleter
+    def obs_list(self):
+        """Delete the observation list. Necessary to pass as callback."""
+        if hasattr(self, "_obs_list"):
+            del self._obs_list
 
 
+    @cached_property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -431,6 +447,9 @@ class Unilateral(DelegatorMixin):
         The :math:`i`-th row and :math:`j`-th column encodes the probability to
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
         are ordered as in the :py:attr:`lymph.graph.state_list`.
+
+        This matrix is deleted every time the parameters along the edges of the graph
+        are changed. It is lazily computed when it is next accessed.
 
         See Also:
             :py:func:`~lymph.descriptors.matrix.generate_transition`
@@ -443,15 +462,21 @@ class Unilateral(DelegatorMixin):
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
         ... })
-        >>> model.assign_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
-        (..., {})
-        >>> model.transition_matrix()
+        >>> model.assign_params(0.7, 0.3, 0.2)
+        >>> model.transition_matrix
         array([[0.21, 0.09, 0.49, 0.21],
-               [0.  , 0.3 , 0.  , 0.7 ],
-               [0.  , 0.  , 0.56, 0.44],
-               [0.  , 0.  , 0.  , 1.  ]])
+            [0.  , 0.3 , 0.  , 0.7 ],
+            [0.  , 0.  , 0.56, 0.44],
+            [0.  , 0.  , 0.  , 1.  ]])
         """
-        return matrix.cached_generate_transition(self.graph.parameter_hash(), self)
+        return matrix.generate_transition(self)
+
+    def delete_transition_matrix(self):
+        """Delete the transition matrix. Necessary to pass as callback."""
+        try:
+            del self.transition_matrix
+        except AttributeError:
+            pass
 
 
     @smart_updating_dict_cached_property
@@ -472,9 +497,13 @@ class Unilateral(DelegatorMixin):
             :py:class:`~lymph.descriptors.modalities.ModalitiesUserDict`
             :py:class:`~lymph.descriptors.modalities.Modality`
         """
-        return modalities.ModalitiesUserDict(is_trinary=self.is_trinary)
+        return modalities.ModalitiesUserDict(
+            is_trinary=self.is_trinary,
+            trigger_callbacks=[self.delete_obs_list_and_matrix],
+        )
 
 
+    @cached_property
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
@@ -488,9 +517,16 @@ class Unilateral(DelegatorMixin):
             :py:func:`~lymph.descriptors.matrix.generate_observation`
                 The function actually computing the observation matrix.
         """
-        return matrix.cached_generate_observation(
-            self.modalities.confusion_matrices_hash(), self
-        )
+        return matrix.generate_observation(self)
+
+    def delete_obs_list_and_matrix(self):
+        """Delete the observation matrix. Necessary to pass as callback."""
+        try:
+            del self.observation_matrix
+        except AttributeError:
+            pass
+
+        del self.obs_list
 
 
     @smart_updating_dict_cached_property
@@ -585,7 +621,7 @@ class Unilateral(DelegatorMixin):
             if side not in patient_data[modality_name]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
-            for name in self.graph.lnls.keys():
+            for name in self.graph.lnls:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
                     modality_side_data = patient_data[modality_name, side]
@@ -603,27 +639,12 @@ class Unilateral(DelegatorMixin):
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
-        self._patient_data = patient_data
         # Changes to the patient data require a recomputation of the data and
-        # diagnose matrices. For the data matrix, it is enough to clear the respective
-        # ``UserDict``. For the diagnose matrices, we need to delete the hash value of
-        # the patient data, so that the next time it is requested, a cache miss occurs
-        # and they are recomputed.
+        # diagnose matrices. Clearing them will trigger this when they are next
+        # accessed.
         self.data_matrices.clear()
-        try:
-            del self.patient_data_hash
-        except AttributeError:
-            pass
-
-
-    @cached_property
-    def patient_data_hash(self) -> int:
-        """Hash of the patient data.
-
-        This is used to check if the patient data has changed since the last time
-        the data and diagnose matrices were computed. If so, they are recomputed.
-        """
-        return hash(self.patient_data.to_numpy().tobytes())
+        self.diagnose_matrices.clear()
+        self._patient_data = patient_data
 
 
     @property
@@ -654,7 +675,7 @@ class Unilateral(DelegatorMixin):
         is the number of steps ``num_steps``.
         """
         for _ in range(num_steps):
-            state_dist = state_dist @ self.transition_matrix()
+            state_dist = state_dist @ self.transition_matrix
 
         return state_dist
 
@@ -721,7 +742,7 @@ class Unilateral(DelegatorMixin):
         the :py:attr:`~data_matrices` and use these to compute the likelihood.
         """
         state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
-        return state_dist @ self.observation_matrix()
+        return state_dist @ self.observation_matrix
 
 
     def _bn_likelihood(self, log: bool = True) -> float:
@@ -866,7 +887,7 @@ class Unilateral(DelegatorMixin):
 
         diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
-        diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
+        diagnose_given_state = diagnose_encoding @ self.observation_matrix.T
 
         # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
         state_dist = self.comp_state_dist(t_stage, mode=mode)
@@ -924,77 +945,58 @@ class Unilateral(DelegatorMixin):
         return marginalize_over_states @ posterior_state_dist
 
 
-    def draw_diagnoses(
+    def _draw_patient_diagnoses(
         self,
         diag_times: list[int],
-        rng: np.random.Generator | None = None,
-        seed: int = 42,
     ) -> np.ndarray:
-        """Given some ``diag_times``, draw diagnoses for each LNL."""
-        if rng is None:
-            rng = np.random.default_rng(seed)
+        """Draw random possible observations for a list of T-stages and
+        diagnose times.
 
-        state_probs_given_time = self.comp_dist_evolution()[diag_times]
-        obs_probs_given_time = state_probs_given_time @ self.observation_matrix()
+        Args:
+            diag_times: List of diagnose times for each patient who's diagnose
+                is supposed to be drawn.
+        """
+        # use the drawn diagnose times to compute probabilities over states and
+        # diagnoses
+        per_time_state_probs = self.comp_dist_evolution()
+        per_patient_state_probs = per_time_state_probs[diag_times]
+        per_patient_obs_probs = per_patient_state_probs @ self.observation_matrix
 
-        obs_indices = np.arange(len(self.obs_list))
+        # then, draw a diagnose from the possible ones
+        obs_idx = np.arange(len(self.obs_list))
         drawn_obs_idx = [
-            np.random.choice(obs_indices, p=obs_prob)
-            for obs_prob in obs_probs_given_time
+            np.random.choice(obs_idx, p=obs_prob)
+            for obs_prob in per_patient_obs_probs
         ]
-
         return self.obs_list[drawn_obs_idx].astype(bool)
 
 
-    def draw_patients(
+    def generate_dataset(
         self,
-        num: int,
-        stage_dist: Iterable[float],
-        rng: np.random.Generator | None = None,
-        seed: int = 42,
+        num_patients: int,
+        stage_dist: dict[str, float],
         **_kwargs,
     ) -> pd.DataFrame:
-        """Draw ``num`` random patients from the model.
+        """Generate/sample a pandas :class:`DataFrame` from the defined network
+        using the samples and diagnostic modalities that have been set.
 
-        For this, a ``stage_dist``, i.e., a distribution over the T-stages, needs to
-        be defined. This must be an iterable of probabilities with as many elements as
-        there are defined T-stages in the model's :py:attr:`diag_time_dists` attribute.
-
-        A random number generator can be provided as ``rng``. If ``None``, a new one
-        is initialized with the given ``seed`` (or ``42``, by default).
-
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.draw_diag_times`
-                Method to draw diagnose times from a distribution.
-            :py:meth:`lymph.models.Unilateral.draw_diagnoses`
-                Method to draw individual diagnoses.
-            :py:meth:`lymph.models.Bilateral.draw_patients`
-                The corresponding bilateral method.
+        Args:
+            num_patients: Number of patients to generate.
+            stage_dist: Probability to find a patient in a certain T-stage.
         """
-        if rng is None:
-            rng = np.random.default_rng(seed)
-
-        if sum(stage_dist) != 1.:
-            warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
-            stage_dist = np.array(stage_dist) / sum(stage_dist)
-
-        drawn_t_stages = rng.choice(
-            a=list(self.diag_time_dists.keys()),
-            p=stage_dist,
-            size=num,
+        drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
+            prob_of_t_stage=stage_dist, size=num_patients
         )
-        drawn_diag_times = [
-            self.diag_time_dists[t_stage].draw_diag_times(rng=rng)
-            for t_stage in drawn_t_stages
-        ]
 
-        drawn_obs = self.draw_diagnoses(drawn_diag_times, rng=rng)
+        drawn_obs = self._draw_patient_diagnoses(drawn_diag_times)
 
+        # construct MultiIndex for dataset from stored modalities
         modality_names = list(self.modalities.keys())
-        lnl_names = list(self.graph.lnls.keys())
-        multi_cols = pd.MultiIndex.from_product([modality_names, ["ipsi"], lnl_names])
+        lnl_names = self.graph.lnls.keys()
+        multi_cols = pd.MultiIndex.from_product([modality_names, lnl_names])
 
+        # create DataFrame
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
+        dataset[('info', 't_stage')] = drawn_t_stages
 
         return dataset

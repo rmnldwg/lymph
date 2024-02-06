@@ -2,70 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
-<a name="1.0.0.a5"></a>
-## [1.0.0.a5] - 2024-02-06
 
-In this alpha release we fixed more bugs and issues that emerged during more rigorous testing.
-
-Most notably, we backed away from storing the transition matrix in a model's instance. Because it created opaque and confusion calls to functions trying to delete them when parameters were updated.
-
-Instead, the function computing the transition matrix is now globally cached using a hash function from the graph representation. This has the drawback of slightly more computation time when calculating the hash. But the advantage is that e.g. in a bilateral symmetric model, the transition matrix of the two sides is only ever computed once when (synched) parameters are updated.
-
-### Bug Fixes
-
-- (**graph**) Assume `nodes` is dictionary, not a list
-- (**uni**) Update `draw_patients()` method to output LyProX style data
-- (**bi**) Update bilateral data generation method to also generate LyProX style data
-- (**bi**) Syntax error in `init_synchronization`
-- (**uni**) Remove need for transition matrix deletion via a global cache
-- (**uni**) Use cached matrices & simplify stuff
-- (**uni**) Observation matrix only property, not cached anymore
-
-### Documentation
-
-- Fix typos & formatting errors in docstrings
-
-### Features
-
-- (**graph**) Implement graph hash for global cache of transition matrix
-- (**helper**) Add an `arg0` cache decorator that caches based on the first argument only
-- (**matrix**) Use cache for observation & diagnose matrices
-
-### Miscellaneous Tasks
-
-- Update dependencies & classifiers
-
-### Refactor
-
-- Variables inside `generate_transition()`
-
-### Testing
-
-- Make doctests discoverable by unittest
-- Update tests to changed API
-- (**uni**) Assert format & distribution of drawn patients
-- (**uni**) Allow larger delta for synthetic data distribution
-- (**bi**) Check bilateral data generation method
-- Check the bilateral model with symmetric tumor spread
-- Make sure delete & recompute synced edges' tensor work
-- Adapt tests to changed `Edge` API
-- (**bi**) Evaluate transition matrix recomputation
-- Update tests to match new transition matrix code
-- Update trinary unilateral tests
-
-### Change
-
-- ⚠ **BREAKING** Compute transition tensor globally
-- ⚠ **BREAKING** Make transition matrix a method instead of a property
-- ⚠ **BREAKING** Make observation matrix a method instead of a property
-
-### Ci
-
-- Add coverage test dependency back into project
-
-### Remove
-
-- Unused files and directories
+## [Unreleased]
 
 
 <a name="1.0.0.a4"></a>

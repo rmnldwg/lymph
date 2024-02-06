@@ -1,0 +1,5 @@
+jupyter
+tqdm
+emcee
+matplotlib
+git+https://github.com/rmnldwg/corner.py#egg=corner
