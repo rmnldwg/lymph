@@ -422,7 +422,6 @@ class Unilateral(DelegatorMixin):
         return np.array(list(product(*possible_obs_list)))
 
 
-    @property
     def transition_matrix(self) -> np.ndarray:
         """Matrix encoding the probabilities to transition from one state to another.
 
@@ -446,7 +445,7 @@ class Unilateral(DelegatorMixin):
         ... })
         >>> model.assign_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
         (..., {})
-        >>> model.transition_matrix
+        >>> model.transition_matrix()
         array([[0.21, 0.09, 0.49, 0.21],
                [0.  , 0.3 , 0.  , 0.7 ],
                [0.  , 0.  , 0.56, 0.44],
@@ -476,7 +475,6 @@ class Unilateral(DelegatorMixin):
         return modalities.ModalitiesUserDict(is_trinary=self.is_trinary)
 
 
-    @property
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
@@ -656,7 +654,7 @@ class Unilateral(DelegatorMixin):
         is the number of steps ``num_steps``.
         """
         for _ in range(num_steps):
-            state_dist = state_dist @ self.transition_matrix
+            state_dist = state_dist @ self.transition_matrix()
 
         return state_dist
 
@@ -723,7 +721,7 @@ class Unilateral(DelegatorMixin):
         the :py:attr:`~data_matrices` and use these to compute the likelihood.
         """
         state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
-        return state_dist @ self.observation_matrix
+        return state_dist @ self.observation_matrix()
 
 
     def _bn_likelihood(self, log: bool = True) -> float:
@@ -868,7 +866,7 @@ class Unilateral(DelegatorMixin):
 
         diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
-        diagnose_given_state = diagnose_encoding @ self.observation_matrix.T
+        diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
 
         # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
         state_dist = self.comp_state_dist(t_stage, mode=mode)
@@ -937,7 +935,7 @@ class Unilateral(DelegatorMixin):
             rng = np.random.default_rng(seed)
 
         state_probs_given_time = self.comp_dist_evolution()[diag_times]
-        obs_probs_given_time = state_probs_given_time @ self.observation_matrix
+        obs_probs_given_time = state_probs_given_time @ self.observation_matrix()
 
         obs_indices = np.arange(len(self.obs_list))
         drawn_obs_idx = [

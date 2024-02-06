@@ -223,7 +223,7 @@ def generate_data_encoding(model: models.Unilateral, t_stage: str) -> np.ndarray
     patients_with_t_stage = model.patient_data[has_t_stage]
 
     result = np.ones(
-        shape=(model.observation_matrix.shape[1], len(patients_with_t_stage)),
+        shape=(model.observation_matrix().shape[1], len(patients_with_t_stage)),
         dtype=bool,
     )
 
@@ -279,7 +279,7 @@ def generate_diagnose(model: models.Unilateral, t_stage: str) -> np.ndarray:
     The diagnose matrix is the product of the observation matrix and the data matrix
     for the given ``t_stage``.
     """
-    return model.observation_matrix @ model.data_matrices[t_stage]
+    return model.observation_matrix() @ model.data_matrices[t_stage]
 
 
 cached_generate_diagnose = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_diagnose)

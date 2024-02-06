@@ -54,7 +54,7 @@ class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
 
     def test_transition_matrix(self) -> None:
         """Test the transition matrix of the model."""
-        transition_matrix = self.model.transition_matrix
+        transition_matrix = self.model.transition_matrix()
         row_sums = transition_matrix.sum(axis=1)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
@@ -72,7 +72,7 @@ class TrinaryObservationMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Te
         """Test the observation matrix of the model."""
         num_lnls = len(self.model.graph.lnls)
         num = num_lnls * len(self.model.modalities)
-        observation_matrix = self.model.observation_matrix
+        observation_matrix = self.model.observation_matrix()
         self.assertEqual(observation_matrix.shape, (3 ** num_lnls, 2 ** num))
 
         row_sums = observation_matrix.sum(axis=1)
