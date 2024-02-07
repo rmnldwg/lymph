@@ -214,27 +214,36 @@ class Unilateral(DelegatorMixin):
         new_params_kwargs: dict[str, float],
     ) -> dict[str, float]:
         """Assign parameters to egdes and to distributions via keyword arguments."""
-        remaining_kwargs = {}
+        if self.is_trinary:
+            global_growth_param = new_params_kwargs.pop("growth", None)
+            global_micro_mod = new_params_kwargs.pop("micro", None)
 
-        global_growth_param = new_params_kwargs.pop("growth", None)
         if self.is_growth_shared and global_growth_param is not None:
             for growth_edge in self.graph.growth_edges.values():
                 growth_edge.set_spread_prob(global_growth_param)
 
-        global_micro_mod = new_params_kwargs.pop("micro", None)
         if self.is_micro_mod_shared and global_micro_mod is not None:
             for lnl_edge in self.graph.lnl_edges.values():
                 lnl_edge.set_micro_mod(global_micro_mod)
 
         edges_and_dists = self.graph.edges.copy()
         edges_and_dists.update(self.diag_time_dists)
-        for key, value in new_params_kwargs.items():
-            edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
+        new_params_keys = list(new_params_kwargs.keys())
+        for key in new_params_keys:
+            try:
+                edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
+            except ValueError as val_err:
+                raise KeyError(
+                    "Keyword arguments must be of the form '<edge_name>_<param_name>' "
+                    "or '<t_stage>_<param_name>' for the distributions over diagnose "
+                    "times."
+                ) from val_err
             if edge_name_or_tstage in edges_and_dists:
+                value = new_params_kwargs.pop(key)
                 edge_or_dist = edges_and_dists[edge_name_or_tstage]
                 edge_or_dist.set_params(**{type_: value})
 
-        return remaining_kwargs
+        return new_params_kwargs
 
 
     def assign_params(
@@ -301,9 +310,13 @@ class Unilateral(DelegatorMixin):
         ...     is_micro_mod_shared=True,
         ...     is_growth_shared=True,
         ... )
-        >>> _ = model.assign_params(
-        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4
+        >>> args, kwargs = model.assign_params(
+        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4, 0.99, A_to_B_param="not_used"
         ... )
+        >>> next(args)
+        0.99
+        >>> kwargs
+        {'A_to_B_param': 'not_used'}
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
         {'T_to_II_spread': 0.7,
          'T_to_III_spread': 0.5,
