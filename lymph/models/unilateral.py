@@ -100,7 +100,7 @@ class Unilateral(DelegatorMixin):
         if 0 >= max_time:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
-        self.max_time = max_time
+        self._max_time = max_time
         self.is_micro_mod_shared = is_micro_mod_shared
         self.is_growth_shared = is_growth_shared
 
@@ -128,6 +128,17 @@ class Unilateral(DelegatorMixin):
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
+
+
+    @property
+    def max_time(self) -> int:
+        """The latest time(-step) to include in the model's evolution.
+
+        This attribute cannot be changed (easily). Thus, we recommend creating a new
+        instance of the model when you feel like needing to change the initially set
+        value.
+        """
+        return self._max_time
 
 
     def print_info(self):
