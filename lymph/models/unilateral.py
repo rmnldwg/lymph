@@ -43,8 +43,8 @@ class Unilateral(DelegatorMixin):
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
-        is_micro_mod_shared: bool = False,
-        is_growth_shared: bool = False,
+        is_micro_mod_shared: bool = True,
+        is_growth_shared: bool = True,
         **_kwargs,
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
