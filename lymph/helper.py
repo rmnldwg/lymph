@@ -519,3 +519,17 @@ def arg0_cache(maxsize: int = 128, cache_class = LRUCache) -> callable:
         return wrapper
 
     return decorator
+
+
+def dict_to_func(mapping: dict[Any, Any]) -> callable:
+    """Transform a dictionary into a function.
+
+    >>> char_map = {'a': 1, 'b': 2, 'c': 3}
+    >>> char_map = dict_to_func(char_map)
+    >>> char_map('a')
+    1
+    """
+    def callable_mapping(key):
+        return mapping[key]
+
+    return callable_mapping

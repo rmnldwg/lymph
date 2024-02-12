@@ -14,6 +14,7 @@ from lymph.helper import (
     DelegatorMixin,
     DiagnoseType,
     PatternType,
+    dict_to_func,
     early_late_mapping,
     smart_updating_dict_cached_property,
 )
@@ -572,7 +573,7 @@ class Unilateral(DelegatorMixin):
         self,
         patient_data: pd.DataFrame,
         side: str = "ipsi",
-        mapping: callable = early_late_mapping,
+        mapping: callable | dict[int, Any] = early_late_mapping,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -580,10 +581,10 @@ class Unilateral(DelegatorMixin):
         ipsi- and contralateral) of the neck, the ``side`` parameter is used to select
         the for which of the two to store the involvement data.
 
-        With the ``mapping`` function, the reported T-stages (usually 0, 1, 2, 3, and 4)
-        can be mapped to any keys also used to access the corresponding distribution
-        over diagnose times. The default mapping is to map 0, 1, and 2 to "early" and
-        3 and 4 to "late".
+        With the ``mapping`` function or dictionary, the reported T-stages (usually 0,
+        1, 2, 3, and 4) can be mapped to any keys also used to access the corresponding
+        distribution over diagnose times. The default mapping is to map 0, 1, and 2 to
+        "early" and 3 and 4 to "late".
 
         What this method essentially does is to copy the entire data frame, check all
         necessary information is present, and add a new top-level header ``"_model"`` to
@@ -594,8 +595,8 @@ class Unilateral(DelegatorMixin):
         """
         patient_data = patient_data.copy()
 
-        if mapping is None:
-            mapping = {"early": [0,1,2], "late": [3,4]}
+        if isinstance(mapping, dict):
+            mapping = dict_to_func(mapping)
 
         for modality_name in self.modalities.keys():
             if modality_name not in patient_data:

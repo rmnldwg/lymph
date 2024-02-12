@@ -411,7 +411,7 @@ class Bilateral(DelegatorMixin):
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
-        mapping: callable = early_late_mapping,
+        mapping: callable | dict[int, Any] = early_late_mapping,
     ) -> None:
         """Load patient data into the model.
 
