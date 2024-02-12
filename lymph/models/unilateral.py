@@ -43,8 +43,6 @@ class Unilateral(DelegatorMixin):
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
-        is_micro_mod_shared: bool = False,
-        is_growth_shared: bool = False,
         **_kwargs,
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
@@ -100,9 +98,7 @@ class Unilateral(DelegatorMixin):
         if 0 >= max_time:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
-        self.max_time = max_time
-        self.is_micro_mod_shared = is_micro_mod_shared
-        self.is_growth_shared = is_growth_shared
+        self._max_time = max_time
 
         self.init_delegation(
             graph=[
@@ -128,6 +124,17 @@ class Unilateral(DelegatorMixin):
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
+
+
+    @property
+    def max_time(self) -> int:
+        """The latest time(-step) to include in the model's evolution.
+
+        This attribute cannot be changed (easily). Thus, we recommend creating a new
+        instance of the model when you feel like needing to change the initially set
+        value.
+        """
+        return self._max_time
 
 
     def print_info(self):
@@ -214,15 +221,14 @@ class Unilateral(DelegatorMixin):
         new_params_kwargs: dict[str, float],
     ) -> dict[str, float]:
         """Assign parameters to egdes and to distributions via keyword arguments."""
-        if self.is_trinary:
-            global_growth_param = new_params_kwargs.pop("growth", None)
-            global_micro_mod = new_params_kwargs.pop("micro", None)
+        global_growth_param = new_params_kwargs.pop("growth", None)
+        global_micro_mod = new_params_kwargs.pop("micro", None)
 
-        if self.is_growth_shared and global_growth_param is not None:
+        if global_growth_param is not None:
             for growth_edge in self.graph.growth_edges.values():
                 growth_edge.set_spread_prob(global_growth_param)
 
-        if self.is_micro_mod_shared and global_micro_mod is not None:
+        if global_micro_mod is not None:
             for lnl_edge in self.graph.lnl_edges.values():
                 lnl_edge.set_micro_mod(global_micro_mod)
 
