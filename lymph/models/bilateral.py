@@ -282,6 +282,58 @@ class Bilateral(DelegatorMixin):
         return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
 
 
+    @property
+    def is_micro_mod_shared(self) -> bool:
+        """Whether the parameter for microscopic spread is shared among graph edges.
+
+        This attribute only plays a role in trinary models. Since this is basically a
+        delegated value from the ``ipsi`` and ``contra`` side of the graph, the value
+        set there is returned.
+
+        If the model is binary or value of the two sides differes, an error is raised.
+        """
+        if self.ipsi.is_micro_mod_shared != self.contra.is_micro_mod_shared:
+            raise AttributeError(
+                "Attribute `is_micro_mod_shared` differs between `ipsi` and `contra` "
+                "model. This might be what you wanted, but then this delegated "
+                "attribute does not make sense anymore."
+            )
+
+        return self.ipsi.is_micro_mod_shared
+
+    @is_micro_mod_shared.setter
+    def is_micro_mod_shared(self, new_value: bool) -> None:
+        """Setter of ipsi- and contralateral ``is_micro_mod_shared`` attribute."""
+        self.ipsi.is_micro_mod_shared = new_value
+        self.contra.is_micro_mod_shared = new_value
+
+
+    @property
+    def is_growth_shared(self) -> bool:
+        """Whether the parameter for growth from micro- to macroscopic is shared.
+
+        This attribute only plays a role in trinary models. Since this is basically a
+        delegated value from the ``ipsi`` and ``contra`` side of the graph, the value
+        set there is returned.
+
+        If the model is binary or value of the two sides differes, an error is raised.
+        """
+        if self.ipsi.is_growth_shared != self.contra.is_growth_shared:
+            raise AttributeError(
+                "Attribute `is_growth_shared` differs between `ipsi` and `contra` "
+                "model. This might be what you wanted, but then this delegated "
+                "attribute does not make sense anymore."
+            )
+
+        return self.ipsi.is_growth_shared
+
+    @is_growth_shared.setter
+    def is_growth_shared(self, new_value: bool) -> None:
+        """Setter of ipsi- and contralateral ``is_growth_shared`` attribute."""
+        self.ipsi.is_growth_shared = new_value
+        self.contra.is_growth_shared = new_value
+
+
     def get_params(
         self,
         param: str | None = None,
