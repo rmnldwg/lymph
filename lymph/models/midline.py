@@ -92,9 +92,11 @@ def init_dict_sync(
 class Midline(DelegatorMixin):
     """Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
-    mid-sagittal line, or is located on the mid-saggital line.
+    mid-sagittal line, or is located on the mid-saggital line. Further, some
+    tumors may be centralized. In this case this class offers the `midline` 
+    option which assigns the same base spread probabilities to both sides.
 
-    It is reasonable to assume (and supported by data) that such an extension
+    It is reasonable to assume (and supported by data) that an extension
     significantly increases the risk for metastatic spread to the contralateral
     side of the neck. This class attempts to capture this using a simple
     assumption: We assume that the probability of spread to the contralateral
@@ -136,7 +138,10 @@ class Midline(DelegatorMixin):
                 side when no midline extension is present.
             trans_symmetric: If ``True``, the spread probabilities among the
                 LNLs will be set symmetrically.
-
+            central_enabled: If ``True``, a third bilateral class is produced
+            which holds a model for patients with central tumor locations.
+            
+        The ``unilateral_kwargs`` are passed to both all bilateral models.
         See Also:
             :class:`Bilateral`: Two of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
@@ -220,7 +225,7 @@ class Midline(DelegatorMixin):
         #         + central_ipsi_lnl_edges 
         #     )
         #     init_edge_sync(
-        #         property_names=property_names,
+        #         property_names=property_names,W
         #         this_edge_list=noext_ipsi_edges,
         #         other_edge_list=central_ipsi_edges,
         #     )
@@ -277,8 +282,6 @@ class Midline(DelegatorMixin):
                     if 'contra' not in key:
                         central_kwargs[(key.replace("ipsi_", ""))] = no_extension_kwargs[key]
                 remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
-
-#this part is not fully tested yet
         else:
             ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs, central_kwargs = {}, {}, {}, {}, {}
 
