@@ -559,16 +559,6 @@ class Unilateral(DelegatorMixin):
                 yield t_stage
 
 
-    @property
-    def stacked_diagnose_matrix(self) -> np.ndarray:
-        """Stacked version of all T-stage's :py:attr:`~diagnose_matrices`.
-
-        This is mainly used for the Bayesian network implementation of the model, which
-        cannot naturally incorporate the T-stage as a random variable.
-        """
-        return np.hstack(list(self.diagnose_matrices.values()))
-
-
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
@@ -744,10 +734,13 @@ class Unilateral(DelegatorMixin):
         return state_dist @ self.observation_matrix()
 
 
-    def _bn_likelihood(self, log: bool = True) -> float:
+    def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
+        if t_stage is None:
+            t_stage = "_BN"
+
         state_dist = self.comp_state_dist(mode="BN")
-        patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
+        patient_likelihoods = state_dist @ self.diagnose_matrices[t_stage]
 
         if log:
             llh = np.sum(np.log(patient_likelihoods))
@@ -756,12 +749,17 @@ class Unilateral(DelegatorMixin):
         return llh
 
 
-    def _hmm_likelihood(self, log: bool = True) -> float:
+    def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood, using the stored params."""
         evolved_model = self.comp_dist_evolution()
         llh = 0. if log else 1.
 
-        for t_stage in self.t_stages:
+        if t_stage is None:
+            t_stages = self.t_stages
+        else:
+            t_stages = [t_stage]
+
+        for t_stage in t_stages:
             patient_likelihoods = (
                 self.diag_time_dists[t_stage].distribution
                 @ evolved_model
@@ -777,18 +775,13 @@ class Unilateral(DelegatorMixin):
 
     def likelihood(
         self,
-        data: pd.DataFrame | None = None,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        load_data_kwargs: dict[str, Any] | None = None,
         log: bool = True,
-        mode: str = "HMM"
+        mode: str = "HMM",
+        for_t_stage: str | None = None,
     ) -> float:
-        """Compute the (log-)likelihood of the ``data`` given the model (and params).
-
-        If the ``data`` is not provided, the previously loaded data is used. One may
-        specify additional ``load_data_kwargs`` to pass to the
-        :py:meth:`~load_patient_data` method when loading the data.
+        """Compute the (log-)likelihood of the stored data given the model (and params).
 
         The parameters of the model can be set via ``given_param_args`` and
         ``given_param_kwargs``. Both arguments are used to call the
@@ -799,11 +792,6 @@ class Unilateral(DelegatorMixin):
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
         """
-        if data is not None:
-            if load_data_kwargs is None:
-                load_data_kwargs = {}
-            self.load_patient_data(data, **load_data_kwargs)
-
         if given_param_args is None:
             given_param_args = []
 
@@ -817,7 +805,13 @@ class Unilateral(DelegatorMixin):
         except ValueError:
             return -np.inf if log else 0.
 
-        return self._hmm_likelihood(log) if mode == "HMM" else self._bn_likelihood(log)
+        if mode == "HMM":
+            return self._hmm_likelihood(log, for_t_stage)
+
+        if mode == "BN":
+            return self._bn_likelihood(log, for_t_stage)
+
+        raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
 
     def comp_diagnose_encoding(
