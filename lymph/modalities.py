@@ -224,7 +224,7 @@ class ModalitiesUserDict(AbstractLookupDict):
 
             1. It may change over the lifetime of the object, whereas ``__hash__``
                 should be constant.
-            2. It only takes into account the ``confusion_matric`` of the modality,
+            2. It only takes into account the ``confusion_matrix`` of the modality,
                 nothing else.
         """
         confusion_mat_bytes = b""

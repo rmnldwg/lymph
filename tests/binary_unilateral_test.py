@@ -11,6 +11,20 @@ from lymph.modalities import Pathological
 class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     """Test the initialization of a binary model."""
 
+    def test_value_errors(self):
+        """Check that the model raises errors when the graph has issues."""
+        empty_graph = {}
+        only_tumor = {("tumor", "T"): []}
+        only_lnl = {("lnl", "II"): []}
+        duplicate_lnls = {
+            ("tumor", "T"): ["II", "II"],
+            ("lnl", "II"): [],
+        }
+        self.assertRaises(ValueError, lambda: type(self.model)(empty_graph))
+        self.assertRaises(ValueError, lambda: type(self.model)(only_tumor))
+        self.assertRaises(ValueError, lambda: type(self.model)(only_lnl))
+        self.assertRaises(ValueError, lambda: type(self.model)(duplicate_lnls))
+
     def test_num_nodes(self):
         """Check number of nodes initialized."""
         num_nodes = len(self.graph_dict)

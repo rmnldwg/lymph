@@ -204,30 +204,38 @@ def compute_encoding(
     return encoding
 
 
-def generate_data_encoding(model: models.Unilateral, t_stage: str) -> np.ndarray:
+def generate_data_encoding(
+    model: models.Unilateral,
+    t_stage: str,
+) -> np.ndarray:
     """Generate the data matrix for a specific T-stage from patient data.
 
     The :py:attr:`~lymph.models.Unilateral.patient_data` needs to contain the column
     ``"_model"``, which is constructed when loading the data into the model. From this,
-    a data matrix is constructed for the given ``t_stage``.
+    a data matrix is constructed for the given ``t_stage``. If ``"_BN"`` is selected,
+    as T-stage, the data matrix for all patients is returned. This is mainly used for
+    the computation of the Bayesian network likelihood.
 
     The returned matrix has the shape :math:`2^{N \\cdot \\mathcal{O}} \\times M`,
     where :math:`N` is the number of lymph node levels, :math:`\\mathcal{O}` is the
     number of diagnostic modalities and :math:`M` is the number of patients with the
-    given ``t_stage``.
+    given ``t_stage`` (or just all patients).
     """
-    if not model.patient_data["_model", "#", "t_stage"].isin([t_stage]).any():
-        raise ValueError(f"No patients with T-stage {t_stage} in patient data.")
+    if t_stage == "_BN":
+        has_t_stage = slice(None)
+    else:
+        has_t_stage = model.patient_data["_model", "#", "t_stage"] == t_stage
 
-    has_t_stage = model.patient_data["_model", "#", "t_stage"] == t_stage
-    patients_with_t_stage = model.patient_data[has_t_stage]
+    selected_patients = model.patient_data[has_t_stage]
+    if len(selected_patients) == 0:
+        raise ValueError(f"No patients with T-stage {t_stage}.")
 
     result = np.ones(
-        shape=(model.observation_matrix().shape[1], len(patients_with_t_stage)),
+        shape=(model.observation_matrix().shape[1], len(selected_patients)),
         dtype=bool,
     )
 
-    for i, (_, patient_row) in enumerate(patients_with_t_stage["_model"].iterrows()):
+    for i, (_, patient_row) in enumerate(selected_patients["_model"].iterrows()):
         patient_encoding = np.ones(shape=1, dtype=bool)
         for modality_name in model.modalities.keys():
             if modality_name not in patient_row:

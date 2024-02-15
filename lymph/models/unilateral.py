@@ -14,6 +14,7 @@ from lymph.helper import (
     DelegatorMixin,
     DiagnoseType,
     PatternType,
+    dict_to_func,
     early_late_mapping,
     smart_updating_dict_cached_property,
 )
@@ -43,8 +44,6 @@ class Unilateral(DelegatorMixin):
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
-        is_micro_mod_shared: bool = False,
-        is_growth_shared: bool = False,
         **_kwargs,
     ) -> None:
         """Create a new instance of the :py:class:`~Unilateral` class.
@@ -100,9 +99,7 @@ class Unilateral(DelegatorMixin):
         if 0 >= max_time:
             raise ValueError("Latest diagnosis time `max_time` must be positive int")
 
-        self.max_time = max_time
-        self.is_micro_mod_shared = is_micro_mod_shared
-        self.is_growth_shared = is_growth_shared
+        self._max_time = max_time
 
         self.init_delegation(
             graph=[
@@ -128,6 +125,17 @@ class Unilateral(DelegatorMixin):
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
+
+
+    @property
+    def max_time(self) -> int:
+        """The latest time(-step) to include in the model's evolution.
+
+        This attribute cannot be changed (easily). Thus, we recommend creating a new
+        instance of the model when you feel like needing to change the initially set
+        value.
+        """
+        return self._max_time
 
 
     def print_info(self):
@@ -214,27 +222,35 @@ class Unilateral(DelegatorMixin):
         new_params_kwargs: dict[str, float],
     ) -> dict[str, float]:
         """Assign parameters to egdes and to distributions via keyword arguments."""
-        remaining_kwargs = {}
-
         global_growth_param = new_params_kwargs.pop("growth", None)
-        if self.is_growth_shared and global_growth_param is not None:
+        global_micro_mod = new_params_kwargs.pop("micro", None)
+
+        if global_growth_param is not None:
             for growth_edge in self.graph.growth_edges.values():
                 growth_edge.set_spread_prob(global_growth_param)
 
-        global_micro_mod = new_params_kwargs.pop("micro", None)
-        if self.is_micro_mod_shared and global_micro_mod is not None:
+        if global_micro_mod is not None:
             for lnl_edge in self.graph.lnl_edges.values():
                 lnl_edge.set_micro_mod(global_micro_mod)
 
         edges_and_dists = self.graph.edges.copy()
         edges_and_dists.update(self.diag_time_dists)
-        for key, value in new_params_kwargs.items():
-            edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
+        new_params_keys = list(new_params_kwargs.keys())
+        for key in new_params_keys:
+            try:
+                edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
+            except ValueError as val_err:
+                raise KeyError(
+                    "Keyword arguments must be of the form '<edge_name>_<param_name>' "
+                    "or '<t_stage>_<param_name>' for the distributions over diagnose "
+                    "times."
+                ) from val_err
             if edge_name_or_tstage in edges_and_dists:
+                value = new_params_kwargs.pop(key)
                 edge_or_dist = edges_and_dists[edge_name_or_tstage]
                 edge_or_dist.set_params(**{type_: value})
 
-        return remaining_kwargs
+        return new_params_kwargs
 
 
     def assign_params(
@@ -301,9 +317,13 @@ class Unilateral(DelegatorMixin):
         ...     is_micro_mod_shared=True,
         ...     is_growth_shared=True,
         ... )
-        >>> _ = model.assign_params(
-        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4
+        >>> args, kwargs = model.assign_params(
+        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4, 0.99, A_to_B_param="not_used"
         ... )
+        >>> next(args)
+        0.99
+        >>> kwargs
+        {'A_to_B_param': 'not_used'}
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
         {'T_to_II_spread': 0.7,
          'T_to_III_spread': 0.5,
@@ -539,21 +559,11 @@ class Unilateral(DelegatorMixin):
                 yield t_stage
 
 
-    @property
-    def stacked_diagnose_matrix(self) -> np.ndarray:
-        """Stacked version of all T-stage's :py:attr:`~diagnose_matrices`.
-
-        This is mainly used for the Bayesian network implementation of the model, which
-        cannot naturally incorporate the T-stage as a random variable.
-        """
-        return np.hstack(list(self.diagnose_matrices.values()))
-
-
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
         side: str = "ipsi",
-        mapping: callable = early_late_mapping,
+        mapping: callable | dict[int, Any] = early_late_mapping,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -561,10 +571,10 @@ class Unilateral(DelegatorMixin):
         ipsi- and contralateral) of the neck, the ``side`` parameter is used to select
         the for which of the two to store the involvement data.
 
-        With the ``mapping`` function, the reported T-stages (usually 0, 1, 2, 3, and 4)
-        can be mapped to any keys also used to access the corresponding distribution
-        over diagnose times. The default mapping is to map 0, 1, and 2 to "early" and
-        3 and 4 to "late".
+        With the ``mapping`` function or dictionary, the reported T-stages (usually 0,
+        1, 2, 3, and 4) can be mapped to any keys also used to access the corresponding
+        distribution over diagnose times. The default mapping is to map 0, 1, and 2 to
+        "early" and 3 and 4 to "late".
 
         What this method essentially does is to copy the entire data frame, check all
         necessary information is present, and add a new top-level header ``"_model"`` to
@@ -575,8 +585,8 @@ class Unilateral(DelegatorMixin):
         """
         patient_data = patient_data.copy()
 
-        if mapping is None:
-            mapping = {"early": [0,1,2], "late": [3,4]}
+        if isinstance(mapping, dict):
+            mapping = dict_to_func(mapping)
 
         for modality_name in self.modalities.keys():
             if modality_name not in patient_data:
@@ -724,10 +734,13 @@ class Unilateral(DelegatorMixin):
         return state_dist @ self.observation_matrix()
 
 
-    def _bn_likelihood(self, log: bool = True) -> float:
+    def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
+        if t_stage is None:
+            t_stage = "_BN"
+
         state_dist = self.comp_state_dist(mode="BN")
-        patient_likelihoods = state_dist @ self.stacked_diagnose_matrix
+        patient_likelihoods = state_dist @ self.diagnose_matrices[t_stage]
 
         if log:
             llh = np.sum(np.log(patient_likelihoods))
@@ -736,12 +749,17 @@ class Unilateral(DelegatorMixin):
         return llh
 
 
-    def _hmm_likelihood(self, log: bool = True) -> float:
+    def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood, using the stored params."""
         evolved_model = self.comp_dist_evolution()
         llh = 0. if log else 1.
 
-        for t_stage in self.t_stages:
+        if t_stage is None:
+            t_stages = self.t_stages
+        else:
+            t_stages = [t_stage]
+
+        for t_stage in t_stages:
             patient_likelihoods = (
                 self.diag_time_dists[t_stage].distribution
                 @ evolved_model
@@ -757,18 +775,13 @@ class Unilateral(DelegatorMixin):
 
     def likelihood(
         self,
-        data: pd.DataFrame | None = None,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        load_data_kwargs: dict[str, Any] | None = None,
         log: bool = True,
-        mode: str = "HMM"
+        mode: str = "HMM",
+        for_t_stage: str | None = None,
     ) -> float:
-        """Compute the (log-)likelihood of the ``data`` given the model (and params).
-
-        If the ``data`` is not provided, the previously loaded data is used. One may
-        specify additional ``load_data_kwargs`` to pass to the
-        :py:meth:`~load_patient_data` method when loading the data.
+        """Compute the (log-)likelihood of the stored data given the model (and params).
 
         The parameters of the model can be set via ``given_param_args`` and
         ``given_param_kwargs``. Both arguments are used to call the
@@ -779,11 +792,6 @@ class Unilateral(DelegatorMixin):
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
         """
-        if data is not None:
-            if load_data_kwargs is None:
-                load_data_kwargs = {}
-            self.load_patient_data(data, **load_data_kwargs)
-
         if given_param_args is None:
             given_param_args = []
 
@@ -797,7 +805,13 @@ class Unilateral(DelegatorMixin):
         except ValueError:
             return -np.inf if log else 0.
 
-        return self._hmm_likelihood(log) if mode == "HMM" else self._bn_likelihood(log)
+        if mode == "HMM":
+            return self._hmm_likelihood(log, for_t_stage)
+
+        if mode == "BN":
+            return self._bn_likelihood(log, for_t_stage)
+
+        raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
 
     def comp_diagnose_encoding(

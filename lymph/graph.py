@@ -471,6 +471,12 @@ class Representation:
                 lnl = LymphNodeLevel(name=node_name, allowed_states=allowed_lnl_states)
                 self._nodes[node_name] = lnl
 
+        if len(self.tumors) < 1:
+            raise ValueError("At least one tumor node must be present in the graph")
+
+        if len(self.lnls) < 1:
+            raise ValueError("At least one LNL node must be present in the graph")
+
 
     @property
     def nodes(self) -> dict[str, Tumor | LymphNodeLevel]:
