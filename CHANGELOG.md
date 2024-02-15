@@ -10,7 +10,7 @@ With this (still alpha) release, we most notably fixed a long unnoticed bug in t
 ### Bug Fixes
 
 - (**uni**) Leftover `kwargs` now correctly returned in `assign_params()`
-- ⚠ **BREAKING** (**uni**) Remove `is_<x>_shared` entirely, as it was unused anyways
+- ⚠ **BREAKING** (**uni**) Remove `is_<x>_shared` entirely, as it was unused anyways. Fixes [#72].
 - T-stage mapping may be dictionary or callable
 - (**uni**) Raise exception when there are no tumors or LNLs in graph
 
@@ -339,6 +339,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#72]: https://github.com/rmnldwg/lymph/issues/72
 [#69]: https://github.com/rmnldwg/lymph/issues/69
 [#68]: https://github.com/rmnldwg/lymph/issues/68
 [#65]: https://github.com/rmnldwg/lymph/issues/65
