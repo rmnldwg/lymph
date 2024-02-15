@@ -3,11 +3,11 @@ Test the bilateral model.
 """
 import unittest
 
-import fixtures
 import numpy as np
 
 from lymph import models
 from lymph.modalities import Clinical
+from tests import fixtures
 
 
 class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):

@@ -1,11 +1,11 @@
 """Test the trinary unilateral system."""
 import unittest
 
-import fixtures
 import numpy as np
 import pandas as pd
 
 from lymph.graph import LymphNodeLevel
+from tests import fixtures
 
 
 class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
