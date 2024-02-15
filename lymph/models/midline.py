@@ -1,14 +1,14 @@
 from __future__ import annotations
-from argparse import OPTIONAL
 
 import logging
 import warnings
+from argparse import OPTIONAL
 from typing import Any, Iterable, Iterator
 
 import numpy as np
 import pandas as pd
 
-from lymph import graph, matrix, modalities, models
+from lymph import graph, modalities, models
 from lymph.helper import (
     AbstractLookupDict,
     DelegatorMixin,
@@ -90,14 +90,14 @@ def init_dict_sync(
 
 
 class Midline(DelegatorMixin):
-    """Model a bilateral lymphatic system where an additional risk factor can
-    be provided in the data: Whether or not the primary tumor extended over the
-    mid-sagittal line, or is located on the mid-saggital line. Further, some
-    tumors may be centralized. In this case this class offers the `midline` 
-    option which assigns the same base spread probabilities to both sides.
+    """Models metastatic progression bilaterally with tumor lateralization.
 
-    It is reasonable to assume (and supported by data) that an extension
-    significantly increases the risk for metastatic spread to the contralateral
+    Model a bilateral lymphatic system where an additional risk factor can
+    be provided in the data: Whether or not the primary tumor extended over the
+    mid-sagittal line, or is located on the mid-saggital line.
+
+    It is reasonable to assume (and supported by data) that an extension of the primary
+    tumor significantly increases the risk for metastatic spread to the contralateral
     side of the neck. This class attempts to capture this using a simple
     assumption: We assume that the probability of spread to the contralateral
     side for patients *with* midline extension is larger than for patients
@@ -122,11 +122,15 @@ class Midline(DelegatorMixin):
         central_enabled: bool = True,
         **_kwargs
     ):
-        """The class is constructed in a similar fashion to the
-        :class:`Bilateral`: That class contains one :class:`Unilateral` for
-        each side of the neck, while this class will contain two/three instances of
-        :class:`Bilateral`, one for the case of a midline extension, one for
-        the case of no midline extension and one for the tumors on the midline.
+        """Initialize the model.
+
+        The class is constructed in a similar fashion to the
+        :py:class:`~lymph.models.Bilateral`: That class contains one
+        :py:class:`~lymph.models.Unilateral` for each side of the neck, while this
+        class will contain several instances of :py:class:`~lymph.models.Bilateral`,
+        one for the ipsilateral side and two to three for the the contralateral side
+        covering the cases a) no midline extension, b) midline extension, and c)
+        central tumor location.
 
         Args:
             graph: Dictionary of the same kind as for initialization of
@@ -140,8 +144,8 @@ class Midline(DelegatorMixin):
                 LNLs will be set symmetrically.
             central_enabled: If ``True``, a third bilateral class is produced
             which holds a model for patients with central tumor locations.
-            
-        The ``unilateral_kwargs`` are passed to both all bilateral models.
+
+        The ``unilateral_kwargs`` are passed to all bilateral models.
         See Also:
             :class:`Bilateral`: Two of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
@@ -199,13 +203,13 @@ class Midline(DelegatorMixin):
         noext_ipsi_tumor_edges = list(self.noext.ipsi.graph.tumor_edges.values())
         noext_ipsi_lnl_edges = list(self.noext.ipsi.graph.lnl_edges.values())
         noext_ipsi_edges = (
-            noext_ipsi_tumor_edges + noext_ipsi_lnl_edges 
+            noext_ipsi_tumor_edges + noext_ipsi_lnl_edges
         )
         ext_ipsi_tumor_edges = list(self.ext.ipsi.graph.tumor_edges.values())
         ext_ipsi_lnl_edges = list(self.ext.ipsi.graph.lnl_edges.values())
         ext_ipsi_edges = (
-            ext_ipsi_tumor_edges 
-            + ext_ipsi_lnl_edges 
+            ext_ipsi_tumor_edges
+            + ext_ipsi_lnl_edges
         )
 
 
@@ -214,15 +218,15 @@ class Midline(DelegatorMixin):
             this_edge_list=noext_ipsi_edges,
             other_edge_list=ext_ipsi_edges,
         )
-        
+
         #The syncing below does not work properly. The ipsilateral central side is synced, but the contralateral central side is not synced. It seems like no callback is initiated when syncing in this manner
 
         # if self.central_enabled:
         #     central_ipsi_tumor_edges = list(self.central.ipsi.graph.tumor_edges.values())
         #     central_ipsi_lnl_edges = list(self.central.ipsi.graph.lnl_edges.values())
         #     central_ipsi_edges = (
-        #         central_ipsi_tumor_edges 
-        #         + central_ipsi_lnl_edges 
+        #         central_ipsi_tumor_edges
+        #         + central_ipsi_lnl_edges
         #     )
         #     init_edge_sync(
         #         property_names=property_names,W
@@ -295,8 +299,8 @@ class Midline(DelegatorMixin):
                 else:
                     if 'contra' in key:
                         warnings.warn(
-                "'contra' keys were assigned without 'ext' or 'noext' defined. For a non-mixture model" 
-                "For a non mixture model these values have no meaning.")   
+                "'contra' keys were assigned without 'ext' or 'noext' defined. For a non-mixture model"
+                "For a non mixture model these values have no meaning.")
                     else:
                         general_kwargs[key] = value
 
@@ -461,13 +465,13 @@ class Midline(DelegatorMixin):
             self.assign_params(*given_param_args)
         if given_param_kwargs is not None:
             self.assign_params(**given_param_kwargs)
-        if central: 
+        if central:
             return self.central.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
         if midline_extension:
             return self.ext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
-        return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)    
-        
-        
+        return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
+
+
 
     # def generate_dataset(
     #     self,
