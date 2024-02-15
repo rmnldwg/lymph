@@ -109,6 +109,75 @@ class DelegatorMixin:
         return super().__getattribute__(name)
 
 
+class DelegationSyncMixin:
+    """Mixin to delegate and synchronize an attribute of multiple instances.
+
+    If a container class holds several (i.e. one ore more) instances of a class, this
+    mixin can be used with the container class to delegate and synchronize an attribute
+    from the instances.
+
+    See the explanation in the :py:class:`DelegatorMixin.init_delegation_sync` method.
+    """
+    def __init__(self) -> None:
+        self._delegated_and_synced = {}
+
+
+    def init_delegation_sync(self, **attrs_from_instances) -> None:
+        """Initialize the delegation and synchronization of attributes.
+
+        Each keyword argument is the name of an attribute to synchronize. The value
+        should be a list of instances for which that attribute should be synchronized.
+
+        Example:
+
+        >>> class Hand:
+        ...     def __init__(self, num_fingers):
+        ...         self.num_fingers = num_fingers
+        >>> class Person(DelegationSyncMixin):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.left = Hand(6)
+        ...         self.right = Hand(4)
+        ...         self.init_delegation_sync(num_fingers=[self.left, self.right])
+        >>> person = Person()
+        >>> person.left.num_fingers
+        6
+        >>> person.right.num_fingers
+        4
+        >>> person.num_fingers   # note that this will also issue a warning
+        4
+        >>> person.num_fingers = 5
+        >>> person.left.num_fingers
+        5
+        >>> person.right.num_fingers
+        5
+        >>> person.num_fingers
+        5
+        """
+        self._delegated_and_synced = attrs_from_instances
+
+
+    def __getattr__(self, name):
+        if name == "_delegated_and_synced" or name not in self._delegated_and_synced:
+            return super().__getattr__(name)
+
+        values = {getattr(inst, name) for inst in self._delegated_and_synced[name]}
+        if len(values) > 1:
+            warnings.warn(
+                f"Attribute '{name}' not synchronized: {values}. Set this "
+                "attribute on each instance to synchronize it."
+            )
+        return values.pop()
+
+
+    def __setattr__(self, name, value):
+        if name != "_delegated_and_synced" and name in self._delegated_and_synced:
+            for inst in self._delegated_and_synced[name]:
+                setattr(inst, name, value)
+        else:
+            super().__setattr__(name, value)
+
+
 def check_unique_names(graph: dict):
     """Check all nodes in ``graph`` have unique names and no duplicate connections."""
     node_name_set = set()
