@@ -1,6 +1,7 @@
 """
 Module containing supporting classes and functions used accross the project.
 """
+import logging
 import warnings
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
@@ -16,97 +17,9 @@ PatternType = dict[str, bool | NAType | None]
 DiagnoseType = dict[str, PatternType]
 """Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
 
+logger = logging.getLogger(__name__)
 
-class DelegatorMixin:
-    """Mixin class that allows the delegation of attributes from another object."""
-    def __init__(self):
-        self._delegated = {}
-
-
-    def init_delegation(self, **from_to) -> None:
-        """Initialize the delegation of attributes.
-
-        For each keyword argument that is an attribute of ``self``, the value is a
-        list of attributes to delegate to ``self``.
-
-        Inspiration from this came from the `delegation pattern`_.
-
-        .. _delegation pattern: https://github.com/faif/python-patterns/blob/master/patterns/fundamental/delegation_pattern.py
-
-        Example:
-
-        >>> class Delegate:
-        ...     def __init__(self):
-        ...         self.fancy_attr = "foo"
-        ...     @property
-        ...     def property_attr(self):
-        ...         return "bar"
-        ...     @cached_property
-        ...     def cached_attr(self):
-        ...         return "baz"
-        >>> class A(DelegatorMixin):
-        ...     def __init__(self):
-        ...         super().__init__()
-        ...         self.delegated = "hello world"
-        ...         self.also_delegated = Delegate()
-        ...         self.normal_attr = 42
-        ...         self.init_delegation(
-        ...             delegated=["count"],
-        ...             also_delegated=["fancy_attr", "property_attr", "cached_attr"],
-        ...         )
-        >>> a = A()
-        >>> a.delegated.count("l")
-        3
-        >>> a.count("l")
-        3
-        >>> a.also_delegated.fancy_attr
-        'foo'
-        >>> a.fancy_attr
-        'foo'
-        >>> a.also_delegated.property_attr
-        'bar'
-        >>> a.property_attr
-        'bar'
-        >>> a.also_delegated.cached_attr
-        'baz'
-        >>> a.cached_attr
-        'baz'
-        >>> a.normal_attr
-        42
-        >>> a.non_existent
-        Traceback (most recent call last):
-        ...
-        AttributeError: 'A' object has no attribute 'non_existent'
-        """
-        for attr, sub_attrs in from_to.items():
-            attr_obj = getattr(self, attr)
-
-            for sub_attr in sub_attrs:
-                if not hasattr(attr_obj, sub_attr):
-                    raise AttributeError(
-                        f"Attribute '{sub_attr}' not found in '{attr_obj}'"
-                    )
-
-                if sub_attr in self._delegated:
-                    warnings.warn(
-                        f"Attribute '{sub_attr}' already delegated. Overwriting."
-                    )
-                self._delegated[sub_attr] = (attr_obj, sub_attr)
-
-    def __getattr__(self, name):
-        if name in self._delegated:
-            attr = getattr(*self._delegated[name])
-
-            if not callable(attr):
-                return attr
-
-            @wraps(attr)
-            def wrapper(*args, **kwargs):
-                return attr(*args, **kwargs)
-
-            return wrapper
-
-        return super().__getattribute__(name)
+BASIC_TYPES = (int, float, str, bool, bytes, type(None))
 
 
 class DelegationSyncMixin:
@@ -117,6 +30,9 @@ class DelegationSyncMixin:
     from the instances.
 
     See the explanation in the :py:class:`DelegatorMixin.init_delegation_sync` method.
+
+    This also works for attributes that are not hashable, such as lists or dictionaries.
+    See more details about that in the :py:class:`AccessPassthrough` class docs.
     """
     def __init__(self) -> None:
         self._delegated_and_synced = {}
@@ -130,44 +46,39 @@ class DelegationSyncMixin:
 
         Example:
 
-        >>> class Hand:
-        ...     def __init__(self, num_fingers):
-        ...         self.num_fingers = num_fingers
+        >>> class Eye:
+        ...     def __init__(self, color="blue"):
+        ...         self.eye_color = color
         >>> class Person(DelegationSyncMixin):
         ...     def __init__(self):
         ...         super().__init__()
-        ...         self.left = Hand(6)
-        ...         self.right = Hand(4)
-        ...         self.init_delegation_sync(num_fingers=[self.left, self.right])
+        ...         self.left = Eye("green")
+        ...         self.right = Eye("brown")
+        ...         self.init_delegation_sync(eye_color=[self.left, self.right])
         >>> person = Person()
-        >>> person.left.num_fingers
-        6
-        >>> person.right.num_fingers
-        4
-        >>> person.num_fingers   # note that this will also issue a warning
-        4
-        >>> person.num_fingers = 5
-        >>> person.left.num_fingers
-        5
-        >>> person.right.num_fingers
-        5
-        >>> person.num_fingers
-        5
+        >>> person.eye_color        # pop element of sorted set and warn that not synced
+        'green'
+        >>> person.eye_color = 'red'
+        >>> person.left.eye_color == person.right.eye_color == 'red'
+        True
         """
         self._delegated_and_synced = attrs_from_instances
 
 
     def __getattr__(self, name):
-        if name == "_delegated_and_synced" or name not in self._delegated_and_synced:
-            return super().__getattr__(name)
+        try:
+            values_set = {getattr(inst, name) for inst in self._delegated_and_synced[name]}
+            if len(values_set) > 1:
+                warnings.warn(
+                    f"Attribute '{name}' not synchronized: {values_set}. Set this "
+                    "attribute on each instance to synchronize it."
+                )
+            return sorted(values_set).pop()
 
-        values = {getattr(inst, name) for inst in self._delegated_and_synced[name]}
-        if len(values) > 1:
-            warnings.warn(
-                f"Attribute '{name}' not synchronized: {values}. Set this "
-                "attribute on each instance to synchronize it."
-            )
-        return values.pop()
+        # Not all attributes might be hashable, which is necessary for a set
+        except TypeError:
+            values_list = [getattr(inst, name) for inst in self._delegated_and_synced[name]]
+            return AccessPassthrough(values_list)
 
 
     def __setattr__(self, name, value):
@@ -176,6 +87,104 @@ class DelegationSyncMixin:
                 setattr(inst, name, value)
         else:
             super().__setattr__(name, value)
+
+
+class AccessPassthrough:
+    """Allows delegated access to an attribute's methods.
+
+    This class is constructed from a list of objects. It allows access to the
+    methods and items of the objects in the list. Setting items is also supported, but
+    only one level deep.
+
+    It is used by the :py:class:`DelegationSyncMixin` to handle unhashable attributes.
+    For example, a delegated and synched attribute might be a dictionary. In this case,
+    a call like ``container.attribute["key"]`` would retrieve the right value, but
+    setting it via ``container.attribute["key"] = value`` would at best set the value
+    on one of the synched instances, but not on all of them. This class handles passing
+    the set value to all instances.
+
+    Note:
+        This class is not meant to be used directly, but only by the
+        :py:class:`DelegationSyncMixin`.
+
+    Below is an example that demonstrates how calls to ``__setitem__``, ``__setattr__``,
+    and ``__call__`` are passed through to both instances for which the delegation and
+    synchronization is invoked:
+
+    >>> class Param:
+    ...     def __init__(self, value):
+    ...         self.value = value
+    >>> class Model:
+    ...     def __init__(self, **kwargs):
+    ...         self.params_dict = kwargs
+    ...         self.param = Param(sum(kwargs.values()))
+    ...     def set_value(self, key, value):
+    ...         self.params_dict[key] = value
+    >>> class Mixture(DelegationSyncMixin):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.c1 = Model(a=1, b=2)
+    ...         self.c2 = Model(a=3, b=4, c=5)
+    ...         self.init_delegation_sync(
+    ...             params_dict=[self.c1, self.c2],
+    ...             param=[self.c1, self.c2],
+    ...             set_value=[self.c1, self.c2],
+    ...         )
+    >>> mixture = Mixture()
+    >>> mixture.params_dict["a"]    # pop element of sorted set and warn that not synced
+    1
+    >>> mixture.params_dict["a"] = 99
+    >>> mixture.c1.params_dict["a"] == mixture.c2.params_dict["a"] == 99
+    True
+    >>> mixture.param.value
+    12
+    >>> mixture.param.value = 42
+    >>> mixture.c1.param.value == mixture.c2.param.value == 42
+    True
+    >>> mixture.set_value("c", 100)
+    >>> mixture.c1.params_dict["c"] == mixture.c2.params_dict["c"] == 100
+    True
+    """
+    def __init__(self, attr_values: list[object]) -> None:
+        self._attr_objects = attr_values
+
+
+    def __getattr__(self, name):
+        values = {getattr(obj, name) for obj in self._attr_objects}
+        if len(values) > 1:
+            warnings.warn(
+                f"Attribute '{name}' not synchronized: {values}. Set this "
+                "attribute on each instance to synchronize it."
+            )
+        return sorted(values).pop()
+
+
+    def __getitem__(self, key):
+        values = {obj[key] for obj in self._attr_objects}
+        if len(values) > 1:
+            warnings.warn(
+                f"Value for key '{key}' not synchronized: {values}. Set this "
+                "value on each item to synchronize it."
+            )
+        return values.pop()
+
+
+    def __setattr__(self, name, value):
+        if name != "_attr_objects":
+            for obj in self._attr_objects:
+                setattr(obj, name, value)
+        else:
+            super().__setattr__(name, value)
+
+
+    def __setitem__(self, key, value):
+        for obj in self._attr_objects:
+            obj[key] = value
+
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        for obj in self._attr_objects:
+            obj(*args, **kwds)
 
 
 def check_unique_names(graph: dict):
@@ -494,11 +503,6 @@ def trigger(func: callable) -> callable:
     return wrapper
 
 
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
-
-
 class AbstractLookupDict(UserDict):
     """Abstract ``UserDict`` subclass that can lazily and dynamically return values.
 
@@ -602,3 +606,41 @@ def dict_to_func(mapping: dict[Any, Any]) -> callable:
         return mapping[key]
 
     return callable_mapping
+
+
+
+if __name__ == "__main__":
+
+    class Number:
+        __hash__ = None
+        def __init__(self, value):
+            self.value = value
+
+    class Param:
+        def __init__(self, value, mapping):
+            self.value = value
+            self.mapping = mapping
+            self.number = Number(10 * value)
+
+    class Container(DelegationSyncMixin):
+        def __init__(self):
+            super().__init__()
+            self.one = Param(1, {"key": 1})
+            self.two = Param(2, {"key": 2})
+            self.init_delegation_sync(
+                value=[self.one, self.two],
+                mapping=[self.one, self.two],
+                number=[self.one, self.two],
+            )
+
+    container = Container()
+    print(container.value)
+    print(container.mapping)
+    print(container.mapping["key"])
+    container.mapping["key"] = 4
+    print(container.one.mapping["key"])
+    print(container.two.mapping["key"])
+    print(container.number.value)
+    container.number.value = 99
+    print(container.one.number.value)
+    print(container.two.number.value)

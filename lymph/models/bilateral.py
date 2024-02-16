@@ -10,7 +10,7 @@ import pandas as pd
 from lymph import graph, matrix, modalities, models
 from lymph.helper import (
     AbstractLookupDict,
-    DelegatorMixin,
+    DelegationSyncMixin,
     DiagnoseType,
     PatternType,
     early_late_mapping,
@@ -124,7 +124,7 @@ def init_dict_sync2(
     this.trigger_callbacks.append(sync)
 
 
-class Bilateral(DelegatorMixin):
+class Bilateral(DelegationSyncMixin):
     """Class that models metastatic progression in a bilateral lymphatic system.
 
     This is achieved by creating two instances of the
@@ -185,13 +185,19 @@ class Bilateral(DelegatorMixin):
             contralateral_kwargs=contralateral_kwargs,
         )
 
-        self.init_synchronization()
+        if self.is_symmetric["modalities"]:
+            delegation_sync_kwargs = {"modalities": [self.ipsi, self.contra]}
+        else:
+            delegation_sync_kwargs = {}
 
-        delegated_attrs = [
-            "max_time", "t_stages", "diag_time_dists",
-            "is_binary", "is_trinary",
-        ] + ["modalities"] if self.is_symmetric["modalities"] else []
-        self.init_delegation(ipsi=delegated_attrs)
+        self.init_delegation_sync(
+            max_time=[self.ipsi, self.contra],
+            t_stages=[self.ipsi, self.contra],
+            diag_time_dists=[self.ipsi, self.contra],
+            is_binary=[self.ipsi, self.contra],
+            is_trinary=[self.ipsi, self.contra],
+            **delegation_sync_kwargs,
+        )
 
 
     def init_models(
