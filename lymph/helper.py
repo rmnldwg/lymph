@@ -5,7 +5,7 @@ import logging
 import warnings
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import numpy as np
 from cachetools import LRUCache
@@ -38,7 +38,7 @@ class DelegationSyncMixin:
         self._delegated_and_synced = {}
 
 
-    def init_delegation_sync(self, **attrs_from_instances) -> None:
+    def _init_delegation_sync(self, **attrs_from_instances) -> None:
         """Initialize the delegation and synchronization of attributes.
 
         Each keyword argument is the name of an attribute to synchronize. The value
@@ -54,7 +54,7 @@ class DelegationSyncMixin:
         ...         super().__init__()
         ...         self.left = Eye("green")
         ...         self.right = Eye("brown")
-        ...         self.init_delegation_sync(eye_color=[self.left, self.right])
+        ...         self._init_delegation_sync(eye_color=[self.left, self.right])
         >>> person = Person()
         >>> person.eye_color        # pop element of sorted set and warn that not synced
         'green'
@@ -125,14 +125,14 @@ class AccessPassthrough:
     ...         super().__init__()
     ...         self.c1 = Model(a=1, b=2)
     ...         self.c2 = Model(a=3, b=4, c=5)
-    ...         self.init_delegation_sync(
+    ...         self._init_delegation_sync(
     ...             params_dict=[self.c1, self.c2],
     ...             param=[self.c1, self.c2],
     ...             set_value=[self.c1, self.c2],
     ...         )
     >>> mixture = Mixture()
     >>> mixture.params_dict["a"]    # pop element of sorted set and warn that not synced
-    1
+    3
     >>> mixture.params_dict["a"] = 99
     >>> mixture.c1.params_dict["a"] == mixture.c2.params_dict["a"] == 99
     True
@@ -166,7 +166,7 @@ class AccessPassthrough:
                 f"Value for key '{key}' not synchronized: {values}. Set this "
                 "value on each item to synchronize it."
             )
-        return values.pop()
+        return sorted(values).pop()
 
 
     def __setattr__(self, name, value):
@@ -493,7 +493,7 @@ def early_late_mapping(t_stage: int | str) -> str:
 
 
 def trigger(func: callable) -> callable:
-    """Method decorator that runs instance's ``trigger()`` when the method is called."""
+    """Decorator that runs instance's ``trigger_callbacks`` when called."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
@@ -608,39 +608,33 @@ def dict_to_func(mapping: dict[Any, Any]) -> callable:
     return callable_mapping
 
 
+def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
+    """Return the first element of a sequence and the sequence without it.
 
-if __name__ == "__main__":
+    Example:
 
-    class Number:
-        __hash__ = None
-        def __init__(self, value):
-            self.value = value
+    >>> popfirst([1, 2, 3])
+    (1, [2, 3])
+    """
+    return seq[0], seq[1:]
 
-    class Param:
-        def __init__(self, value, mapping):
-            self.value = value
-            self.mapping = mapping
-            self.number = Number(10 * value)
 
-    class Container(DelegationSyncMixin):
-        def __init__(self):
-            super().__init__()
-            self.one = Param(1, {"key": 1})
-            self.two = Param(2, {"key": 2})
-            self.init_delegation_sync(
-                value=[self.one, self.two],
-                mapping=[self.one, self.two],
-                number=[self.one, self.two],
-            )
+def flatten(mapping: dict) -> dict:
+    """Flatten a nested dictionary.
 
-    container = Container()
-    print(container.value)
-    print(container.mapping)
-    print(container.mapping["key"])
-    container.mapping["key"] = 4
-    print(container.one.mapping["key"])
-    print(container.two.mapping["key"])
-    print(container.number.value)
-    container.number.value = 99
-    print(container.one.number.value)
-    print(container.two.number.value)
+    Example:
+
+    >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
+    {'a_b': 1, 'a_c': 2, 'd': 3}
+    """
+    def _flatten(mapping, parent_key='', sep='_'):
+        items = []
+        for k, v in mapping.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(_flatten(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
+
+    return _flatten(mapping)
