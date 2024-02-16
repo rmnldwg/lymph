@@ -4,25 +4,26 @@ import itertools
 import warnings
 from functools import cached_property
 from itertools import product
-from typing import Any, Callable, Generator, Iterable, Iterator
+from typing import Any, Callable, Generator, Iterable, Iterator, Literal
 
 import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, graph, matrix, modalities
 from lymph.helper import (
-    DelegatorMixin,
+    DelegationSyncMixin,
     DiagnoseType,
     PatternType,
     dict_to_func,
     early_late_mapping,
+    flatten,
     smart_updating_dict_cached_property,
 )
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 
-class Unilateral(DelegatorMixin):
+class Unilateral(DelegationSyncMixin):
     """Class that models metastatic progression in a unilateral lymphatic system.
 
     It does this by representing it as a directed graph (DAG), which is stored in and
@@ -101,12 +102,12 @@ class Unilateral(DelegatorMixin):
 
         self._max_time = max_time
 
-        self.init_delegation(
-            graph=[
-                "is_binary", "is_trinary",
-                "get_state", "set_state", "state_list",
-                "lnls",
-            ],
+        self._init_delegation_sync(
+            is_binary=[self.graph],
+            is_trinary=[self.graph],
+            get_state=[self.graph],
+            set_state=[self.graph],
+            state_list=[self.graph],
         )
 
 
@@ -153,46 +154,55 @@ class Unilateral(DelegatorMixin):
 
     def get_params(
         self,
-        param: str | None = None,
-        as_dict: bool = False,
-        with_edges: bool = True,
-        with_dists: bool = True,
+        as_dict: bool = True,
+        as_flat: bool = True,
     ) -> float | Iterable[float] | dict[str, float]:
         """Get the parameters of the model.
 
-        If ``as_dict`` is ``True``, return a dictionary with the parameters as values.
-        Otherwise, return the value of the parameter ``param``.
-
-        Using the keyword arguments ``with_edges`` and ``with_dists``, one can control
-        whether the parameters of the edges and the distributions over diagnose times
-        should be included in the returned parameters. By default, both are included.
-
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.get_params`
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
-            :py:meth:`lymph.graph.Edge.get_params`
-            :py:meth:`lymph.models.Bilateral.get_params`
+        If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
+        ``as_flat`` is ``True``, the dictionary is flattened, i.e., all nested
+        dictionaries are merged into one, using :py:func:`~lymph.helper.flatten`.
         """
-        iterator = []
-        params = {}
+        params = self.graph.get_params(as_flat=as_flat)
+        params.update(self.diag_time_dists.get_params(as_flat=as_flat))
 
-        if with_edges:
-            iterator = itertools.chain(iterator, self.graph.edges.items())
-
-        if with_dists:
-            iterator = itertools.chain(iterator, self.diag_time_dists.items())
-
-        for edge_name_or_tstage, edge_or_dist in iterator:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=UserWarning)
-                edge_or_dist_params = edge_or_dist.get_params(as_dict=True)
-            for name, value in edge_or_dist_params.items():
-                params[f"{edge_name_or_tstage}_{name}"] = value
-
-        if param is not None:
-            return params[param]
+        if as_flat or not as_dict:
+            params = flatten(params)
 
         return params if as_dict else params.values()
+
+
+    def assign_edge_params(
+        self,
+        *args: float,
+        kind: Literal["growth", "tumor", "lnl"] | None = None,
+        **kwargs: float,
+    ) -> tuple[Iterator[float], dict[str, float]]:
+        """Assign the spread probabilities of the tumor edges.
+
+        If the params are provided via positional arguments, they are used in the order
+        of the edges as they are stored in the graph. Keyword arguments override the
+        positional arguments.
+
+        Via the ``kind`` parameter, one can specify whether the spread probabilities
+        should be set for the tumor edges (``kind="tumor"``), the LNL edges
+        (``kind="lnl"``), the growth edges (``kind="growth"``), or all (``kind=None``).
+        """
+        args = iter(args)
+        kind = "" if kind is None else f"{kind}_"
+        edges = getattr(self.graph, f"{kind}edges")
+
+        for (edge_name, edge), param_arg in zip(edges.items(), args):
+            edge.set_spread_prob(param_arg)
+            if (param_name := f"{edge_name}_spread") in kwargs:
+                edge.set_spread_prob(kwargs.pop(param_name))
+            elif (param_name := f"{edge_name}_growth") in kwargs:
+                edge.set_spread_prob(kwargs.pop(param_name))
+
+        return args, kwargs
+
+
+
 
 
     def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
@@ -241,8 +251,8 @@ class Unilateral(DelegatorMixin):
                 edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
             except ValueError as val_err:
                 raise KeyError(
-                    "Keyword arguments must be of the form '<edge_name>_<param_name>' "
-                    "or '<t_stage>_<param_name>' for the distributions over diagnose "
+                    "Keyword arguments must be of the form `<edge_name>_<param_name>` "
+                    "or `<t_stage>_<param_name>` for the distributions over diagnose "
                     "times."
                 ) from val_err
             if edge_name_or_tstage in edges_and_dists:

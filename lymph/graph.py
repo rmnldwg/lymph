@@ -18,7 +18,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import check_unique_names, comp_transition_tensor, trigger
+from lymph.helper import check_unique_names, comp_transition_tensor, flatten
 
 
 class AbstractNode:
@@ -260,7 +260,6 @@ class Edge:
         return self._parent
 
     @parent.setter
-    @trigger
     def parent(self, new_parent: Tumor | LymphNodeLevel) -> None:
         """Set the parent node of the edge."""
         if hasattr(self, '_parent'):
@@ -279,7 +278,6 @@ class Edge:
         return self._child
 
     @child.setter
-    @trigger
     def child(self, new_child: LymphNodeLevel) -> None:
         """Set the end (child) node of the edge."""
         if hasattr(self, '_child'):
@@ -323,7 +321,6 @@ class Edge:
             self._micro_mod = 1.
         return self._micro_mod
 
-    @trigger
     def set_micro_mod(self, new_micro_mod: float) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
         if self.child.is_binary:
@@ -347,7 +344,6 @@ class Edge:
             self._spread_prob = 0.
         return self._spread_prob
 
-    @trigger
     def set_spread_prob(self, new_spread_prob):
         """Set the spread probability of the edge."""
         if not 0. <= new_spread_prob <= 1.:
@@ -363,9 +359,9 @@ class Edge:
 
     def get_params(
         self,
-        param: str | None = None,
-        as_dict: bool = False,
-    ) -> float | Iterable[float] | dict[str, float]:
+        as_dict: bool = True,
+        **_kwargs,
+    ) -> Iterable[float] | dict[str, float]:
         """Return the value of the parameter ``param`` or all params in a dict.
 
         See Also:
@@ -376,14 +372,11 @@ class Edge:
         """
         if self.is_growth:
             params = {"growth": self.get_spread_prob()}
-            return params if as_dict else params[param]
+            return params if as_dict else params.values()
 
         params = {"spread": self.get_spread_prob()}
         if self.child.is_trinary and not self.is_tumor_spread:
             params["micro"] = self.get_micro_mod()
-
-        if param is not None:
-            return params[param]
 
         return params if as_dict else params.values()
 
@@ -763,3 +756,28 @@ class Representation:
         except AttributeError:
             self._gen_state_list()
             return self._state_list
+
+
+    def get_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of the edges in the graph.
+
+        If ``as_dict`` is ``False``, return an iterable of all parameter values. If
+        ``as_dict`` is ``True``, return a nested dictionary with the edges' names as
+        keys and the edges' parameter dicts as values.
+
+        If ``as_flat`` is ``True``, return a flat dictionary with the T-stages and
+        parameters as keys and values, respectively. This is the result of passing the
+        nested dictionary to :py:meth:`~lymph.helper.flatten`.
+        """
+        params = {}
+        for edge in self.edges.values():
+            params[edge.name] = edge.get_params(as_flat=as_flat)
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()

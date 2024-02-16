@@ -13,7 +13,7 @@ from typing import List, Tuple, Union
 
 import numpy as np
 
-from lymph.helper import AbstractLookupDict, trigger
+from lymph.helper import AbstractLookupDict
 
 
 class Modality:
@@ -151,7 +151,6 @@ class ModalitiesUserDict(AbstractLookupDict):
            [0., 1.],
            [0., 1.]])
     """
-    @trigger
     def __setitem__(self, name: str, value: ModalityDef, / ) -> None:
         """Set the modality of the lymph model."""
         # pylint: disable=unidiomatic-typecheck
@@ -209,7 +208,6 @@ class ModalitiesUserDict(AbstractLookupDict):
         super().__setitem__(name, value)
 
 
-    @trigger
     def __delitem__(self, key: str) -> None:
         return super().__delitem__(key)
 

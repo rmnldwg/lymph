@@ -20,7 +20,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import AbstractLookupDict, trigger
+from lymph.helper import AbstractLookupDict, flatten
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +170,8 @@ class Distribution:
 
     def get_params(
         self,
-        param: str | None = None,
-        as_dict: bool = False,
+        as_dict: bool = True,
+        **_kwargs,
     ) -> float | Iterable[float] | dict[str, float]:
         """If updateable, return the dist's ``param`` value or all params in a dict.
 
@@ -184,9 +184,6 @@ class Distribution:
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, returning empty dict")
             return {} if as_dict else None
-
-        if param is not None:
-            return self._kwargs[param]
 
         return self._kwargs if as_dict else self._kwargs.values()
 
@@ -252,7 +249,6 @@ class DistributionsUserDict(AbstractLookupDict):
     """Dictionary with added methods for storing distributions over diagnose times."""
     max_time: int
 
-    @trigger
     def __setitem__(
         self,
         t_stage: str,
@@ -266,7 +262,7 @@ class DistributionsUserDict(AbstractLookupDict):
 
         super().__setitem__(t_stage, distribution)
 
-    @trigger
+
     def __delitem__(self, t_stage: str) -> None:
         """Delete the distribution for a T-stage."""
         super().__delitem__(t_stage)
@@ -280,24 +276,19 @@ class DistributionsUserDict(AbstractLookupDict):
 
     def get_params(
         self,
-        param: str | None = None,
-        as_dict: bool = False,
+        as_dict: bool = True,
+        as_flat: bool = True,
     ) -> float | Iterable[float] | dict[str, float]:
-        """Return the parameter(s) of parametrized distributions.
+        """Return the parameters of parametrized distributions.
 
-        If ``param`` is provided, return the value of that particular parameter. Note
-        that the parameter name must be of the form ``{t_stage}_{param}``, where
-        ``t_stage`` is the T-stage and ``param`` is the name of the parameter.
+        If ``as_dict`` is ``False``, return an iterable of all parameter values. If
+        ``as_dict`` is ``True``, return a nested dictionary with the T-stages as keys
+        and the distributions' parameter dicts as values (essentially what is returned
+        by :py:meth:`~lymph.diagnose_times.Distribution.get_params`).
 
-        If ``param`` is ``None`` and ``as_dict`` is ``False``, return an iterable of
-        all parameter values. If ``as_dict`` is ``True``, return a dictionary with the
-        parameter names as keys and the parameter values as values.
-
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.get_params`
-            :py:meth:`lymph.graph.Edge.get_params`
-            :py:meth:`lymph.models.Unilateral.get_params`
-            :py:meth:`lymph.models.Bilateral.get_params`
+        If ``as_flat`` is ``True``, return a flat dictionary with the T-stages and
+        parameters as keys and values, respectively. This is the result of passing the
+        nested dictionary to :py:meth:`~lymph.helper.flatten`.
         """
         params = {}
 
@@ -305,16 +296,14 @@ class DistributionsUserDict(AbstractLookupDict):
             if not distribution.is_updateable:
                 continue
 
-            for name, value in distribution.get_params(as_dict=True).items():
-                params[f"{t_stage}_{name}"] = value
+            params[t_stage] = distribution.get_params(as_flat=as_flat)
 
-        if param is not None:
-            return params[param]
+        if as_flat or not as_dict:
+            params = flatten(params)
 
         return params if as_dict else params.values()
 
 
-    @trigger
     def set_params(self, **kwargs) -> None:
         """Update all parametrized distributions via keyword arguments.
 

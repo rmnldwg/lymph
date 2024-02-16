@@ -7,121 +7,18 @@ from typing import Any, Iterable, Iterator
 import numpy as np
 import pandas as pd
 
-from lymph import graph, matrix, modalities, models
+from lymph import matrix, models
 from lymph.helper import (
-    AbstractLookupDict,
     DelegationSyncMixin,
     DiagnoseType,
     PatternType,
     early_late_mapping,
+    flatten,
 )
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
-
-
-def create_property_sync_callback(
-    names: list[str],
-    this: graph.Edge,
-    other: graph.Edge,
-) -> callable:
-    """Return func to sync property values whose name is in ``names`` btw two edges.
-
-    The returned function is meant to be added to the list of callbacks of the
-    :py:class:`Edge` class, such that two edges in a mirrored pair of graphs are kept
-    in sync.
-    """
-    def sync():
-        # We must set the value of `this` property via the private name, otherwise
-        # we would trigger the setter's callbacks and may end up in an infinite loop.
-        for name in names:
-            private_name = f"_{name}"
-            setattr(other, private_name, getattr(this, name))
-
-    logger.debug(f"Created sync callback for properties {names} of {this.name} edge.")
-    return sync
-
-
-def init_edge_sync(
-    property_names: list[str],
-    this_edges: list[graph.Edge],
-    other_edges: list[graph.Edge],
-) -> None:
-    """Initialize the callbacks to sync properties btw. Edges.
-
-    This is a two-way sync, i.e. the properties of both ``this_edges`` and
-    ``other_edges`` are kept in sync. The ``property_names`` is a list of property
-    names that should be synced.
-
-    Implementing this as a separate method allows a user in theory to initialize
-    an arbitrary kind of symmetry between the two sides of the neck.
-    """
-    this_edge_names = [e.name for e in this_edges]
-    other_edge_names = [e.name for e in other_edges]
-
-    for edge_name in set(this_edge_names).intersection(other_edge_names):
-        this_edge = this_edges[this_edge_names.index(edge_name)]
-        other_edge = other_edges[other_edge_names.index(edge_name)]
-
-        this_edge.trigger_callbacks.append(
-            create_property_sync_callback(
-                names=property_names,
-                this=this_edge,
-                other=other_edge,
-            )
-        )
-        other_edge.trigger_callbacks.append(
-            create_property_sync_callback(
-                names=property_names,
-                this=other_edge,
-                other=this_edge,
-            )
-        )
-
-
-def create_lookupdict_sync_callback(
-    this: AbstractLookupDict,
-    other: AbstractLookupDict,
-) -> callable:
-    """Return func to sync content of ``this`` lookup dict to ``other``.
-
-    The returned function is meant to be added to the list of callbacks of the lookup
-    dict class, such that two dicts in a mirrored pair of graphs are kept in sync.
-    """
-    def sync():
-        other.clear_without_trigger()
-        other.update_without_trigger(this)
-
-    logger.debug(f"Created sync callback from {this} lookup dict to {other}.")
-    return sync
-
-
-def init_dict_sync(
-    this: AbstractLookupDict,
-    other: AbstractLookupDict,
-) -> None:
-    """Initialize the callbacks to sync two lookup dicts.
-
-    This is a two-way sync, i.e. the dicts are kept in sync in both directions.
-    """
-    this.trigger_callbacks.append(
-        create_lookupdict_sync_callback(this=this, other=other)
-    )
-    other.trigger_callbacks.append(
-        create_lookupdict_sync_callback(this=other, other=this)
-    )
-
-def init_dict_sync2(
-    this: AbstractLookupDict,
-    other: AbstractLookupDict,
-) -> None:
-    """Add callback to ``this`` to sync with ``other``."""
-    def sync():
-        other.clear()
-        other.update(this)
-
-    this.trigger_callbacks.append(sync)
 
 
 class Bilateral(DelegationSyncMixin):
@@ -141,7 +38,7 @@ class Bilateral(DelegationSyncMixin):
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        is_symmetric: dict[str, bool] | None = None,
+        modalities_symmetric: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
         ipsilateral_kwargs: dict[str, Any] | None = None,
         contralateral_kwargs: dict[str, Any] | None = None,
@@ -154,20 +51,11 @@ class Bilateral(DelegationSyncMixin):
         which in turn pass it to the :py:class:`~lymph.graph.Representation` class that
         stores the graph.
 
-        The ``is_symmetric`` dictionary defines which characteristics of the bilateral
-        model should be symmetric. Valid keys are:
-
-        - ``"modalities"``:
-            Whether the diagnostic modalities of the two neck sides are symmetric
-            (default: ``True``).
-        - ``"tumor_spread"``:
-            Whether the spread probabilities from the tumor(s) to the LNLs are
-            symmetric (default: ``False``). If this is set to ``True`` but the graphs
-            are asymmetric, a warning is issued.
-        - ``"lnl_spread"``:
-            Whether the spread probabilities between the LNLs are symmetric
-            (default: ``True`` if the graphs are symmetric, otherwise ``False``). If
-            this is set to ``True`` but the graphs are asymmetric, a warning is issued.
+        With the boolean ``modalities_symmetric`` the user can specify whether the
+        diagnostic modalities of the ``ipsi`` and ``contra`` side are symmetric. If
+        they are, instances of this class will have a ``modalities`` attribute that
+        will synchronize the diagnostic modalities of the two sides of the neck when
+        setting it or its keys.
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
         while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
@@ -177,20 +65,19 @@ class Bilateral(DelegationSyncMixin):
         """
         super().__init__()
 
-        self.init_models(
+        self._init_models(
             graph_dict=graph_dict,
-            is_symmetric=is_symmetric,
             unilateral_kwargs=unilateral_kwargs,
             ipsilateral_kwargs=ipsilateral_kwargs,
             contralateral_kwargs=contralateral_kwargs,
         )
 
-        if self.is_symmetric["modalities"]:
+        if modalities_symmetric:
             delegation_sync_kwargs = {"modalities": [self.ipsi, self.contra]}
         else:
             delegation_sync_kwargs = {}
 
-        self.init_delegation_sync(
+        self._init_delegation_sync(
             max_time=[self.ipsi, self.contra],
             t_stages=[self.ipsi, self.contra],
             diag_time_dists=[self.ipsi, self.contra],
@@ -200,10 +87,9 @@ class Bilateral(DelegationSyncMixin):
         )
 
 
-    def init_models(
+    def _init_models(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        is_symmetric: dict[str, bool] | None = None,
         unilateral_kwargs: dict[str, Any] | None = None,
         ipsilateral_kwargs: dict[str, Any] | None = None,
         contralateral_kwargs: dict[str, Any] | None = None,
@@ -223,64 +109,6 @@ class Bilateral(DelegationSyncMixin):
         self.ipsi   = models.Unilateral(**ipsi_kwargs)
         self.contra = models.Unilateral(**contra_kwargs)
 
-        self.is_symmetric = {
-            "modalities": True,
-            "tumor_spread": False,
-            "lnl_spread": ipsi_kwargs == contra_kwargs,
-        }
-        try:
-            self.is_symmetric.update(is_symmetric or {})
-        except TypeError as type_err:
-            raise TypeError(
-                "The `is_symmetric` argument must be a dictionary with possible keys "
-                f"{list(self.is_symmetric.keys())} and boolean values."
-            ) from type_err
-
-        if (
-            (self.is_symmetric["tumor_spread"] or self.is_symmetric["lnl_spread"])
-            and ipsi_kwargs != contra_kwargs
-        ):
-            warnings.warn(
-                "The graphs are asymmetric. Syncing spread probabilities "
-                "may not have intended effect."
-            )
-
-
-    def init_synchronization(self) -> None:
-        """Initialize the synchronization of edges, modalities, and diagnose times."""
-        # Sync spread probabilities
-        property_names = ["spread_prob", "micro_mod"] if self.ipsi.is_trinary else ["spread_prob"]
-        ipsi_tumor_edges = list(self.ipsi.graph.tumor_edges.values())
-        ipsi_lnl_edges = list(self.ipsi.graph.lnl_edges.values())
-        ipsi_edges = (
-            (ipsi_tumor_edges if self.is_symmetric["tumor_spread"] else [])
-            + (ipsi_lnl_edges if self.is_symmetric["lnl_spread"] else [])
-        )
-        contra_tumor_edges = list(self.contra.graph.tumor_edges.values())
-        contra_lnl_edges = list(self.contra.graph.lnl_edges.values())
-        contra_edges = (
-            (contra_tumor_edges if self.is_symmetric["tumor_spread"] else [])
-            + (contra_lnl_edges if self.is_symmetric["lnl_spread"] else [])
-        )
-        init_edge_sync(
-            property_names=property_names,
-            this_edges=ipsi_edges,
-            other_edges=contra_edges,
-        )
-
-        # Sync modalities
-        if self.is_symmetric["modalities"]:
-            init_dict_sync2(
-                this=self.ipsi.modalities,
-                other=self.contra.modalities,
-            )
-
-        # Sync diagnose time distributions
-        init_dict_sync(
-            this=self.ipsi.diag_time_dists,
-            other=self.contra.diag_time_dists,
-        )
-
 
     @classmethod
     def binary(cls, *args, **kwargs) -> Bilateral:
@@ -299,13 +127,12 @@ class Bilateral(DelegationSyncMixin):
 
     def get_params(
         self,
-        param: str | None = None,
-        as_dict: bool = False,
-        nested: bool = False,
-    ) -> float | Iterable[float] | dict[str, float] | dict[str, dict[str, float]]:
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
         """Return the parameters of the model.
 
-        If ``nested`` is ``True``, the parameters of the two sides of the neck are
+        If ``as_flat`` is ``False``, the parameters of the two sides of the neck are
         returned as a nested dictionary in addition to one dictionary storing the
         parameters of the parametric distributions for marginalizing over diagnose
         times. Otherwise, the parameters are returned as a flat dictionary, with the
@@ -327,23 +154,18 @@ class Bilateral(DelegationSyncMixin):
             :py:meth:`lymph.graph.Edge.get_params`
             :py:meth:`lymph.models.Unilateral.get_params`
         """
-        ipsi_params = self.ipsi.get_params(as_dict=True, with_dists=False)
-        contra_params = self.contra.get_params(as_dict=True, with_dists=False)
-        dist_params = self.ipsi.get_params(as_dict=True, with_edges=False)
+        ipsi_params = self.ipsi.graph.get_params(as_flat=as_flat)
+        contra_params = self.contra.graph.get_params(as_flat=as_flat)
+        dist_params = self.diag_time_dists.get_params(as_flat=as_flat)
 
-        if nested and as_dict and param is None:
-            return {
-                "ipsi": ipsi_params,
-                "contra": contra_params,
-                "diag_time_dists": dist_params,
-            }
+        params = {
+            "ipsi": ipsi_params,
+            "contra": contra_params,
+            **dist_params,
+        }
 
-        params = {f"ipsi_{k}": v for k, v in ipsi_params.items()}
-        params.update({f"contra_{k}": v for k, v in contra_params.items()})
-        params.update(dist_params)
-
-        if param is not None:
-            return params[param]
+        if as_flat or not as_dict:
+            params = flatten(params)
 
         return params if as_dict else params.values()
 
@@ -358,9 +180,7 @@ class Bilateral(DelegationSyncMixin):
         This works almost exactly as the unilateral model's
         :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
         allows the user to set the parameters of individual sides of the neck by
-        prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``. This
-        is necessary for parameters that are not symmetric between the two sides of the
-        neck.
+        prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``.
 
         Anything not prefixed by ``"ipsi_"`` or ``"contra_"`` is passed to both sides
         of the neck.
@@ -393,34 +213,6 @@ class Bilateral(DelegationSyncMixin):
             *remaining_args, **contra_kwargs, **general_kwargs
         )
         return remaining_args, {"ipsi": rem_ipsi_kwargs, "contra": rem_contra_kwargs}
-
-
-    @property
-    def modalities(self) -> modalities.ModalitiesUserDict:
-        """Return the set diagnostic modalities of the model.
-
-        See Also:
-            :py:attr:`lymph.models.Unilateral.modalities`
-                The corresponding unilateral attribute.
-            :py:class:`~lymph.modalities.ModalitiesUserDict`
-                The implementation of the descriptor class.
-        """
-        if not self.is_symmetric["modalities"]:
-            raise AttributeError(
-                "The modalities are not symmetric. Please access them via the "
-                "`ipsi` or `contra` attributes."
-            )
-        return self.ipsi.modalities
-
-    @modalities.setter
-    def modalities(self, new_modalities) -> None:
-        """Set the diagnostic modalities of the model."""
-        if not self.is_symmetric["modalities"]:
-            raise AttributeError(
-                "The modalities are not symmetric. Please set them via the "
-                "`ipsi` or `contra` attributes."
-            )
-        self.ipsi.modalities = new_modalities
 
 
     def load_patient_data(

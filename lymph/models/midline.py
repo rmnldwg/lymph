@@ -11,7 +11,7 @@ import pandas as pd
 from lymph import graph, modalities, models
 from lymph.helper import (
     AbstractLookupDict,
-    DelegatorMixin,
+    DelegationSyncMixin,
     DiagnoseType,
     PatternType,
     early_late_mapping,
@@ -89,7 +89,7 @@ def init_dict_sync(
     this.trigger_callbacks.append(sync)
 
 
-class Midline(DelegatorMixin):
+class Midline(DelegationSyncMixin):
     """Models metastatic progression bilaterally with tumor lateralization.
 
     Model a bilateral lymphatic system where an additional risk factor can

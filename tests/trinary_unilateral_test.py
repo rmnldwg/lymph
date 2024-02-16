@@ -1,11 +1,11 @@
 """Test the trinary unilateral system."""
 import unittest
 
+import fixtures
 import numpy as np
 import pandas as pd
 
 from lymph.graph import LymphNodeLevel
-from tests import fixtures
 
 
 class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
@@ -98,6 +98,29 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
             num_patients = (self.model.patient_data["_model", "#", "t_stage"] == t_stage).sum()
             diagnose_matrix = self.model.diagnose_matrices[t_stage]
             self.assertEqual(diagnose_matrix.shape, (3 ** num_lnls, num_patients))
+
+
+class TrinaryParamAssignmentTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+    """Test the assignment of parameters in a trinary model."""
+
+    def setUp(self):
+        """Load patient data."""
+        super().setUp()
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.assign_params(**self.create_random_params())
+
+    def test_edge_params(self):
+        """Test the assignment of edge parameters."""
+        params_to_set = {}
+        for edge_name, edge in self.model.graph.edges.items():
+            params = edge.get_params(as_dict=True)
+            for param in params:
+                params_to_set[f"{edge_name}_{param}"] = self.rng.random()
+
+        self.model.assign_edge_params(**params_to_set)
+        retrieved_params = self.model.get_params(as_dict=True)
+        for param in params_to_set:
+            self.assertEqual(params_to_set[param], retrieved_params[param])
 
 
 class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
