@@ -20,7 +20,8 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import AbstractLookupDict, flatten
+from lymph.helper import AbstractLookupDict, flatten, popfirst, set_params_for
+from lymph.types import SetParamsReturnType
 
 logger = logging.getLogger(__name__)
 
@@ -156,9 +157,7 @@ class Distribution:
     def distribution(self) -> np.ndarray:
         """Return the probability mass function of the distribution if it is frozen."""
         if not hasattr(self, "_frozen") or self._frozen is None:
-            self._frozen = self.normalize(
-                self._func(self.support, **self._kwargs)
-            )
+            self._frozen = self.normalize(self._func(self.support, **self._kwargs))
         return self._frozen
 
 
@@ -188,44 +187,35 @@ class Distribution:
         return self._kwargs if as_dict else self._kwargs.values()
 
 
-    def set_params(self, **kwargs) -> None:
+    def set_params(self, *args: float, **kwargs: float) -> SetParamsReturnType:
         """Update distribution by setting its parameters and storing the frozen PMF.
 
-        To work during inference using e.g. MCMC sampling, it needs to throw a
-        ``ValueError`` if the parameters are invalid. To this end, it expects the
-        underlying function to raise a ``ValueError`` if one of the parameters is
-        invalid. If the parameters are valid, the frozen PMF is stored and can be
-        retrieved via the :py:meth:`distribution` property.
+        Parameters can be set via positional arguments or keyword arguments. Keyword
+        arguments override positional arguments. If the distribution is not updateable,
+        a warning is issued and all args and kwargs are returned.
 
-        Note:
-            Parameters whose values are ``None`` are ignored.
+        If any of the parameters is invalid, a ``ValueError`` is raised and the original
+        parameters are restored.
 
-        See Also:
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.set_params`
-            :py:meth:`lymph.graph.Edge.set_params`
+        Unused args and kwargs are returned as well.
         """
-        params_to_set = {}
-        for name, value in kwargs.items():
-            if name not in self._kwargs or value is None:
-                continue
-            params_to_set[name] = value
+        if not self.is_updateable:
+            warnings.warn("Distribution is not updateable, ignoring parameters")
+            return args, kwargs
 
-        if self.is_updateable:
-            new_kwargs = self._kwargs.copy()
-            new_kwargs.update(params_to_set)
+        old_kwargs = self._kwargs.copy()
 
-            try:
-                self._frozen = self.normalize(
-                    self._func(self.support, **new_kwargs)
-                )
-            except ValueError as val_err:
-                raise ValueError(
-                    "Invalid parameter(s) provided to distribution over diagnose times"
-                ) from val_err
+        for name, value in self._kwargs.items():
+            first, args = popfirst(args)
+            self._kwargs[name] = first or kwargs.pop(name, value)
 
-            self._kwargs = new_kwargs
-        else:
-            warnings.warn("Distribution is not updateable, skipping...")
+        try:
+            _ = self.distribution
+        except ValueError as val_err:
+            self._kwargs = old_kwargs
+            raise ValueError("Invalid params provided to distribution") from val_err
+
+        return args, kwargs
 
 
     def draw_diag_times(
@@ -304,30 +294,17 @@ class DistributionsUserDict(AbstractLookupDict):
         return params if as_dict else params.values()
 
 
-    def set_params(self, **kwargs) -> None:
-        """Update all parametrized distributions via keyword arguments.
+    def set_params(self, *args: float, **kwargs: float) -> SetParamsReturnType:
+        """Update all parametrized distributions.
 
-        The keys must be of the form ``{t_stage}_{param}``, where ``t_stage`` is the
-        T-stage and ``param`` is the name of the parameter to update. The values are
-        the new parameter values.
+        When the new parameters are provided as positional arguments, they are used up
+        in the order of the T-stages.
 
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.set_params`
-            :py:meth:`lymph.graph.Edge.set_params`
+        If the params are provided as keyword arguments, the keys must be of the form
+        ``{t_stage}_{param}``, where ``t_stage`` is the T-stage and ``param`` is the
+        name of the parameter to update. Keyword arguments override positional ones.
         """
-        nested_params = {
-            t_stage: {} for t_stage, dist in self.items()
-            if dist.is_updateable
-        }
-        for key, value in kwargs.items():
-            t_stage, param = key.split("_", maxsplit=1)
-            if t_stage not in nested_params:
-                logger.debug(
-                    f"Skipping parameter {param} for T-stage {t_stage} "
-                    "because it doesn't have a parametrized distribution"
-                )
-                continue
-            nested_params[t_stage][param] = value
+        return set_params_for(self, *args, **kwargs)
 
 
     def draw(

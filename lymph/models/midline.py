@@ -12,10 +12,9 @@ from lymph import graph, modalities, models
 from lymph.helper import (
     AbstractLookupDict,
     DelegationSyncMixin,
-    DiagnoseType,
-    PatternType,
     early_late_mapping,
 )
+from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -304,13 +303,13 @@ class Midline(DelegationSyncMixin):
                     else:
                         general_kwargs[key] = value
 
-            remaining_args, remainings_kwargs = self.ext.ipsi.assign_params(
+            remaining_args, remainings_kwargs = self.ext.ipsi.set_params(
                 *new_params_args, **ipsi_kwargs, **general_kwargs
             )
-            remaining_args, remainings_kwargs = self.noext.contra.assign_params(
+            remaining_args, remainings_kwargs = self.noext.contra.set_params(
                 *remaining_args, **noext_contra_kwargs, **remainings_kwargs, **general_kwargs
             )
-            remaining_args, remainings_kwargs = self.ext.contra.assign_params(
+            remaining_args, remainings_kwargs = self.ext.contra.set_params(
                 *remaining_args, **ext_contra_kwargs, **remainings_kwargs, **general_kwargs
             )
             if self.central_enabled:

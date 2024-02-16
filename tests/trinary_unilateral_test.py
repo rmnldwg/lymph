@@ -32,7 +32,7 @@ class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
     def setUp(self):
         super().setUp()
         params_to_set = self.create_random_params()
-        self.model.assign_params(**params_to_set)
+        self.model.set_params(**params_to_set)
 
     def test_edge_transition_tensors(self) -> None:
         """Test the tensors associated with each edge.
@@ -107,7 +107,7 @@ class TrinaryParamAssignmentTestCase(fixtures.TrinaryFixtureMixin, unittest.Test
         """Load patient data."""
         super().setUp()
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def test_edge_params(self):
         """Test the assignment of edge parameters."""
@@ -131,7 +131,7 @@ class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase)
         super().setUp()
         self.model.modalities = fixtures.MODALITIES
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_log_likelihood_smaller_zero(self):

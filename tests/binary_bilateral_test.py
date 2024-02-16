@@ -55,7 +55,7 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         rand_ipsi_param = self.rng.choice(list(
             self.model.ipsi.get_params(as_dict=True).keys()
         ))
-        self.model.assign_params(**{f"ipsi_{rand_ipsi_param}": self.rng.random()})
+        self.model.set_params(**{f"ipsi_{rand_ipsi_param}": self.rng.random()})
         self.assertFalse(np.all(
             ipsi_trans_mat == self.model.ipsi.transition_matrix()
         ))
@@ -200,14 +200,14 @@ class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCas
         contra_dict = self.model.contra.get_params(as_dict=True)
         self.assertEqual(ipsi_dict.keys(), contra_dict.keys())
 
-    def test_assign_params_as_args(self):
+    def test_set_params_as_args(self):
         """Test that the parameters can be assigned."""
         ipsi_args = self.rng.uniform(size=len(self.model.ipsi.get_params()))
         contra_args = self.rng.uniform(size=len(self.model.contra.get_params()))
         none_args = [None] * len(ipsi_args)
 
         # Assigning only the ipsi side
-        self.model.assign_params(*ipsi_args, *none_args)
+        self.model.set_params(*ipsi_args, *none_args)
         self.assertTrue(np.allclose(ipsi_args, list(self.model.ipsi.get_params())))
         self.assertEqual(
             list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
@@ -215,7 +215,7 @@ class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCas
         )
 
         # Assigning only the contra side
-        self.model.assign_params(*none_args, *contra_args)
+        self.model.set_params(*none_args, *contra_args)
         self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
         self.assertEqual(
             list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
@@ -223,7 +223,7 @@ class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCas
         )
 
         # Assigning both sides
-        self.model.assign_params(*ipsi_args, *contra_args)
+        self.model.set_params(*ipsi_args, *contra_args)
         self.assertTrue(np.allclose(ipsi_args[:-1], list(self.model.ipsi.get_params())[:-1]))
         self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
         self.assertEqual(
@@ -308,7 +308,7 @@ class DataGenerationTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         super().setUp()
         self.model.modalities = fixtures.MODALITIES
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def test_generate_data(self):
         """Check bilateral data generation."""

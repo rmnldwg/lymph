@@ -12,13 +12,12 @@ import pandas as pd
 from lymph import diagnose_times, graph, matrix, modalities
 from lymph.helper import (
     DelegationSyncMixin,
-    DiagnoseType,
-    PatternType,
     dict_to_func,
     early_late_mapping,
     flatten,
     smart_updating_dict_cached_property,
 )
+from lymph.types import DiagnoseType, PatternType, SetParamsReturnType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -263,57 +262,19 @@ class Unilateral(DelegationSyncMixin):
         return new_params_kwargs
 
 
-    def assign_params(
-        self,
-        *new_params_args,
-        **new_params_kwargs,
-    ) -> tuple[Iterator[float], dict[str, float]]:
+    def set_params(self, *args, **kwargs) -> SetParamsReturnType:
         """Assign new parameters to the model.
 
-        The parameters can either be provided with positional arguments or as
-        keyword arguments. The positional arguments must be in the following order:
+        The parameters can be provided either via positional arguments or via keyword
+        arguments. The positional arguments are used up one by one first by the
+        :py:meth:`lymph.graph.set_params` method and then by the
+        :py:meth:`lymph.diag_time_dists.set_params` method.
 
-        1. All spread probs from tumor to the LNLs
-        2. The parameters of arcs from LNL to LNL. For each arc, the parameters are set
-           in the following order:
-
-            1. The spread probability (or growth probability, if it's a growth edge)
-            2. The microscopic involvement probability, if the model is trinary
-
-        3. The parameters for the marginalizing distributions over diagnose times. Note
-           that a distribution may take more than one parameter. So, if there are e.g.
-           two T-stages with distributions over diagnose times that take two parameters
-           each, this step requires and consumes four arguments.
-
-        If the arguments are not used up, the remaining ones are given back as the first
-        element of the returned tuple.
-
-        When providing keyword arguments, the order of the keyword arguments obviously
-        does not matter. If one wants to set the microscopic or growth parameters
-        globally for all LNLs, the keyword arguments ``micro`` and ``growth`` can
-        be used for that.
-
-        As with the positional arguments, the dictionary of unused keyword arguments is
-        returned as the second element of the tuple.
-
-        Note:
-            Providing positional arguments does not allow using the global
-            parameters ``micro`` and ``growth``.
-
-            However, when assigning them via keyword arguments, the global parameters
-            are set first, while still allowing to override them for individual edges.
-
-        Since the distributions over diagnose times may take more than one parameter,
-        they can be provided as keyword arguments by appending their name to the
-        corresponding T-stage, separated by an underscore. For example, a parameter
-        ``foo`` for the T-stage ``early`` is set via the keyword argument ``early_foo``.
-
-        Note:
-            When using keyword arguments to set the parameters of the distributions
-            over diagnose times, it is not possible to just use the name of the
-            T-stage, even when the distribution only takes one parameter.
-
-        The keyword arguments override the positional arguments, when both are provided.
+        The keyword arguments can be of the format ``"<edge_name>_<param_name>"`` or
+        ``"<t_stage>_<param_name>"`` for the distributions over diagnose times. If only
+        a ``"<param_name>"`` is provided, it is assumed to be a global parameter and is
+        sent to all edges or distributions. But the more specific keyword arguments
+        override the global ones, which in turn override the positional arguments.
 
         Example:
 
@@ -327,35 +288,26 @@ class Unilateral(DelegationSyncMixin):
         ...     is_micro_mod_shared=True,
         ...     is_growth_shared=True,
         ... )
-        >>> args, kwargs = model.assign_params(
-        ...     0.7, 0.5, 0.3, 0.2, 0.1, 0.4, 0.99, A_to_B_param="not_used"
-        ... )
-        >>> next(args)
-        0.99
-        >>> kwargs
-        {'A_to_B_param': 'not_used'}
+        >>> model.set_params(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.99, AtoB_param="not_used")
+        ((0.99,), {'AtoB_param': 'not_used'})
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
-        {'T_to_II_spread': 0.7,
-         'T_to_III_spread': 0.5,
+        {'TtoII_spread': 0.1,
+         'TtoIII_spread': 0.2,
          'II_growth': 0.3,
-         'II_to_III_spread': 0.2,
-         'II_to_III_micro': 0.1,
-         'III_growth': 0.4}
-        >>> _ = model.assign_params(growth=0.123)
+         'IItoIII_spread': 0.4,
+         'IItoIII_micro': 0.5,
+         'III_growth': 0.6}
+        >>> _ = model.set_params(growth=0.123)
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
-        {'T_to_II_spread': 0.7,
-         'T_to_III_spread': 0.5,
+        {'TtoII_spread': 0.1,
+         'TtoIII_spread': 0.2,
          'II_growth': 0.123,
-         'II_to_III_spread': 0.2,
-         'II_to_III_micro': 0.1,
+         'IItoIII_spread': 0.4,
+         'IItoIII_micro': 0.5,
          'III_growth': 0.123}
         """
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=UserWarning)
-            remaining_args = self._assign_via_args(iter(new_params_args))
-            remainig_kwargs = self._assign_via_kwargs(new_params_kwargs)
-
-        return remaining_args, remainig_kwargs
+        args, kwargs = self.graph.set_params(*args, **kwargs)
+        return self.diag_time_dists.set_params(*args, **kwargs)
 
 
     def comp_transition_prob(
@@ -473,7 +425,7 @@ class Unilateral(DelegationSyncMixin):
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
         ... })
-        >>> model.assign_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
+        >>> model.set_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
         (..., {})
         >>> model.transition_matrix()
         array([[0.21, 0.09, 0.49, 0.21],
@@ -795,7 +747,7 @@ class Unilateral(DelegationSyncMixin):
 
         The parameters of the model can be set via ``given_param_args`` and
         ``given_param_kwargs``. Both arguments are used to call the
-        :py:meth:`~assign_params` method. If the parameters are not provided, the
+        :py:meth:`Unilateral.set_params` method. If the parameters are not provided, the
         previously assigned parameters are used.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
@@ -811,7 +763,7 @@ class Unilateral(DelegationSyncMixin):
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            self.assign_params(*given_param_args, **given_param_kwargs)
+            _ = self.set_params(*given_param_args, **given_param_kwargs)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -883,7 +835,7 @@ class Unilateral(DelegationSyncMixin):
         # here if the parameters are invalid, since we want to know if the user
         # provided invalid parameters. In the likelihood, we rather return a zero
         # likelihood to tell the inference algorithm that the parameters are invalid.
-        self.assign_params(*given_param_args, **given_param_kwargs)
+        self.set_params(*given_param_args, **given_param_kwargs)
 
         if given_diagnoses is None:
             given_diagnoses = {}

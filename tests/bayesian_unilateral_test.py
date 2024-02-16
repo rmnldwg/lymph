@@ -12,7 +12,7 @@ class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unitt
 
     def setUp(self):
         super().setUp()
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.model.modalities = fixtures.MODALITIES
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 

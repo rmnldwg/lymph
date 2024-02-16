@@ -9,17 +9,10 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 from cachetools import LRUCache
-from pandas._libs.missing import NAType
 
-PatternType = dict[str, bool | NAType | None]
-"""Type alias for an involvement pattern."""
-
-DiagnoseType = dict[str, PatternType]
-"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
+from lymph.types import HasSetParams, SetParamsReturnType
 
 logger = logging.getLogger(__name__)
-
-BASIC_TYPES = (int, float, str, bool, bytes, type(None))
 
 
 class DelegationSyncMixin:
@@ -611,15 +604,21 @@ def dict_to_func(mapping: dict[Any, Any]) -> callable:
 def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
     """Return the first element of a sequence and the sequence without it.
 
-    Example:
+    If the sequence is empty, the first element will be ``None`` and the second just
+    the empty sequence. Example:
 
     >>> popfirst([1, 2, 3])
     (1, [2, 3])
+    >>> popfirst([])
+    (None, [])
     """
-    return seq[0], seq[1:]
+    try:
+        return seq[0], seq[1:]
+    except IndexError:
+        return None, seq
 
 
-def flatten(mapping: dict) -> dict:
+def flatten(mapping, parent_key='', sep='_') -> dict:
     """Flatten a nested dictionary.
 
     Example:
@@ -627,14 +626,64 @@ def flatten(mapping: dict) -> dict:
     >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
     {'a_b': 1, 'a_c': 2, 'd': 3}
     """
-    def _flatten(mapping, parent_key='', sep='_'):
-        items = []
-        for k, v in mapping.items():
-            new_key = f"{parent_key}{sep}{k}" if parent_key else k
-            if isinstance(v, dict):
-                items.extend(_flatten(v, new_key, sep=sep).items())
-            else:
-                items.append((new_key, v))
-        return dict(items)
+    items = []
+    for k, v in mapping.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
-    return _flatten(mapping)
+
+def unflatten_and_split(
+    mapping: dict,
+    expected_keys: list[str],
+    sep: str = "_",
+) -> tuple[dict, dict]:
+    """Unflatten the part of a dict containing ``expected_keys`` and return the rest.
+
+    Example:
+
+    >>> unflatten_and_split({'a_b': 1, 'a_c_x': 2, 'd_y': 3}, expected_keys=['a'])
+    ({'a': {'b': 1, 'c_x': 2}}, {'d_y': 3})
+    """
+    split_kwargs, global_kwargs = {}, {}
+    for key, value in mapping.items():
+        left, _, right = key.partition(sep)
+        if left not in expected_keys:
+            global_kwargs[key] = value
+            continue
+
+        tmp = split_kwargs
+        if left not in tmp:
+            tmp[left] = {}
+
+        tmp = tmp[left]
+        tmp[right] = value
+
+    return split_kwargs, global_kwargs
+
+
+def set_params_for(
+    objects: dict[str, HasSetParams],
+    *args: float,
+    **kwargs: float,
+) -> SetParamsReturnType:
+    """Pass arguments to each ``set_params()`` method of the ``objects``."""
+    kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=objects.keys())
+    rem_global_keys = global_kwargs.copy().keys()
+
+    for key, obj in objects.items():
+        obj_kwargs = kwargs.get(key, global_kwargs.copy())
+        args, obj_kwargs = obj.set_params(*args, **obj_kwargs)
+
+        rem_global_keys &= obj_kwargs.keys()
+        for global_key in global_kwargs:
+            if global_key in obj_kwargs:
+                del obj_kwargs[global_key]
+
+        kwargs[key] = obj_kwargs
+
+    kwargs.update({key: global_kwargs[key] for key in rem_global_keys})
+    return args, flatten(kwargs)

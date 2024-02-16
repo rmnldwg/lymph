@@ -8,13 +8,8 @@ import numpy as np
 import pandas as pd
 
 from lymph import matrix, models
-from lymph.helper import (
-    DelegationSyncMixin,
-    DiagnoseType,
-    PatternType,
-    early_late_mapping,
-    flatten,
-)
+from lymph.helper import DelegationSyncMixin, early_late_mapping, flatten
+from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -206,10 +201,10 @@ class Bilateral(DelegationSyncMixin):
             else:
                 general_kwargs[key] = value
 
-        remaining_args, rem_ipsi_kwargs = self.ipsi.assign_params(
+        remaining_args, rem_ipsi_kwargs = self.ipsi.set_params(
             *new_params_args, **ipsi_kwargs, **general_kwargs
         )
-        remaining_args, rem_contra_kwargs = self.contra.assign_params(
+        remaining_args, rem_contra_kwargs = self.contra.set_params(
             *remaining_args, **contra_kwargs, **general_kwargs
         )
         return remaining_args, {"ipsi": rem_ipsi_kwargs, "contra": rem_contra_kwargs}

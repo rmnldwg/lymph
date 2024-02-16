@@ -18,7 +18,15 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import check_unique_names, comp_transition_tensor, flatten
+from lymph.helper import (
+    check_unique_names,
+    comp_transition_tensor,
+    flatten,
+    popfirst,
+    set_params_for,
+    trigger,
+)
+from lymph.types import SetParamsReturnType
 
 
 class AbstractNode:
@@ -300,7 +308,7 @@ class Edge:
         if self.is_growth:
             return self.parent.name
 
-        return self.parent.name + '_to_' + self.child.name
+        return self.parent.name + 'to' + self.child.name
 
 
     @property
@@ -317,13 +325,21 @@ class Edge:
 
     def get_micro_mod(self) -> float:
         """Return the spread probability."""
-        if not hasattr(self, "_micro_mod") or self.child.is_binary:
+        if (
+            not hasattr(self, "_micro_mod")
+            or isinstance(self.parent, Tumor)
+            or self.parent.is_binary
+        ):
             self._micro_mod = 1.
         return self._micro_mod
 
-    def set_micro_mod(self, new_micro_mod: float) -> None:
+    @trigger
+    def set_micro_mod(self, new_micro_mod: float | None) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
-        if self.child.is_binary:
+        if new_micro_mod is None:
+            return
+
+        if isinstance(self.parent, Tumor) or self.parent.is_binary:
             warnings.warn("Microscopic spread modifier is not used for binary nodes!")
 
         if not 0. <= new_micro_mod <= 1.:
@@ -344,10 +360,15 @@ class Edge:
             self._spread_prob = 0.
         return self._spread_prob
 
-    def set_spread_prob(self, new_spread_prob):
+    @trigger
+    def set_spread_prob(self, new_spread_prob: float | None) -> None:
         """Set the spread probability of the edge."""
+        if new_spread_prob is None:
+            return
+
         if not 0. <= new_spread_prob <= 1.:
             raise ValueError("Spread probability must be between 0 and 1!")
+
         self._spread_prob = new_spread_prob
 
     spread_prob = property(
@@ -381,25 +402,49 @@ class Edge:
         return params if as_dict else params.values()
 
 
-    def set_params(
-        self,
-        growth: float | None = None,
-        spread: float | None = None,
-        micro: float | None = None,
-    ) -> None:
+    def set_params(self, *args, **kwargs) -> SetParamsReturnType:
         """Set the values of the edge's parameters.
 
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.set_params`
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.set_params`
-        """
-        if self.is_growth:
-            return self.set_spread_prob(growth) if growth is not None else None
+        If provided as positional arguments, the edge connects to a trinary node, and
+        is not a growth node, the first argument is the spread probability and the
+        second argument is the microscopic spread modifier. Otherwise it only consumes
+        one argument, which is the growth or spread probability.
 
-        if spread is not None:
-            self.set_spread_prob(spread)
-        if self.child.is_trinary and not self.is_tumor_spread and micro is not None:
-            self.set_micro_mod(micro)
+        Keyword arguments (i.e., ``"grwoth"``, ``"spread"``, and ``"micro"``) override
+        positional arguments. Unused args and kwargs are returned.
+
+        Examples:
+
+        >>> edge = Edge(Tumor("T"), LymphNodeLevel("II", allowed_states=[0, 1, 2]))
+        >>> _ = edge.set_params(0.1, 0.2)
+        >>> edge.spread_prob
+        0.1
+        >>> edge.micro_mod
+        0.2
+        >>> _ = edge.set_params(spread=0.3, micro=0.4)
+        >>> edge.spread_prob
+        0.3
+        >>> edge.micro_mod
+        0.4
+        """
+        first, args = popfirst(args)
+        value = first or self.get_spread_prob()
+
+        if self.is_growth:
+            self.set_spread_prob(kwargs.pop("growth", value))
+        else:
+            self.set_spread_prob(kwargs.pop("spread", value))
+
+        if (
+            not isinstance(self.parent, Tumor)
+            and self.parent.is_trinary
+            and not self.is_growth
+        ):
+            first, args = popfirst(args)
+            value = first or self.get_micro_mod()
+            self.set_micro_mod(kwargs.pop("micro", value))
+
+        return args, kwargs
 
 
     @property
@@ -610,8 +655,8 @@ class Representation:
         ... ):
         ...     params_dict = one_edge.get_params(as_dict=True)
         ...     params_to_set = {k: rng.uniform() for k in params_dict}
-        ...     one_edge.set_params(**params_to_set)
-        ...     another_edge.set_params(**params_to_set)
+        ...     _ = one_edge.set_params(**params_to_set)
+        ...     _ = another_edge.set_params(**params_to_set)
         >>> one_graph.parameter_hash() == another_graph.parameter_hash()
         True
         """
@@ -654,9 +699,9 @@ class Representation:
         ...    ('lnl', 'III'): [],
         ... }
         >>> graph = Representation(graph_dict)
-        >>> graph.edges["T_to_II"].spread_prob = 0.1
-        >>> graph.edges["T_to_III"].spread_prob = 0.2
-        >>> graph.edges["II_to_III"].spread_prob = 0.3
+        >>> graph.edges["TtoII"].spread_prob = 0.1
+        >>> graph.edges["TtoIII"].spread_prob = 0.2
+        >>> graph.edges["IItoIII"].spread_prob = 0.3
         >>> print(graph.get_mermaid())  # doctest: +NORMALIZE_WHITESPACE
         flowchart TD
             T-->|10%| II
@@ -781,3 +826,16 @@ class Representation:
             params = flatten(params)
 
         return params if as_dict else params.values()
+
+
+    def set_params(self, *args, **kwargs) -> SetParamsReturnType:
+        """Set the parameters of the edges in the graph.
+
+        The arguments are passed to the :py:meth:`~lymph.graph.Edge.set_params` method
+        of the edges. Global keyword arguments (e.g. ``"spread"``) are passed to each
+        edge's ``set_params`` method. Unused args and kwargs are returned.
+
+        Specific keyword arguments take precedence over global ones which in turn take
+        precedence over positional arguments.
+        """
+        return set_params_for(self.edges, *args, **kwargs)

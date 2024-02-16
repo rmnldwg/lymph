@@ -12,9 +12,9 @@ import scipy as sp
 
 import lymph
 from lymph import diagnose_times
-from lymph.helper import PatternType
 from lymph.modalities import Clinical, Modality, Pathological
 from lymph.models import Unilateral
+from lymph.types import PatternType
 
 MODALITIES = {
     "CT": Clinical(specificity=0.81, sensitivity=0.86),
@@ -171,7 +171,7 @@ class BilateralModelMixin:
         self.graph_dict = get_graph("large")
         self.model = lymph.models.Bilateral(graph_dict=self.graph_dict, **self.model_kwargs)
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.logger = get_logger(level=logging.INFO)
 
 

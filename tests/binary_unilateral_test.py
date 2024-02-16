@@ -142,7 +142,7 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
     def test_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params()
-        self.model.assign_params(**params_to_set)
+        self.model.set_params(**params_to_set)
 
         edges_and_dists = self.model.graph.edges.copy()
         edges_and_dists.update(self.model.diag_time_dists)
@@ -170,7 +170,7 @@ class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Tes
     def setUp(self):
         """Initialize a simple binary model."""
         super().setUp()
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
@@ -232,7 +232,7 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
         super().setUp()
         self.model.modalities = fixtures.MODALITIES
         self.init_diag_time_dists(early="frozen", late="parametric", foo="frozen")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_load_patient_data(self):
@@ -311,7 +311,7 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         super().setUp()
         self.model.modalities = fixtures.MODALITIES
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_log_likelihood_smaller_zero(self):
@@ -340,7 +340,7 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         super().setUp()
         self.model.modalities = fixtures.MODALITIES
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def create_random_diagnoses(self):
         """Create a random diagnosis for each modality and LNL."""
@@ -399,7 +399,7 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
         super().setUp()
         self.model.modalities = fixtures.MODALITIES
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def test_generate_early_patients(self):
         """Check that generating only early T-stage patients works."""
