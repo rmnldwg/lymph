@@ -5,7 +5,7 @@ import logging
 import warnings
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 from cachetools import LRUCache
@@ -28,10 +28,10 @@ class DelegationSyncMixin:
     See more details about that in the :py:class:`AccessPassthrough` class docs.
     """
     def __init__(self) -> None:
-        self._delegated_and_synced = {}
+        self._attrs_to_objects = {}
 
 
-    def _init_delegation_sync(self, **attrs_from_instances) -> None:
+    def _init_delegation_sync(self, **attrs_to_objects: list[object]) -> None:
         """Initialize the delegation and synchronization of attributes.
 
         Each keyword argument is the name of an attribute to synchronize. The value
@@ -55,28 +55,29 @@ class DelegationSyncMixin:
         >>> person.left.eye_color == person.right.eye_color == 'red'
         True
         """
-        self._delegated_and_synced = attrs_from_instances
+        for name, objects in attrs_to_objects.items():
+            types = {type(obj) for obj in objects}
+            if len(types) > 1:
+                raise ValueError(
+                    f"Instances of delegated attribute {name} must be of same type"
+                )
+
+        self._attrs_to_objects = attrs_to_objects
 
 
     def __getattr__(self, name):
-        try:
-            values_set = {getattr(inst, name) for inst in self._delegated_and_synced[name]}
-            if len(values_set) > 1:
-                warnings.warn(
-                    f"Attribute '{name}' not synchronized: {values_set}. Set this "
-                    "attribute on each instance to synchronize it."
-                )
-            return sorted(values_set).pop()
+        objects = self._attrs_to_objects[name]
+        attr_list = [getattr(obj, name) for obj in objects]
 
-        # Not all attributes might be hashable, which is necessary for a set
-        except TypeError:
-            values_list = [getattr(inst, name) for inst in self._delegated_and_synced[name]]
-            return AccessPassthrough(values_list)
+        if len(attr_list) == 1:
+            return attr_list[0]
+
+        return fuse(attr_list)
 
 
     def __setattr__(self, name, value):
-        if name != "_delegated_and_synced" and name in self._delegated_and_synced:
-            for inst in self._delegated_and_synced[name]:
+        if name != "_attrs_to_objects" and name in self._attrs_to_objects:
+            for inst in self._attrs_to_objects[name]:
                 setattr(inst, name, value)
         else:
             super().__setattr__(name, value)
@@ -124,8 +125,8 @@ class AccessPassthrough:
     ...             set_value=[self.c1, self.c2],
     ...         )
     >>> mixture = Mixture()
-    >>> mixture.params_dict["a"]    # pop element of sorted set and warn that not synced
-    3
+    >>> mixture.params_dict["b"]    # get first element and warn that not synced
+    4
     >>> mixture.params_dict["a"] = 99
     >>> mixture.c1.params_dict["a"] == mixture.c2.params_dict["a"] == 99
     True
@@ -138,28 +139,22 @@ class AccessPassthrough:
     >>> mixture.c1.params_dict["c"] == mixture.c2.params_dict["c"] == 100
     True
     """
-    def __init__(self, attr_values: list[object]) -> None:
-        self._attr_objects = attr_values
+    def __init__(self, attr_objects: list[object]) -> None:
+        self._attr_objects = attr_objects
 
 
     def __getattr__(self, name):
-        values = {getattr(obj, name) for obj in self._attr_objects}
-        if len(values) > 1:
-            warnings.warn(
-                f"Attribute '{name}' not synchronized: {values}. Set this "
-                "attribute on each instance to synchronize it."
-            )
-        return sorted(values).pop()
+        if len(self._attr_objects) == 1:
+            return getattr(self._attr_objects[0], name)
+
+        return fuse([getattr(obj, name) for obj in self._attr_objects])
 
 
     def __getitem__(self, key):
-        values = {obj[key] for obj in self._attr_objects}
-        if len(values) > 1:
-            warnings.warn(
-                f"Value for key '{key}' not synchronized: {values}. Set this "
-                "value on each item to synchronize it."
-            )
-        return sorted(values).pop()
+        if len(self._attr_objects) == 1:
+            return self._attr_objects[0][key]
+
+        return fuse([obj[key] for obj in self._attr_objects])
 
 
     def __setattr__(self, name, value):
@@ -176,8 +171,37 @@ class AccessPassthrough:
 
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return_values = []
         for obj in self._attr_objects:
-            obj(*args, **kwds)
+            return_values.append(obj(*args, **kwds))
+
+        return fuse(return_values)
+
+
+    def __len__(self) -> int:
+        if len(self._attr_objects) == 1:
+            return len(self._attr_objects[0])
+
+        return fuse([len(obj) for obj in self._attr_objects])
+
+
+def fuse(objects: list[Any]) -> Any:
+    """Try to fuse ``objects`` and return one result.
+
+    TODO: This should not immediately return an ``AccessPassthrough`` just because the
+    ``objects`` are not all equal. It should do so, when the ``objects`` may be dict-
+    like or be callables... I need to think of a proper criterion.
+
+    What about return an ``AccessPassthrough`` when the type is one of those defined
+    in this package?
+    """
+    if all(objects[0] == obj for obj in objects[1:]):
+        return objects[0]
+
+    try:
+        return sorted(set(objects)).pop()
+    except TypeError:
+        return AccessPassthrough(objects)
 
 
 def check_unique_names(graph: dict):
@@ -691,9 +715,9 @@ def synchronize_params(
 
 
 def set_bilateral_params_for(
+    *args: float,
     ipsi_objects: dict[str, HasSetParams],
     contra_objects: dict[str, HasSetParams],
-    *args: float,
     is_symmetric: bool = False,
     **kwargs: float,
 ) -> tuple[float]:
@@ -712,3 +736,47 @@ def set_bilateral_params_for(
         args = set_params_for(contra_objects, *args, **contra_kwargs)
 
     return args
+
+
+def has_any_dunder_method(obj: Any, *methods: str) -> bool:
+    """Check whether a class has any of the given dunder methods."""
+    return any(hasattr(obj, method) for method in methods)
+
+
+def check_unique_and_get_first(objects: Iterable, attr: str = "") -> Any:
+    """Check if ``objects`` are unique via a set and return of them.
+
+    This function is meant to be used with the ``AccessPassthrough`` class. It is
+    used to retrieve the last element of a set of values that are not synchronized.
+    """
+    object_set = set(objects)
+    if len(object_set) > 1:
+        warnings.warn(f"{attr} not synced: {object_set}. Setting should sync.")
+    return sorted(object_set).pop()
+
+
+if __name__ == "__main__":
+    class Param:
+        def __init__(self, value):
+            self.value = value
+    class Model:
+        def __init__(self, **kwargs):
+            self.params_dict = kwargs
+            self.param = Param(sum(kwargs.values()))
+        def set_value(self, key, value):
+            self.params_dict[key] = value
+    class Mixture(DelegationSyncMixin):
+        def __init__(self):
+            super().__init__()
+            self.c1 = Model(a=1, b=2)
+            self.c2 = Model(a=3, b=4, c=5)
+            self._init_delegation_sync(
+                params_dict=[self.c1, self.c2],
+                param=[self.c1, self.c2],
+                set_value=[self.c1, self.c2],
+            )
+    mixture = Mixture()
+    mixture.params_dict["b"]
+    mixture.params_dict["a"] = 99
+    mixture.param.value = 42
+    mixture.set_value("c", 100)

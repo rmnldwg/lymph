@@ -227,7 +227,7 @@ class Unilateral(DelegationSyncMixin):
 
         The probability is computed as the product of the transition probabilities of
         the individual LNLs. If ``assign`` is ``True``, the new state is assigned to
-        the model using the method :py:meth:`~Unilateral.assign_states`.
+        the model using the method :py:meth:`~Unilateral.set_states`.
         """
         trans_prob = 1
         for i, lnl in enumerate(self.graph.lnls):
