@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
 
 from lymph import matrix, models
-from lymph.helper import DelegationSyncMixin, early_late_mapping, flatten
+from lymph.helper import (
+    DelegationSyncMixin,
+    early_late_mapping,
+    flatten,
+    set_bilateral_params_for,
+)
 from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
@@ -33,7 +38,7 @@ class Bilateral(DelegationSyncMixin):
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        modalities_symmetric: bool = True,
+        is_symmetric: dict[str, bool] | None = None,
         unilateral_kwargs: dict[str, Any] | None = None,
         ipsilateral_kwargs: dict[str, Any] | None = None,
         contralateral_kwargs: dict[str, Any] | None = None,
@@ -46,11 +51,17 @@ class Bilateral(DelegationSyncMixin):
         which in turn pass it to the :py:class:`~lymph.graph.Representation` class that
         stores the graph.
 
-        With the boolean ``modalities_symmetric`` the user can specify whether the
-        diagnostic modalities of the ``ipsi`` and ``contra`` side are symmetric. If
-        they are, instances of this class will have a ``modalities`` attribute that
-        will synchronize the diagnostic modalities of the two sides of the neck when
-        setting it or its keys.
+        With the dictionary ``is_symmetric`` the user can specify which aspects of the
+        model are symmetric. Valid keys are ``"modalities"``, ``"tumor_spread"``,
+        and ``"lnl_spread"``. The values are booleans, with ``True`` meaning that the
+        aspect is symmetric.
+
+        Note:
+            The symmetries of tumor and LNL spread are only guaranteed if the
+            respective parameters are set via the :py:meth:`~set_params()` method of
+            this bilateral model. It is still possible to set different parameters for
+            the ipsi- and contralateral side by using their respective
+            :py:meth:`~lymph.models.Unilateral.set_params()` method.
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
         while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
@@ -67,7 +78,7 @@ class Bilateral(DelegationSyncMixin):
             contralateral_kwargs=contralateral_kwargs,
         )
 
-        if modalities_symmetric:
+        if is_symmetric["modalities"]:
             delegation_sync_kwargs = {"modalities": [self.ipsi, self.contra]}
         else:
             delegation_sync_kwargs = {}
@@ -139,10 +150,6 @@ class Bilateral(DelegationSyncMixin):
         ``param`` is not ``None``, only the value of the parameter with that name is
         returned. Otherwise, all parameters are returned as a dictionary or a list.
 
-        Note:
-            The arguments ``as_dict`` and ``nested`` are ignored if ``param`` is not
-            ``None``. Also, ``nested`` is ignored if ``as_dict`` is ``False``.
-
         See Also:
             :py:meth:`lymph.diagnose_times.Distribution.get_params`
             :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
@@ -165,11 +172,7 @@ class Bilateral(DelegationSyncMixin):
         return params if as_dict else params.values()
 
 
-    def assign_params(
-        self,
-        *new_params_args,
-        **new_params_kwargs,
-    ) -> tuple[Iterator[float, dict[str, dict[str, float]]]]:
+    def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Assign new parameters to the model.
 
         This works almost exactly as the unilateral model's
@@ -192,22 +195,21 @@ class Bilateral(DelegationSyncMixin):
         Similar to the unilateral method, this returns a tuple of the remaining args
         and a dictionary with the remaining `"ipsi"` and `"contra"` kwargs.
         """
-        ipsi_kwargs, contra_kwargs, general_kwargs = {}, {}, {}
-        for key, value in new_params_kwargs.items():
-            if "ipsi_" in key:
-                ipsi_kwargs[key.replace("ipsi_", "")] = value
-            elif "contra_" in key:
-                contra_kwargs[key.replace("contra_", "")] = value
-            else:
-                general_kwargs[key] = value
-
-        remaining_args, rem_ipsi_kwargs = self.ipsi.set_params(
-            *new_params_args, **ipsi_kwargs, **general_kwargs
+        args = set_bilateral_params_for(
+            ipsi_objects=self.ipsi.graph.tumor_edges,
+            contra_objects=self.contra.graph.tumor_edges,
+            *args,
+            is_symmetric=self.is_symmetric["tumor_spread"],
+            **kwargs,
         )
-        remaining_args, rem_contra_kwargs = self.contra.set_params(
-            *remaining_args, **contra_kwargs, **general_kwargs
+        args = set_bilateral_params_for(
+            ipsi_objects=self.ipsi.graph.lnl_edges,
+            contra_objects=self.contra.graph.lnl_edges,
+            *args,
+            is_symmetric=self.is_symmetric["lnl_spread"],
+            **kwargs,
         )
-        return remaining_args, {"ipsi": rem_ipsi_kwargs, "contra": rem_contra_kwargs}
+        return self.diag_time_dists.set_params(*args, **kwargs)
 
 
     def load_patient_data(
@@ -380,7 +382,7 @@ class Bilateral(DelegationSyncMixin):
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            self.assign_params(*given_param_args, **given_param_kwargs)
+            self.set_params(*given_param_args, **given_param_kwargs)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -422,7 +424,7 @@ class Bilateral(DelegationSyncMixin):
         if given_param_kwargs is None:
             given_param_kwargs = {}
 
-        self.assign_params(*given_param_args, **given_param_kwargs)
+        self.set_params(*given_param_args, **given_param_kwargs)
 
         if given_diagnoses is None:
             given_diagnoses = {}

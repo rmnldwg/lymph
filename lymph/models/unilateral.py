@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import itertools
 import warnings
 from functools import cached_property
 from itertools import product
-from typing import Any, Callable, Generator, Iterable, Iterator, Literal
+from typing import Any, Callable, Generator, Iterable
 
 import numpy as np
 import pandas as pd
@@ -17,7 +16,7 @@ from lymph.helper import (
     flatten,
     smart_updating_dict_cached_property,
 )
-from lymph.types import DiagnoseType, PatternType, SetParamsReturnType
+from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
@@ -171,98 +170,7 @@ class Unilateral(DelegationSyncMixin):
         return params if as_dict else params.values()
 
 
-    def assign_edge_params(
-        self,
-        *args: float,
-        kind: Literal["growth", "tumor", "lnl"] | None = None,
-        **kwargs: float,
-    ) -> tuple[Iterator[float], dict[str, float]]:
-        """Assign the spread probabilities of the tumor edges.
-
-        If the params are provided via positional arguments, they are used in the order
-        of the edges as they are stored in the graph. Keyword arguments override the
-        positional arguments.
-
-        Via the ``kind`` parameter, one can specify whether the spread probabilities
-        should be set for the tumor edges (``kind="tumor"``), the LNL edges
-        (``kind="lnl"``), the growth edges (``kind="growth"``), or all (``kind=None``).
-        """
-        args = iter(args)
-        kind = "" if kind is None else f"{kind}_"
-        edges = getattr(self.graph, f"{kind}edges")
-
-        for (edge_name, edge), param_arg in zip(edges.items(), args):
-            edge.set_spread_prob(param_arg)
-            if (param_name := f"{edge_name}_spread") in kwargs:
-                edge.set_spread_prob(kwargs.pop(param_name))
-            elif (param_name := f"{edge_name}_growth") in kwargs:
-                edge.set_spread_prob(kwargs.pop(param_name))
-
-        return args, kwargs
-
-
-
-
-
-    def _assign_via_args(self, new_params_args: Iterator[float]) -> Iterator[float]:
-        """Assign parameters to egdes and to distributions via positional arguments."""
-        for edge_or_dist in itertools.chain(
-            self.graph.edges.values(),
-            self.diag_time_dists.values(),
-        ):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=UserWarning)
-                params = edge_or_dist.get_params(as_dict=True)
-
-            new_params = {}
-            for name in params:
-                try:
-                    new_params[name] = next(new_params_args)
-                except StopIteration:
-                    return new_params_args
-                finally:
-                    edge_or_dist.set_params(**new_params)
-
-        return new_params_args
-
-
-    def _assign_via_kwargs(
-        self,
-        new_params_kwargs: dict[str, float],
-    ) -> dict[str, float]:
-        """Assign parameters to egdes and to distributions via keyword arguments."""
-        global_growth_param = new_params_kwargs.pop("growth", None)
-        global_micro_mod = new_params_kwargs.pop("micro", None)
-
-        if global_growth_param is not None:
-            for growth_edge in self.graph.growth_edges.values():
-                growth_edge.set_spread_prob(global_growth_param)
-
-        if global_micro_mod is not None:
-            for lnl_edge in self.graph.lnl_edges.values():
-                lnl_edge.set_micro_mod(global_micro_mod)
-
-        edges_and_dists = self.graph.edges.copy()
-        edges_and_dists.update(self.diag_time_dists)
-        new_params_keys = list(new_params_kwargs.keys())
-        for key in new_params_keys:
-            try:
-                edge_name_or_tstage, type_ = key.rsplit("_", maxsplit=1)
-            except ValueError as val_err:
-                raise KeyError(
-                    "Keyword arguments must be of the form `<edge_name>_<param_name>` "
-                    "or `<t_stage>_<param_name>` for the distributions over diagnose "
-                    "times."
-                ) from val_err
-            if edge_name_or_tstage in edges_and_dists:
-                value = new_params_kwargs.pop(key)
-                edge_or_dist = edges_and_dists[edge_name_or_tstage]
-                edge_or_dist.set_params(**{type_: value})
-
-        return new_params_kwargs
-
-
-    def set_params(self, *args, **kwargs) -> SetParamsReturnType:
+    def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Assign new parameters to the model.
 
         The parameters can be provided either via positional arguments or via keyword
@@ -289,7 +197,7 @@ class Unilateral(DelegationSyncMixin):
         ...     is_growth_shared=True,
         ... )
         >>> model.set_params(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.99, AtoB_param="not_used")
-        ((0.99,), {'AtoB_param': 'not_used'})
+        (0.99,)
         >>> model.get_params(as_dict=True)  # doctest: +NORMALIZE_WHITESPACE
         {'TtoII_spread': 0.1,
          'TtoIII_spread': 0.2,
@@ -306,7 +214,7 @@ class Unilateral(DelegationSyncMixin):
          'IItoIII_micro': 0.5,
          'III_growth': 0.123}
         """
-        args, kwargs = self.graph.set_params(*args, **kwargs)
+        args = self.graph.set_params(*args, **kwargs)
         return self.diag_time_dists.set_params(*args, **kwargs)
 
 
@@ -426,7 +334,7 @@ class Unilateral(DelegationSyncMixin):
         ...     ("lnl", "III"): [],
         ... })
         >>> model.set_params(0.7, 0.3, 0.2)  # doctest: +ELLIPSIS
-        (..., {})
+        ()
         >>> model.transition_matrix()
         array([[0.21, 0.09, 0.49, 0.21],
                [0.  , 0.3 , 0.  , 0.7 ],

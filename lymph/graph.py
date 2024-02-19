@@ -26,7 +26,6 @@ from lymph.helper import (
     set_params_for,
     trigger,
 )
-from lymph.types import SetParamsReturnType
 
 
 class AbstractNode:
@@ -402,7 +401,7 @@ class Edge:
         return params if as_dict else params.values()
 
 
-    def set_params(self, *args, **kwargs) -> SetParamsReturnType:
+    def set_params(self, *args, **kwargs) -> tuple[float]:
         """Set the values of the edge's parameters.
 
         If provided as positional arguments, the edge connects to a trinary node, and
@@ -431,9 +430,9 @@ class Edge:
         value = first or self.get_spread_prob()
 
         if self.is_growth:
-            self.set_spread_prob(kwargs.pop("growth", value))
+            self.set_spread_prob(kwargs.get("growth", value))
         else:
-            self.set_spread_prob(kwargs.pop("spread", value))
+            self.set_spread_prob(kwargs.get("spread", value))
 
         if (
             not isinstance(self.parent, Tumor)
@@ -442,9 +441,9 @@ class Edge:
         ):
             first, args = popfirst(args)
             value = first or self.get_micro_mod()
-            self.set_micro_mod(kwargs.pop("micro", value))
+            self.set_micro_mod(kwargs.get("micro", value))
 
-        return args, kwargs
+        return args
 
 
     @property
@@ -828,7 +827,7 @@ class Representation:
         return params if as_dict else params.values()
 
 
-    def set_params(self, *args, **kwargs) -> SetParamsReturnType:
+    def set_params(self, *args, **kwargs) -> tuple[float]:
         """Set the parameters of the edges in the graph.
 
         The arguments are passed to the :py:meth:`~lymph.graph.Edge.set_params` method

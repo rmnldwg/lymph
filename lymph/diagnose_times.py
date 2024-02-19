@@ -21,7 +21,6 @@ from typing import Iterable
 import numpy as np
 
 from lymph.helper import AbstractLookupDict, flatten, popfirst, set_params_for
-from lymph.types import SetParamsReturnType
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +186,7 @@ class Distribution:
         return self._kwargs if as_dict else self._kwargs.values()
 
 
-    def set_params(self, *args: float, **kwargs: float) -> SetParamsReturnType:
+    def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Update distribution by setting its parameters and storing the frozen PMF.
 
         Parameters can be set via positional arguments or keyword arguments. Keyword
@@ -201,13 +200,13 @@ class Distribution:
         """
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, ignoring parameters")
-            return args, kwargs
+            return args
 
         old_kwargs = self._kwargs.copy()
 
         for name, value in self._kwargs.items():
             first, args = popfirst(args)
-            self._kwargs[name] = first or kwargs.pop(name, value)
+            self._kwargs[name] = first or kwargs.get(name, value)
 
         try:
             _ = self.distribution
@@ -215,7 +214,7 @@ class Distribution:
             self._kwargs = old_kwargs
             raise ValueError("Invalid params provided to distribution") from val_err
 
-        return args, kwargs
+        return args
 
 
     def draw_diag_times(
@@ -294,7 +293,7 @@ class DistributionsUserDict(AbstractLookupDict):
         return params if as_dict else params.values()
 
 
-    def set_params(self, *args: float, **kwargs: float) -> SetParamsReturnType:
+    def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Update all parametrized distributions.
 
         When the new parameters are provided as positional arguments, they are used up

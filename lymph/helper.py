@@ -10,7 +10,7 @@ from typing import Any, Callable, Sequence
 import numpy as np
 from cachetools import LRUCache
 
-from lymph.types import HasSetParams, SetParamsReturnType
+from lymph.types import HasGetParams, HasSetParams
 
 logger = logging.getLogger(__name__)
 
@@ -669,21 +669,46 @@ def set_params_for(
     objects: dict[str, HasSetParams],
     *args: float,
     **kwargs: float,
-) -> SetParamsReturnType:
+) -> tuple[float]:
     """Pass arguments to each ``set_params()`` method of the ``objects``."""
     kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=objects.keys())
-    rem_global_keys = global_kwargs.copy().keys()
 
     for key, obj in objects.items():
-        obj_kwargs = kwargs.get(key, global_kwargs.copy())
-        args, obj_kwargs = obj.set_params(*args, **obj_kwargs)
+        obj_kwargs = global_kwargs.copy()
+        obj_kwargs.update(kwargs.get(key, {}))
+        args = obj.set_params(*args, **obj_kwargs)
 
-        rem_global_keys &= obj_kwargs.keys()
-        for global_key in global_kwargs:
-            if global_key in obj_kwargs:
-                del obj_kwargs[global_key]
+    return args
 
-        kwargs[key] = obj_kwargs
 
-    kwargs.update({key: global_kwargs[key] for key in rem_global_keys})
-    return args, flatten(kwargs)
+def synchronize_params(
+    get_from: dict[str, HasGetParams],
+    set_to: dict[str, HasSetParams],
+) -> None:
+    """Get the parameters from one object and set them to another."""
+    for key, obj in set_to.items():
+        obj.set_params(**get_from[key].get_params(as_dict=True))
+
+
+def set_bilateral_params_for(
+    ipsi_objects: dict[str, HasSetParams],
+    contra_objects: dict[str, HasSetParams],
+    *args: float,
+    is_symmetric: bool = False,
+    **kwargs: float,
+) -> tuple[float]:
+    """Pass arguments to each ``set_params()`` method of the ``objects``."""
+    kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+
+    ipsi_kwargs = global_kwargs.copy()
+    ipsi_kwargs.update(kwargs.get("ipsi", {}))
+    args = set_params_for(ipsi_objects, *args, **ipsi_kwargs)
+
+    if is_symmetric:
+        synchronize_params(ipsi_objects, contra_objects)
+    else:
+        contra_kwargs = global_kwargs.copy()
+        contra_kwargs.update(kwargs.get("contra", {}))
+        args = set_params_for(contra_objects, *args, **contra_kwargs)
+
+    return args

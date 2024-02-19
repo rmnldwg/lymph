@@ -272,19 +272,19 @@ class Midline(DelegationSyncMixin):
                     self.alpha_mix = value
                 else:
                     no_extension_kwargs[key] = value
-            remaining_args, remainings_kwargs = self.noext.assign_params(*new_params_args, **no_extension_kwargs)
+            remaining_args, remainings_kwargs = self.noext.set_params(*new_params_args, **no_extension_kwargs)
             for key in no_extension_kwargs.keys():
                 if 'contra_primary' in key:
                     extension_kwargs[key] = self.alpha_mix * extension_kwargs[(key.replace("contra", "ipsi"))] + (1. - self.alpha_mix) * no_extension_kwargs[key]
                 else:
                     extension_kwargs[key] = no_extension_kwargs[key]
-            remaining_args, remainings_kwargs = self.ext.assign_params(*remaining_args, **extension_kwargs)
+            remaining_args, remainings_kwargs = self.ext.set_params(*remaining_args, **extension_kwargs)
             # If the syncing of the edges works properly, this below can be deleted.
             if self.central_enabled:
                 for key in no_extension_kwargs.keys():
                     if 'contra' not in key:
                         central_kwargs[(key.replace("ipsi_", ""))] = no_extension_kwargs[key]
-                remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
+                remaining_args, remainings_kwargs = self.central.set_params(*new_params_args, **central_kwargs)
         else:
             ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs, central_kwargs = {}, {}, {}, {}, {}
 
@@ -317,7 +317,7 @@ class Midline(DelegationSyncMixin):
                         central_kwargs[(key.replace("ipsi_", ""))] = ipsi_kwargs[key]
                 print(ipsi_kwargs)
                 print(general_kwargs)
-                remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs, **general_kwargs)
+                remaining_args, remainings_kwargs = self.central.set_params(*new_params_args, **central_kwargs, **general_kwargs)
 
         return remaining_args, remainings_kwargs
 
