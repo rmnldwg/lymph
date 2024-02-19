@@ -173,27 +173,35 @@ class Bilateral(DelegationSyncMixin):
 
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
-        """Assign new parameters to the model.
+        """Set new parameters to the model.
 
         This works almost exactly as the unilateral model's
-        :py:meth:`~lymph.models.Unilateral.assign_params` method. However, this one
+        :py:meth:`~lymph.models.Unilateral.set_params` method. However, this one
         allows the user to set the parameters of individual sides of the neck by
         prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``.
 
         Anything not prefixed by ``"ipsi_"`` or ``"contra_"`` is passed to both sides
-        of the neck.
+        of the neck. This does obviously not work with positional arguments.
 
         Note:
             When setting the parameters via positional arguments, the order is
-            important. The first ``len(self.ipsi.get_params(as_dict=True))`` arguments
-            are passed to the ipsilateral side, the remaining ones to the contralateral
-            side.
+            important:
 
-            When still some remain after that, they are returned as the first element
-            of the returned tuple.
+            1. The parameters of the edges from tumor to LNLs:
+                1. first the ipsilateral parameters,
+                2. if ``is_symmetric["tumor_spread"]`` is ``False``, the contralateral
+                    parameters. Otherwise, the ipsilateral parameters are used for both
+                    sides.
+            2. The parameters of the edges from LNLs to tumor:
+                1. again, first the ipsilateral parameters,
+                2. if ``is_symmetric["lnl_spread"]`` is ``False``, the contralateral
+                    parameters. Otherwise, the ipsilateral parameters are used for both
+                    sides.
+            3. The parameters of the parametric distributions for marginalizing over
+                diagnose times.
 
-        Similar to the unilateral method, this returns a tuple of the remaining args
-        and a dictionary with the remaining `"ipsi"` and `"contra"` kwargs.
+            When still some positional arguments remain after that, they are returned
+            in a tuple.
         """
         args = set_bilateral_params_for(
             ipsi_objects=self.ipsi.graph.tumor_edges,

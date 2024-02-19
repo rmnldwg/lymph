@@ -189,14 +189,13 @@ class Distribution:
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Update distribution by setting its parameters and storing the frozen PMF.
 
-        Parameters can be set via positional arguments or keyword arguments. Keyword
-        arguments override positional arguments. If the distribution is not updateable,
-        a warning is issued and all args and kwargs are returned.
+        Parameters can be set via positional arguments - which are used up one by one
+        in the order they are provided and are then returned - or keyword arguments.
+        Keyword arguments override positional arguments. If the distribution is not
+        updateable, a warning is issued and all args and kwargs are returned.
 
         If any of the parameters is invalid, a ``ValueError`` is raised and the original
         parameters are restored.
-
-        Unused args and kwargs are returned as well.
         """
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, ignoring parameters")
@@ -297,7 +296,7 @@ class DistributionsUserDict(AbstractLookupDict):
         """Update all parametrized distributions.
 
         When the new parameters are provided as positional arguments, they are used up
-        in the order of the T-stages.
+        in the order of the T-stages and remaining args are returned.
 
         If the params are provided as keyword arguments, the keys must be of the form
         ``{t_stage}_{param}``, where ``t_stage`` is the T-stage and ``param`` is the

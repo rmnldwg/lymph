@@ -409,12 +409,12 @@ class Edge:
         second argument is the microscopic spread modifier. Otherwise it only consumes
         one argument, which is the growth or spread probability.
 
-        Keyword arguments (i.e., ``"grwoth"``, ``"spread"``, and ``"micro"``) override
-        positional arguments. Unused args and kwargs are returned.
+        Keyword arguments (i.e., ``"growth"``, ``"spread"``, and ``"micro"``) override
+        positional arguments. Unused args are returned.
 
         Examples:
 
-        >>> edge = Edge(Tumor("T"), LymphNodeLevel("II", allowed_states=[0, 1, 2]))
+        >>> edge = Edge(LymphNodeLevel("II", allowed_states=[0, 1, 2]), LymphNodeLevel("III"))
         >>> _ = edge.set_params(0.1, 0.2)
         >>> edge.spread_prob
         0.1
@@ -832,9 +832,22 @@ class Representation:
 
         The arguments are passed to the :py:meth:`~lymph.graph.Edge.set_params` method
         of the edges. Global keyword arguments (e.g. ``"spread"``) are passed to each
-        edge's ``set_params`` method. Unused args and kwargs are returned.
+        edge's ``set_params`` method. Unused args are returned.
 
         Specific keyword arguments take precedence over global ones which in turn take
         precedence over positional arguments.
+
+        Example:
+
+        >>> graph = Representation(graph_dict={
+        ...     ("tumor", "T"): ["II" , "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> _ = graph.set_params(0.1, 0.2, 0.3, spread=0.4, TtoII_spread=0.5)
+        >>> graph.get_params(as_dict=True)   # doctest: +NORMALIZE_WHITESPACE
+        {'TtoII_spread': 0.5,
+         'TtoIII_spread': 0.4,
+         'IItoIII_spread': 0.4}
         """
         return set_params_for(self.edges, *args, **kwargs)
