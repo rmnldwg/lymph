@@ -206,6 +206,7 @@ class Distribution:
         for name, value in self._kwargs.items():
             first, args = popfirst(args)
             self._kwargs[name] = first or kwargs.get(name, value)
+            del self._frozen
 
         try:
             _ = self.distribution
