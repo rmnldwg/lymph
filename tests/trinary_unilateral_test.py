@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from lymph.graph import LymphNodeLevel
+from lymph.helper import set_params_for
 
 
 class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
@@ -117,7 +118,7 @@ class TrinaryParamAssignmentTestCase(fixtures.TrinaryFixtureMixin, unittest.Test
             for param in params:
                 params_to_set[f"{edge_name}_{param}"] = self.rng.random()
 
-        self.model.assign_edge_params(**params_to_set)
+        set_params_for(self.model.graph.edges, **params_to_set)
         retrieved_params = self.model.get_params(as_dict=True)
         for param in params_to_set:
             self.assertEqual(params_to_set[param], retrieved_params[param])

@@ -247,7 +247,7 @@ class Edge:
 
     def __str__(self) -> str:
         """Print basic info."""
-        return f"Edge {self.name.replace('_', ' ')}"
+        return f"Edge {self.get_name(middle=' to ')}"
 
     def __repr__(self) -> str:
         """Print basic info."""
@@ -297,17 +297,16 @@ class Edge:
         self.child.inc.append(self)
 
 
-    @property
-    def name(self) -> str:
+    def get_name(self, middle='to') -> str:
         """Return the name of the edge.
 
-        This is used to identify and assign spread probabilities to it in the
-        :py:class:`~models.Unilateral` class.
+        This is used to identify and assign spread probabilities to it e.g. in the
+        :py:class:`~models.Unilateral.set_params()` method and elsewhere.
         """
         if self.is_growth:
             return self.parent.name
 
-        return self.parent.name + 'to' + self.child.name
+        return f"{self.parent.name}{middle}{self.child.name}"
 
 
     @property
@@ -584,12 +583,12 @@ class Representation:
             start = self.nodes[start_name]
             if isinstance(start, LymphNodeLevel) and start.is_trinary:
                 growth_edge = Edge(parent=start, child=start, callbacks=on_edge_change)
-                self._edges[growth_edge.name] = growth_edge
+                self._edges[growth_edge.get_name()] = growth_edge
 
             for end_name in end_names:
                 end = self.nodes[end_name]
                 new_edge = Edge(parent=start, child=end, callbacks=on_edge_change)
-                self._edges[new_edge.name] = new_edge
+                self._edges[new_edge.get_name()] = new_edge
 
 
     @property
@@ -819,7 +818,7 @@ class Representation:
         """
         params = {}
         for edge in self.edges.values():
-            params[edge.name] = edge.get_params(as_flat=as_flat)
+            params[edge.get_name()] = edge.get_params(as_flat=as_flat)
 
         if as_flat or not as_dict:
             params = flatten(params)

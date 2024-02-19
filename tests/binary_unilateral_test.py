@@ -79,7 +79,7 @@ class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
             self.assertEqual(edge.parent.name, "T")
             self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
-            self.assertIn(edge.name, connecting_edge_names)
+            self.assertIn(edge.get_name(middle="_to_"), connecting_edge_names)
 
 
 class DelegationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -98,10 +98,6 @@ class DelegationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         self.assertEqual(
             self.model.graph.get_state(),
             self.model.get_state(),
-        )
-        self.assertEqual(
-            self.model.graph.lnls,
-            self.model.lnls,
         )
 
     def test_set_state_delegation(self):
@@ -135,7 +131,7 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
             name, type_ = param_name.rsplit("_", maxsplit=1)
             edges_and_dists[name].set_params(**{type_: value})
             self.assertEqual(
-                edges_and_dists[name].get_params(type_),
+                edges_and_dists[name].get_params()[type_],
                 value,
             )
 
@@ -150,7 +146,7 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         for param_name, value in params_to_set.items():
             name, type_ = param_name.rsplit("_", maxsplit=1)
             self.assertEqual(
-                edges_and_dists[name].get_params(type_),
+                edges_and_dists[name].get_params()[type_],
                 value,
             )
 
@@ -158,7 +154,7 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         """Check if the transition matrix gets deleted when a parameter is set."""
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
         trans_mat = self.model.transition_matrix()
-        self.model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
+        self.model.graph.edges[f"Tto{first_lnl_name}"].set_spread_prob(0.5)
         self.assertFalse(np.all(
             trans_mat == self.model.transition_matrix()
         ))

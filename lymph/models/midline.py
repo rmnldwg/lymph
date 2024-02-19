@@ -39,7 +39,7 @@ def create_property_sync_callback(
             private_name = f"_{name}"
             setattr(other, private_name, getattr(this, name))
 
-    logger.debug(f"Created sync callback for properties {names} of {this.name} edge.")
+    logger.debug(f"Created sync callback for properties {names} of {this.get_name} edge.")
     return sync
 
 # this here could probably be used to sync the edges for the different bilateral classes if we want to keep on using it
@@ -53,8 +53,8 @@ def init_edge_sync(
     Implementing this as a separate method allows a user in theory to initialize
     an arbitrary kind of symmetry between the two sides of the neck.
     """
-    this_edge_names = [e.name for e in this_edge_list]
-    other_edge_names = [e.name for e in other_edge_list]
+    this_edge_names = [e.get_name for e in this_edge_list]
+    other_edge_names = [e.get_name for e in other_edge_list]
 
     for edge_name in set(this_edge_names).intersection(other_edge_names):
         this_edge = this_edge_list[this_edge_names.index(edge_name)]

@@ -3,11 +3,11 @@ Test the bilateral model.
 """
 import unittest
 
+import fixtures
 import numpy as np
 
 from lymph import models
 from lymph.modalities import Clinical
-from tests import fixtures
 
 
 class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
@@ -32,7 +32,7 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
     def test_edge_sync(self):
         """Check if synced edges update their respective parameters."""
         for ipsi_edge in self.model.ipsi.graph.edges.values():
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
+            contra_edge = self.model.contra.graph.edges[ipsi_edge.get_name]
             ipsi_edge.set_params(spread=self.rng.random())
             self.assertEqual(
                 ipsi_edge.get_params("spread"),
@@ -43,7 +43,7 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         """Check the transition tensors of the edges get deleted and updated properly."""
         for ipsi_edge in self.model.ipsi.graph.edges.values():
             ipsi_edge.set_params(spread=self.rng.random())
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.name]
+            contra_edge = self.model.contra.graph.edges[ipsi_edge.get_name]
             self.assertTrue(np.all(
                 ipsi_edge.transition_tensor == contra_edge.transition_tensor
             ))
