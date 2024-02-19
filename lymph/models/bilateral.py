@@ -78,7 +78,15 @@ class Bilateral(DelegationSyncMixin):
             contralateral_kwargs=contralateral_kwargs,
         )
 
-        if is_symmetric["modalities"]:
+        self.is_symmetric = is_symmetric
+        if self.is_symmetric is None:
+            self.is_symmetric = {
+                "modalities": True,
+                "tumor_spread": False,
+                "lnl_spread": True,
+            }
+
+        if self.is_symmetric["modalities"]:
             delegation_sync_kwargs = {"modalities": [self.ipsi, self.contra]}
         else:
             delegation_sync_kwargs = {}
@@ -204,16 +212,16 @@ class Bilateral(DelegationSyncMixin):
             in a tuple.
         """
         args = set_bilateral_params_for(
+            *args,
             ipsi_objects=self.ipsi.graph.tumor_edges,
             contra_objects=self.contra.graph.tumor_edges,
-            *args,
             is_symmetric=self.is_symmetric["tumor_spread"],
             **kwargs,
         )
         args = set_bilateral_params_for(
+            *args,
             ipsi_objects=self.ipsi.graph.lnl_edges,
             contra_objects=self.contra.graph.lnl_edges,
-            *args,
             is_symmetric=self.is_symmetric["lnl_spread"],
             **kwargs,
         )
@@ -366,7 +374,7 @@ class Bilateral(DelegationSyncMixin):
 
         The parameters of the model can be set via ``given_param_args`` and
         ``given_param_kwargs``. Both arguments are used to call the
-        :py:meth:`~assign_params` method. If the parameters are not provided, the
+        :py:meth:`~set_params` method. If the parameters are not provided, the
         previously assigned parameters are used.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
@@ -473,7 +481,7 @@ class Bilateral(DelegationSyncMixin):
 
         The parameters can be set via the ``given_param_args`` and
         ``given_param_kwargs``, both of which are passed to the
-        :py:meth:`~assign_params` method. The ``given_diagnoses`` must be a dictionary
+        :py:meth:`~set_params` method. The ``given_diagnoses`` must be a dictionary
         mapping the side of the neck to a :py:class:`DiagnoseType`.
 
         Note:
