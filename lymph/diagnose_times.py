@@ -16,11 +16,12 @@ from __future__ import annotations
 import inspect
 import logging
 import warnings
-from typing import Iterable
+from abc import ABC
+from typing import Any, Iterable, TypeVar
 
 import numpy as np
 
-from lymph.helper import AbstractLookupDict, flatten, popfirst, set_params_for
+from lymph.helper import flatten, popfirst, unflatten_and_split
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,10 @@ class SupportError(Exception):
 
 
 class Distribution:
-    """Class that provides a way of storeing distributions over diagnose times."""
+    """Class that provides a way of storing distributions over diagnose times."""
     def __init__(
         self,
-        distribution: list[float] | np.ndarray | callable,
+        distribution: Iterable[float] | callable,
         max_time: int | None = None,
     ) -> None:
         """Initialize a distribution over diagnose times.
@@ -51,62 +52,48 @@ class Distribution:
             parameters have bounds (like the binomial distribution's ``p``), the
             function must raise a ``ValueError`` if the parameter is invalid.
 
-        Since ``max_time`` specifies the support of the distribution (rangin from 0 to
+        Since ``max_time`` specifies the support of the distribution (ranging from 0 to
         ``max_time``), it must be provided if a parametrized function is passed. If a
         list of probabilities is passed, ``max_time`` is inferred from the length of the
         list and can be omitted. But an error is raised if the length of the list and
         ``max_time`` + 1 don't match, in case it is accidentally provided.
         """
-        self._kwargs = {}
-
         if callable(distribution):
-            if max_time is None:
-                raise ValueError("max_time must be provided if a function is passed")
-            if max_time < 0:
-                raise ValueError("max_time must be a positive integer")
-
-            self.check_callable(distribution)
-            self.support = np.arange(max_time + 1)
-            self._func = distribution
-            self._frozen = self.distribution
-
+            self._init_from_callable(distribution, max_time)
         else:
-            max_time = self.check_frozen(distribution, max_time)
-            self.support = np.arange(max_time + 1)
-            self._func = None
-            self._frozen = self.normalize(distribution)
+            self._init_from_frozen(distribution, max_time)
 
 
-    def copy(self) -> Distribution:
-        """Return a copy of the distribution.
+    def _init_from_frozen(self, distribution: Iterable[float], max_time: int):
+        """Initialize the distribution from a frozen distribution."""
+        if max_time is None:
+            max_time = len(distribution) - 1
 
-        Note:
-            This will return a frozen distribution, even if the original distribution
-            was parametrized.
-        """
-        return type(self)(
-            distribution=self.distribution,
-            max_time=self.support[-1],
-        )
+        if max_time != len(distribution) - 1:
+            raise ValueError("max_time and the length of the distribution don't match")
+
+        self.support = np.arange(max_time + 1)
+        self._kwargs = {}
+        self._func = None
+        self._frozen = self.normalize(distribution)
+
+
+    def _init_from_callable(self, distribution: callable, max_time: int | None = None):
+        """Initialize the distribution from a callable distribution."""
+        if max_time is None:
+            raise ValueError("max_time must be provided if a function is passed")
+        if max_time < 0:
+            raise ValueError("max_time must be a positive integer")
+
+        self.support = np.arange(max_time + 1)
+        self._kwargs = self.extract_kwargs(distribution)
+        self._func = distribution
+        self._frozen = self.pmf
 
 
     @staticmethod
-    def check_frozen(distribution: list[float] | np.ndarray, max_time: int) -> int:
-        """Check if the frozen distribution is valid.
-
-        The frozen distribution must be a list or array of probabilities for each
-        diagnose time. The length of the list must be ``max_time`` + 1.
-        """
-        if max_time is None:
-            max_time = len(distribution) - 1
-        elif max_time != len(distribution) - 1:
-            raise ValueError("max_time and the length of the distribution don't match")
-
-        return max_time
-
-
-    def check_callable(self, distribution: callable) -> None:
-        """Check if the callable's signature is valid.
+    def extract_kwargs(distribution: callable) -> dict[str, Any]:
+        """Extract the keyword arguments from the provided parametric distribution.
 
         The signature of the provided parametric distribution must be
         ``func(support, **kwargs)``. The first argument is the support of the
@@ -114,6 +101,7 @@ class Distribution:
         The ``**kwargs`` are keyword parameters that are passed to the function to
         update it.
         """
+        kwargs = {}
         # skip the first parameter, which is the support
         skip_first = True
         for name, param in inspect.signature(distribution).parameters.items():
@@ -124,25 +112,24 @@ class Distribution:
             if param.default is inspect.Parameter.empty:
                 raise ValueError("All params of the function must be keyword arguments")
 
-            self._kwargs[name] = param.default
+            kwargs[name] = param.default
+
+        return kwargs
 
 
-    @classmethod
-    def from_instance(cls, other: Distribution, max_time: int) -> Distribution:
-        """Create a new distribution from an existing one."""
-        if other.support[-1] != max_time:
-            warnings.warn(
-                "max_time of the new distribution is different from the old one. "
-                "Support will be truncated/expanded."
-            )
+    def __repr__(self) -> str:
+        return f"Distribution({self.pmf})"
 
-        if other.is_updateable:
-            new_instance = cls(other._func, max_time=max_time)
-            new_instance._kwargs = other._kwargs
-        else:
-            new_instance = cls(other.distribution[:max_time + 1], max_time=max_time)
 
-        return new_instance
+    def __eq__(self, __value) -> bool:
+        if not isinstance(__value, Distribution):
+            return False
+
+        return np.all(self.pmf == __value.pmf)
+
+
+    def __hash__(self) -> int:
+        return hash(self.pmf.tobytes())
 
 
     @staticmethod
@@ -153,7 +140,7 @@ class Distribution:
 
 
     @property
-    def distribution(self) -> np.ndarray:
+    def pmf(self) -> np.ndarray:
         """Return the probability mass function of the distribution if it is frozen."""
         if not hasattr(self, "_frozen") or self._frozen is None:
             self._frozen = self.normalize(self._func(self.support, **self._kwargs))
@@ -209,7 +196,7 @@ class Distribution:
             del self._frozen
 
         try:
-            _ = self.distribution
+            _ = self.pmf
         except ValueError as val_err:
             self._kwargs = old_kwargs
             raise ValueError("Invalid params provided to distribution") from val_err
@@ -231,61 +218,154 @@ class Distribution:
         if rng is None:
             rng = np.random.default_rng(seed)
 
-        return rng.choice(a=self.support, p=self.distribution, size=num)
+        return rng.choice(a=self.support, p=self.pmf, size=num)
 
 
-class DistributionsUserDict(AbstractLookupDict):
-    """Dictionary with added methods for storing distributions over diagnose times."""
-    max_time: int
 
-    def __setitem__(
-        self,
-        t_stage: str,
-        distribution: list[float] | np.ndarray | Distribution,
+DC = TypeVar("DC", bound="Composite")
+
+class Composite(ABC):
+    """Abstract base class implementing the composite pattern for distributions.
+
+    Any class inheriting from this class should be able to handle the definition of
+    distributions over diagnosis times.
+
+    Example:
+
+    >>> class MyComposite(Composite):
+    ...     pass
+    >>> leaf1 = MyComposite(is_distribution_leaf=True)
+    >>> leaf2 = MyComposite(is_distribution_leaf=True)
+    >>> leaf3 = MyComposite(is_distribution_leaf=True)
+    >>> branch1 = MyComposite(distribution_children={"L1": leaf1, "L2": leaf2})
+    >>> branch2 = MyComposite(distribution_children={"L3": leaf3})
+    >>> root = MyComposite(distribution_children={"B1": branch1, "B2": branch2})
+    >>> root.set_distribution("T1", Distribution([0.1, 0.9]))
+    >>> root.get_distribution("T1")
+    Distribution([0.1 0.9])
+    >>> leaf1.get_distribution("T1")
+    Distribution([0.1 0.9])
+    """
+    _max_time: int
+    _distributions: dict[str, Distribution]    # only for leaf nodes
+    _distribution_children: dict[str, Composite]
+
+    def __init__(
+        self: DC,
+        max_time: int = 10,
+        distribution_children: dict[str, Composite] | None = None,
+        is_distribution_leaf: bool = False,
     ) -> None:
-        """Set the distribution to marginalize over diagnose times for a T-stage."""
-        if isinstance(distribution, Distribution):
-            distribution = Distribution.from_instance(distribution, max_time=self.max_time)
-        else:
-            distribution = Distribution(distribution, max_time=self.max_time)
+        """Initialize the distribution composite."""
+        self.max_time = max_time
 
-        super().__setitem__(t_stage, distribution)
+        if distribution_children is None:
+            distribution_children = {}
 
+        if is_distribution_leaf:
+            self._distributions = {}
+            distribution_children = {}         # ignore any provided children
 
-    def __delitem__(self, t_stage: str) -> None:
-        """Delete the distribution for a T-stage."""
-        super().__delitem__(t_stage)
+        self._distribution_children = distribution_children
+        super().__init__()
 
 
     @property
-    def num_parametric(self) -> int:
-        """Return the number of parametrized distributions."""
-        return sum(distribution.is_updateable for distribution in self.values())
+    def _is_distribution_leaf(self: DC) -> bool:
+        """Return whether the object is a leaf node w.r.t. distributions."""
+        if len(self._distribution_children) > 0:
+            return False
+
+        if not hasattr(self, "_distributions"):
+            raise AttributeError(f"{self} has no children and no distributions.")
+
+        return True
 
 
-    def get_params(
-        self,
+    @property
+    def max_time(self: DC) -> int:
+        """Return the maximum time for the distributions."""
+        return self._max_time
+
+    @max_time.setter
+    def max_time(self: DC, value: int) -> None:
+        """Set the maximum time for the distributions."""
+        if value < 0:
+            raise ValueError("max_time must be a positive integer")
+
+        self._max_time = value
+
+
+    @property
+    def t_stages(self: DC) -> list[str]:
+        """Return the T-stages for which distributions are defined."""
+        return list(self.get_all_distributions().keys())
+
+
+    def get_distribution(self: DC, t_stage: str) -> Distribution:
+        """Return the distribution for the given ``t_stage``."""
+        return self.get_all_distributions()[t_stage]
+
+
+    def get_all_distributions(self: DC) -> dict[str, Distribution]:
+        """Return all distributions."""
+        if self._is_distribution_leaf:
+            return self._distributions
+
+        child_keys = list(self._distribution_children.keys())
+        first_child = self._distribution_children[child_keys[0]]
+        first_distributions = first_child.get_all_distributions()
+        are_all_equal = True
+        for key in child_keys[1:]:
+            other_child = self._distribution_children[key]
+            are_all_equal &= first_distributions == other_child.get_all_distributions()
+
+        if not are_all_equal:
+            warnings.warn("Not all distributions are equal. Returning the first one.")
+
+        return first_distributions
+
+
+    def set_distribution(
+        self: DC,
+        t_stage: str,
+        distribution: Distribution | Iterable[float] | callable,
+    ) -> None:
+        """Set/update the distribution for the given ``t_stage``."""
+        if self._is_distribution_leaf:
+            self._distributions[t_stage] = Distribution(distribution, self.max_time)
+
+        else:
+            for child in self._distribution_children.values():
+                child.set_distribution(t_stage, distribution)
+
+
+    def replace_all_distributions(self: DC, distributions: dict[str, Distribution]) -> None:
+        """Replace all distributions with the given ones."""
+        if self._is_distribution_leaf:
+            self._distributions = {}
+            for t_stage, distribution in distributions.items():
+                self.set_distribution(t_stage, distribution)
+
+        else:
+            for child in self._distribution_children.values():
+                child.replace_all_distributions(distributions)
+
+
+    def get_distribution_params(
+        self: DC,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> float | Iterable[float] | dict[str, float]:
-        """Return the parameters of parametrized distributions.
-
-        If ``as_dict`` is ``False``, return an iterable of all parameter values. If
-        ``as_dict`` is ``True``, return a nested dictionary with the T-stages as keys
-        and the distributions' parameter dicts as values (essentially what is returned
-        by :py:meth:`~lymph.diagnose_times.Distribution.get_params`).
-
-        If ``as_flat`` is ``True``, return a flat dictionary with the T-stages and
-        parameters as keys and values, respectively. This is the result of passing the
-        nested dictionary to :py:meth:`~lymph.helper.flatten`.
-        """
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of all distributions."""
         params = {}
 
-        for t_stage, distribution in self.items():
-            if not distribution.is_updateable:
-                continue
-
-            params[t_stage] = distribution.get_params(as_flat=as_flat)
+        if self._is_distribution_leaf:
+            for t_stage, distribution in self._distributions.items():
+                params[t_stage] = distribution.get_params(as_flat=as_flat)
+        else:
+            for key, child in self._distribution_children.items():
+                params[key] = child.get_distribution_params(as_flat=as_flat)
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -293,40 +373,24 @@ class DistributionsUserDict(AbstractLookupDict):
         return params if as_dict else params.values()
 
 
-    def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
-        """Update all parametrized distributions.
+    def set_distribution_params(self: DC, *args: float, **kwargs: float) -> tuple[float]:
+        """Set the parameters of all distributions."""
+        if self._is_distribution_leaf:
+            kwargs, global_kwargs = unflatten_and_split(
+                kwargs, expected_keys=self._distributions.keys()
+            )
+            for t_stage, distribution in self._distributions.items():
+                t_stage_kwargs = global_kwargs.copy()
+                t_stage_kwargs.update(kwargs.get(t_stage, {}))
+                args = distribution.set_params(*args, **t_stage_kwargs)
 
-        When the new parameters are provided as positional arguments, they are used up
-        in the order of the T-stages and remaining args are returned.
+        else:
+            kwargs, global_kwargs = unflatten_and_split(
+                kwargs, expected_keys=self._distribution_children.keys()
+            )
+            for key, child in self._distribution_children.items():
+                child_kwargs = global_kwargs.copy()
+                child_kwargs.update(kwargs.get(key, {}))
+                args = child.set_distribution_params(*args, **child_kwargs)
 
-        If the params are provided as keyword arguments, the keys must be of the form
-        ``{t_stage}_{param}``, where ``t_stage`` is the T-stage and ``param`` is the
-        name of the parameter to update. Keyword arguments override positional ones.
-        """
-        return set_params_for(self, *args, **kwargs)
-
-
-    def draw(
-        self,
-        prob_of_t_stage: dict[str, float],
-        size: int = 1,
-    ) -> tuple[list[str], list[int]]:
-        """
-        Draw first a T-stage and then from that distribution a diagnose time.
-
-        Args:
-            dist: Distribution over T-stages. For each key, this defines the
-                probability for seeing the respective T-stage. Will be normalized if
-                it isn't already.
-        """
-        stage_dist = np.zeros(shape=len(self))
-        t_stages = list(self.keys())
-
-        for i, t_stage in enumerate(t_stages):
-            stage_dist[i] = prob_of_t_stage[t_stage]
-
-        stage_dist = stage_dist / np.sum(stage_dist)
-        drawn_t_stages = np.random.choice(a=t_stages, p=stage_dist, size=size).tolist()
-        drawn_diag_times = [self[t].draw() for t in drawn_t_stages]
-
-        return drawn_t_stages, drawn_diag_times
+        return args
