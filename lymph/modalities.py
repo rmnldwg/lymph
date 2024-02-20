@@ -9,11 +9,10 @@ recoding the output of diagnostic modalities), given the model and its parameter
 from __future__ import annotations
 
 import warnings
-from typing import List, Tuple, Union
+from abc import ABC
+from typing import Literal, TypeVar
 
 import numpy as np
-
-from lymph.helper import AbstractLookupDict
 
 
 class Modality:
@@ -30,6 +29,10 @@ class Modality:
         self.specificity = specificity
         self.sensitivity = sensitivity
         self.is_trinary = is_trinary
+
+
+    def __hash__(self) -> int:
+        return hash((self.specificity, self.sensitivity, self.is_trinary))
 
 
     def __repr__(self) -> str:
@@ -107,126 +110,118 @@ class Pathological(Modality):
 
 
 
-ModalityDef = Union[Modality, np.ndarray, Tuple[float, float], List[float]]
+MC = TypeVar("MC", bound="Composite")
 
-class ModalitiesUserDict(AbstractLookupDict):
-    """Dictionary storing instances of :py:class:`Modality` for a lymph model.
+class Composite(ABC):
+    """Abstract base class implementing the composite pattern for diagnostic modalities.
 
-    This class allows the user to specify the diagnostic modalities of a lymph model
-    in a convenient way. The user may pass an instance of :py:class:`Modality` - or one
-    of its subclasses - directly. Especially for trinary models, it is recommended to
-    use the subclasses :py:class:`Clinical` and :py:class:`Pathological` to avoid
-    ambiguities.
-
-    Alternatively, a simple tuple or list of floats may be passed, from which the first
-    two entries are interpreted as the specificity and sensitivity, respectively. For
-    trinary models, we assume the modality to be :py:class:`Clinical`.
-
-    For completely custom confusion matrices, the user may pass a numpy array directly.
-    In the binary case, a valid :py:class:`Modality` instance is constructed from the
-    array. For trinary models, the array must have three rows, and is not possible
-    anymore to infer the type of the modality or unambiguouse values for sensitivity and
-    specificity. This may lead to unexpected results when the confusion matrix is
-    recomputed accidentally at some point.
-
-    Examples:
-
-    >>> binary_modalities = ModalitiesUserDict(is_trinary=False)
-    >>> binary_modalities["test"] = Modality(0.9, 0.8)
-    >>> binary_modalities["test"].confusion_matrix
-    array([[0.9, 0.1],
-           [0.2, 0.8]])
-    >>> modalities = ModalitiesUserDict(is_trinary=True)
-    >>> modalities["CT"] = Clinical(specificity=0.9, sensitivity=0.8)
-    >>> modalities["CT"].confusion_matrix
-    array([[0.9, 0.1],
-           [0.9, 0.1],
-           [0.2, 0.8]])
-    >>> modalities["PET"] = (0.85, 0.82)
-    >>> modalities["PET"]
-    Clinical(specificity=0.85, sensitivity=0.82, is_trinary=True)
-    >>> modalities["pathology"] = Pathological(specificity=1.0, sensitivity=1.0)
-    >>> modalities["pathology"].confusion_matrix
-    array([[1., 0.],
-           [0., 1.],
-           [0., 1.]])
+    Any class inheriting from this class should be able to handle the definition of
+    diagnostic modalities and their sensitivity/specificity values,
     """
-    def __setitem__(self, name: str, value: ModalityDef, / ) -> None:
-        """Set the modality of the lymph model."""
-        # pylint: disable=unidiomatic-typecheck
-        # pylint: disable=no-member
-        cls = Clinical
+    _is_trinary: bool
+    _modalities: dict[str, Modality]    # only for leaf nodes
+    _modality_children: dict[str, Composite]
 
-        if type(value) is Modality:
-            # we assume the modality to be clinical here, because for a binary model
-            # it does not matter, but for a trinary model the base `Modalitiy` class
-            # would not work.
-            if self.is_trinary:
-                warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-            value = cls(value.specificity, value.sensitivity, self.is_trinary)
+    def __init__(
+        self: MC,
+        is_trinary: bool = False,
+        modality_children: dict[str, Composite] = None,
+        is_modality_leaf: bool = False,
+    ) -> None:
+        """Initialize the modality composite."""
+        self._is_trinary = is_trinary
 
-        elif isinstance(value, Modality):
-            # in this case, the user has provided a `Clinical` or `Pathological`
-            # modality, so we can just use it after passing the model's type (binary
-            # or trinary).
-            value.is_trinary = self.is_trinary
+        if modality_children is None:
+            modality_children = {}
 
-        elif isinstance(value, np.ndarray):
-            # this should allow users to pass some custom confusion matrix directly.
-            # we do check if the matrix is valid, but the `Modalitiy` class may
-            # misbehave, e.g. when a recomputation of the confusion matrix is triggered.
-            specificity = value[0, 0]
-            sensitivity = value[-1, -1]
-            modality = Modality(specificity, sensitivity, self.is_trinary)
-            modality.confusion_matrix = value
+        if is_modality_leaf:
+            self._modalities = {}
+            self._modality_children = {}   # ignore any provided children
 
-            if self.is_trinary:
-                warnings.warn(
-                    "Provided transition matrix will be used as is. The sensitivity "
-                    "and specificity extracted from it may be nonsensical. Recomputing "
-                    "the confusion matrix from them may not work."
-                )
+        self._modality_children = modality_children
+        super().__init__()
 
-            value = modality
+
+    @property
+    def _is_modality_leaf(self: MC) -> bool:
+        """Return whether the composite is a leaf node."""
+        if len(self._modality_children) > 0:
+            return False
+
+        if not hasattr(self, "_modalities"):
+            raise AttributeError(f"{self} has no children and no modalities.")
+
+        return True
+
+
+    @property
+    def is_trinary(self: MC) -> bool:
+        """Return whether the modality is trinary."""
+        return self._is_trinary
+
+
+    def get_modality(self: MC, name: str) -> Modality:
+        """Return the modality with the given name."""
+        return self.get_all_modalities()[name]
+
+
+    def get_all_modalities(self: MC) -> dict[str, Modality]:
+        """Return all modalities of the composite."""
+        if self._is_modality_leaf:
+            return self._modalities
+
+        child_keys = list(self._modality_children.keys())
+        first_child = self._modality_children[child_keys[0]]
+        firs_modalities = first_child.get_all_modalities()
+        are_all_equal = True
+        for key in child_keys[1:]:
+            other_child = self._modality_children[key]
+            are_all_equal &= firs_modalities == other_child.get_all_modalities()
+
+        if not are_all_equal:
+            warnings.warn("Not all modalities are equal. Returning first one.")
+
+        return firs_modalities
+
+
+    def set_modality(
+        self,
+        name: str,
+        specificity: float,
+        sensitivity: float,
+        kind: Literal["clinical", "pathological"] = "clinical",
+    ) -> None:
+        """Set the modality with the given name."""
+        if self._is_modality_leaf:
+            cls = Pathological if kind == "pathological" else Clinical
+            self._modalities[name] = cls(specificity, sensitivity, self.is_trinary)
 
         else:
-            # lastly, the user may have provided a list or tuple with the specificity
-            # and sensitivity and we're trying to interpret it that way. As before, we
-            # assume the modality to be clinical here.
-            try:
-                specificity, sensitivity = value
-                if self.is_trinary:
-                    warnings.warn(f"Assuming modality to be `{cls.__name__}`.")
-                value = cls(specificity, sensitivity, self.is_trinary)
-            except (ValueError, TypeError) as err:
-                raise ValueError(
-                    "Value must be a `Clinical` or `Pathological` modality, a "
-                    "confusion matrix or a list/tuple containing specificity and "
-                    "sensitivity."
-                ) from err
-
-        super().__setitem__(name, value)
+            for child in self._modality_children.values():
+                child.set_modality(name, specificity, sensitivity, kind)
 
 
-    def __delitem__(self, key: str) -> None:
-        return super().__delitem__(key)
+    def replace_all_modalities(self: MC, modalities: dict[str, Modality]) -> None:
+        """Replace all modalities of the composite."""
+        if self._is_modality_leaf:
+            self._modalities = {}
+            for name, modality in modalities.items():
+                kind = "pathological" if isinstance(modality, Pathological) else "clinical"
+                self.set_modality(name, modality.specificity, modality.sensitivity, kind)
+
+        else:
+            for child in self._modality_children.values():
+                child.replace_all_modalities(modalities)
 
 
-    def confusion_matrices_hash(self) -> int:
-        """Compute a kind of hash from all confusion matrices.
+    def compute_modalities_hash(self: MC) -> int:
+        """Compute a hash from all modalities."""
+        hash_res = 0
+        if self._is_modality_leaf:
+            for name, modality in self._modalities.items():
+                hash_res = hash((hash_res, name, hash(modality)))
 
-        Note:
-            This is used to check if some modalities have changed and the observation
-            matrix needs to be recomputed. It should not be used as a replacement for
-            the ``__hash__`` method, for two reasons:
+        for child in self._modality_children.values():
+            hash_res = hash((hash_res, hash(child)))
 
-            1. It may change over the lifetime of the object, whereas ``__hash__``
-                should be constant.
-            2. It only takes into account the ``confusion_matrix`` of the modality,
-                nothing else.
-        """
-        confusion_mat_bytes = b""
-        for modality in self.values():
-            confusion_mat_bytes += modality.confusion_matrix.tobytes()
-
-        return hash(confusion_mat_bytes)
+        return hash_res
