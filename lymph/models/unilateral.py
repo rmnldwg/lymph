@@ -3,25 +3,27 @@ from __future__ import annotations
 import warnings
 from functools import cached_property
 from itertools import product
-from typing import Any, Callable, Generator, Iterable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, graph, matrix, modalities
+from lymph import diagnose_times, graph, matrix, modalities, types
 from lymph.helper import (
-    DelegationSyncMixin,
     dict_to_func,
     early_late_mapping,
     flatten,
     smart_updating_dict_cached_property,
 )
-from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 
-class Unilateral(DelegationSyncMixin):
+class Unilateral(
+    diagnose_times.Composite,
+    modalities.Composite,
+    types.Model,
+):
     """Class that models metastatic progression in a unilateral lymphatic system.
 
     It does this by representing it as a directed graph (DAG), which is stored in and
@@ -95,17 +97,11 @@ class Unilateral(DelegationSyncMixin):
             allowed_states=allowed_states,
         )
 
-        if 0 >= max_time:
-            raise ValueError("Latest diagnosis time `max_time` must be positive int")
-
-        self._max_time = max_time
-
-        self._init_delegation_sync(
-            is_binary=[self.graph],
-            is_trinary=[self.graph],
-            get_state=[self.graph],
-            set_state=[self.graph],
-            state_list=[self.graph],
+        diagnose_times.Composite.__init__(
+            self, max_time=max_time, is_distribution_leaf=True,
+        )
+        modalities.Composite.__init__(
+            self, is_trinary=self.is_trinary, is_modality_leaf=True,
         )
 
 
@@ -126,17 +122,6 @@ class Unilateral(DelegationSyncMixin):
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
 
 
-    @property
-    def max_time(self) -> int:
-        """The latest time(-step) to include in the model's evolution.
-
-        This attribute cannot be changed (easily). Thus, we recommend creating a new
-        instance of the model when you feel like needing to change the initially set
-        value.
-        """
-        return self._max_time
-
-
     def print_info(self):
         """Print detailed information about the instance."""
         num_tumors = len(self.graph.tumors)
@@ -154,7 +139,7 @@ class Unilateral(DelegationSyncMixin):
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> float | Iterable[float] | dict[str, float]:
+    ) -> Iterable[float] | dict[str, float]:
         """Get the parameters of the model.
 
         If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
@@ -162,7 +147,7 @@ class Unilateral(DelegationSyncMixin):
         dictionaries are merged into one, using :py:func:`~lymph.helper.flatten`.
         """
         params = self.graph.get_params(as_flat=as_flat)
-        params.update(self.diag_time_dists.get_params(as_flat=as_flat))
+        params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -215,7 +200,7 @@ class Unilateral(DelegationSyncMixin):
          'III_growth': 0.123}
         """
         args = self.graph.set_params(*args, **kwargs)
-        return self.diag_time_dists.set_params(*args, **kwargs)
+        return self.set_distribution_params(*args, **kwargs)
 
 
     def comp_transition_prob(
@@ -256,7 +241,7 @@ class Unilateral(DelegationSyncMixin):
         diagnoses, given the current state of the system.
         """
         prob = 1.
-        for name, modality in self.modalities.items():
+        for name, modality in self.get_all_modalities().items():
             if name in diagnoses:
                 mod_diagnose = diagnoses[name]
                 for lnl in self.graph.lnls:
@@ -304,7 +289,7 @@ class Unilateral(DelegationSyncMixin):
         pathology modality.
         """
         possible_obs_list = []
-        for modality in self.modalities.values():
+        for modality in self.get_all_modalities().values():
             possible_obs = np.arange(modality.confusion_matrix.shape[1])
             for _ in self.graph.lnls:
                 possible_obs_list.append(possible_obs.copy())
@@ -344,27 +329,6 @@ class Unilateral(DelegationSyncMixin):
         return matrix.cached_generate_transition(self.graph.parameter_hash(), self)
 
 
-    @smart_updating_dict_cached_property
-    def modalities(self) -> modalities.ModalitiesUserDict:
-        """Dictionary of diagnostic modalities and their confusion matrices.
-
-        This must be set by the user. For example, if one wanted to add the modality
-        "CT" with a sensitivity of 80% and a specificity of 90%, one would do:
-
-        >>> model = Unilateral(graph_dict={
-        ...     ("tumor", "T"): ["II", "III"],
-        ...     ("lnl", "II"): ["III"],
-        ...     ("lnl", "III"): [],
-        ... })
-        >>> model.modalities["CT"] = (0.8, 0.9)
-
-        See Also:
-            :py:class:`~lymph.descriptors.modalities.ModalitiesUserDict`
-            :py:class:`~lymph.descriptors.modalities.Modality`
-        """
-        return modalities.ModalitiesUserDict(is_trinary=self.is_trinary)
-
-
     def observation_matrix(self) -> np.ndarray:
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
@@ -379,7 +343,7 @@ class Unilateral(DelegationSyncMixin):
                 The function actually computing the observation matrix.
         """
         return matrix.cached_generate_observation(
-            self.modalities.confusion_matrices_hash(), self
+            self.compute_modalities_hash(), self
         )
 
 
@@ -405,28 +369,6 @@ class Unilateral(DelegationSyncMixin):
             :py:class:`~lymph.descriptors.matrix.DiagnoseUserDict`
         """
         return matrix.DiagnoseUserDict(model=self)
-
-
-    @smart_updating_dict_cached_property
-    def diag_time_dists(self) -> diagnose_times.DistributionsUserDict:
-        """Dictionary of distributions over diagnose times for each T-stage."""
-        return diagnose_times.DistributionsUserDict(max_time=self.max_time)
-
-
-    @property
-    def t_stages(self) -> Generator[str, None, None]:
-        """Generator of all valid T-stages in the model.
-
-        This is the intersection of the unique T-stages found in the (mapped) data
-        and the T-stages defined in the distributions over diagnose times.
-        """
-        for t_stage in self.diag_time_dists.keys():
-            # This implementation is a little special, because the diagnose matrix
-            # of a particular T-stage is only computed when either __contains__ or
-            # __getitem__ is called on it. Therefore, we cannot directly loop over
-            # the diagnose matrices' keys or something like that.
-            if t_stage in self.diagnose_matrices:
-                yield t_stage
 
 
     def load_patient_data(
@@ -458,7 +400,7 @@ class Unilateral(DelegationSyncMixin):
         if isinstance(mapping, dict):
             mapping = dict_to_func(mapping)
 
-        for modality_name in self.modalities.keys():
+        for modality_name in self.get_all_modalities().keys():
             if modality_name not in patient_data:
                 raise ValueError(f"Modality '{modality_name}' not found in data.")
 
@@ -479,7 +421,7 @@ class Unilateral(DelegationSyncMixin):
             lambda row: mapping(row["tumor", "1", "t_stage"]), axis=1
         )
 
-        for t_stage in self.diag_time_dists.keys():
+        for t_stage in self.t_stages:
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
@@ -550,7 +492,7 @@ class Unilateral(DelegationSyncMixin):
         distribution over diagnose times that are stored and managed for each T-stage
         in the dictionary :py:attr:`~diag_time_dists`.
         """
-        state_dists = np.zeros(shape=(self.max_time + 1, len(self.state_list)))
+        state_dists = np.zeros(shape=(self.max_time + 1, len(self.graph.state_list)))
         state_dists[0, 0] = 1.
 
         for t in range(1, self.max_time + 1):
@@ -573,7 +515,7 @@ class Unilateral(DelegationSyncMixin):
         """
         if mode == "HMM":
             state_dists = self.comp_dist_evolution()
-            diag_time_dist = self.diag_time_dists[t_stage].distribution
+            diag_time_dist = self.get_distribution(t_stage).pmf
 
             return diag_time_dist @ state_dists
 
@@ -631,7 +573,7 @@ class Unilateral(DelegationSyncMixin):
 
         for t_stage in t_stages:
             patient_likelihoods = (
-                self.diag_time_dists[t_stage].distribution
+                self.get_distribution(t_stage).pmf
                 @ evolved_model
                 @ self.diagnose_matrices[t_stage]
             )
@@ -686,12 +628,12 @@ class Unilateral(DelegationSyncMixin):
 
     def comp_diagnose_encoding(
         self,
-        given_diagnoses: DiagnoseType | None = None,
+        given_diagnoses: types.DiagnoseType | None = None,
     ) -> np.ndarray:
         """Compute one-hot vector encoding of a given diagnosis."""
         diagnose_encoding = np.array([True], dtype=bool)
 
-        for modality in self.modalities.keys():
+        for modality in self.get_all_modalities().keys():
             diagnose_encoding = np.kron(
                 diagnose_encoding,
                 matrix.compute_encoding(
@@ -708,7 +650,7 @@ class Unilateral(DelegationSyncMixin):
         self,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        given_diagnoses: DiagnoseType | None = None,
+        given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
     ) -> np.ndarray:
@@ -765,10 +707,10 @@ class Unilateral(DelegationSyncMixin):
 
     def risk(
         self,
-        involvement: PatternType | None = None,
+        involvement: types.PatternType | None = None,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        given_diagnoses: dict[str, PatternType] | None = None,
+        given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
         **_kwargs,
@@ -863,18 +805,18 @@ class Unilateral(DelegationSyncMixin):
             stage_dist = np.array(stage_dist) / sum(stage_dist)
 
         drawn_t_stages = rng.choice(
-            a=list(self.diag_time_dists.keys()),
+            a=self.t_stages,
             p=stage_dist,
             size=num,
         )
         drawn_diag_times = [
-            self.diag_time_dists[t_stage].draw_diag_times(rng=rng)
+            self.get_distribution(t_stage).draw_diag_times(rng=rng)
             for t_stage in drawn_t_stages
         ]
 
         drawn_obs = self.draw_diagnoses(drawn_diag_times, rng=rng)
 
-        modality_names = list(self.modalities.keys())
+        modality_names = list(self.get_all_modalities().keys())
         lnl_names = list(self.graph.lnls.keys())
         multi_cols = pd.MultiIndex.from_product([modality_names, ["ipsi"], lnl_names])
 
