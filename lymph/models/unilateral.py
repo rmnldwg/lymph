@@ -88,20 +88,14 @@ class Unilateral(
         LNLs. If they are set to ``True``, the parameters are set globally for all LNLs.
         If they are set to ``False``, the parameters are set individually for each LNL.
         """
-        super().__init__()
-
         self.graph = graph.Representation(
             graph_dict=graph_dict,
             tumor_state=tumor_state,
             allowed_states=allowed_states,
         )
 
-        diagnose_times.Composite.__init__(
-            self, max_time=max_time, is_distribution_leaf=True,
-        )
-        modalities.Composite.__init__(
-            self, is_trinary=self.is_trinary, is_modality_leaf=True,
-        )
+        diagnose_times.Composite.__init__(self, max_time=max_time, is_distribution_leaf=True)
+        modalities.Composite.__init__(self, is_modality_leaf=True)
 
 
     @classmethod
@@ -132,6 +126,17 @@ class Unilateral(
             + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
         )
         print(string)
+
+
+    @property
+    def is_trinary(self) -> bool:
+        """Return whether the model is trinary."""
+        return self.graph.is_trinary
+
+    @property
+    def is_binary(self) -> bool:
+        """Return whether the model is binary."""
+        return self.graph.is_binary
 
 
     def get_params(

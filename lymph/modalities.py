@@ -9,7 +9,7 @@ recoding the output of diagnostic modalities), given the model and its parameter
 from __future__ import annotations
 
 import warnings
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Literal, TypeVar
 
 import numpy as np
@@ -33,6 +33,17 @@ class Modality:
 
     def __hash__(self) -> int:
         return hash((self.specificity, self.sensitivity, self.is_trinary))
+
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Modality):
+            return False
+
+        return (
+            self.specificity == other.specificity
+            and self.sensitivity == other.sensitivity
+            and self.is_trinary == other.is_trinary
+        )
 
 
     def __repr__(self) -> str:
@@ -124,19 +135,16 @@ class Composite(ABC):
 
     def __init__(
         self: MC,
-        is_trinary: bool = False,
         modality_children: dict[str, Composite] = None,
         is_modality_leaf: bool = False,
     ) -> None:
         """Initialize the modality composite."""
-        self._is_trinary = is_trinary
-
         if modality_children is None:
             modality_children = {}
 
         if is_modality_leaf:
             self._modalities = {}
-            self._modality_children = {}   # ignore any provided children
+            modality_children = {}   # ignore any provided children
 
         self._modality_children = modality_children
         super().__init__()
@@ -155,16 +163,9 @@ class Composite(ABC):
 
 
     @property
+    @abstractmethod
     def is_trinary(self: MC) -> bool:
         """Return whether the modality is trinary."""
-        if self._is_modality_leaf:
-            return self._is_trinary
-
-        values = {child.is_trinary for child in self._modality_children.values()}
-        if len(values) > 1:
-            warnings.warn("Not all children have same 'narity'. Returning first one.")
-
-        return self._modality_children.values()[0].is_trinary
 
 
     def get_modality(self: MC, name: str) -> Modality:

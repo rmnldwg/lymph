@@ -257,16 +257,16 @@ class Composite(ABC):
         is_distribution_leaf: bool = False,
     ) -> None:
         """Initialize the distribution composite."""
-        self.max_time = max_time
-
         if distribution_children is None:
             distribution_children = {}
 
         if is_distribution_leaf:
             self._distributions = {}
-            distribution_children = {}         # ignore any provided children
+            self._distribution_children = {}    # ignore any provided children
+            self.max_time = max_time            # only set max_time in leaf
 
         self._distribution_children = distribution_children
+
         super().__init__()
 
 
@@ -292,7 +292,7 @@ class Composite(ABC):
         if len(max_times) > 1:
             warnings.warn("Not all max_times are equal. Returning the first one.")
 
-        return self._distribution_children.values()[0].max_time
+        return list(self._distribution_children.values())[0].max_time
 
     @max_time.setter
     def max_time(self: DC, value: int) -> None:
@@ -376,8 +376,14 @@ class Composite(ABC):
             for t_stage, distribution in self._distributions.items():
                 params[t_stage] = distribution.get_params(as_flat=as_flat)
         else:
-            for key, child in self._distribution_children.items():
-                params[key] = child.get_distribution_params(as_flat=as_flat)
+            child_keys = list(self._distribution_children.keys())
+            first_child = self._distribution_children[child_keys[0]]
+            params = first_child.get_distribution_params(as_flat=as_flat)
+            are_all_equal = True
+            for key in child_keys[1:]:
+                other_child = self._distribution_children[key]
+                other_params = other_child.get_distribution_params(as_flat=as_flat)
+                are_all_equal &= params == other_params
 
         if as_flat or not as_dict:
             params = flatten(params)

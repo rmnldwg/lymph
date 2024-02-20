@@ -66,8 +66,6 @@ class Bilateral(
         override the unilateral kwargs and may also override the ``graph_dict``. This
         allows the user to specify different graphs for the two sides of the neck.
         """
-        super().__init__()
-
         self._init_models(
             graph_dict=graph_dict,
             unilateral_kwargs=unilateral_kwargs,
@@ -85,13 +83,11 @@ class Bilateral(
 
         diagnose_times.Composite.__init__(
             self,
-            max_time=self.max_time,     # `max_time` already accessible from ipsi/contra
             distribution_children={"ipsi": self.ipsi, "contra": self.contra},
             is_distribution_leaf=False,
         )
         modalities.Composite.__init__(
             self,
-            is_trinary=self.is_trinary, # `is_trinary` already accessible from ipsi/contra
             modality_children={"ipsi": self.ipsi, "contra": self.contra},
             is_modality_leaf=False,
         )
@@ -135,6 +131,23 @@ class Bilateral(
         return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
 
 
+    @property
+    def is_trinary(self) -> bool:
+        """Return whether the model is trinary."""
+        if self.ipsi.is_trinary != self.contra.is_trinary:
+            raise ValueError("Both sides must be of the same 'naryity'.")
+
+        return self.ipsi.is_trinary
+
+    @property
+    def is_binary(self) -> bool:
+        """Return whether the model is binary."""
+        if self.ipsi.is_binary != self.contra.is_binary:
+            raise ValueError("Both sides must be of the same 'naryity'.")
+
+        return self.ipsi.is_binary
+
+
     def get_params(
         self,
         as_dict: bool = True,
@@ -154,8 +167,8 @@ class Bilateral(
         params = {
             "ipsi": ipsi_params,
             "contra": contra_params,
-            **dist_params,
         }
+        params.update(dist_params)
 
         if as_flat or not as_dict:
             params = flatten(params)
