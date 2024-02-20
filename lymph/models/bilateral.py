@@ -7,21 +7,18 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from lymph import matrix, models
-from lymph.helper import (
-    DelegationSyncMixin,
-    early_late_mapping,
-    flatten,
-    set_bilateral_params_for,
-)
-from lymph.types import DiagnoseType, PatternType
+from lymph import diagnose_times, matrix, modalities, models, types
+from lymph.helper import early_late_mapping, flatten, set_bilateral_params_for
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
-
-class Bilateral(DelegationSyncMixin):
+class Bilateral(
+    diagnose_times.Composite,
+    modalities.Composite,
+    types.Model,
+):
     """Class that models metastatic progression in a bilateral lymphatic system.
 
     This is achieved by creating two instances of the
@@ -86,18 +83,17 @@ class Bilateral(DelegationSyncMixin):
                 "lnl_spread": True,
             }
 
-        if self.is_symmetric["modalities"]:
-            delegation_sync_kwargs = {"modalities": [self.ipsi, self.contra]}
-        else:
-            delegation_sync_kwargs = {}
-
-        self._init_delegation_sync(
-            max_time=[self.ipsi, self.contra],
-            t_stages=[self.ipsi, self.contra],
-            diag_time_dists=[self.ipsi, self.contra],
-            is_binary=[self.ipsi, self.contra],
-            is_trinary=[self.ipsi, self.contra],
-            **delegation_sync_kwargs,
+        diagnose_times.Composite.__init__(
+            self,
+            max_time=self.max_time,     # `max_time` already accessible from ipsi/contra
+            distribution_children={"ipsi": self.ipsi, "contra": self.contra},
+            is_distribution_leaf=False,
+        )
+        modalities.Composite.__init__(
+            self,
+            is_trinary=self.is_trinary, # `is_trinary` already accessible from ipsi/contra
+            modality_children={"ipsi": self.ipsi, "contra": self.contra},
+            is_modality_leaf=False,
         )
 
 
@@ -146,27 +142,14 @@ class Bilateral(DelegationSyncMixin):
     ) -> Iterable[float] | dict[str, float]:
         """Return the parameters of the model.
 
-        If ``as_flat`` is ``False``, the parameters of the two sides of the neck are
-        returned as a nested dictionary in addition to one dictionary storing the
-        parameters of the parametric distributions for marginalizing over diagnose
-        times. Otherwise, the parameters are returned as a flat dictionary, with the
-        keys prefixed by ``"ipsi_"`` or ``"contra_"``. The parameters of the parametric
-        distributions are only prefixed by their corresponding T-stage, e.g.
-        ``"early_p"``.
-
-        If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
-        ``param`` is not ``None``, only the value of the parameter with that name is
-        returned. Otherwise, all parameters are returned as a dictionary or a list.
-
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.get_params`
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
-            :py:meth:`lymph.graph.Edge.get_params`
-            :py:meth:`lymph.models.Unilateral.get_params`
+        It returns the combination of the call to the
+        :py:meth:`lymph.models.Unilateral.get_params` of the ipsi- and contralateral
+        side. For the use of the ``as_dict`` and ``as_flat`` arguments, see the
+        documentation of the :py:meth:`lymph.types.Model.get_params` method.
         """
         ipsi_params = self.ipsi.graph.get_params(as_flat=as_flat)
         contra_params = self.contra.graph.get_params(as_flat=as_flat)
-        dist_params = self.diag_time_dists.get_params(as_flat=as_flat)
+        dist_params = self.get_distribution_params(as_flat=as_flat)
 
         params = {
             "ipsi": ipsi_params,
@@ -225,7 +208,7 @@ class Bilateral(DelegationSyncMixin):
             is_symmetric=self.is_symmetric["lnl_spread"],
             **kwargs,
         )
-        return self.diag_time_dists.set_params(*args, **kwargs)
+        return self.set_distribution_params(*args, **kwargs)
 
 
     def load_patient_data(
@@ -261,7 +244,7 @@ class Bilateral(DelegationSyncMixin):
         if mode == "HMM":
             ipsi_state_evo = self.ipsi.comp_dist_evolution()
             contra_state_evo = self.contra.comp_dist_evolution()
-            time_marg_matrix = np.diag(self.diag_time_dists[t_stage].distribution)
+            time_marg_matrix = np.diag(self.get_distribution(t_stage).pmf)
 
             result = (
                 ipsi_state_evo.T
@@ -334,7 +317,7 @@ class Bilateral(DelegationSyncMixin):
             t_stages = [t_stage]
 
         for stage in t_stages:
-            diag_time_matrix = np.diag(self.diag_time_dists[stage].distribution)
+            diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
 
             # Note that I am not using the `comp_joint_state_dist` method here, since
             # that would recompute the state dist evolution for each T-stage.
@@ -415,13 +398,13 @@ class Bilateral(DelegationSyncMixin):
         self,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        given_diagnoses: dict[str, DiagnoseType] | None = None,
+        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
     ) -> np.ndarray:
         """Compute joint post. dist. over ipsi & contra states, ``given_diagnoses``.
 
-        The ``given_diagnoses`` is a dictionary storing a :py:class:`DiagnoseType` for
+        The ``given_diagnoses`` is a dictionary storing a :py:class:`types.DiagnoseType` for
         the ``"ipsi"`` and ``"contra"`` side of the neck.
 
         Essentially, this is the risk for any possible combination of ipsi- and
@@ -470,10 +453,10 @@ class Bilateral(DelegationSyncMixin):
 
     def risk(
         self,
-        involvement: PatternType | None = None,
+        involvement: types.PatternType | None = None,
         given_param_args: Iterable[float] | None = None,
         given_param_kwargs: dict[str, float] | None = None,
-        given_diagnoses: dict[str, DiagnoseType] | None = None,
+        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
     ) -> float:
@@ -482,7 +465,7 @@ class Bilateral(DelegationSyncMixin):
         The parameters can be set via the ``given_param_args`` and
         ``given_param_kwargs``, both of which are passed to the
         :py:meth:`~set_params` method. The ``given_diagnoses`` must be a dictionary
-        mapping the side of the neck to a :py:class:`DiagnoseType`.
+        mapping the side of the neck to a :py:class:`types.DiagnoseType`.
 
         Note:
             The computation is much faster if no parameters are given, since then the
@@ -549,12 +532,12 @@ class Bilateral(DelegationSyncMixin):
             stage_dist = np.array(stage_dist) / sum(stage_dist)
 
         drawn_t_stages = rng.choice(
-            a=list(self.diag_time_dists.keys()),
+            a=self.t_stages,
             p=stage_dist,
             size=num,
         )
         drawn_diag_times = [
-            self.diag_time_dists[t_stage].draw_diag_times(rng=rng)
+            self.get_distribution(t_stage).draw_diag_times(rng=rng)
             for t_stage in drawn_t_stages
         ]
 
@@ -565,7 +548,7 @@ class Bilateral(DelegationSyncMixin):
         # construct MultiIndex with "ipsi" and "contra" at top level to allow
         # concatenation of the two separate drawn diagnoses
         sides = ["ipsi", "contra"]
-        modality_names = list(self.modalities.keys())
+        modality_names = list(self.get_all_modalities().keys())
         lnl_names = [lnl for lnl in self.ipsi.graph.lnls.keys()]
         multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
 

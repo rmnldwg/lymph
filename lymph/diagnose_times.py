@@ -285,15 +285,27 @@ class Composite(ABC):
     @property
     def max_time(self: DC) -> int:
         """Return the maximum time for the distributions."""
-        return self._max_time
+        if self._is_distribution_leaf:
+            return self._max_time
+
+        max_times = {child.max_time for child in self._distribution_children.values()}
+        if len(max_times) > 1:
+            warnings.warn("Not all max_times are equal. Returning the first one.")
+
+        return self._distribution_children.values()[0].max_time
 
     @max_time.setter
     def max_time(self: DC, value: int) -> None:
         """Set the maximum time for the distributions."""
-        if value < 0:
-            raise ValueError("max_time must be a positive integer")
+        if self._is_distribution_leaf:
+            if value < 0:
+                raise ValueError("max_time must be a positive integer")
 
-        self._max_time = value
+            self._max_time = value
+
+        else:
+            for child in self._distribution_children.values():
+                child.max_time = value
 
 
     @property

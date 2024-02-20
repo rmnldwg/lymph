@@ -157,7 +157,14 @@ class Composite(ABC):
     @property
     def is_trinary(self: MC) -> bool:
         """Return whether the modality is trinary."""
-        return self._is_trinary
+        if self._is_modality_leaf:
+            return self._is_trinary
+
+        values = {child.is_trinary for child in self._modality_children.values()}
+        if len(values) > 1:
+            warnings.warn("Not all children have same 'narity'. Returning first one.")
+
+        return self._modality_children.values()[0].is_trinary
 
 
     def get_modality(self: MC, name: str) -> Modality:

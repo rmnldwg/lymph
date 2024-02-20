@@ -36,7 +36,6 @@ class Unilateral(
     is_trinary: bool
     get_state: Callable
     set_state: Callable
-    state_list: list[int]
     lnls: dict[str, graph.LymphNodeLevel]
 
     def __init__(
@@ -520,9 +519,9 @@ class Unilateral(
             return diag_time_dist @ state_dists
 
         if mode == "BN":
-            state_dist = np.ones(shape=(len(self.state_list),), dtype=float)
+            state_dist = np.ones(shape=(len(self.graph.state_list),), dtype=float)
 
-            for i, state in enumerate(self.state_list):
+            for i, state in enumerate(self.graph.state_list):
                 self.set_state(*state)
                 for node in self.graph.lnls.values():
                     state_dist[i] *= node.comp_bayes_net_prob()
