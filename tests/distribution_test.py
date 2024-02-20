@@ -45,8 +45,8 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
             warnings.simplefilter("ignore", category=UserWarning)
             self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
-        self.assertTrue(len(dist.distribution) == self.max_time + 1)
-        self.assertTrue(np.allclose(sum(dist.distribution), 1.))
+        self.assertTrue(len(dist.pmf) == self.max_time + 1)
+        self.assertTrue(np.allclose(sum(dist.pmf), 1.))
 
     def test_frozen_distribution_with_max_time(self):
         """Test the creation of a frozen distribution where we provide the max_time."""
@@ -56,8 +56,8 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
             warnings.simplefilter("ignore", category=UserWarning)
             self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
-        self.assertTrue(len(dist.distribution) == self.max_time + 1)
-        self.assertTrue(np.allclose(sum(dist.distribution), 1.))
+        self.assertTrue(len(dist.pmf) == self.max_time + 1)
+        self.assertTrue(np.allclose(sum(dist.pmf), 1.))
 
         self.assertRaises(ValueError, Distribution, self.array_arg, max_time=5)
 
@@ -72,8 +72,8 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
 
         dist.set_params(p=0.5)
         self.assertTrue(len(dist.support) == self.max_time + 1)
-        self.assertTrue(len(dist.distribution) == self.max_time + 1)
-        self.assertTrue(np.allclose(sum(dist.distribution), 1.))
+        self.assertTrue(len(dist.pmf) == self.max_time + 1)
+        self.assertTrue(np.allclose(sum(dist.pmf), 1.))
 
     def test_updateable_distribution_raises_value_error(self):
         """Check that an invalid parameter raises a ValueError."""

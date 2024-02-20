@@ -565,15 +565,6 @@ class AbstractLookupDict(UserDict):
         return False
 
 
-    def clear_without_trigger(self) -> None:
-        """Clear the dictionary without triggering the callbacks."""
-        self.__dict__["data"].clear()
-
-    def update_without_trigger(self, other=(), /, **kwargs):
-        """Update the dictionary without triggering the callbacks."""
-        self.__dict__["data"].update(other, **kwargs)
-
-
 class smart_updating_dict_cached_property(cached_property):
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
     def __set__(self, instance: object, value: Any) -> None:
@@ -753,30 +744,3 @@ def check_unique_and_get_first(objects: Iterable, attr: str = "") -> Any:
     if len(object_set) > 1:
         warnings.warn(f"{attr} not synced: {object_set}. Setting should sync.")
     return sorted(object_set).pop()
-
-
-if __name__ == "__main__":
-    class Param:
-        def __init__(self, value):
-            self.value = value
-    class Model:
-        def __init__(self, **kwargs):
-            self.params_dict = kwargs
-            self.param = Param(sum(kwargs.values()))
-        def set_value(self, key, value):
-            self.params_dict[key] = value
-    class Mixture(DelegationSyncMixin):
-        def __init__(self):
-            super().__init__()
-            self.c1 = Model(a=1, b=2)
-            self.c2 = Model(a=3, b=4, c=5)
-            self._init_delegation_sync(
-                params_dict=[self.c1, self.c2],
-                param=[self.c1, self.c2],
-                set_value=[self.c1, self.c2],
-            )
-    mixture = Mixture()
-    mixture.params_dict["b"]
-    mixture.params_dict["a"] = 99
-    mixture.param.value = 42
-    mixture.set_value("c", 100)

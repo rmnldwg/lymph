@@ -90,7 +90,7 @@ def generate_observation(instance: models.Unilateral) -> np.ndarray:
     shape = (base ** num_lnls, 1)
     observation_matrix = np.ones(shape=shape)
 
-    for modality in instance.modalities.values():
+    for modality in instance.get_all_modalities().values():
         mod_obs_matrix = np.ones(shape=(1,1))
         for _ in instance.graph.lnls:
             mod_obs_matrix = np.kron(mod_obs_matrix, modality.confusion_matrix)
@@ -237,7 +237,7 @@ def generate_data_encoding(
 
     for i, (_, patient_row) in enumerate(selected_patients["_model"].iterrows()):
         patient_encoding = np.ones(shape=1, dtype=bool)
-        for modality_name in model.modalities.keys():
+        for modality_name in model.get_all_modalities().keys():
             if modality_name not in patient_row:
                 continue
             diagnose_encoding = compute_encoding(
@@ -320,7 +320,7 @@ class DiagnoseUserDict(AbstractLookupDict):
         warnings.warn("Setting the diagnose matrices is not supported.")
 
     def __getitem__(self, key: Any) -> Any:
-        modalities_hash = self.model.modalities.confusion_matrices_hash()
+        modalities_hash = self.model.compute_modalities_hash()
         patient_data_hash = self.model.patient_data_hash
         joint_hash = hash((modalities_hash, patient_data_hash, key))
         return cached_generate_diagnose(joint_hash, self.model, key)
