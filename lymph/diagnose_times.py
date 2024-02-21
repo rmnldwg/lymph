@@ -118,18 +118,23 @@ class Distribution:
 
 
     def __repr__(self) -> str:
-        return f"Distribution({self.pmf})"
+        return f"Distribution({repr(self.pmf.tolist())})"
 
 
-    def __eq__(self, __value) -> bool:
-        if not isinstance(__value, Distribution):
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Distribution):
             return False
 
-        return np.all(self.pmf == __value.pmf)
+        return (
+            self.is_updateable == other.is_updateable
+            and self._kwargs == other._kwargs
+            and np.all(self.pmf == other.pmf)
+        )
 
 
     def __hash__(self) -> int:
-        return hash(self.pmf.tobytes())
+        kwarg_tpl = tuple(self._kwargs.items())
+        return hash((self.is_updateable, kwarg_tpl, self.pmf.tobytes()))
 
 
     @staticmethod
@@ -320,7 +325,14 @@ class Composite(ABC):
 
 
     def get_all_distributions(self: DC) -> dict[str, Distribution]:
-        """Return all distributions."""
+        """Return all distributions.
+
+        This will issue a warning if it finds that not all distributions of the
+        composite are equal. Note that it will always return the distributions of the
+        first child. This means one should NOT try to set the distributions via the
+        returned dictionary of this method. Instead, use the :py:meth:`set_modality`
+        method.
+        """
         if self._is_distribution_leaf:
             return self._distributions
 
@@ -362,6 +374,30 @@ class Composite(ABC):
         else:
             for child in self._distribution_children.values():
                 child.replace_all_distributions(distributions)
+
+
+    def clear_distributions(self: DC) -> None:
+        """Remove all distributions."""
+        if self._is_distribution_leaf:
+            self._distributions.clear()
+
+        else:
+            for child in self._distribution_children.values():
+                child.clear_distributions()
+
+
+    def distributions_hash(self: DC) -> int:
+        """Return a hash of all distributions."""
+        hash_res = 0
+        if self._is_distribution_leaf:
+            for t_stage, distribution in self._distributions.items():
+                hash_res = hash((hash_res, t_stage, hash(distribution)))
+
+        else:
+            for child in self._distribution_children.values():
+                hash_res = hash((hash_res, child.distributions_hash()))
+
+        return hash_res
 
 
     def get_distribution_params(
