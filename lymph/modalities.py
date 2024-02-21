@@ -245,6 +245,16 @@ class Composite(ABC):
                 child.set_modality(name, spec, sens, kind)
 
 
+    def del_modality(self: MC, name: str) -> None:
+        """Delete the modality with the given name."""
+        if self._is_modality_leaf:
+            del self._modalities[name]
+
+        else:
+            for child in self._modality_children.values():
+                child.del_modality(name)
+
+
     def replace_all_modalities(self: MC, modalities: dict[str, Modality]) -> None:
         """Replace all modalities of the composite."""
         if self._is_modality_leaf:
