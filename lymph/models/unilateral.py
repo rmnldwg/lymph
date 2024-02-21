@@ -827,8 +827,9 @@ class Unilateral(
             p=stage_dist,
             size=num,
         )
+        distributions = self.get_all_distributions()
         drawn_diag_times = [
-            self.get_distribution(t_stage).draw_diag_times(rng=rng)
+            distributions[t_stage].draw_diag_times(rng=rng)
             for t_stage in drawn_t_stages
         ]
 

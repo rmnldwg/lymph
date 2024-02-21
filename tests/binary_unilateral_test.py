@@ -1,10 +1,10 @@
 """Test the binary unilateral system."""
 import unittest
 
+import fixtures
 import numpy as np
 
 from lymph.graph import LymphNodeLevel, Tumor
-from tests import fixtures
 
 
 class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
