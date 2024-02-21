@@ -76,6 +76,10 @@ class AbstractNode:
             f"allowed_states={self.allowed_states!r})"
         )
 
+    def __hash__(self) -> int:
+        """Return a hash of the node's name and state."""
+        return hash((self.name, self.state, tuple(self.allowed_states)))
+
 
     @property
     def name(self) -> str:
@@ -259,6 +263,10 @@ class Edge:
             f"spread_prob={self.spread_prob!r}, "
             f"micro_mod={self.micro_mod!r})"
         )
+
+    def __hash__(self) -> int:
+        """Return a hash of the edge's transition tensor."""
+        return hash((self.get_name(), self.transition_tensor.tobytes()))
 
 
     @property
@@ -625,44 +633,13 @@ class Representation:
         return {n: e for n, e in self.edges.items() if e.is_growth}
 
 
-    def parameter_hash(self) -> int:
-        """Compute a hash of the graph.
-
-        Note:
-            This is used to check if the graph has changed and the transition matrix
-            needs to be recomputed. It should not be used as a replacement for the
-            ``__hash__`` method, for two reasons:
-
-            1. It may change over the lifetime of the object, whereas ``__hash__``
-                should be constant.
-            2. It only takes into account the ``transition_tensor`` of the edges,
-                nothing else.
-
-        Example:
-
-        >>> graph_dict = {
-        ...    ('tumor', 'T'): ['II', 'III'],
-        ...    ('lnl', 'II'): ['III'],
-        ...    ('lnl', 'III'): [],
-        ... }
-        >>> one_graph = Representation(graph_dict)
-        >>> another_graph = Representation(graph_dict)
-        >>> rng = np.random.default_rng(42)
-        >>> for one_edge, another_edge in zip(
-        ...     one_graph.edges.values(), another_graph.edges.values()
-        ... ):
-        ...     params_dict = one_edge.get_params(as_dict=True)
-        ...     params_to_set = {k: rng.uniform() for k in params_dict}
-        ...     _ = one_edge.set_params(**params_to_set)
-        ...     _ = another_edge.set_params(**params_to_set)
-        >>> one_graph.parameter_hash() == another_graph.parameter_hash()
-        True
-        """
-        tensor_bytes = b""
+    def __hash__(self) -> int:
+        """Return a hash of the graph."""
+        hash_res = 0
         for edge in self.edges.values():
-            tensor_bytes += edge.transition_tensor.tobytes()
+            hash_res = hash((hash_res, hash(edge)))
 
-        return hash(tensor_bytes)
+        return hash_res
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
