@@ -330,7 +330,10 @@ class Unilateral(
                [0.  , 0.  , 0.56, 0.44],
                [0.  , 0.  , 0.  , 1.  ]])
         """
-        return matrix.cached_generate_transition(self.graph.parameter_hash(), self)
+        return matrix.generate_transition(
+            lnls=self.graph.lnls.values(),
+            num_states=3 if self.is_trinary else 2,
+        )
 
 
     def observation_matrix(self) -> np.ndarray:
@@ -346,8 +349,10 @@ class Unilateral(
             :py:func:`~lymph.descriptors.matrix.generate_observation`
                 The function actually computing the observation matrix.
         """
-        return matrix.cached_generate_observation(
-            self.compute_modalities_hash(), self
+        return matrix.generate_observation(
+            modalities=self.get_all_modalities().values(),
+            num_lnls=len(self.graph.lnls),
+            base=3 if self.is_trinary else 2,
         )
 
 
