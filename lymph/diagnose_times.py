@@ -60,22 +60,10 @@ class Distribution:
         """
         if callable(distribution):
             self._init_from_callable(distribution, max_time)
+        elif isinstance(distribution, Distribution):
+            self._init_from_instance(distribution)
         else:
             self._init_from_frozen(distribution, max_time)
-
-
-    def _init_from_frozen(self, distribution: Iterable[float], max_time: int):
-        """Initialize the distribution from a frozen distribution."""
-        if max_time is None:
-            max_time = len(distribution) - 1
-
-        if max_time != len(distribution) - 1:
-            raise ValueError("max_time and the length of the distribution don't match")
-
-        self.support = np.arange(max_time + 1)
-        self._kwargs = {}
-        self._func = None
-        self._frozen = self.normalize(distribution)
 
 
     def _init_from_callable(self, distribution: callable, max_time: int | None = None):
@@ -85,10 +73,38 @@ class Distribution:
         if max_time < 0:
             raise ValueError("max_time must be a positive integer")
 
-        self.support = np.arange(max_time + 1)
+        self.max_time = max_time
         self._kwargs = self.extract_kwargs(distribution)
         self._func = distribution
         self._frozen = self.pmf
+
+
+    def _init_from_instance(self, instance: Distribution):
+        """Initialize the distribution from another instance."""
+        if not instance.is_updateable:
+            self._init_from_frozen(instance.pmf, instance.max_time)
+        else:
+            self.max_time = instance.max_time
+            self._kwargs = instance._kwargs.copy()
+            self._func = instance._func
+            self._frozen = self.pmf
+
+
+    def _init_from_frozen(self, distribution: Iterable[float], max_time: int | None = None):
+        """Initialize the distribution from a frozen distribution."""
+        if max_time is None:
+            max_time = len(distribution) - 1
+
+        if max_time != len(distribution) - 1:
+            raise ValueError(
+                f"max_time {max_time} and len of distribution {len(distribution)} "
+                "don't match"
+            )
+
+        self.max_time = max_time
+        self._kwargs = {}
+        self._func = None
+        self._frozen = self.normalize(distribution)
 
 
     @staticmethod
@@ -120,7 +136,6 @@ class Distribution:
     def __repr__(self) -> str:
         return f"Distribution({repr(self.pmf.tolist())})"
 
-
     def __eq__(self, other) -> bool:
         if not isinstance(other, Distribution):
             return False
@@ -131,10 +146,27 @@ class Distribution:
             and np.all(self.pmf == other.pmf)
         )
 
+    def __len__(self) -> int:
+        return len(self.support)
 
     def __hash__(self) -> int:
         kwarg_tpl = tuple(self._kwargs.items())
         return hash((self.is_updateable, kwarg_tpl, self.pmf.tobytes()))
+
+
+    @property
+    def max_time(self) -> int:
+        """Return the maximum time for the distribution."""
+        return self.support[-1]
+
+    @max_time.setter
+    def max_time(self, value: int) -> None:
+        """Set the maximum time for the distribution."""
+        if value < 0:
+            raise ValueError("max_time must be a positive integer")
+
+        self.support = np.arange(value + 1)
+        self._frozen = None
 
 
     @staticmethod
@@ -239,17 +271,17 @@ class Composite(ABC):
 
     >>> class MyComposite(Composite):
     ...     pass
-    >>> leaf1 = MyComposite(is_distribution_leaf=True)
-    >>> leaf2 = MyComposite(is_distribution_leaf=True)
-    >>> leaf3 = MyComposite(is_distribution_leaf=True)
+    >>> leaf1 = MyComposite(is_distribution_leaf=True, max_time=1)
+    >>> leaf2 = MyComposite(is_distribution_leaf=True, max_time=1)
+    >>> leaf3 = MyComposite(is_distribution_leaf=True, max_time=1)
     >>> branch1 = MyComposite(distribution_children={"L1": leaf1, "L2": leaf2})
     >>> branch2 = MyComposite(distribution_children={"L3": leaf3})
     >>> root = MyComposite(distribution_children={"B1": branch1, "B2": branch2})
     >>> root.set_distribution("T1", Distribution([0.1, 0.9]))
     >>> root.get_distribution("T1")
-    Distribution([0.1 0.9])
+    Distribution([0.1, 0.9])
     >>> leaf1.get_distribution("T1")
-    Distribution([0.1 0.9])
+    Distribution([0.1, 0.9])
     """
     _max_time: int
     _distributions: dict[str, Distribution]    # only for leaf nodes
@@ -257,7 +289,7 @@ class Composite(ABC):
 
     def __init__(
         self: DC,
-        max_time: int = 10,
+        max_time: int | None = None,
         distribution_children: dict[str, Composite] | None = None,
         is_distribution_leaf: bool = False,
     ) -> None:
@@ -291,22 +323,37 @@ class Composite(ABC):
     def max_time(self: DC) -> int:
         """Return the maximum time for the distributions."""
         if self._is_distribution_leaf:
+            are_all_equal = True
+            for dist in self._distributions.values():
+                are_equal = dist.max_time == self._max_time
+                if not are_equal:
+                    dist.max_time = self._max_time
+                are_all_equal &= are_equal
+
+            if not are_all_equal:
+                warnings.warn(f"Not all max_times were equal. Set all to {self._max_time}")
+
             return self._max_time
 
-        max_times = {child.max_time for child in self._distribution_children.values()}
-        if len(max_times) > 1:
+        max_times = [child.max_time for child in self._distribution_children.values()]
+        if len(set(max_times)) > 1:
             warnings.warn("Not all max_times are equal. Returning the first one.")
 
-        return list(self._distribution_children.values())[0].max_time
+        return max_times[0]
 
     @max_time.setter
     def max_time(self: DC, value: int) -> None:
         """Set the maximum time for the distributions."""
         if self._is_distribution_leaf:
+            if value is None:
+                raise ValueError("max_time must be provided if the composite is a leaf")
+
             if value < 0:
                 raise ValueError("max_time must be a positive integer")
 
             self._max_time = value
+            for dist in self._distributions.values():
+                dist.max_time = value
 
         else:
             for child in self._distribution_children.values():
@@ -364,6 +411,16 @@ class Composite(ABC):
                 child.set_distribution(t_stage, distribution)
 
 
+    def del_distribution(self: DC, t_stage: str) -> None:
+        """Delete the distribution for the given ``t_stage``."""
+        if self._is_distribution_leaf:
+            del self._distributions[t_stage]
+
+        else:
+            for child in self._distribution_children.values():
+                child.del_distribution(t_stage)
+
+
     def replace_all_distributions(self: DC, distributions: dict[str, Distribution]) -> None:
         """Replace all distributions with the given ones."""
         if self._is_distribution_leaf:
@@ -410,6 +467,8 @@ class Composite(ABC):
 
         if self._is_distribution_leaf:
             for t_stage, distribution in self._distributions.items():
+                if not distribution.is_updateable:
+                    continue
                 params[t_stage] = distribution.get_params(as_flat=as_flat)
         else:
             child_keys = list(self._distribution_children.keys())
@@ -434,17 +493,20 @@ class Composite(ABC):
                 kwargs, expected_keys=self._distributions.keys()
             )
             for t_stage, distribution in self._distributions.items():
+                if not distribution.is_updateable:
+                    continue
                 t_stage_kwargs = global_kwargs.copy()
                 t_stage_kwargs.update(kwargs.get(t_stage, {}))
                 args = distribution.set_params(*args, **t_stage_kwargs)
+            # in leafs, use up args one by one
+            return args
 
-        else:
-            kwargs, global_kwargs = unflatten_and_split(
-                kwargs, expected_keys=self._distribution_children.keys()
-            )
-            for key, child in self._distribution_children.items():
-                child_kwargs = global_kwargs.copy()
-                child_kwargs.update(kwargs.get(key, {}))
-                args = child.set_distribution_params(*args, **child_kwargs)
-
-        return args
+        kwargs, global_kwargs = unflatten_and_split(
+            kwargs, expected_keys=self._distribution_children.keys()
+        )
+        for key, child in self._distribution_children.items():
+            child_kwargs = global_kwargs.copy()
+            child_kwargs.update(kwargs.get(key, {}))
+            rem_args = child.set_distribution_params(*args, **child_kwargs)
+        # in branches, distribute all args to children
+        return rem_args
