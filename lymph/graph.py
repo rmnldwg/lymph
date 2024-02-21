@@ -243,7 +243,11 @@ class Edge:
         self.parent: Tumor | LymphNodeLevel = parent
         self.child: LymphNodeLevel = child
 
-        if self.child.is_trinary:
+        if (
+            not isinstance(self.parent, Tumor)
+            and self.parent.is_trinary
+            and not self.is_growth
+        ):
             self.micro_mod = micro_mod
 
         self.spread_prob = spread_prob
