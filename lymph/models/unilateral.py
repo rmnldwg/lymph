@@ -139,6 +139,17 @@ class Unilateral(
         return self.graph.is_binary
 
 
+    @property
+    def t_stages(self) -> list[str]:
+        """Return the T-stages of the model."""
+        distribution_t_stages = super().t_stages
+        try:
+            data_t_stages = self.patient_data[("_model", "#", "t_stage")].unique()
+        except AttributeError:
+            return distribution_t_stages
+        return sorted(set(distribution_t_stages) & set(data_t_stages))
+
+
     def get_params(
         self,
         as_dict: bool = True,
@@ -165,7 +176,7 @@ class Unilateral(
         The parameters can be provided either via positional arguments or via keyword
         arguments. The positional arguments are used up one by one first by the
         :py:meth:`lymph.graph.set_params` method and then by the
-        :py:meth:`lymph.diag_time_dists.set_params` method.
+        :py:meth:`lymph.models.Unilateral.set_distribution_params` method.
 
         The keyword arguments can be of the format ``"<edge_name>_<param_name>"`` or
         ``"<t_stage>_<param_name>"`` for the distributions over diagnose times. If only
@@ -216,7 +227,7 @@ class Unilateral(
 
         The probability is computed as the product of the transition probabilities of
         the individual LNLs. If ``assign`` is ``True``, the new state is assigned to
-        the model using the method :py:meth:`~Unilateral.set_states`.
+        the model using the method :py:meth:`lymph.graph.Representation.set_state`.
         """
         trans_prob = 1
         for i, lnl in enumerate(self.graph.lnls):
@@ -274,10 +285,8 @@ class Unilateral(
         ...     ("lnl", "II"): ["III"],
         ...     ("lnl", "III"): [],
         ... })
-        >>> model.modalities = {
-        ...     "CT":        (0.8, 0.8),
-        ...     "pathology": (1.0, 1.0),
-        ... }
+        >>> model.set_modality("CT", spec=0.8, sens=0.8)
+        >>> model.set_modality("pathology", spec=1.0, sens=1.0)
         >>> model.obs_list  # doctest: +ELLIPSIS
         array([[0, 0, 0, 0],
                [0, 0, 0, 1],
@@ -532,7 +541,7 @@ class Unilateral(
             state_dist = np.ones(shape=(len(self.graph.state_list),), dtype=float)
 
             for i, state in enumerate(self.graph.state_list):
-                self.set_state(*state)
+                self.graph.set_state(*state)
                 for node in self.graph.lnls.values():
                     state_dist[i] *= node.comp_bayes_net_prob()
 

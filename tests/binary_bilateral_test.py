@@ -7,7 +7,6 @@ import fixtures
 import numpy as np
 
 from lymph import models
-from lymph.modalities import Clinical
 
 
 class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
@@ -29,25 +28,6 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         self.assertEqual(self.model.max_time, self.model.ipsi.max_time)
         self.assertEqual(list(self.model.t_stages), list(self.model.ipsi.t_stages))
 
-    def test_edge_sync(self):
-        """Check if synced edges update their respective parameters."""
-        for ipsi_edge in self.model.ipsi.graph.edges.values():
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.get_name]
-            ipsi_edge.set_params(spread=self.rng.random())
-            self.assertEqual(
-                ipsi_edge.get_params("spread"),
-                contra_edge.get_params("spread"),
-            )
-
-    def test_tensor_sync(self):
-        """Check the transition tensors of the edges get deleted and updated properly."""
-        for ipsi_edge in self.model.ipsi.graph.edges.values():
-            ipsi_edge.set_params(spread=self.rng.random())
-            contra_edge = self.model.contra.graph.edges[ipsi_edge.get_name]
-            self.assertTrue(np.all(
-                ipsi_edge.transition_tensor == contra_edge.transition_tensor
-            ))
-
     def test_transition_matrix_sync(self):
         """Make sure contra transition matrix gets recomputed when ipsi param is set."""
         ipsi_trans_mat = self.model.ipsi.transition_matrix()
@@ -65,17 +45,14 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
 
     def test_modality_sync(self):
         """Make sure the modalities are synced between the two sides."""
-        self.model.ipsi.modalities = {"foo": Clinical(
-            specificity=self.rng.uniform(),
-            sensitivity=self.rng.uniform(),
-        )}
+        self.model.set_modality("foo", spec=self.rng.uniform(), sens=self.rng.uniform())
         self.assertEqual(
-            self.model.ipsi.modalities["foo"].sensitivity,
-            self.model.contra.modalities["foo"].sensitivity,
+            self.model.ipsi.get_modality("foo").sens,
+            self.model.contra.get_modality("foo").sens,
         )
         self.assertEqual(
-            self.model.ipsi.modalities["foo"].specificity,
-            self.model.contra.modalities["foo"].specificity,
+            self.model.ipsi.get_modality("foo").spec,
+            self.model.contra.get_modality("foo").spec,
         )
 
     def test_asymmetric_model(self):
@@ -111,68 +88,69 @@ class ModalityDelegationTestCase(fixtures.BilateralModelMixin, unittest.TestCase
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
 
     def test_modality_access(self):
         """Test that the modality can be accessed."""
         self.assertEqual(
-            self.model.modalities["CT"].sensitivity,
-            self.model.ipsi.modalities["CT"].sensitivity,
+            self.model.get_modality("CT").sens,
+            self.model.ipsi.get_modality("CT").sens,
         )
         self.assertEqual(
-            self.model.modalities["FNA"].specificity,
-            self.model.ipsi.modalities["FNA"].specificity,
+            self.model.get_modality("FNA").spec,
+            self.model.ipsi.get_modality("FNA").spec,
         )
 
     def test_modality_delete(self):
         """Test that the modality can be deleted."""
-        del self.model.modalities["CT"]
-        self.assertNotIn("CT", self.model.modalities)
-        self.assertNotIn("CT", self.model.ipsi.modalities)
-        self.assertNotIn("CT", self.model.contra.modalities)
+        self.model.del_modality("CT")
+        self.assertNotIn("CT", self.model.get_all_modalities())
+        self.assertNotIn("CT", self.model.ipsi.get_all_modalities())
+        self.assertNotIn("CT", self.model.contra.get_all_modalities())
 
     def test_modality_update(self):
         """Test that the modality can be updated."""
-        self.model.modalities["CT"].sensitivity = 0.8
+        old_mod = self.model.get_modality("CT")
+        self.model.set_modality("CT", spec=old_mod.spec, sens=0.8)
         self.assertEqual(
-            self.model.modalities["CT"].sensitivity,
-            self.model.ipsi.modalities["CT"].sensitivity,
+            self.model.get_modality("CT").sens,
+            self.model.ipsi.get_modality("CT").sens,
         )
         self.assertEqual(
-            self.model.modalities["CT"].sensitivity,
-            self.model.contra.modalities["CT"].sensitivity,
+            self.model.get_modality("CT").sens,
+            self.model.contra.get_modality("CT").sens,
         )
 
     def test_modality_reset(self):
         """Test resetting the modalities also works."""
-        self.model.modalities = {"foo": Clinical(0.8, 0.9)}
+        self.model.set_modality("foo", spec=0.8, sens=0.9)
         self.assertEqual(
-            self.model.modalities["foo"].sensitivity,
-            self.model.ipsi.modalities["foo"].sensitivity,
+            self.model.get_modality("foo").sens,
+            self.model.ipsi.get_modality("foo").sens,
         )
         self.assertEqual(
-            self.model.modalities["foo"].specificity,
-            self.model.contra.modalities["foo"].specificity,
+            self.model.get_modality("foo").spec,
+            self.model.contra.get_modality("foo").spec,
         )
 
     def test_diag_time_dists_delegation(self):
         """Test that the diagnose time distributions are delegated."""
-        self.assertTrue(np.allclose(
-            list(self.model.diag_time_dists["early"].distribution),
-            list(self.model.ipsi.diag_time_dists["early"].distribution),
-        ))
-        self.assertTrue(np.allclose(
-            list(self.model.diag_time_dists["late"].get_params()),
-            list(self.model.ipsi.diag_time_dists["late"].get_params()),
-        ))
-        self.assertTrue(np.allclose(
-            list(self.model.diag_time_dists["early"].distribution),
-            list(self.model.contra.diag_time_dists["early"].distribution),
-        ))
-        self.assertTrue(np.allclose(
-            list(self.model.diag_time_dists["late"].get_params()),
-            list(self.model.contra.diag_time_dists["late"].get_params()),
-        ))
+        self.assertEqual(
+            list(self.model.get_distribution("early").pmf),
+            list(self.model.ipsi.get_distribution("early").pmf),
+        )
+        self.assertEqual(
+            list(self.model.get_distribution("late").get_params()),
+            list(self.model.ipsi.get_distribution("late").get_params()),
+        )
+        self.assertEqual(
+            list(self.model.get_distribution("early").pmf),
+            list(self.model.contra.get_distribution("early").pmf),
+        )
+        self.assertEqual(
+            list(self.model.get_distribution("late").get_params()),
+            list(self.model.contra.get_distribution("late").get_params()),
+        )
 
 
 class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
@@ -202,33 +180,30 @@ class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCas
 
     def test_set_params_as_args(self):
         """Test that the parameters can be assigned."""
-        ipsi_args = self.rng.uniform(size=len(self.model.ipsi.get_params()))
-        contra_args = self.rng.uniform(size=len(self.model.contra.get_params()))
-        none_args = [None] * len(ipsi_args)
+        ipsi_tumor_spread_args = self.rng.uniform(size=len(self.model.ipsi.graph.tumor_edges))
+        ipsi_lnl_spread_args = self.rng.uniform(size=len(self.model.ipsi.graph.lnl_edges))
+        contra_tumor_spread_args = self.rng.uniform(size=len(self.model.contra.graph.tumor_edges))
+        contra_lnl_spread_args = self.rng.uniform(size=len(self.model.contra.graph.lnl_edges))
+        dist_params = self.rng.uniform(size=len(self.model.get_distribution_params()))
 
-        # Assigning only the ipsi side
-        self.model.set_params(*ipsi_args, *none_args)
-        self.assertTrue(np.allclose(ipsi_args, list(self.model.ipsi.get_params())))
-        self.assertEqual(
-            list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
-            list(self.model.contra.diag_time_dists["late"].get_params())[0],
+        self.model.set_params(
+            *ipsi_tumor_spread_args,
+            *contra_tumor_spread_args,
+            *ipsi_lnl_spread_args,
+            *contra_lnl_spread_args,
+            *dist_params,
         )
-
-        # Assigning only the contra side
-        self.model.set_params(*none_args, *contra_args)
-        self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
         self.assertEqual(
-            list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
-            list(self.model.contra.diag_time_dists["late"].get_params())[0],
+            [*ipsi_tumor_spread_args, *ipsi_lnl_spread_args, *dist_params],
+            list(self.model.ipsi.get_params(as_dict=False)),
         )
-
-        # Assigning both sides
-        self.model.set_params(*ipsi_args, *contra_args)
-        self.assertTrue(np.allclose(ipsi_args[:-1], list(self.model.ipsi.get_params())[:-1]))
-        self.assertTrue(np.allclose(contra_args, list(self.model.contra.get_params())))
         self.assertEqual(
-            list(self.model.ipsi.diag_time_dists["late"].get_params())[0],
-            list(self.model.contra.diag_time_dists["late"].get_params())[0],
+            [*contra_tumor_spread_args, *contra_lnl_spread_args, *dist_params],
+            list(self.model.contra.get_params(as_dict=False)),
+        )
+        self.assertEqual(
+            list(self.model.ipsi.get_distribution("late").get_params())[0],
+            list(self.model.contra.get_distribution("late").get_params())[0],
         )
 
 
@@ -237,7 +212,7 @@ class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.load_patient_data()
 
     def test_compute_likelihood_twice(self):
@@ -252,7 +227,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
 
     def create_random_diagnoses(self):
         """Create a random diagnosis for each modality and LNL."""
@@ -262,14 +237,14 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
             diagnoses[side] = {}
             side_model = getattr(self.model, side)
             lnl_names = side_model.graph.lnls.keys()
-            for modality in side_model.modalities:
+            for modality in side_model.get_all_modalities():
                 diagnoses[side][modality] = fixtures.create_random_pattern(lnl_names)
 
         return diagnoses
 
     def test_posterior_state_dist(self):
         """Test that the posterior state distribution is computed correctly."""
-        num_states = len(self.model.ipsi.state_list)
+        num_states = len(self.model.ipsi.graph.state_list)
         random_parameters = self.create_random_params()
         random_diagnoses = self.create_random_diagnoses()
 
@@ -306,7 +281,7 @@ class DataGenerationTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.set_params(**self.create_random_params())
 
@@ -318,7 +293,7 @@ class DataGenerationTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
             rng=self.rng,
         )
 
-        for mod in self.model.modalities.keys():
+        for mod in self.model.get_all_modalities():
             self.assertIn(mod, dataset)
             for side in ["ipsi", "contra"]:
                 self.assertIn(side, dataset[mod])

@@ -13,7 +13,7 @@ class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unitt
     def setUp(self):
         super().setUp()
         self.model.set_params(**self.create_random_params())
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_state_dist(self):

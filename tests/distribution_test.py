@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import scipy as sp
 
-from lymph.diagnose_times import Distribution, DistributionsUserDict
+from lymph.diagnose_times import Distribution
 
 
 class FixtureMixin:
@@ -80,52 +80,3 @@ class DistributionTestCase(FixtureMixin, unittest.TestCase):
         dist = Distribution(self.func_arg, max_time=self.max_time)
         self.assertTrue(dist.is_updateable)
         self.assertRaises(ValueError, dist.set_params, p=1.5)
-
-
-class DistributionDictTestCase(FixtureMixin, unittest.TestCase):
-    """Test the distribution dictionary."""
-
-    def setUp(self):
-        super().setUp()
-        self.rng = np.random.default_rng(42)
-        self.dist_dict = DistributionsUserDict(
-            max_time=self.max_time,
-            trigger_callbacks=[],
-        )
-
-    def test_setitem_distribution_from_array(self):
-        """Test setting a distribution created from an array."""
-        self.dist_dict['test'] = Distribution(self.array_arg)
-        self.assertTrue('test' in self.dist_dict)
-        self.assertTrue(self.dist_dict.max_time == self.max_time)
-
-    def test_setitem_distribution_from_func(self):
-        """Test setting a distribution created from a function."""
-        self.assertRaises(ValueError, Distribution, self.func_arg)
-        self.dist_dict['test'] = Distribution(self.func_arg, max_time=self.max_time)
-        self.assertTrue('test' in self.dist_dict)
-
-    def test_setitem_from_array(self):
-        """Test setting an item via an array distribution."""
-        self.dist_dict['test'] = self.array_arg
-        self.assertTrue('test' in self.dist_dict)
-
-    def test_setitem_from_func(self):
-        """Test setting an item via a parametrized distribution."""
-        self.dist_dict['test'] = self.func_arg
-        self.assertTrue('test' in self.dist_dict)
-
-    def test_multiple_setitem(self):
-        """Test setting multiple distributions."""
-        for i in range(5):
-            func = lambda support, p=0.2: sp.stats.binom.pmf(support, self.max_time, p)
-            self.dist_dict[f"test_{i}"] = func
-
-        self.assertTrue(len(self.dist_dict) == 5)
-        for i in range(5):
-            self.assertTrue(f"test_{i}" in self.dist_dict)
-            self.assertTrue(self.dist_dict[f"test_{i}"].is_updateable)
-            param = self.rng.uniform()
-            self.dist_dict[f"test_{i}"].set_params(p=param)
-            returned_param = self.dist_dict[f"test_{i}"].get_params(as_dict=True)
-            self.assertTrue(np.allclose(param, returned_param["p"]))

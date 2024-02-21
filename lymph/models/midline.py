@@ -347,7 +347,7 @@ class Midline(DelegationSyncMixin):
                 "The modalities are not symmetric. Please set them via the "
                 "`ipsi` or `contra` attributes."
             )
-        self.ext.modalities = new_modalities
+        self.ext.replace_all_modalities(new_modalities)
 
 
     def load_patient_data(

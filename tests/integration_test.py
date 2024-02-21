@@ -22,7 +22,7 @@ class IntegrationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
     def setUp(self):
         self.graph_dict = fixtures.get_graph(size="medium")
         self.model = lymph.models.Unilateral.binary(graph_dict=self.graph_dict)
-        self.model.modalities = {"PET": [0.86, 0.79]}
+        self.model.set_modality("PET", spec=0.86, sens=0.79)
         self.load_patient_data("2021-usz-oropharynx.csv")
 
         early_fixed = sp.stats.binom.pmf(
@@ -30,8 +30,8 @@ class IntegrationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
             self.model.max_time,
             0.4,
         )
-        self.model.diag_time_dists["early"] = early_fixed
-        self.model.diag_time_dists["late"] = late_binomial
+        self.model.set_distribution("early", early_fixed)
+        self.model.set_distribution("late", late_binomial)
 
     def test_likelihood_value(self):
         """Check that the computed likelihood is correct."""

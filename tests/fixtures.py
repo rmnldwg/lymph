@@ -17,8 +17,8 @@ from lymph.models import Unilateral
 from lymph.types import PatternType
 
 MODALITIES = {
-    "CT": Clinical(specificity=0.81, sensitivity=0.86),
-    "FNA": Pathological(specificity=0.95, sensitivity=0.81),
+    "CT": Clinical(spec=0.81, sens=0.86),
+    "FNA": Pathological(spec=0.95, sens=0.81),
 }
 RNG = np.random.default_rng(42)
 
@@ -74,7 +74,6 @@ def _create_random_frozen_dist(
     unnormalized = rng.random(size=max_time + 1)
     return unnormalized / np.sum(unnormalized)
 
-
 def _create_random_parametric_dist(
     max_time: int,
     rng: np.random.Generator = RNG,
@@ -87,7 +86,6 @@ def _create_random_parametric_dist(
         distribution=_pmf,
         max_time=max_time,
     )
-
 
 def create_random_dist(
     type_: str,
@@ -134,7 +132,7 @@ class BinaryUnilateralModelMixin:
             warnings.simplefilter("ignore", category=UserWarning)
             params.update({
                 f"{t_stage}_{type_}": self.rng.random()
-                for t_stage, dist in self.model.diag_time_dists.items()
+                for t_stage, dist in self.model.get_all_distributions().items()
                 for type_ in dist.get_params(as_dict=True).keys()
             })
         return params
@@ -143,8 +141,9 @@ class BinaryUnilateralModelMixin:
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnose time distributions."""
         for t_stage, type_ in dists.items():
-            self.model.diag_time_dists[t_stage] = create_random_dist(
-                type_, self.model.max_time, self.rng
+            self.model.set_distribution(
+                t_stage,
+                create_random_dist(type_, self.model.max_time, self.rng),
             )
 
 
@@ -178,8 +177,9 @@ class BilateralModelMixin:
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnose time distributions."""
         for t_stage, type_ in dists.items():
-            self.model.diag_time_dists[t_stage] = create_random_dist(
-                type_, self.model.max_time, self.rng
+            self.model.set_distribution(
+                t_stage,
+                create_random_dist(type_, self.model.max_time, self.rng),
             )
 
 
@@ -226,7 +226,7 @@ class TrinaryFixtureMixin:
             warnings.simplefilter("ignore", category=UserWarning)
             params.update({
                 f"{t_stage}_{type_}": self.rng.random()
-                for t_stage, dist in self.model.diag_time_dists.items()
+                for t_stage, dist in self.model.get_all_distributions().items()
                 for type_ in dist.get_params(as_dict=True).keys()
             })
 
@@ -236,21 +236,22 @@ class TrinaryFixtureMixin:
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnose time distributions."""
         for t_stage, type_ in dists.items():
-            self.model.diag_time_dists[t_stage] = create_random_dist(
-                type_, self.model.max_time, self.rng
+            self.model.set_distribution(
+                t_stage,
+                create_random_dist(type_, self.model.max_time, self.rng),
             )
 
 
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
         modalities_in_data = {
-            "CT": Clinical(specificity=0.76, sensitivity=0.81),
-            "MRI": Clinical(specificity=0.63, sensitivity=0.81),
-            "PET": Clinical(specificity=0.86, sensitivity=0.79),
-            "FNA": Pathological(specificity=0.98, sensitivity=0.80),
-            "diagnostic_consensus": Clinical(specificity=0.86, sensitivity=0.81),
-            "pathology": Pathological(specificity=1.0, sensitivity=1.0),
-            "pCT": Clinical(specificity=0.86, sensitivity=0.81),
+            "CT": Clinical(spec=0.76, sens=0.81),
+            "MRI": Clinical(spec=0.63, sens=0.81),
+            "PET": Clinical(spec=0.86, sens=0.79),
+            "FNA": Pathological(spec=0.98, sens=0.80),
+            "diagnostic_consensus": Clinical(spec=0.86, sens=0.81),
+            "pathology": Pathological(spec=1.0, sens=1.0),
+            "pCT": Clinical(spec=0.86, sens=0.81),
         }
         return {name: modalities_in_data[name] for name in names}
 
