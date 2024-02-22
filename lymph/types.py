@@ -2,7 +2,7 @@
 Type aliases and protocols used in the lymph package.
 """
 from abc import ABC, abstractmethod
-from typing import Iterable, Protocol, TypeVar
+from typing import Iterable, Literal, Protocol, TypeVar
 
 import pandas as pd
 from pandas._libs.missing import NAType
@@ -53,6 +53,13 @@ class Model(ABC):
         the ``get_params`` method of other instances, which can be fused to get a
         flat dictionary.
         """
+
+    def get_num_dims(self: M, mode: Literal["HMM", "BN"] = "HMM") -> int:
+        """Return the number of dimensions of the parameter space."""
+        num = len(self.get_params())
+        if mode == "BN":
+            num -= len(self.get_distribution_params())
+        return num
 
     @abstractmethod
     def set_params(self: M, *args: float, **kwargs: float) -> tuple[float]:
