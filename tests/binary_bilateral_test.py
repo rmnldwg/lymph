@@ -3,10 +3,12 @@ Test the bilateral model.
 """
 import unittest
 
-import fixtures
 import numpy as np
 
 from lymph import models
+from lymph.helper import flatten
+
+from . import fixtures
 
 
 class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
@@ -16,7 +18,6 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
         self.model_kwargs = {"is_symmetric": {
             "tumor_spread": True,
             "lnl_spread": True,
-            "modalities": True,
         }}
         super().setUp()
         self.load_patient_data()
@@ -153,33 +154,47 @@ class ModalityDelegationTestCase(fixtures.BilateralModelMixin, unittest.TestCase
         )
 
 
-class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
-    """Test the parameter assignment."""
+class NoSymmetryParamsTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Test the parameter assignment when the model is not symmetric"""
 
     def setUp(self):
         self.model_kwargs = {
             "is_symmetric": {
                 "tumor_spread": False,
                 "lnl_spread": False,
-                "modalities": True,
             }
         }
         super().setUp()
 
     def test_get_params_as_args(self):
         """Test that the parameters can be retrieved."""
-        ipsi_args = self.model.ipsi.get_params()
-        contra_args = self.model.contra.get_params()
-        self.assertEqual(len(ipsi_args), len(contra_args))
+        ipsi_args = list(self.model.ipsi.get_params(as_dict=False))
+        contra_args = list(self.model.contra.get_params(as_dict=False))
+        both_args = list(self.model.get_params(as_dict=False))
+        num_param_dists = len(self.model.get_distribution_params())
+        # need plus one, because distribution's parameter is accounted for twice
+        self.assertEqual(len(ipsi_args) + len(contra_args), len(both_args) + 1)
+        self.assertEqual(
+            [*ipsi_args[:-num_param_dists], *contra_args[:-num_param_dists]],
+            both_args[:-num_param_dists],
+        )
 
     def test_get_params_as_dict(self):
         """Test that the parameters can be retrieved."""
         ipsi_dict = self.model.ipsi.get_params(as_dict=True)
         contra_dict = self.model.contra.get_params(as_dict=True)
-        self.assertEqual(ipsi_dict.keys(), contra_dict.keys())
+        both_dict = self.model.get_params(as_dict=True, as_flat=False)
+        dist_param_keys = self.model.get_distribution_params().keys()
+
+        for key in dist_param_keys:
+            ipsi_dict.pop(key)
+            contra_dict.pop(key)
+
+        self.assertEqual(ipsi_dict, flatten(both_dict["ipsi"]))
+        self.assertEqual(contra_dict, flatten(both_dict["contra"]))
 
     def test_set_params_as_args(self):
-        """Test that the parameters can be assigned."""
+        """Test that the parameters can be set."""
         ipsi_tumor_spread_args = self.rng.uniform(size=len(self.model.ipsi.graph.tumor_edges))
         ipsi_lnl_spread_args = self.rng.uniform(size=len(self.model.ipsi.graph.lnl_edges))
         contra_tumor_spread_args = self.rng.uniform(size=len(self.model.contra.graph.tumor_edges))
@@ -205,6 +220,53 @@ class ParameterAssignmentTestCase(fixtures.BilateralModelMixin, unittest.TestCas
             list(self.model.ipsi.get_distribution("late").get_params())[0],
             list(self.model.contra.get_distribution("late").get_params())[0],
         )
+
+    def test_set_params_as_dict(self):
+        """Test that the parameters can be set via keyword arguments."""
+        params_to_set = {k: self.rng.uniform() for k in self.model.get_params().keys()}
+        self.model.set_params(**params_to_set)
+        self.assertEqual(params_to_set, self.model.get_params())
+
+
+class SymmetryParamsTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+    """Test the parameter assignment when the model is symmetric."""
+
+    def setUp(self):
+        self.model_kwargs = {
+            "is_symmetric": {
+                "tumor_spread": True,
+                "lnl_spread": True,
+            }
+        }
+        super().setUp()
+
+    def test_get_params_as_args(self):
+        """Test that the parameters can be retrieved."""
+        ipsi_args = list(self.model.ipsi.get_params(as_dict=False))
+        contra_args = list(self.model.contra.get_params(as_dict=False))
+        both_args = list(self.model.get_params(as_dict=False))
+        self.assertEqual(ipsi_args, both_args)
+        self.assertEqual(contra_args, both_args)
+
+    def test_get_params_as_dict(self):
+        """Test that the parameters can be retrieved."""
+        ipsi_dict = self.model.ipsi.get_params()
+        contra_dict = self.model.contra.get_params()
+        both_dict = self.model.get_params()
+        self.assertEqual(ipsi_dict, both_dict)
+        self.assertEqual(contra_dict, both_dict)
+
+    def test_set_params_as_args(self):
+        """Test that the parameters can be set."""
+        args_to_set = [self.rng.uniform() for _ in self.model.ipsi.get_params(as_dict=False)]
+        self.model.set_params(*args_to_set)
+        self.assertEqual(args_to_set, list(self.model.contra.get_params().values()))
+
+    def test_set_params_as_dict(self):
+        """Test that the parameters can be set via keyword arguments."""
+        params_to_set = {k: self.rng.uniform() for k in self.model.contra.get_params()}
+        self.model.set_params(**params_to_set)
+        self.assertEqual(params_to_set, self.model.ipsi.get_params())
 
 
 class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):

@@ -3,8 +3,9 @@ Test the Bayesian Unilateral Model.
 """
 import unittest
 
-import fixtures
 import numpy as np
+
+from . import fixtures
 
 
 class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):

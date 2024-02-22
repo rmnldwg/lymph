@@ -4,11 +4,12 @@ computed value of the likelihood function.
 """
 import unittest
 
-import fixtures
 import numpy as np
 import scipy as sp
 
 import lymph
+
+from . import fixtures
 
 
 def late_binomial(support: np.ndarray, p: float = 0.5) -> np.ndarray:

@@ -113,10 +113,10 @@ def create_random_pattern(lnls: list[str]) -> PatternType:
 class BinaryUnilateralModelMixin:
     """Mixin class for simple binary model fixture creation."""
 
-    def setUp(self):
+    def setUp(self, graph_size: str = "large"):
         """Initialize a simple binary model."""
         self.rng = np.random.default_rng(42)
-        self.graph_dict = get_graph(size="large")
+        self.graph_dict = get_graph(size=graph_size)
         self.model = Unilateral.binary(graph_dict=self.graph_dict)
         self.logger = get_logger(level=logging.INFO)
 
