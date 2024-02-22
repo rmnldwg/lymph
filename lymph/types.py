@@ -4,6 +4,7 @@ Type aliases and protocols used in the lymph package.
 from abc import ABC, abstractmethod
 from typing import Iterable, Literal, Protocol, TypeVar
 
+import numpy as np
 import pandas as pd
 from pandas._libs.missing import NAType
 
@@ -56,6 +57,7 @@ class Model(ABC):
 
     def get_num_dims(self: M, mode: Literal["HMM", "BN"] = "HMM") -> int:
         """Return the number of dimensions of the parameter space."""
+        # pylint: disable=no-member
         num = len(self.get_params())
         if mode == "BN":
             num -= len(self.get_distribution_params())
@@ -92,3 +94,12 @@ class Model(ABC):
         otherwise. The parameters may be passed as positional or keyword arguments.
         They are then passed to the :py:meth:`set_params` method first.
         """
+
+    @abstractmethod
+    def risk(
+        self,
+        involvement: PatternType | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_diagnoses: dict[str, PatternType] | None = None,
+    ) -> float | np.ndarray:
+        """Return the risk of ``involvement``, given the parameters and diagnoses."""
