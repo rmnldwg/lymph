@@ -20,6 +20,10 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
+EXT_COL = ("tumor", "1", "extension")
+CENTRAL_COL = ("tumor", "1", "central")
+
+
 
 class Midline(
     diagnose_times.Composite,
@@ -321,19 +325,32 @@ class Midline(
     ) -> None:
         """Load patient data into the model.
 
-        This amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
-        method on both models.
+        This amounts to sorting the patients into three bins:
+        1. Patients whose tumor is clearly laterlaized, meaning the column
+            ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+            the :py:attr:`noext` attribute.
+        2. Those with a central tumor, indicated by ``True`` in the column
+            ``("tumor", "1", "central")``. If the :py:attr:`use_central` attribute is
+            set to ``True``, these patients are assigned to the :py:attr:`central`
+            model. Otherwise, they are assigned to the :py:attr:`ext` model.
+        3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
+            line but is not central, i.e., symmetric w.r.t to the mid-sagittal line.
+            These are assigned to the :py:attr:`ext` model.
+
+        The split data is sent to the :py:meth:`lymph.models.Bilateral.load_patient_data`
+        method of the respective models.
         """
+        # pylint: disable=singleton-comparison
+        is_lateralized = patient_data[EXT_COL] == False
+        self.noext.load_patient_data(patient_data[is_lateralized], mapping)
+
         if self.use_central:
-            ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True) & (patient_data[("tumor", "1", "central")] != True)]
-            noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
-            central = patient_data[patient_data[("tumor", "1", "central")].notna() & patient_data[("tumor", "1", "central")]]
-            self.central.load_patient_data(central, mapping)
+            is_central = patient_data[CENTRAL_COL] == True
+            self.central.load_patient_data(patient_data[is_central], mapping)
+            self.ext.load_patient_data(patient_data[~is_lateralized & ~is_central], mapping)
+
         else:
-            ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True)]
-            noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
-        self.ext.load_patient_data(ext_data, mapping)
-        self.noext.load_patient_data(noext_data, mapping)
+            self.ext.load_patient_data(patient_data[~is_lateralized], mapping)
 
 
     def likelihood(
