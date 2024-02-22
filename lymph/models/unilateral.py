@@ -697,8 +697,7 @@ class Unilateral(
 
     def comp_posterior_state_dist(
         self,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
@@ -724,17 +723,14 @@ class Unilateral(
             The computation is much faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
         """
-        if given_param_args is None:
-            given_param_args = []
-
-        if given_param_kwargs is None:
-            given_param_kwargs = {}
-
         # in contrast to when computing the likelihood, we do want to raise an error
         # here if the parameters are invalid, since we want to know if the user
         # provided invalid parameters. In the likelihood, we rather return a zero
         # likelihood to tell the inference algorithm that the parameters are invalid.
-        self.set_params(*given_param_args, **given_param_kwargs)
+        if isinstance(given_params, dict):
+            self.set_params(**given_params)
+        else:
+            self.set_params(*given_params)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -757,8 +753,7 @@ class Unilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
@@ -782,7 +777,7 @@ class Unilateral(
             :py:meth:`comp_posterior_state_dist`
         """
         posterior_state_dist = self.comp_posterior_state_dist(
-            given_param_args, given_param_kwargs, given_diagnoses, t_stage, mode,
+            given_params, given_diagnoses, t_stage, mode,
         )
 
         if involvement is None:

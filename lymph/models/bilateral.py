@@ -459,8 +459,7 @@ class Bilateral(
 
     def comp_posterior_joint_state_dist(
         self,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str | int = "early",
         mode: str = "HMM",
@@ -480,13 +479,10 @@ class Bilateral(
         See Also:
             :py:meth:`lymph.models.Unilateral.comp_posterior_state_dist`
         """
-        if given_param_args is None:
-            given_param_args = []
-
-        if given_param_kwargs is None:
-            given_param_kwargs = {}
-
-        self.set_params(*given_param_args, **given_param_kwargs)
+        if isinstance(given_params, dict):
+            self.set_params(**given_params)
+        else:
+            self.set_params(*given_params)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -517,8 +513,7 @@ class Bilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
         mode: str = "HMM",
@@ -544,8 +539,7 @@ class Bilateral(
         """
         # TODO: test this method
         posterior_state_probs = self.comp_posterior_joint_state_dist(
-            given_param_args=given_param_args,
-            given_param_kwargs=given_param_kwargs,
+            given_params=given_params,
             given_diagnoses=given_diagnoses,
             t_stage=t_stage,
             mode=mode,
