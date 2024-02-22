@@ -3,7 +3,7 @@ from __future__ import annotations
 import warnings
 from functools import cached_property
 from itertools import product
-from typing import Any, Callable, Iterable, Literal
+from typing import Any, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -34,12 +34,6 @@ class Unilateral(
     of this class allow to calculate the probability of a certain hidden pattern of
     involvement, given an individual diagnosis of a patient.
     """
-    is_binary: bool
-    is_trinary: bool
-    get_state: Callable
-    set_state: Callable
-    lnls: dict[str, graph.LymphNodeLevel]
-
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
@@ -647,39 +641,34 @@ class Unilateral(
 
     def likelihood(
         self,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
         mode: str = "HMM",
         for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
-        The parameters of the model can be set via ``given_param_args`` and
-        ``given_param_kwargs``. Both arguments are used to call the
-        :py:meth:`Unilateral.set_params` method. If the parameters are not provided, the
-        previously assigned parameters are used.
+        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        information on how to use the ``given_params`` parameter.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
         """
-        if given_param_args is None:
-            given_param_args = []
-
-        if given_param_kwargs is None:
-            given_param_kwargs = {}
-
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            _ = self.set_params(*given_param_args, **given_param_kwargs)
+            if given_params is None:
+                pass
+            elif isinstance(given_params, dict):
+                self.set_params(**given_params)
+            else:
+                self.set_params(*given_params)
         except ValueError:
             return -np.inf if log else 0.
 
         if mode == "HMM":
             return self._hmm_likelihood(log, for_t_stage)
-
         if mode == "BN":
             return self._bn_likelihood(log, for_t_stage)
 

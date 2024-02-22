@@ -76,8 +76,7 @@ class Model(ABC):
     @abstractmethod
     def likelihood(
         self: M,
-        given_param_args: Iterable[float],
-        given_param_kwargs: dict[str, float],
+        given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
     ) -> float:
         """Return the likelihood of the model given the parameters.

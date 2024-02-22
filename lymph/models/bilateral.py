@@ -54,9 +54,8 @@ class Bilateral(
         stores the graph.
 
         With the dictionary ``is_symmetric`` the user can specify which aspects of the
-        model are symmetric. Valid keys are ``"modalities"``, ``"tumor_spread"``,
-        and ``"lnl_spread"``. The values are booleans, with ``True`` meaning that the
-        aspect is symmetric.
+        model are symmetric. Valid keys are ``"tumor_spread"`` and ``"lnl_spread"``.
+        The values are booleans, with ``True`` meaning that the aspect is symmetric.
 
         Note:
             The symmetries of tumor and LNL spread are only guaranteed if the
@@ -78,13 +77,12 @@ class Bilateral(
             contralateral_kwargs=contralateral_kwargs,
         )
 
-        self.is_symmetric = is_symmetric
-        if self.is_symmetric is None:
-            self.is_symmetric = {
-                "modalities": True,
+        if is_symmetric is None:
+            is_symmetric = {
                 "tumor_spread": False,
                 "lnl_spread": True,
             }
+        self.is_symmetric = is_symmetric
 
         diagnose_times.Composite.__init__(
             self,
@@ -153,6 +151,46 @@ class Bilateral(
         return self.ipsi.is_binary
 
 
+    def get_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of the model's spread edges.
+
+        Depending on the symmetries (i.e. the ``is_symmetric`` attribute), this returns
+        different results:
+
+        If ``is_symmetric["tumor_spread"] = False``, the flattened (``as_flat=True``)
+        dictionary (``as_dict=True``) will contain keys of the form
+        ``ipsi_Tto<lnl>_spread`` and ``contra_Tto<lnl>_spread``, where ``<lnl>`` is the
+        name of the lymph node level. However, if the tumor spread is set to be
+        symmetric, the leading ``ipsi_`` or ``contra_`` is omitted, since it's valid
+        for both sides.
+
+        This is consistent with how the :py:meth:`~lymph.models.Bilteral.set_params`
+        method expects the keyword arguments in case of the symmetry configurations.
+        """
+        params = {}
+
+        if self.is_symmetric["tumor_spread"]:
+            params.update(self.ipsi.get_tumor_spread_params(as_flat=as_flat))
+        else:
+            params["ipsi"] = self.ipsi.get_tumor_spread_params(as_flat=as_flat)
+            params["contra"] = self.contra.get_tumor_spread_params(as_flat=as_flat)
+
+        if self.is_symmetric["lnl_spread"]:
+            params.update(self.ipsi.get_lnl_spread_params(as_flat=as_flat))
+        else:
+            params["ipsi"].update(self.ipsi.get_lnl_spread_params(as_flat=as_flat))
+            params["contra"].update(self.contra.get_lnl_spread_params(as_flat=as_flat))
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
     def get_params(
         self,
         as_dict: bool = True,
@@ -164,21 +202,47 @@ class Bilateral(
         :py:meth:`lymph.models.Unilateral.get_params` of the ipsi- and contralateral
         side. For the use of the ``as_dict`` and ``as_flat`` arguments, see the
         documentation of the :py:meth:`lymph.types.Model.get_params` method.
-        """
-        ipsi_params = self.ipsi.graph.get_params(as_flat=as_flat)
-        contra_params = self.contra.graph.get_params(as_flat=as_flat)
-        dist_params = self.get_distribution_params(as_flat=as_flat)
 
-        params = {
-            "ipsi": ipsi_params,
-            "contra": contra_params,
-        }
-        params.update(dist_params)
+        Also see the :py:meth:`lymph.models.Bilateral.get_spread_params` method to
+        understand how the symmetry settings affect the return value.
+        """
+        params = self.get_spread_params(as_flat=as_flat)
+        params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
             params = flatten(params)
 
         return params if as_dict else params.values()
+
+
+    def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Set the parameters of the model's spread edges."""
+        kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+
+        ipsi_kwargs = global_kwargs.copy()
+        ipsi_kwargs.update(kwargs.get("ipsi", {}))
+        contra_kwargs = global_kwargs.copy()
+        contra_kwargs.update(kwargs.get("contra", {}))
+
+        args = self.ipsi.set_tumor_spread_params(*args, **ipsi_kwargs)
+        if self.is_symmetric["tumor_spread"]:
+            synchronize_params(
+                get_from=self.ipsi.graph.tumor_edges,
+                set_to=self.contra.graph.tumor_edges,
+            )
+        else:
+            args = self.contra.set_tumor_spread_params(*args, **contra_kwargs)
+
+        args = self.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
+        if self.is_symmetric["lnl_spread"]:
+            synchronize_params(
+                get_from=self.ipsi.graph.lnl_edges,
+                set_to=self.contra.graph.lnl_edges,
+            )
+        else:
+            args = self.contra.set_lnl_spread_params(*args, **contra_kwargs)
+
+        return args
 
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
@@ -211,31 +275,7 @@ class Bilateral(
         When still some positional arguments remain after that, they are returned
         in a tuple.
         """
-        kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
-
-        ipsi_kwargs = global_kwargs.copy()
-        ipsi_kwargs.update(kwargs.get("ipsi", {}))
-        contra_kwargs = global_kwargs.copy()
-        contra_kwargs.update(kwargs.get("contra", {}))
-
-        args = self.ipsi.set_tumor_spread_params(*args, **ipsi_kwargs)
-        if self.is_symmetric["tumor_spread"]:
-            synchronize_params(
-                get_from=self.ipsi.graph.tumor_edges,
-                set_to=self.contra.graph.tumor_edges,
-            )
-        else:
-            args = self.contra.set_tumor_spread_params(*args, **contra_kwargs)
-
-        args = self.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
-        if self.is_symmetric["lnl_spread"]:
-            synchronize_params(
-                get_from=self.ipsi.graph.lnl_edges,
-                set_to=self.contra.graph.lnl_edges,
-            )
-        else:
-            args = self.contra.set_lnl_spread_params(*args, **contra_kwargs)
-
+        args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
 
@@ -375,18 +415,15 @@ class Bilateral(
 
     def likelihood(
         self,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
         mode: str = "HMM",
         for_t_stage: str | None = None,
     ):
-        """Compute the (log-)likelihood of the ``data`` given the model (and params).
+        """Compute the (log-)likelihood of the stored data given the model (and params).
 
-        The parameters of the model can be set via ``given_param_args`` and
-        ``given_param_kwargs``. Both arguments are used to call the
-        :py:meth:`~set_params` method. If the parameters are not provided, the
-        previously assigned parameters are used.
+        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        information on how to use the ``given_params`` parameter.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
         determines whether the likelihood is computed for the hidden Markov model
@@ -400,22 +437,20 @@ class Bilateral(
             :py:meth:`lymph.models.Unilateral.likelihood`
                 The corresponding unilateral function.
         """
-        if given_param_args is None:
-            given_param_args = []
-
-        if given_param_kwargs is None:
-            given_param_kwargs = {}
-
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            self.set_params(*given_param_args, **given_param_kwargs)
+            if given_params is None:
+                pass
+            elif isinstance(given_params, dict):
+                self.set_params(**given_params)
+            else:
+                self.set_params(*given_params)
         except ValueError:
             return -np.inf if log else 0.
 
         if mode == "HMM":
             return self._hmm_likelihood(log, for_t_stage)
-
         if mode == "BN":
             return self._bn_likelihood(log, for_t_stage)
 
