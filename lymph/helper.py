@@ -680,6 +680,22 @@ def unflatten_and_split(
     return split_kwargs, global_kwargs
 
 
+def get_params_from(
+    objects: dict[str, HasGetParams],
+    as_dict: bool = True,
+    as_flat: bool = True,
+) -> Iterable[float] | dict[str, float]:
+    """Get the parameters from each ``get_params()`` method of the ``objects``."""
+    params = {}
+    for key, obj in objects.items():
+        params[key] = obj.get_params(as_flat=as_flat)
+
+    if as_flat or not as_dict:
+        params = flatten(params)
+
+    return params if as_dict else params.values()
+
+
 def set_params_for(
     objects: dict[str, HasSetParams],
     *args: float,
@@ -712,7 +728,12 @@ def set_bilateral_params_for(
     is_symmetric: bool = False,
     **kwargs: float,
 ) -> tuple[float]:
-    """Pass arguments to each ``set_params()`` method of the ``objects``."""
+    """Pass arguments to ``set_params()`` of ``ipsi_objects`` and ``contra_objects``.
+
+    If ``is_symmetric`` is ``True``, the parameters of the ``contra_objects`` will be
+    set to the parameters of the ``ipsi_objects``. Otherwise, the parameters of the
+    ``contra_objects`` will be set independently.
+    """
     kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
 
     ipsi_kwargs = global_kwargs.copy()
@@ -727,20 +748,3 @@ def set_bilateral_params_for(
         args = set_params_for(contra_objects, *args, **contra_kwargs)
 
     return args
-
-
-def has_any_dunder_method(obj: Any, *methods: str) -> bool:
-    """Check whether a class has any of the given dunder methods."""
-    return any(hasattr(obj, method) for method in methods)
-
-
-def check_unique_and_get_first(objects: Iterable, attr: str = "") -> Any:
-    """Check if ``objects`` are unique via a set and return of them.
-
-    This function is meant to be used with the ``AccessPassthrough`` class. It is
-    used to retrieve the last element of a set of values that are not synchronized.
-    """
-    object_set = set(objects)
-    if len(object_set) > 1:
-        warnings.warn(f"{attr} not synced: {object_set}. Setting should sync.")
-    return sorted(object_set).pop()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import warnings
 from functools import cached_property
 from itertools import product
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,8 @@ from lymph.helper import (
     dict_to_func,
     early_late_mapping,
     flatten,
+    get_params_from,
+    set_params_for,
     smart_updating_dict_cached_property,
 )
 
@@ -139,15 +141,29 @@ class Unilateral(
         return self.graph.is_binary
 
 
-    @property
-    def t_stages(self) -> list[str]:
+    def get_t_stages(
+        self,
+        which: Literal["valid", "distributions", "data"] = "valid",
+    ) -> list[str]:
         """Return the T-stages of the model."""
         distribution_t_stages = super().t_stages
+
         try:
             data_t_stages = self.patient_data[("_model", "#", "t_stage")].unique()
         except AttributeError:
+            data_t_stages = []
+
+        if which == "valid":
+            return sorted(set(distribution_t_stages) & set(data_t_stages))
+        if which == "distributions":
             return distribution_t_stages
-        return sorted(set(distribution_t_stages) & set(data_t_stages))
+        if which == "data":
+            return data_t_stages
+
+        raise ValueError(
+            f"Invalid value for 'which': {which}. Must be either 'valid', "
+            "'distributions', or 'data'."
+        )
 
 
     def get_params(
@@ -168,6 +184,23 @@ class Unilateral(
             params = flatten(params)
 
         return params if as_dict else params.values()
+
+
+    def get_tumor_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Get the parameters of the tumor spread edges."""
+        return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
+
+    def get_lnl_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Get the parameters of the LNL spread edges."""
+        return get_params_from(self.graph.lnl_edges, as_dict, as_flat)
 
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
@@ -216,6 +249,15 @@ class Unilateral(
         """
         args = self.graph.set_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
+
+
+    def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Assign new parameters to the tumor spread edges."""
+        return set_params_for(self.graph.tumor_edges, *args, **kwargs)
+
+    def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Assign new parameters to the LNL spread edges."""
+        return set_params_for(self.graph.lnl_edges, *args, **kwargs)
 
 
     def comp_transition_prob(
@@ -439,7 +481,7 @@ class Unilateral(
             lambda row: mapping(row["tumor", "1", "t_stage"]), axis=1
         )
 
-        for t_stage in self.t_stages:
+        for t_stage in self.get_t_stages("distributions"):
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
@@ -585,7 +627,7 @@ class Unilateral(
         llh = 0. if log else 1.
 
         if t_stage is None:
-            t_stages = self.t_stages
+            t_stages = self.get_t_stages("valid")
         else:
             t_stages = [t_stage]
 
@@ -823,7 +865,7 @@ class Unilateral(
             stage_dist = np.array(stage_dist) / sum(stage_dist)
 
         drawn_t_stages = rng.choice(
-            a=self.t_stages,
+            a=self.get_t_stages("distributions"),
             p=stage_dist,
             size=num,
         )
