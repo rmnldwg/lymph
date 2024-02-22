@@ -5,7 +5,9 @@ import numpy as np
 import pandas as pd
 
 from lymph.graph import LymphNodeLevel
-from tests import fixtures
+from lymph.helper import set_params_for
+
+from . import fixtures
 
 
 class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
@@ -32,7 +34,7 @@ class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
     def setUp(self):
         super().setUp()
         params_to_set = self.create_random_params()
-        self.model.assign_params(**params_to_set)
+        self.model.set_params(**params_to_set)
 
     def test_edge_transition_tensors(self) -> None:
         """Test the tensors associated with each edge.
@@ -64,14 +66,14 @@ class TrinaryObservationMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Te
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = self.get_modalities_subset(
-            names=["diagnostic_consensus", "pathology"],
+        self.model.replace_all_modalities(
+            self.get_modalities_subset(names=["diagnostic_consensus", "pathology"]),
         )
 
     def test_observation_matrix(self) -> None:
         """Test the observation matrix of the model."""
         num_lnls = len(self.model.graph.lnls)
-        num = num_lnls * len(self.model.modalities)
+        num = num_lnls * len(self.model.get_all_modalities())
         observation_matrix = self.model.observation_matrix()
         self.assertEqual(observation_matrix.shape, (3 ** num_lnls, 2 ** num))
 
@@ -84,7 +86,7 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
 
     def setUp(self):
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def get_patient_data(self) -> pd.DataFrame:
@@ -100,15 +102,38 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
             self.assertEqual(diagnose_matrix.shape, (3 ** num_lnls, num_patients))
 
 
+class TrinaryParamAssignmentTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+    """Test the assignment of parameters in a trinary model."""
+
+    def setUp(self):
+        """Load patient data."""
+        super().setUp()
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.set_params(**self.create_random_params())
+
+    def test_edge_params(self):
+        """Test the assignment of edge parameters."""
+        params_to_set = {}
+        for edge_name, edge in self.model.graph.edges.items():
+            params = edge.get_params(as_dict=True)
+            for param in params:
+                params_to_set[f"{edge_name}_{param}"] = self.rng.random()
+
+        set_params_for(self.model.graph.edges, **params_to_set)
+        retrieved_params = self.model.get_params(as_dict=True)
+        for param in params_to_set:
+            self.assertEqual(params_to_set[param], retrieved_params[param])
+
+
 class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
     """Test the likelihood of a trinary model."""
 
     def setUp(self):
         """Load patient data."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_log_likelihood_smaller_zero(self):
@@ -135,7 +160,7 @@ class TrinaryRiskTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
     def setUp(self):
         """Load patient data."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
@@ -144,7 +169,7 @@ class TrinaryRiskTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
         lnl_names = list(self.model.graph.lnls.keys())
         diagnoses = {}
 
-        for modality in self.model.modalities:
+        for modality in self.model.get_all_modalities():
             diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
 
         return diagnoses

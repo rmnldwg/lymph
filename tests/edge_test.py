@@ -35,7 +35,7 @@ class BinaryEdgeTestCase(unittest.TestCase):
                 "Tumor": graph.Tumor,
             },
         )
-        self.assertEqual(self.edge.name, recreated_edge.name)
+        self.assertEqual(self.edge.get_name(), recreated_edge.get_name())
         self.assertEqual(self.edge.parent.name, recreated_edge.parent.name)
         self.assertEqual(self.edge.child.name, recreated_edge.child.name)
         self.assertEqual(self.edge.spread_prob, recreated_edge.spread_prob)

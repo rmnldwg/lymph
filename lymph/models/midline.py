@@ -2,94 +2,34 @@ from __future__ import annotations
 
 import logging
 import warnings
-from argparse import OPTIONAL
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
 
-from lymph import graph, modalities, models
+from lymph import diagnose_times, modalities, models, types
 from lymph.helper import (
-    AbstractLookupDict,
-    DelegatorMixin,
-    DiagnoseType,
-    PatternType,
     early_late_mapping,
+    flatten,
+    popfirst,
+    unflatten_and_split,
 )
+from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
-
-def create_property_sync_callback(
-    names: list[str],
-    this: graph.Edge,
-    other: graph.Edge,
-) -> callable:
-    """Return func to sync property values whose name is in ``names`` btw two edges.
-
-    The returned function is meant to be added to the list of callbacks of the
-    :py:class:`Edge` class, such that two edges in a mirrored pair of graphs are kept
-    in sync.
-    """
-    def sync():
-        # We must set the value of `this` property via the private name, otherwise
-        # we would trigger the setter's callbacks and may end up in an infinite loop.
-        for name in names:
-            private_name = f"_{name}"
-            setattr(other, private_name, getattr(this, name))
-
-    logger.debug(f"Created sync callback for properties {names} of {this.name} edge.")
-    return sync
-
-# this here could probably be used to sync the edges for the different bilateral classes if we want to keep on using it
-def init_edge_sync(
-    property_names: list[str],
-    this_edge_list: list[graph.Edge],
-    other_edge_list: list[graph.Edge],
-) -> None:
-    """Initialize the callbacks to sync properties btw. Edges.
-
-    Implementing this as a separate method allows a user in theory to initialize
-    an arbitrary kind of symmetry between the two sides of the neck.
-    """
-    this_edge_names = [e.name for e in this_edge_list]
-    other_edge_names = [e.name for e in other_edge_list]
-
-    for edge_name in set(this_edge_names).intersection(other_edge_names):
-        this_edge = this_edge_list[this_edge_names.index(edge_name)]
-        other_edge = other_edge_list[other_edge_names.index(edge_name)]
-
-        this_edge.trigger_callbacks.append(
-            create_property_sync_callback(
-                names=property_names,
-                this=this_edge,
-                other=other_edge,
-            )
-        )
-        other_edge.trigger_callbacks.append(
-            create_property_sync_callback(
-                names=property_names,
-                this=other_edge,
-                other=this_edge,
-            )
-        )
+EXT_COL = ("tumor", "1", "extension")
+CENTRAL_COL = ("tumor", "1", "central")
 
 
-def init_dict_sync(
-    this: AbstractLookupDict,
-    other: AbstractLookupDict,
-) -> None:
-    """Add callback to ``this`` to sync with ``other``."""
-    def sync():
-        other.clear()
-        other.update(this)
 
-    this.trigger_callbacks.append(sync)
-
-
-class Midline(DelegatorMixin):
+class Midline(
+    diagnose_times.Composite,
+    modalities.Composite,
+    types.Model,
+):
     """Models metastatic progression bilaterally with tumor lateralization.
 
     Model a bilateral lymphatic system where an additional risk factor can
@@ -115,11 +55,10 @@ class Midline(DelegatorMixin):
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
+        is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
-        modalities_symmetric: bool = True,
-        trans_symmetric: bool = True,
+        use_central: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
-        central_enabled: bool = True,
         **_kwargs
     ):
         """Initialize the model.
@@ -151,204 +90,232 @@ class Midline(DelegatorMixin):
             class. One for the case of a mid-sagittal extension of the primary
             tumor and one for the case of no such extension.
         """
-        super().__init__()
-        self.central_enabled = central_enabled
-        self.ext   = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':False, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
-        self.noext = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':False, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
-        if self.central_enabled:
-            self.central = models.Bilateral(graph_dict= graph_dict,unilateral_kwargs=unilateral_kwargs, is_symmetric={'tumor_spread':True, "modalities": modalities_symmetric, "lnl_spread":trans_symmetric})
-
-        self.use_mixing = use_mixing
-        self.diag_time_dists = {}
-        if self.use_mixing:
-            self.alpha_mix = 0.
-
-        self.modalities_symmetric = modalities_symmetric
-        property_names = ["spread_prob"]
-        if self.ext.ipsi.graph.is_trinary:
-            property_names.append("micro_mod")
-        delegated_attrs = [
-            "max_time", "t_stages",
-            "is_binary", "is_trinary",
-        ]
-
-        init_dict_sync(
-            this=self.ext.ipsi.diag_time_dists,
-            other=self.noext.ipsi.diag_time_dists,
-        )
-        if central_enabled:
-            init_dict_sync(
-                this=self.noext.ipsi.diag_time_dists,
-                other=self.central.ipsi.diag_time_dists
-                )
-
-        if self.modalities_symmetric:
-            delegated_attrs.append("modalities")
-            init_dict_sync(
-                this=self.ext.modalities,
-                other=self.noext.modalities,
+        if is_symmetric is None:
+            is_symmetric = {
+                "tumor_spread": False,
+                "lnl_spread": True,
+            }
+        if is_symmetric["tumor_spread"]:
+            raise ValueError(
+                "If you want the tumor spread to be symmetric, consider using the "
+                "Bilateral class."
             )
-            if central_enabled:
-                init_dict_sync(
-                    this=self.noext.modalities,
-                    other=self.central.modalities,
-                )
-        self.init_synchronization()
-        self.init_delegation(ext=delegated_attrs)
+        self.is_symmetric = is_symmetric
 
-    def init_synchronization(self) -> None:
-        """Initialize the synchronization of edges, modalities, and diagnose times."""
-        # Sync spread probabilities
-        property_names = ["spread_prob", "micro_mod"] if self.noext.ipsi.is_trinary else ["spread_prob"]
-        noext_ipsi_tumor_edges = list(self.noext.ipsi.graph.tumor_edges.values())
-        noext_ipsi_lnl_edges = list(self.noext.ipsi.graph.lnl_edges.values())
-        noext_ipsi_edges = (
-            noext_ipsi_tumor_edges + noext_ipsi_lnl_edges
+        self.ext = models.Bilateral(
+            graph_dict=graph_dict,
+            unilateral_kwargs=unilateral_kwargs,
+            is_symmetric=self.is_symmetric,
         )
-        ext_ipsi_tumor_edges = list(self.ext.ipsi.graph.tumor_edges.values())
-        ext_ipsi_lnl_edges = list(self.ext.ipsi.graph.lnl_edges.values())
-        ext_ipsi_edges = (
-            ext_ipsi_tumor_edges
-            + ext_ipsi_lnl_edges
+        self.noext = models.Bilateral(
+            graph_dict=graph_dict,
+            unilateral_kwargs=unilateral_kwargs,
+            is_symmetric=self.is_symmetric,
         )
+        central_child = {}
+        if use_central:
+            self.central = models.Bilateral(
+                graph_dict=graph_dict,
+                unilateral_kwargs=unilateral_kwargs,
+                is_symmetric={
+                    "tumor_spread": True,
+                    "lnl_spread": self.is_symmetric["lnl_spread"],
+                },
+            )
+            central_child = {"central": self.central}
 
+        if use_mixing:
+            self.mixing_param = 0.
 
-        init_edge_sync(
-            property_names=property_names,
-            this_edge_list=noext_ipsi_edges,
-            other_edge_list=ext_ipsi_edges,
+        diagnose_times.Composite.__init__(
+            self,
+            distribution_children={"ext": self.ext, "noext": self.noext, **central_child},
+            is_distribution_leaf=False,
         )
-
-        #The syncing below does not work properly. The ipsilateral central side is synced, but the contralateral central side is not synced. It seems like no callback is initiated when syncing in this manner
-
-        # if self.central_enabled:
-        #     central_ipsi_tumor_edges = list(self.central.ipsi.graph.tumor_edges.values())
-        #     central_ipsi_lnl_edges = list(self.central.ipsi.graph.lnl_edges.values())
-        #     central_ipsi_edges = (
-        #         central_ipsi_tumor_edges
-        #         + central_ipsi_lnl_edges
-        #     )
-        #     init_edge_sync(
-        #         property_names=property_names,W
-        #         this_edge_list=noext_ipsi_edges,
-        #         other_edge_list=central_ipsi_edges,
-        #     )
-
-    def get_params(
-        self):
-        """Return the parameters of the model.
-        Parameters are only returned as dictionary.
-        """
-
-        if self.use_mixing:
-            return {'ipsi': self.noext.ipsi.get_params(as_dict=True),
-                'no extension contra':self.noext.contra.get_params(as_dict=True),
-                'mixing':self.alpha_mix}
-        else:
-            return {
-                'ipsi':self.ext.ipsi.get_params(as_dict=True),
-                'extension contra':self.ext.contra.get_params(as_dict=True),
-                'no extension contra':self.noext.contra.get_params(as_dict=True)}
-
-
-    def assign_params(
-        self,
-        *new_params_args,
-        **new_params_kwargs,
-    ) -> tuple[Iterator[float, dict[str, float]]]:
-        """Assign new parameters to the model.
-
-        This works almost exactly as the bilateral model's
-        :py:meth:`~lymph.models.Bilateral.assign_params` method. However the assignment of parametrs
-        with an array is disabled as it gets to messy with such a large parameter space.
-        For universal parameters, the prefix is not needed as they are directly
-        sent to the noextension ipsilateral side, which then triggers a sync callback.
-        """
-        if self.use_mixing:
-            extension_kwargs = {}
-            no_extension_kwargs = {}
-            central_kwargs = {}
-            for key, value in new_params_kwargs.items():
-                if 'mixing' in key:
-                    self.alpha_mix = value
-                else:
-                    no_extension_kwargs[key] = value
-            remaining_args, remainings_kwargs = self.noext.assign_params(*new_params_args, **no_extension_kwargs)
-            for key in no_extension_kwargs.keys():
-                if 'contra_primary' in key:
-                    extension_kwargs[key] = self.alpha_mix * extension_kwargs[(key.replace("contra", "ipsi"))] + (1. - self.alpha_mix) * no_extension_kwargs[key]
-                else:
-                    extension_kwargs[key] = no_extension_kwargs[key]
-            remaining_args, remainings_kwargs = self.ext.assign_params(*remaining_args, **extension_kwargs)
-            # If the syncing of the edges works properly, this below can be deleted.
-            if self.central_enabled:
-                for key in no_extension_kwargs.keys():
-                    if 'contra' not in key:
-                        central_kwargs[(key.replace("ipsi_", ""))] = no_extension_kwargs[key]
-                remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs)
-        else:
-            ipsi_kwargs, noext_contra_kwargs, ext_contra_kwargs, general_kwargs, central_kwargs = {}, {}, {}, {}, {}
-
-            for key, value in new_params_kwargs.items():
-                if "ipsi_" in key:
-                    ipsi_kwargs[key.replace("ipsi_", "")] = value
-                elif "noext" in key:
-                    noext_contra_kwargs[key.replace("contra_noext_", "")] = value
-                elif 'ext' in key:
-                    ext_contra_kwargs[key.replace("contra_ext_", "")] = value
-                else:
-                    if 'contra' in key:
-                        warnings.warn(
-                "'contra' keys were assigned without 'ext' or 'noext' defined. For a non-mixture model"
-                "For a non mixture model these values have no meaning.")
-                    else:
-                        general_kwargs[key] = value
-
-            remaining_args, remainings_kwargs = self.ext.ipsi.assign_params(
-                *new_params_args, **ipsi_kwargs, **general_kwargs
-            )
-            remaining_args, remainings_kwargs = self.noext.contra.assign_params(
-                *remaining_args, **noext_contra_kwargs, **remainings_kwargs, **general_kwargs
-            )
-            remaining_args, remainings_kwargs = self.ext.contra.assign_params(
-                *remaining_args, **ext_contra_kwargs, **remainings_kwargs, **general_kwargs
-            )
-            if self.central_enabled:
-                for key in ipsi_kwargs.keys():
-                        central_kwargs[(key.replace("ipsi_", ""))] = ipsi_kwargs[key]
-                print(ipsi_kwargs)
-                print(general_kwargs)
-                remaining_args, remainings_kwargs = self.central.assign_params(*new_params_args, **central_kwargs, **general_kwargs)
-
-        return remaining_args, remainings_kwargs
+        modalities.Composite.__init__(
+            self,
+            modality_children={"ext": self.ext, "noext": self.noext, **central_child},
+            is_modality_leaf=False,
+        )
 
 
     @property
-    def modalities(self) -> modalities.ModalitiesUserDict:
-        """Return the set diagnostic modalities of the model.
+    def is_trinary(self) -> bool:
+        """Return whether the model is trinary."""
+        if self.ext.is_trinary != self.noext.is_trinary:
+            raise ValueError("The bilateral models must have the same trinary status.")
 
-        See Also:
-            :py:attr:`lymph.models.Unilateral.modalities`
-                The corresponding unilateral attribute.
-            :py:class:`~lymph.descriptors.ModalitiesUserDict`
-                The implementation of the descriptor class.
+        if self.use_central and self.central.is_trinary != self.ext.is_trinary:
+            raise ValueError("The bilateral models must have the same trinary status.")
+
+        return self.ext.is_trinary
+
+
+    @property
+    def mixing_param(self) -> float | None:
+        """Return the mixing parameter."""
+        if hasattr(self, "_mixing_param"):
+            return self._mixing_param
+
+        return None
+
+    @mixing_param.setter
+    def mixing_param(self, value: float) -> None:
+        """Set the mixing parameter."""
+        if value is not None and not 0. <= value <= 1.:
+            raise ValueError("The mixing parameter must be in the range [0, 1].")
+
+        self._mixing_param = value
+
+    @property
+    def use_mixing(self) -> bool:
+        """Return whether the model uses a mixing parameter."""
+        return hasattr(self, "_mixing_param")
+
+    @property
+    def use_central(self) -> bool:
+        """Return whether the model uses a central model."""
+        return hasattr(self, "central")
+
+
+    def get_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> dict[str, float] | Iterable[float]:
+        """Return the spread parameters of the model.
+
+        TODO: enrich docstring
         """
-        if not self.modalities_symmetric:
-            raise AttributeError(
-                "The modalities are not symmetric. Please access them via the "
-                "`ipsi` or `contra` attributes."
-            )
-        return self.ext.modalities
+        params = {}
+        params["ipsi"] = self.ext.ipsi.get_tumor_spread_params(as_flat=as_flat)
 
-    @modalities.setter
-    def modalities(self, new_modalities) -> None:
-        """Set the diagnostic modalities of the model."""
-        if not self.modalities_symmetric:
-            raise AttributeError(
-                "The modalities are not symmetric. Please set them via the "
-                "`ipsi` or `contra` attributes."
-            )
-        self.ext.modalities = new_modalities
+        if self.use_mixing:
+            params["contra"] = self.noext.contra.get_tumor_spread_params(as_flat=as_flat)
+            params["mixing"] = self.mixing_param
+        else:
+            params["noext"] = {
+                "contra": self.noext.contra.get_tumor_spread_params(as_flat=as_flat)
+            }
+            params["ext"] = {
+                "contra": self.ext.contra.get_tumor_spread_params(as_flat=as_flat)
+            }
+
+        if self.is_symmetric["lnl_spread"]:
+            params.update(self.ext.ipsi.get_lnl_spread_params(as_flat=as_flat))
+        else:
+            if "contra" not in params:
+                params["contra"] = {}
+            params["ipsi"].update(self.ext.ipsi.get_lnl_spread_params(as_flat=as_flat))
+            params["contra"].update(self.noext.contra.get_lnl_spread_params(as_flat=as_flat))
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
+    def get_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of the model.
+
+        TODO: enrich docstring
+        """
+        params = self.get_spread_params(as_flat=as_flat)
+        params.update(self.get_distribution_params(as_flat=as_flat))
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
+    def set_spread_params(
+        self, *args: float, **kwargs: float,
+    ) -> Iterable[float] | dict[str, float]:
+        """Set the spread parameters of the midline model.
+
+        TODO: enrich docstring
+        """
+        kwargs, global_kwargs = unflatten_and_split(
+            kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
+        )
+
+        # first, take care of ipsilateral tumor spread (same for all models)
+        ipsi_kwargs = global_kwargs.copy()
+        ipsi_kwargs.update(kwargs.get("ipsi", {}))
+        if self.use_central:
+            self.central.set_spread_params(*args, **ipsi_kwargs)
+        self.ext.ipsi.set_tumor_spread_params(*args, **ipsi_kwargs)
+        args = self.noext.ipsi.set_tumor_spread_params(*args, **ipsi_kwargs)
+
+        # then, take care of contralateral tumor spread
+        if self.use_mixing:
+            contra_kwargs = global_kwargs.copy()
+            contra_kwargs.update(kwargs.get("contra", {}))
+            args = self.noext.contra.set_tumor_spread_params(*args, **contra_kwargs)
+            mixing_param, args = popfirst(args)
+            mixing_param = global_kwargs.get("mixing", mixing_param) or self.mixing_param
+            self.mixing_param = global_kwargs.get("mixing", mixing_param)
+
+            ext_contra_kwargs = {}
+            for (key, ipsi_param), noext_contra_param in zip(
+                self.ext.ipsi.get_tumor_spread_params().items(),
+                self.noext.contra.get_tumor_spread_params().values(),
+            ):
+                ext_contra_kwargs[key] = (
+                    self.mixing_param * ipsi_param
+                    + (1. - self.mixing_param) * noext_contra_param
+                )
+            self.ext.contra.set_tumor_spread_params(**ext_contra_kwargs)
+
+        else:
+            noext_contra_kwargs = global_kwargs.copy()
+            noext_contra_kwargs.update(kwargs.get("noext", {}).get("contra", {}))
+            args = self.noext.contra.set_tumor_spread_params(*args, **noext_contra_kwargs)
+
+            ext_contra_kwargs = global_kwargs.copy()
+            ext_contra_kwargs.update(kwargs.get("ext", {}).get("contra", {}))
+            args = self.ext.contra.set_tumor_spread_params(*args, **ext_contra_kwargs)
+
+        # finally, take care of LNL spread
+        if self.is_symmetric["lnl_spread"]:
+            if self.use_central:
+                self.central.ipsi.set_lnl_spread_params(*args, **global_kwargs)
+                self.central.contra.set_lnl_spread_params(*args, **global_kwargs)
+            self.ext.ipsi.set_lnl_spread_params(*args, **global_kwargs)
+            self.ext.contra.set_lnl_spread_params(*args, **global_kwargs)
+            self.noext.ipsi.set_lnl_spread_params(*args, **global_kwargs)
+            args = self.noext.contra.set_lnl_spread_params(*args, **global_kwargs)
+
+        else:
+            if self.use_central:
+                self.central.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
+            self.ext.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
+            args = self.noext.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
+
+            contra_kwargs = global_kwargs.copy()
+            contra_kwargs.update(kwargs.get("contra", {}))
+            if self.use_central:
+                self.central.contra.set_lnl_spread_params(*args, **contra_kwargs)
+            self.ext.contra.set_lnl_spread_params(*args, **contra_kwargs)
+            args = self.noext.contra.set_lnl_spread_params(*args, **contra_kwargs)
+
+        return args
+
+
+    def set_params(
+        self, *args: float, **kwargs: float,
+    ) -> Iterable[float] | dict[str, float]:
+        """Assign new parameters to the model.
+
+        TODO: enrich docstring
+        """
+        args = self.set_spread_params(*args, **kwargs)
+        return self.set_distribution_params(*args, **kwargs)
 
 
     def load_patient_data(
@@ -358,81 +325,82 @@ class Midline(DelegatorMixin):
     ) -> None:
         """Load patient data into the model.
 
-        This amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
-        method on both models.
+        This amounts to sorting the patients into three bins:
+        1. Patients whose tumor is clearly laterlaized, meaning the column
+            ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+            the :py:attr:`noext` attribute.
+        2. Those with a central tumor, indicated by ``True`` in the column
+            ``("tumor", "1", "central")``. If the :py:attr:`use_central` attribute is
+            set to ``True``, these patients are assigned to the :py:attr:`central`
+            model. Otherwise, they are assigned to the :py:attr:`ext` model.
+        3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
+            line but is not central, i.e., symmetric w.r.t to the mid-sagittal line.
+            These are assigned to the :py:attr:`ext` model.
+
+        The split data is sent to the :py:meth:`lymph.models.Bilateral.load_patient_data`
+        method of the respective models.
         """
-        if self.central_enabled:
-            ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True) & (patient_data[("tumor", "1", "central")] != True)]
-            noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
-            central = patient_data[patient_data[("tumor", "1", "central")].notna() & patient_data[("tumor", "1", "central")]]
-            self.central.load_patient_data(central, mapping)
+        # pylint: disable=singleton-comparison
+        is_lateralized = patient_data[EXT_COL] == False
+        self.noext.load_patient_data(patient_data[is_lateralized], mapping)
+
+        if self.use_central:
+            is_central = patient_data[CENTRAL_COL] == True
+            self.central.load_patient_data(patient_data[is_central], mapping)
+            self.ext.load_patient_data(patient_data[~is_lateralized & ~is_central], mapping)
+
         else:
-            ext_data = patient_data.loc[(patient_data[("tumor", "1", "extension")] == True)]
-            noext_data = patient_data.loc[~patient_data[("tumor", "1", "extension")]]
-        self.ext.load_patient_data(ext_data, mapping)
-        self.noext.load_patient_data(noext_data, mapping)
+            self.ext.load_patient_data(patient_data[~is_lateralized], mapping)
 
 
     def likelihood(
         self,
-        data: OPTIONAL[pd.DataFrame] = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = 'HMM'
+        mode: str = "HMM",
+        for_t_stage: str | None = None,
     ) -> float:
-        """Compute log-likelihood of (already stored) data, given the spread
-        probabilities and either a discrete diagnose time or a distribution to
-        use for marginalization over diagnose times.
+        """Compute the (log-)likelihood of the stored data given the model (and params).
 
-        Args:
-            data: Table with rows of patients and columns of per-LNL involvment. See
-                :meth:`load_data` for more details on how this should look like.
+        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        information on how to use the ``given_params`` parameter.
 
-            given_params: The likelihood is a function of these parameters. They mainly
-                consist of the :attr:`spread_probs` of the model. Any excess parameters
-                will be used to update the parametrized distributions used for
-                marginalizing over the diagnose times (see :attr:`diag_time_dists`).
+        Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
+        determines whether the likelihood is computed for the hidden Markov model
+        (``"HMM"``) or the Bayesian network (``"BN"``).
 
-            log: When ``True``, the log-likelihood is returned.
-
-        Returns:
-            The log-likelihood :math:`\\log{p(D \\mid \\theta)}` where :math:`D`
-            is the data and :math:`\\theta` is the tuple of spread probabilities
-            and diagnose times or distributions over diagnose times.
+        Note:
+            The computation is much faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
 
         See Also:
-            :attr:`spread_probs`: Property for getting and setting the spread
-            probabilities, of which a lymphatic network has as many as it has
-            :class:`Edge` instances (in case no symmetries apply).
-
-            :meth:`Unilateral.likelihood`: The log-likelihood function of
-            the unilateral system.
-
-            :meth:`Bilateral.likelihood`: The (log-)likelihood function of the
-            bilateral system.
+            :py:meth:`lymph.models.Unilateral.likelihood`
+                The corresponding unilateral function.
         """
-        if data is not None:
-            self.patient_data = data
-
-        if given_param_kwargs is None:
-            given_param_kwargs = {}
-
         try:
-            self.assign_params(**given_param_kwargs)
+            # all functions and methods called here should raise a ValueError if the
+            # given parameters are invalid...
+            if given_params is None:
+                pass
+            elif isinstance(given_params, dict):
+                self.set_params(**given_params)
+            else:
+                self.set_params(*given_params)
         except ValueError:
             return -np.inf if log else 0.
 
+        kwargs = {"log": log, "mode": mode, "for_t_stage": for_t_stage}
         llh = 0. if log else 1.
         if log:
-            llh += self.ext.likelihood(log = log, mode = mode)
-            llh += self.noext.likelihood(log = log, mode = mode)
-            if self.central_enabled:
-                llh += self.central.likelihood(log = log, mode = mode)
+            llh += self.ext.likelihood(**kwargs)
+            llh += self.noext.likelihood(**kwargs)
+            if self.use_central:
+                llh += self.central.likelihood(**kwargs)
         else:
-            llh *= self.ext.likelihood(log = log, mode = mode)
-            llh *= self.noext.likelihood(log = log, mode = mode)
-            if self.central_enabled:
-                llh *= self.central.likelihood(log = log, mode = mode)
+            llh *= self.ext.likelihood(**kwargs)
+            llh *= self.noext.likelihood(**kwargs)
+            if self.use_central:
+                llh *= self.central.likelihood(**kwargs)
 
         return llh
 
@@ -440,69 +408,39 @@ class Midline(DelegatorMixin):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
         midline_extension: bool = False,
         central: bool = False,
         mode: str = "HMM",
     ) -> float:
-        """Compute the risk of nodal involvement given a specific diagnose.
+        """Compute the risk of nodal involvement ``given_diagnoses``.
 
-        Args:
-            spread_probs: Set ot new spread parameters. This also contains the
-                mixing parameter alpha in the last position.
-            midline_extension: Whether or not the patient's tumor extends over
-                the mid-sagittal line.
-
-        See Also:
-            :meth:`Bilateral.risk`: Depending on whether or not the patient's
-            tumor does extend over the midline, the risk function of the
-            respective :class:`Bilateral` instance gets called.
+        TODO: finish docstring
         """
-        if given_param_args is not None:
-            self.assign_params(*given_param_args)
-        if given_param_kwargs is not None:
-            self.assign_params(**given_param_kwargs)
+        if isinstance(given_params, dict):
+            self.set_params(**given_params)
+        else:
+            self.set_params(*given_params)
+
         if central:
-            return self.central.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
+            return self.central.risk(
+                given_diagnoses=given_diagnoses,
+                t_stage=t_stage,
+                involvement=involvement,
+                mode=mode,
+            )
         if midline_extension:
-            return self.ext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
-        return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
-
-
-
-    # def generate_dataset(
-    #     self,
-    #     num_patients: int,
-    #     stage_dist: dict[str, float],
-    # ) -> pd.DataFrame:
-    #     """Generate/sample a pandas :class:`DataFrame` from the defined network.
-
-    #     Args:
-    #         num_patients: Number of patients to generate.
-    #         stage_dist: Probability to find a patient in a certain T-stage.
-    #     """
-    #     # TODO: check if this still works
-    #     drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
-    #         dist=stage_dist, size=num_patients
-    #     )
-
-    #     drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)
-    #     drawn_obs_contra = self.contra._draw_patient_diagnoses(drawn_diag_times)
-    #     drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
-
-    #     # construct MultiIndex for dataset from stored modalities
-    #     sides = ["ipsi", "contra"]
-    #     modalities = list(self.modalities.keys())
-    #     lnl_names = [lnl.name for lnl in self.ipsi.graph._lnls]
-    #     multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
-
-    #     # create DataFrame
-    #     dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-    #     dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
-    #     dataset = dataset.sort_index(axis="columns", level=0)
-    #     dataset[('info', 'tumor', 't_stage')] = drawn_t_stages
-
-    #     return dataset
+            return self.ext.risk(
+                given_diagnoses=given_diagnoses,
+                t_stage=t_stage,
+                involvement=involvement,
+                mode=mode,
+            )
+        return self.noext.risk(
+            given_diagnoses=given_diagnoses,
+            t_stage=t_stage,
+            involvement=involvement,
+            mode=mode,
+        )

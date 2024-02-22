@@ -1,112 +1,207 @@
 """
 Module containing supporting classes and functions used accross the project.
 """
+import logging
 import warnings
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Callable
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 from cachetools import LRUCache
-from pandas._libs.missing import NAType
 
-PatternType = dict[str, bool | NAType | None]
-"""Type alias for an involvement pattern."""
+from lymph.types import HasGetParams, HasSetParams
 
-DiagnoseType = dict[str, PatternType]
-"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
+logger = logging.getLogger(__name__)
 
 
-class DelegatorMixin:
-    """Mixin class that allows the delegation of attributes from another object."""
-    def __init__(self):
-        self._delegated = {}
+class DelegationSyncMixin:
+    """Mixin to delegate and synchronize an attribute of multiple instances.
+
+    If a container class holds several (i.e. one ore more) instances of a class, this
+    mixin can be used with the container class to delegate and synchronize an attribute
+    from the instances.
+
+    See the explanation in the :py:class:`DelegatorMixin.init_delegation_sync` method.
+
+    This also works for attributes that are not hashable, such as lists or dictionaries.
+    See more details about that in the :py:class:`AccessPassthrough` class docs.
+    """
+    def __init__(self) -> None:
+        self._attrs_to_objects = {}
 
 
-    def init_delegation(self, **from_to) -> None:
-        """Initialize the delegation of attributes.
+    def _init_delegation_sync(self, **attrs_to_objects: list[object]) -> None:
+        """Initialize the delegation and synchronization of attributes.
 
-        For each keyword argument that is an attribute of ``self``, the value is a
-        list of attributes to delegate to ``self``.
-
-        Inspiration from this came from the `delegation pattern`_.
-
-        .. _delegation pattern: https://github.com/faif/python-patterns/blob/master/patterns/fundamental/delegation_pattern.py
+        Each keyword argument is the name of an attribute to synchronize. The value
+        should be a list of instances for which that attribute should be synchronized.
 
         Example:
 
-        >>> class Delegate:
-        ...     def __init__(self):
-        ...         self.fancy_attr = "foo"
-        ...     @property
-        ...     def property_attr(self):
-        ...         return "bar"
-        ...     @cached_property
-        ...     def cached_attr(self):
-        ...         return "baz"
-        >>> class A(DelegatorMixin):
+        >>> class Eye:
+        ...     def __init__(self, color="blue"):
+        ...         self.eye_color = color
+        >>> class Person(DelegationSyncMixin):
         ...     def __init__(self):
         ...         super().__init__()
-        ...         self.delegated = "hello world"
-        ...         self.also_delegated = Delegate()
-        ...         self.normal_attr = 42
-        ...         self.init_delegation(
-        ...             delegated=["count"],
-        ...             also_delegated=["fancy_attr", "property_attr", "cached_attr"],
-        ...         )
-        >>> a = A()
-        >>> a.delegated.count("l")
-        3
-        >>> a.count("l")
-        3
-        >>> a.also_delegated.fancy_attr
-        'foo'
-        >>> a.fancy_attr
-        'foo'
-        >>> a.also_delegated.property_attr
-        'bar'
-        >>> a.property_attr
-        'bar'
-        >>> a.also_delegated.cached_attr
-        'baz'
-        >>> a.cached_attr
-        'baz'
-        >>> a.normal_attr
-        42
-        >>> a.non_existent
-        Traceback (most recent call last):
-        ...
-        AttributeError: 'A' object has no attribute 'non_existent'
+        ...         self.left = Eye("green")
+        ...         self.right = Eye("brown")
+        ...         self._init_delegation_sync(eye_color=[self.left, self.right])
+        >>> person = Person()
+        >>> person.eye_color        # pop element of sorted set and warn that not synced
+        'green'
+        >>> person.eye_color = 'red'
+        >>> person.left.eye_color == person.right.eye_color == 'red'
+        True
         """
-        for attr, sub_attrs in from_to.items():
-            attr_obj = getattr(self, attr)
+        for name, objects in attrs_to_objects.items():
+            types = {type(obj) for obj in objects}
+            if len(types) > 1:
+                raise ValueError(
+                    f"Instances of delegated attribute {name} must be of same type"
+                )
 
-            for sub_attr in sub_attrs:
-                if not hasattr(attr_obj, sub_attr):
-                    raise AttributeError(
-                        f"Attribute '{sub_attr}' not found in '{attr_obj}'"
-                    )
+        self._attrs_to_objects = attrs_to_objects
 
-                if sub_attr in self._delegated:
-                    warnings.warn(
-                        f"Attribute '{sub_attr}' already delegated. Overwriting."
-                    )
-                self._delegated[sub_attr] = (attr_obj, sub_attr)
 
     def __getattr__(self, name):
-        if name in self._delegated:
-            attr = getattr(*self._delegated[name])
+        objects = self._attrs_to_objects[name]
+        attr_list = [getattr(obj, name) for obj in objects]
 
-            if not callable(attr):
-                return attr
+        if len(attr_list) == 1:
+            return attr_list[0]
 
-            @wraps(attr)
-            def wrapper(*args, **kwargs):
-                return attr(*args, **kwargs)
+        return fuse(attr_list)
 
-            return wrapper
 
-        return super().__getattribute__(name)
+    def __setattr__(self, name, value):
+        if name != "_attrs_to_objects" and name in self._attrs_to_objects:
+            for inst in self._attrs_to_objects[name]:
+                setattr(inst, name, value)
+        else:
+            super().__setattr__(name, value)
+
+
+class AccessPassthrough:
+    """Allows delegated access to an attribute's methods.
+
+    This class is constructed from a list of objects. It allows access to the
+    methods and items of the objects in the list. Setting items is also supported, but
+    only one level deep.
+
+    It is used by the :py:class:`DelegationSyncMixin` to handle unhashable attributes.
+    For example, a delegated and synched attribute might be a dictionary. In this case,
+    a call like ``container.attribute["key"]`` would retrieve the right value, but
+    setting it via ``container.attribute["key"] = value`` would at best set the value
+    on one of the synched instances, but not on all of them. This class handles passing
+    the set value to all instances.
+
+    Note:
+        This class is not meant to be used directly, but only by the
+        :py:class:`DelegationSyncMixin`.
+
+    Below is an example that demonstrates how calls to ``__setitem__``, ``__setattr__``,
+    and ``__call__`` are passed through to both instances for which the delegation and
+    synchronization is invoked:
+
+    >>> class Param:
+    ...     def __init__(self, value):
+    ...         self.value = value
+    >>> class Model:
+    ...     def __init__(self, **kwargs):
+    ...         self.params_dict = kwargs
+    ...         self.param = Param(sum(kwargs.values()))
+    ...     def set_value(self, key, value):
+    ...         self.params_dict[key] = value
+    >>> class Mixture(DelegationSyncMixin):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.c1 = Model(a=1, b=2)
+    ...         self.c2 = Model(a=3, b=4, c=5)
+    ...         self._init_delegation_sync(
+    ...             params_dict=[self.c1, self.c2],
+    ...             param=[self.c1, self.c2],
+    ...             set_value=[self.c1, self.c2],
+    ...         )
+    >>> mixture = Mixture()
+    >>> mixture.params_dict["b"]    # get first element and warn that not synced
+    4
+    >>> mixture.params_dict["a"] = 99
+    >>> mixture.c1.params_dict["a"] == mixture.c2.params_dict["a"] == 99
+    True
+    >>> mixture.param.value
+    12
+    >>> mixture.param.value = 42
+    >>> mixture.c1.param.value == mixture.c2.param.value == 42
+    True
+    >>> mixture.set_value("c", 100)
+    >>> mixture.c1.params_dict["c"] == mixture.c2.params_dict["c"] == 100
+    True
+    """
+    def __init__(self, attr_objects: list[object]) -> None:
+        self._attr_objects = attr_objects
+
+
+    def __getattr__(self, name):
+        if len(self._attr_objects) == 1:
+            return getattr(self._attr_objects[0], name)
+
+        return fuse([getattr(obj, name) for obj in self._attr_objects])
+
+
+    def __getitem__(self, key):
+        if len(self._attr_objects) == 1:
+            return self._attr_objects[0][key]
+
+        return fuse([obj[key] for obj in self._attr_objects])
+
+
+    def __setattr__(self, name, value):
+        if name != "_attr_objects":
+            for obj in self._attr_objects:
+                setattr(obj, name, value)
+        else:
+            super().__setattr__(name, value)
+
+
+    def __setitem__(self, key, value):
+        for obj in self._attr_objects:
+            obj[key] = value
+
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return_values = []
+        for obj in self._attr_objects:
+            return_values.append(obj(*args, **kwds))
+
+        return fuse(return_values)
+
+
+    def __len__(self) -> int:
+        if len(self._attr_objects) == 1:
+            return len(self._attr_objects[0])
+
+        return fuse([len(obj) for obj in self._attr_objects])
+
+
+def fuse(objects: list[Any]) -> Any:
+    """Try to fuse ``objects`` and return one result.
+
+    TODO: This should not immediately return an ``AccessPassthrough`` just because the
+    ``objects`` are not all equal. It should do so, when the ``objects`` may be dict-
+    like or be callables... I need to think of a proper criterion.
+
+    What about return an ``AccessPassthrough`` when the type is one of those defined
+    in this package?
+    """
+    if all(objects[0] == obj for obj in objects[1:]):
+        return objects[0]
+
+    try:
+        return sorted(set(objects)).pop()
+    except TypeError:
+        return AccessPassthrough(objects)
 
 
 def check_unique_names(graph: dict):
@@ -415,7 +510,7 @@ def early_late_mapping(t_stage: int | str) -> str:
 
 
 def trigger(func: callable) -> callable:
-    """Method decorator that runs instance's ``trigger()`` when the method is called."""
+    """Decorator that runs instance's ``trigger_callbacks`` when called."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
@@ -423,11 +518,6 @@ def trigger(func: callable) -> callable:
             callback()
         return result
     return wrapper
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
 
 
 class AbstractLookupDict(UserDict):
@@ -473,15 +563,6 @@ class AbstractLookupDict(UserDict):
                 return False
 
         return False
-
-
-    def clear_without_trigger(self) -> None:
-        """Clear the dictionary without triggering the callbacks."""
-        self.__dict__["data"].clear()
-
-    def update_without_trigger(self, other=(), /, **kwargs):
-        """Update the dictionary without triggering the callbacks."""
-        self.__dict__["data"].update(other, **kwargs)
 
 
 class smart_updating_dict_cached_property(cached_property):
@@ -533,3 +614,137 @@ def dict_to_func(mapping: dict[Any, Any]) -> callable:
         return mapping[key]
 
     return callable_mapping
+
+
+def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
+    """Return the first element of a sequence and the sequence without it.
+
+    If the sequence is empty, the first element will be ``None`` and the second just
+    the empty sequence. Example:
+
+    >>> popfirst([1, 2, 3])
+    (1, [2, 3])
+    >>> popfirst([])
+    (None, [])
+    """
+    try:
+        return seq[0], seq[1:]
+    except IndexError:
+        return None, seq
+
+
+def flatten(mapping, parent_key='', sep='_') -> dict:
+    """Flatten a nested dictionary.
+
+    Example:
+
+    >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
+    {'a_b': 1, 'a_c': 2, 'd': 3}
+    """
+    items = []
+    for k, v in mapping.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def unflatten_and_split(
+    mapping: dict,
+    expected_keys: list[str],
+    sep: str = "_",
+) -> tuple[dict, dict]:
+    """Unflatten the part of a dict containing ``expected_keys`` and return the rest.
+
+    Example:
+
+    >>> unflatten_and_split({'a_b': 1, 'a_c_x': 2, 'd_y': 3}, expected_keys=['a'])
+    ({'a': {'b': 1, 'c_x': 2}}, {'d_y': 3})
+    """
+    split_kwargs, global_kwargs = {}, {}
+    for key, value in mapping.items():
+        left, _, right = key.partition(sep)
+        if left not in expected_keys:
+            global_kwargs[key] = value
+            continue
+
+        tmp = split_kwargs
+        if left not in tmp:
+            tmp[left] = {}
+
+        tmp = tmp[left]
+        tmp[right] = value
+
+    return split_kwargs, global_kwargs
+
+
+def get_params_from(
+    objects: dict[str, HasGetParams],
+    as_dict: bool = True,
+    as_flat: bool = True,
+) -> Iterable[float] | dict[str, float]:
+    """Get the parameters from each ``get_params()`` method of the ``objects``."""
+    params = {}
+    for key, obj in objects.items():
+        params[key] = obj.get_params(as_flat=as_flat)
+
+    if as_flat or not as_dict:
+        params = flatten(params)
+
+    return params if as_dict else params.values()
+
+
+def set_params_for(
+    objects: dict[str, HasSetParams],
+    *args: float,
+    **kwargs: float,
+) -> tuple[float]:
+    """Pass arguments to each ``set_params()`` method of the ``objects``."""
+    kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=objects.keys())
+
+    for key, obj in objects.items():
+        obj_kwargs = global_kwargs.copy()
+        obj_kwargs.update(kwargs.get(key, {}))
+        args = obj.set_params(*args, **obj_kwargs)
+
+    return args
+
+
+def synchronize_params(
+    get_from: dict[str, HasGetParams],
+    set_to: dict[str, HasSetParams],
+) -> None:
+    """Get the parameters from one object and set them to another."""
+    for key, obj in set_to.items():
+        obj.set_params(**get_from[key].get_params(as_dict=True))
+
+
+def set_bilateral_params_for(
+    *args: float,
+    ipsi_objects: dict[str, HasSetParams],
+    contra_objects: dict[str, HasSetParams],
+    is_symmetric: bool = False,
+    **kwargs: float,
+) -> tuple[float]:
+    """Pass arguments to ``set_params()`` of ``ipsi_objects`` and ``contra_objects``.
+
+    If ``is_symmetric`` is ``True``, the parameters of the ``contra_objects`` will be
+    set to the parameters of the ``ipsi_objects``. Otherwise, the parameters of the
+    ``contra_objects`` will be set independently.
+    """
+    kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+
+    ipsi_kwargs = global_kwargs.copy()
+    ipsi_kwargs.update(kwargs.get("ipsi", {}))
+    args = set_params_for(ipsi_objects, *args, **ipsi_kwargs)
+
+    if is_symmetric:
+        synchronize_params(ipsi_objects, contra_objects)
+    else:
+        contra_kwargs = global_kwargs.copy()
+        contra_kwargs.update(kwargs.get("contra", {}))
+        args = set_params_for(contra_objects, *args, **contra_kwargs)
+
+    return args
