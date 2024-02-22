@@ -408,69 +408,39 @@ class Midline(
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_param_args: Iterable[float] | None = None,
-        given_param_kwargs: dict[str, float] | None = None,
+        given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
         midline_extension: bool = False,
         central: bool = False,
         mode: str = "HMM",
     ) -> float:
-        """Compute the risk of nodal involvement given a specific diagnose.
+        """Compute the risk of nodal involvement ``given_diagnoses``.
 
-        Args:
-            spread_probs: Set ot new spread parameters. This also contains the
-                mixing parameter alpha in the last position.
-            midline_extension: Whether or not the patient's tumor extends over
-                the mid-sagittal line.
-
-        See Also:
-            :meth:`Bilateral.risk`: Depending on whether or not the patient's
-            tumor does extend over the midline, the risk function of the
-            respective :class:`Bilateral` instance gets called.
+        TODO: finish docstring
         """
-        if given_param_args is not None:
-            self.set_params(*given_param_args)
-        if given_param_kwargs is not None:
-            self.set_params(**given_param_kwargs)
+        if isinstance(given_params, dict):
+            self.set_params(**given_params)
+        else:
+            self.set_params(*given_params)
+
         if central:
-            return self.central.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
+            return self.central.risk(
+                given_diagnoses=given_diagnoses,
+                t_stage=t_stage,
+                involvement=involvement,
+                mode=mode,
+            )
         if midline_extension:
-            return self.ext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
-        return self.noext.risk(given_diagnoses = given_diagnoses,t_stage = t_stage, involvement = involvement)
-
-
-
-    # def generate_dataset(
-    #     self,
-    #     num_patients: int,
-    #     stage_dist: dict[str, float],
-    # ) -> pd.DataFrame:
-    #     """Generate/sample a pandas :class:`DataFrame` from the defined network.
-
-    #     Args:
-    #         num_patients: Number of patients to generate.
-    #         stage_dist: Probability to find a patient in a certain T-stage.
-    #     """
-    #     # TODO: check if this still works
-    #     drawn_t_stages, drawn_diag_times = self.diag_time_dists.draw(
-    #         dist=stage_dist, size=num_patients
-    #     )
-
-    #     drawn_obs_ipsi = self.ipsi._draw_patient_diagnoses(drawn_diag_times)
-    #     drawn_obs_contra = self.contra._draw_patient_diagnoses(drawn_diag_times)
-    #     drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
-
-    #     # construct MultiIndex for dataset from stored modalities
-    #     sides = ["ipsi", "contra"]
-    #     modalities = list(self.modalities.keys())
-    #     lnl_names = [lnl.name for lnl in self.ipsi.graph._lnls]
-    #     multi_cols = pd.MultiIndex.from_product([sides, modalities, lnl_names])
-
-    #     # create DataFrame
-    #     dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-    #     dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
-    #     dataset = dataset.sort_index(axis="columns", level=0)
-    #     dataset[('info', 'tumor', 't_stage')] = drawn_t_stages
-
-    #     return dataset
+            return self.ext.risk(
+                given_diagnoses=given_diagnoses,
+                t_stage=t_stage,
+                involvement=involvement,
+                mode=mode,
+            )
+        return self.noext.risk(
+            given_diagnoses=given_diagnoses,
+            t_stage=t_stage,
+            involvement=involvement,
+            mode=mode,
+        )
