@@ -203,9 +203,9 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
 
     def test_t_stages(self):
         """Make sure all T-stages are present."""
-        t_stages_in_data = self.model.patient_data["_model", "#" ,"t_stage"].unique()
-        t_stages_in_diag_time_dists = super(type(self.model), self.model).t_stages
-        t_stages_in_model = list(self.model.t_stages)
+        t_stages_in_data = self.model.get_t_stages("data")
+        t_stages_in_diag_time_dists = self.model.get_t_stages("distributions")
+        t_stages_in_model = self.model.get_t_stages("valid")
         t_stages_intersection = set(t_stages_in_data).intersection(t_stages_in_diag_time_dists)
 
         self.assertNotIn("foo", t_stages_in_model)
@@ -395,14 +395,15 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
         self.model.set_distribution("early", [0,1,0,0,0,0,0,0,0,0,0])
 
         # assign only one pathology modality
+        self.model.clear_modalities()
         self.model.set_modality("tmp", spec=1., sens=1.)
 
         # extract the tumor spread parameters
         params = self.model.get_params(as_dict=True)
         params = {
-            key.replace("T_to_", "").replace("_spread", ""): value
+            key.replace("Tto", "").replace("_spread", ""): value
             for key, value in params.items()
-            if "T_to_" in key
+            if "Tto" in key
         }
 
         # draw large enough amount of patients
