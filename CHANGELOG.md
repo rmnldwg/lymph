@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.0.0.a6"></a>
+## [1.0.0.a6] - 2024-02-15
+
+With this (still alpha) release, we most notably fixed a long unnoticed bug in the computation of the Bayesian network likelihood.
+
+### Bug Fixes
+
+- (**uni**) Leftover `kwargs` now correctly returned in `assign_params()`
+- ⚠ **BREAKING** (**uni**) Remove `is_<x>_shared` entirely, as it was unused anyways. Fixes [#72].
+- T-stage mapping may be dictionary or callable
+- (**uni**) Raise exception when there are no tumors or LNLs in graph
+
+### Documentation
+
+- Fix typo in modalities
+
+### Testing
+
+- (**uni**) Check constructor raises exceptions
+- Check the Bayesian network likelihood
+
+### Change
+
+- (**uni**) Trinary params are shared by default
+- (**uni**) Prohibit setting `max_time`
+- ⚠ **BREAKING** Change `likelihood()` API: We don't allow setting the data via the `likelihood()` anymore. It convoluted the method and setting it beforehand is more explicit anyways.
+
+
 <a name="1.0.0.a5"></a>
 ## [1.0.0.a5] - 2024-02-06
 
@@ -298,7 +326,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a6...HEAD
+[1.0.0.a6]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...1.0.0.a6
 [1.0.0.a5]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...1.0.0.a5
 [1.0.0.a4]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...1.0.0.a4
 [1.0.0.a3]: https://github.com/rmnldwg/lymph/compare/1.0.0.a2...1.0.0.a3
@@ -310,6 +339,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#72]: https://github.com/rmnldwg/lymph/issues/72
 [#69]: https://github.com/rmnldwg/lymph/issues/69
 [#68]: https://github.com/rmnldwg/lymph/issues/68
 [#65]: https://github.com/rmnldwg/lymph/issues/65
