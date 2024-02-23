@@ -63,30 +63,22 @@ class Midline(
     ):
         """Initialize the model.
 
-        The class is constructed in a similar fashion to the
-        :py:class:`~lymph.models.Bilateral`: That class contains one
-        :py:class:`~lymph.models.Unilateral` for each side of the neck, while this
-        class will contain several instances of :py:class:`~lymph.models.Bilateral`,
+        The class is constructed in a similar fashion to the :py:class:`~.Bilateral`:
+        That class contains one :py:class:`~.Unilateral` for each side of the neck,
+        while this class will contain several instances of :py:class:`~.Bilateral`,
         one for the ipsilateral side and two to three for the the contralateral side
         covering the cases a) no midline extension, b) midline extension, and c)
         central tumor location.
 
-        Args:
-            graph: Dictionary of the same kind as for initialization of
-                :class:`System`. This graph will be passed to the constructors of
-                two :class:`System` attributes of this class.
-            use_mixing: Describe the contralateral base spread probabilities for the
-                case of a midline extension as a linear combination between the base
-                spread probs of the ipsilateral side and the ones of the contralateral
-                side when no midline extension is present.
-            trans_symmetric: If ``True``, the spread probabilities among the
-                LNLs will be set symmetrically.
-            central_enabled: If ``True``, a third bilateral class is produced
-            which holds a model for patients with central tumor locations.
+        Added keyword arguments in this constructor are ``use_mixing``, which controls
+        whether to use the above described mixture of spread parameters from tumor to
+        the LNLs. And ``use_central``, which controls whether to use a third
+        :py:class:`~.Bilateral` model for the case of a central tumor location.
 
         The ``unilateral_kwargs`` are passed to all bilateral models.
+
         See Also:
-            :class:`Bilateral`: Two of these are held as attributes by this
+            :py:class:`Bilateral`: Two of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
             tumor and one for the case of no such extension.
         """
@@ -196,7 +188,13 @@ class Midline(
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> dict[str, float] | Iterable[float]:
-        """Return the tumor spread parameters of the model."""
+        """Return the tumor spread parameters of the model.
+
+        If the model uses the mixing parameter, the returned params will contain the
+        ipsilateral spread from tumor to LNLs, the contralateral ones for the case of
+        no midline extension, and the mixing parameter. Otherwise, it will contain the
+        contralateral params for the cases of present and absent midline extension.
+        """
         params = {}
         params["ipsi"] = self.ext.ipsi.get_tumor_spread_params(as_flat=as_flat)
 
@@ -222,7 +220,12 @@ class Midline(
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> dict[str, float] | Iterable[float]:
-        """Return the LNL spread parameters of the model."""
+        """Return the LNL spread parameters of the model.
+
+        Depending on the value of ``is_symmetric["lnl_spread"]``, the returned params
+        may contain only one set of spread parameters (if ``True``) or one for the ipsi-
+        and one for the contralateral side (if ``False``).
+        """
         ext_lnl_params = self.ext.get_lnl_spread_params(as_flat=False)
         noext_lnl_params = self.noext.get_lnl_spread_params(as_flat=False)
 
@@ -253,17 +256,19 @@ class Midline(
     ) -> dict[str, float] | Iterable[float]:
         """Return the spread parameters of the model.
 
-        TODO: enrich docstring
+        This combines the returned values from the calls to
+        :py:meth:`get_tumor_spread_params` and :py:meth:`get_lnl_spread_params`.
         """
         params = self.get_tumor_spread_params(as_flat=False)
+        lnl_spread_params = self.get_lnl_spread_params(as_flat=False)
 
         if self.is_symmetric["lnl_spread"]:
-            params.update(self.ext.ipsi.get_lnl_spread_params(as_flat=False))
+            params.update(lnl_spread_params)
         else:
             if "contra" not in params:
                 params["contra"] = {}
-            params["ipsi"].update(self.ext.ipsi.get_lnl_spread_params(as_flat=False))
-            params["contra"].update(self.noext.contra.get_lnl_spread_params(as_flat=False))
+            params["ipsi"].update(lnl_spread_params["ipsi"])
+            params["contra"].update(lnl_spread_params["contra"])
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -276,9 +281,10 @@ class Midline(
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> Iterable[float] | dict[str, float]:
-        """Return the parameters of the model.
+        """Return all the parameters of the model.
 
-        TODO: enrich docstring
+        This includes the spread parameters from the call to :py:meth:`get_spread_params`
+        and the distribution parameters from the call to :py:meth:`get_distribution_params`.
         """
         params = self.get_spread_params(as_flat=as_flat)
         params.update(self.get_distribution_params(as_flat=as_flat))
@@ -294,7 +300,12 @@ class Midline(
     ) -> Iterable[float] | dict[str, float]:
         """Set the spread parameters of the midline model.
 
-        TODO: enrich docstring
+        In analogy to the :py:meth:`get_tumor_spread_params` method, this method sets
+        the parameters describing how the tumor spreads to the LNLs. How many params
+        to provide to this model depends on the value of the ``use_mixing`` and the
+        ``use_central`` attributes. Have a look at what the
+        :py:meth:`get_tumor_spread_params` method returns for an insight in what you
+        can provide.
         """
         kwargs, global_kwargs = unflatten_and_split(
             kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
@@ -341,7 +352,13 @@ class Midline(
 
 
     def set_lnl_spread_params(self, *args: float, **kwargs: float) -> Iterable[float]:
-        """Set the LNL spread parameters of the midline model."""
+        """Set the LNL spread parameters of the midline model.
+
+        This works exactly like the :py:meth:`.Bilateral.set_lnl_spread_params` for the
+        user, but under the hood, the parameters also need to be distributed to two or
+        three instances of :py:class:`~.Bilateral` depending on the value of the
+        ``use_central`` attribute.
+        """
         kwargs, global_kwargs = unflatten_and_split(
             kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
         )
@@ -382,9 +399,10 @@ class Midline(
     def set_params(
         self, *args: float, **kwargs: float,
     ) -> Iterable[float] | dict[str, float]:
-        """Assign new parameters to the model.
+        """Set all parameters of the model.
 
-        TODO: enrich docstring
+        Combines the calls to :py:meth:`set_spread_params` and
+        :py:meth:`set_distribution_params`.
         """
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
@@ -489,9 +507,17 @@ class Midline(
     ) -> float:
         """Compute the risk of nodal involvement ``given_diagnoses``.
 
-        TODO: finish docstring
+        In addition to the arguments of the :py:meth:`.Bilateral.risk` method, this
+        also allows specifying if the patient's tumor extended over the mid-sagittal
+        line (``midline_extension=True``) or if it was even located right on that line
+        (``central=True``).
+
+        For logical reasons, ``midline_extension=False`` makes no sense if
+        ``central=True`` and is thus ignored.
         """
-        if isinstance(given_params, dict):
+        if given_params is None:
+            pass
+        elif isinstance(given_params, dict):
             self.set_params(**given_params)
         else:
             self.set_params(*given_params)

@@ -268,8 +268,6 @@ class Composite(ABC):
     Any class inheriting from this class should be able to handle the definition of
     distributions over diagnosis times.
 
-    Example:
-
     >>> class MyComposite(Composite):
     ...     pass
     >>> leaf1 = MyComposite(is_distribution_leaf=True, max_time=1)

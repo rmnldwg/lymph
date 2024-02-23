@@ -423,8 +423,6 @@ class Edge:
         Keyword arguments (i.e., ``"growth"``, ``"spread"``, and ``"micro"``) override
         positional arguments. Unused args are returned.
 
-        Examples:
-
         >>> edge = Edge(LymphNodeLevel("II", allowed_states=[0, 1, 2]), LymphNodeLevel("III"))
         >>> _ = edge.set_params(0.1, 0.2)
         >>> edge.spread_prob
@@ -462,7 +460,7 @@ class Edge:
         """Return the transition tensor of the edge.
 
         See Also:
-            :py:function:`lymph.helper.comp_transition_tensor`
+            :py:func:`lymph.helper.comp_transition_tensor`
         """
         return comp_transition_tensor(
             num_parent=len(self.parent.allowed_states),
@@ -649,8 +647,6 @@ class Representation:
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
         """Returns graph representing this instance's nodes and egdes as dictionary.
 
-        Example:
-
         >>> graph_dict = {
         ...    ('tumor', 'T'): ['II', 'III'],
         ...    ('lnl', 'II'): ['III'],
@@ -669,8 +665,6 @@ class Representation:
 
     def get_mermaid(self) -> str:
         """Prints the graph in mermaid format.
-
-        Example:
 
         >>> graph_dict = {
         ...    ('tumor', 'T'): ['II', 'III'],
@@ -816,8 +810,6 @@ class Representation:
 
         Specific keyword arguments take precedence over global ones which in turn take
         precedence over positional arguments.
-
-        Example:
 
         >>> graph = Representation(graph_dict={
         ...     ("tumor", "T"): ["II" , "III"],

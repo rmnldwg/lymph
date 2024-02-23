@@ -13,12 +13,11 @@ Documentation
 =============
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 3
     :caption: Content
 
     install
     quickstart_unilateral
-    sampling
     api
     license
 

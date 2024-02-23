@@ -222,6 +222,27 @@ class Bilateral(
 
         This is consistent with how the :py:meth:`~lymph.models.Bilteral.set_params`
         method expects the keyword arguments in case of the symmetry configurations.
+
+        >>> model = Bilateral(graph_dict={
+        ...     ("tumor", "T"): ["II", "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> num_dims = model.get_num_dims()
+        >>> model.set_spread_params(*np.round(np.linspace(0., 1., num_dims+1), 2))
+        (1.0,)
+        >>> model.get_spread_params(as_flat=False)   # doctest: +NORMALIZE_WHITESPACE
+        {'ipsi':    {'TtoII': {'spread': 0.0},
+                     'TtoIII': {'spread': 0.2}},
+         'contra':  {'TtoII': {'spread': 0.4},
+                     'TtoIII': {'spread': 0.6}},
+         'IItoIII': {'spread': 0.8}}
+        >>> model.get_spread_params(as_flat=True)    # doctest: +NORMALIZE_WHITESPACE
+        {'ipsi_TtoII_spread': 0.0,
+         'ipsi_TtoIII_spread': 0.2,
+         'contra_TtoII_spread': 0.4,
+         'contra_TtoIII_spread': 0.6,
+         'IItoIII_spread': 0.8}
         """
         params = self.get_tumor_spread_params(as_flat=False)
 

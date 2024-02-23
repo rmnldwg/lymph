@@ -130,7 +130,6 @@ def compute_encoding(
 
     Missing values are treated as unknown involvement.
 
-    Examples:
     >>> compute_encoding(["II", "III"], {"II": True, "III": False})
     array([False, False,  True, False])
     >>> compute_encoding(["II", "III"], {"II": "involved"})

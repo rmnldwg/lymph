@@ -154,8 +154,6 @@ def tile_and_repeat(
     .. _tile: https://numpy.org/doc/stable/reference/generated/numpy.tile.html
     .. _repeat: https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
 
-    Example:
-
     >>> mat = np.array([[1, 2], [3, 4]])
     >>> tile_and_repeat(mat, (2, 2), (2, 2))
     array([[1, 1, 2, 2, 1, 1, 2, 2],
@@ -182,8 +180,6 @@ def tile_and_repeat(
 @lru_cache
 def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
     """Return the indices for the transition tensor correpsonding to ``lnl_idx``.
-
-    Example:
 
     >>> get_state_idx_matrix(1, 3, 2)
     array([[0, 0, 0, 0, 0, 0, 0, 0],
@@ -214,8 +210,6 @@ def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Compute the `kronecker product`_ of two matrices row-wise.
 
     .. _kronecker product: https://en.wikipedia.org/wiki/Kronecker_product
-
-    Example:
 
     >>> a = np.array([[1, 2], [3, 4]])
     >>> b = np.array([[5, 6], [7, 8]])
@@ -370,8 +364,6 @@ def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
 def flatten(mapping, parent_key='', sep='_') -> dict:
     """Flatten a nested dictionary.
 
-    Example:
-
     >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
     {'a_b': 1, 'a_c': 2, 'd': 3}
     """
@@ -391,8 +383,6 @@ def unflatten_and_split(
     sep: str = "_",
 ) -> tuple[dict, dict]:
     """Unflatten the part of a dict containing ``expected_keys`` and return the rest.
-
-    Example:
 
     >>> unflatten_and_split({'a_b': 1, 'a_c_x': 2, 'd_y': 3}, expected_keys=['a'])
     ({'a': {'b': 1, 'c_x': 2}}, {'d_y': 3})

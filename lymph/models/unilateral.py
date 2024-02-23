@@ -244,8 +244,6 @@ class Unilateral(
         sent to all edges or distributions. But the more specific keyword arguments
         override the global ones, which in turn override the positional arguments.
 
-        Example:
-
         >>> graph = {
         ...     ("tumor", "T"): ["II", "III"],
         ...     ("lnl", "II"): ["III"],
@@ -383,8 +381,6 @@ class Unilateral(
         See Also:
             :py:func:`~lymph.descriptors.matrix.generate_transition`
                 The function actually computing the transition matrix.
-
-        Example:
 
         >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["II", "III"],
