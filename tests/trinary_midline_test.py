@@ -28,7 +28,7 @@ class MidlineSetParamsTestCase(unittest.TestCase):
         if is_symmetric is None:
             is_symmetric = {"tumor_spread": False, "lnl_spread": True}
 
-        self.model = models.Midline(
+        self.model = models.Midline.trinary(
             graph_dict=graph_dict,
             is_symmetric=is_symmetric,
             use_mixing=use_mixing,
@@ -40,7 +40,7 @@ class MidlineSetParamsTestCase(unittest.TestCase):
         """Check some basic attributes."""
         self.assertTrue(self.model.use_central)
         self.assertTrue(self.model.use_mixing)
-        self.assertFalse(self.model.is_trinary)
+        self.assertTrue(self.model.is_trinary)
 
 
     def test_set_spread_params(self) -> None:

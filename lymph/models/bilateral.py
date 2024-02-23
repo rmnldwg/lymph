@@ -151,6 +151,58 @@ class Bilateral(
         return self.ipsi.is_binary
 
 
+    def get_tumor_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of the model's spread from tumor to LNLs."""
+        params = {
+            "ipsi": self.ipsi.get_tumor_spread_params(as_flat=as_flat),
+            "contra": self.contra.get_tumor_spread_params(as_flat=as_flat),
+        }
+
+        if self.is_symmetric["tumor_spread"]:
+            if params["ipsi"] != params["contra"]:
+                warnings.warn(
+                    "The tumor spread parameters are not symmetric. "
+                    "Returning the ipsilateral parameters."
+                )
+
+            params = params["ipsi"]
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
+    def get_lnl_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of the model's spread from LNLs to tumor."""
+        params = {
+            "ipsi": self.ipsi.get_lnl_spread_params(as_flat=as_flat),
+            "contra": self.contra.get_lnl_spread_params(as_flat=as_flat),
+        }
+
+        if self.is_symmetric["lnl_spread"]:
+            if params["ipsi"] != params["contra"]:
+                warnings.warn(
+                    "The LNL spread parameters are not symmetric. "
+                    "Returning the ipsilateral parameters."
+                )
+
+            params = params["ipsi"]
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
     def get_spread_params(
         self,
         as_dict: bool = True,
@@ -171,19 +223,13 @@ class Bilateral(
         This is consistent with how the :py:meth:`~lymph.models.Bilteral.set_params`
         method expects the keyword arguments in case of the symmetry configurations.
         """
-        params = {}
+        params = self.get_tumor_spread_params(as_flat=False)
 
-        if self.is_symmetric["tumor_spread"]:
-            params.update(self.ipsi.get_tumor_spread_params(as_flat=as_flat))
+        if not self.is_symmetric["tumor_spread"] and not self.is_symmetric["lnl_spread"]:
+            params["ipsi"].update(self.get_lnl_spread_params(as_flat=False)["ipsi"])
+            params["contra"].update(self.get_lnl_spread_params(as_flat=False)["contra"])
         else:
-            params["ipsi"] = self.ipsi.get_tumor_spread_params(as_flat=as_flat)
-            params["contra"] = self.contra.get_tumor_spread_params(as_flat=as_flat)
-
-        if self.is_symmetric["lnl_spread"]:
-            params.update(self.ipsi.get_lnl_spread_params(as_flat=as_flat))
-        else:
-            params["ipsi"].update(self.ipsi.get_lnl_spread_params(as_flat=as_flat))
-            params["contra"].update(self.contra.get_lnl_spread_params(as_flat=as_flat))
+            params.update(self.get_lnl_spread_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -215,8 +261,8 @@ class Bilateral(
         return params if as_dict else params.values()
 
 
-    def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
-        """Set the parameters of the model's spread edges."""
+    def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Set the parameters of the model's spread from tumor to LNLs."""
         kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
 
         ipsi_kwargs = global_kwargs.copy()
@@ -233,6 +279,18 @@ class Bilateral(
         else:
             args = self.contra.set_tumor_spread_params(*args, **contra_kwargs)
 
+        return args
+
+
+    def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Set the parameters of the model's spread from LNLs to tumor."""
+        kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+
+        ipsi_kwargs = global_kwargs.copy()
+        ipsi_kwargs.update(kwargs.get("ipsi", {}))
+        contra_kwargs = global_kwargs.copy()
+        contra_kwargs.update(kwargs.get("contra", {}))
+
         args = self.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
         if self.is_symmetric["lnl_spread"]:
             synchronize_params(
@@ -243,6 +301,12 @@ class Bilateral(
             args = self.contra.set_lnl_spread_params(*args, **contra_kwargs)
 
         return args
+
+
+    def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Set the parameters of the model's spread edges."""
+        args = self.set_tumor_spread_params(*args, **kwargs)
+        return self.set_lnl_spread_params(*args, **kwargs)
 
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
@@ -520,8 +584,8 @@ class Bilateral(
     ) -> float:
         """Compute risk of an ``involvement`` pattern, given parameters and diagnoses.
 
-        The parameters can be set via the ``given_param_args`` and
-        ``given_param_kwargs``, both of which are passed to the
+        The parameters can be set via the ``given_params`` and
+        ``given_params``, both of which are passed to the
         :py:meth:`~set_params` method. The ``given_diagnoses`` must be a dictionary
         mapping the side of the neck to a :py:class:`types.DiagnoseType`.
 

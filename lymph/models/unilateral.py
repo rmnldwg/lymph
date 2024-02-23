@@ -160,6 +160,40 @@ class Unilateral(
         )
 
 
+    def get_tumor_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Get the parameters of the tumor spread edges."""
+        return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
+
+
+    def get_lnl_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Get the parameters of the LNL spread edges.
+
+        In the trinary case, this includes the growth parameters as well as the
+        microscopic modification parameters.
+        """
+        return get_params_from(self.graph.lnl_edges, as_dict, as_flat)
+
+
+    def get_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Get the parameters of the spread edges."""
+        return {
+            **self.get_tumor_spread_params(as_dict, as_flat),
+            **self.get_lnl_spread_params(as_dict, as_flat),
+        }
+
+
     def get_params(
         self,
         as_dict: bool = True,
@@ -171,7 +205,7 @@ class Unilateral(
         ``as_flat`` is ``True``, the dictionary is flattened, i.e., all nested
         dictionaries are merged into one, using :py:func:`~lymph.helper.flatten`.
         """
-        params = self.graph.get_params(as_flat=as_flat)
+        params = self.get_spread_params(as_flat=as_flat)
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
@@ -180,21 +214,20 @@ class Unilateral(
         return params if as_dict else params.values()
 
 
-    def get_tumor_spread_params(
-        self,
-        as_dict: bool = True,
-        as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
-        """Get the parameters of the tumor spread edges."""
-        return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
+    def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Assign new parameters to the tumor spread edges."""
+        return set_params_for(self.graph.tumor_edges, *args, **kwargs)
 
-    def get_lnl_spread_params(
-        self,
-        as_dict: bool = True,
-        as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
-        """Get the parameters of the LNL spread edges."""
-        return get_params_from(self.graph.lnl_edges, as_dict, as_flat)
+
+    def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Assign new parameters to the LNL spread edges."""
+        return set_params_for(self.graph.lnl_edges, *args, **kwargs)
+
+
+    def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Assign new parameters to the spread edges."""
+        args = self.set_tumor_spread_params(*args, **kwargs)
+        return self.set_lnl_spread_params(*args, **kwargs)
 
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
@@ -241,17 +274,8 @@ class Unilateral(
          'IItoIII_micro': 0.5,
          'III_growth': 0.123}
         """
-        args = self.graph.set_params(*args, **kwargs)
+        args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
-
-
-    def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
-        """Assign new parameters to the tumor spread edges."""
-        return set_params_for(self.graph.tumor_edges, *args, **kwargs)
-
-    def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
-        """Assign new parameters to the LNL spread edges."""
-        return set_params_for(self.graph.lnl_edges, *args, **kwargs)
 
 
     def comp_transition_prob(
@@ -727,7 +751,9 @@ class Unilateral(
         # here if the parameters are invalid, since we want to know if the user
         # provided invalid parameters. In the likelihood, we rather return a zero
         # likelihood to tell the inference algorithm that the parameters are invalid.
-        if isinstance(given_params, dict):
+        if given_params is None:
+            pass
+        elif isinstance(given_params, dict):
             self.set_params(**given_params)
         else:
             self.set_params(*given_params)

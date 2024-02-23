@@ -285,7 +285,7 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         for name in random_params:
             random_params[name] += 1.
         likelihood = self.model.likelihood(
-            given_param_kwargs=random_params,
+            given_params=random_params,
             log=True,
             mode="HMM",
         )
@@ -326,7 +326,7 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     def test_posterior_state_dist(self):
         """Make sure the posterior state dist is correctly computed."""
         posterior_state_dist = self.model.comp_posterior_state_dist(
-            given_param_kwargs=self.create_random_params(),
+            given_params=self.create_random_params(),
             given_diagnoses=self.create_random_diagnoses(),
             t_stage=self.rng.choice(["early", "late"]),
         )
@@ -343,7 +343,7 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
         risk = self.model.risk(
             involvement=random_pattern,
-            given_param_kwargs=random_params,
+            given_params=random_params,
             given_diagnoses=random_diagnoses,
             t_stage=random_t_stage,
         )

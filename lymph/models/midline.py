@@ -114,7 +114,7 @@ class Midline(
         )
         central_child = {}
         if use_central:
-            self.central = models.Bilateral(
+            self._central = models.Bilateral(
                 graph_dict=graph_dict,
                 unilateral_kwargs=unilateral_kwargs,
                 is_symmetric={
@@ -137,6 +137,14 @@ class Midline(
             modality_children={"ext": self.ext, "noext": self.noext, **central_child},
             is_modality_leaf=False,
         )
+
+
+    @classmethod
+    def trinary(cls, *args, **kwargs) -> Midline:
+        """Create a trinary model."""
+        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
+        unilateral_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
 
 
     @property
@@ -175,18 +183,20 @@ class Midline(
     @property
     def use_central(self) -> bool:
         """Return whether the model uses a central model."""
-        return hasattr(self, "central")
+        return hasattr(self, "_central")
+
+    @property
+    def central(self) -> models.Bilateral:
+        """Return the central model."""
+        return self._central
 
 
-    def get_spread_params(
+    def get_tumor_spread_params(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> dict[str, float] | Iterable[float]:
-        """Return the spread parameters of the model.
-
-        TODO: enrich docstring
-        """
+        """Return the tumor spread parameters of the model."""
         params = {}
         params["ipsi"] = self.ext.ipsi.get_tumor_spread_params(as_flat=as_flat)
 
@@ -201,13 +211,59 @@ class Midline(
                 "contra": self.ext.contra.get_tumor_spread_params(as_flat=as_flat)
             }
 
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
+    def get_lnl_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> dict[str, float] | Iterable[float]:
+        """Return the LNL spread parameters of the model."""
+        ext_lnl_params = self.ext.get_lnl_spread_params(as_flat=False)
+        noext_lnl_params = self.noext.get_lnl_spread_params(as_flat=False)
+
+        if ext_lnl_params != noext_lnl_params:
+            raise ValueError(
+                "LNL spread params not synched between ext and noext models. "
+                "Returning the ext params."
+            )
+
+        if self.use_central:
+            central_lnl_params = self.central.get_lnl_spread_params(as_flat=False)
+            if central_lnl_params != ext_lnl_params:
+                warnings.warn(
+                    "LNL spread params not synched between central and ext models. "
+                    "Returning the ext params."
+                )
+
+        if as_flat or not as_dict:
+            ext_lnl_params = flatten(ext_lnl_params)
+
+        return ext_lnl_params if as_dict else ext_lnl_params.values()
+
+
+    def get_spread_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> dict[str, float] | Iterable[float]:
+        """Return the spread parameters of the model.
+
+        TODO: enrich docstring
+        """
+        params = self.get_tumor_spread_params(as_flat=False)
+
         if self.is_symmetric["lnl_spread"]:
-            params.update(self.ext.ipsi.get_lnl_spread_params(as_flat=as_flat))
+            params.update(self.ext.ipsi.get_lnl_spread_params(as_flat=False))
         else:
             if "contra" not in params:
                 params["contra"] = {}
-            params["ipsi"].update(self.ext.ipsi.get_lnl_spread_params(as_flat=as_flat))
-            params["contra"].update(self.noext.contra.get_lnl_spread_params(as_flat=as_flat))
+            params["ipsi"].update(self.ext.ipsi.get_lnl_spread_params(as_flat=False))
+            params["contra"].update(self.noext.contra.get_lnl_spread_params(as_flat=False))
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -233,7 +289,7 @@ class Midline(
         return params if as_dict else params.values()
 
 
-    def set_spread_params(
+    def set_tumor_spread_params(
         self, *args: float, **kwargs: float,
     ) -> Iterable[float] | dict[str, float]:
         """Set the spread parameters of the midline model.
@@ -281,7 +337,17 @@ class Midline(
             ext_contra_kwargs.update(kwargs.get("ext", {}).get("contra", {}))
             args = self.ext.contra.set_tumor_spread_params(*args, **ext_contra_kwargs)
 
-        # finally, take care of LNL spread
+        return args
+
+
+    def set_lnl_spread_params(self, *args: float, **kwargs: float) -> Iterable[float]:
+        """Set the LNL spread parameters of the midline model."""
+        kwargs, global_kwargs = unflatten_and_split(
+            kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
+        )
+        ipsi_kwargs = global_kwargs.copy()
+        ipsi_kwargs.update(kwargs.get("ipsi", {}))
+
         if self.is_symmetric["lnl_spread"]:
             if self.use_central:
                 self.central.ipsi.set_lnl_spread_params(*args, **global_kwargs)
@@ -305,6 +371,12 @@ class Midline(
             args = self.noext.contra.set_lnl_spread_params(*args, **contra_kwargs)
 
         return args
+
+
+    def set_spread_params(self, *args: float, **kwargs: float) -> Iterable[float]:
+        """Set the spread parameters of the midline model."""
+        args = self.set_tumor_spread_params(*args, **kwargs)
+        return self.set_lnl_spread_params(*args, **kwargs)
 
 
     def set_params(

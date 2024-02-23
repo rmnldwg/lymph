@@ -38,7 +38,7 @@ class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unitt
         for name in random_params:
             random_params[name] += 1.
         likelihood = self.model.likelihood(
-            given_param_kwargs=random_params,
+            given_params=random_params,
             log=True,
             mode="BN",
         )

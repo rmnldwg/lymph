@@ -56,7 +56,13 @@ class Model(ABC):
         """
 
     def get_num_dims(self: M, mode: Literal["HMM", "BN"] = "HMM") -> int:
-        """Return the number of dimensions of the parameter space."""
+        """Return the number of dimensions of the parameter space.
+
+        A hidden Markov model (``mode="HMM"``) typically has more parameters than a
+        Bayesian network (``mode="BN"``), because it we need parameters for the
+        distributions over diagnosis times. Your can read more about that in the
+        :py:mod:`lymph.diagnose_times` module.
+        """
         # pylint: disable=no-member
         num = len(self.get_params())
         if mode == "BN":

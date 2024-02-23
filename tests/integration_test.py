@@ -37,5 +37,5 @@ class IntegrationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
     def test_likelihood_value(self):
         """Check that the computed likelihood is correct."""
         test_probabilities = [0.02, 0.24, 0.03, 0.2, 0.23, 0.18, 0.18, 0.5]
-        llh = self.model.likelihood(given_param_args=test_probabilities, log=True)
+        llh = self.model.likelihood(given_params=test_probabilities, log=True)
         self.assertAlmostEqual(llh, -586.8723971388224, places=10)

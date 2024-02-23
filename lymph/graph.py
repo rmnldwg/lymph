@@ -622,9 +622,9 @@ class Representation:
         """List of all LNL :py:class:`~Edge` instances in the graph.
 
         This contains all edges who's parents and children are instances of
-        :py:class:`~LymphNodeLevel` and that are not growth edges.
+        :py:class:`~LymphNodeLevel`, including growth edges (if the graph is trinary).
         """
-        return {n: e for n, e in self.edges.items() if not (e.is_tumor_spread or e.is_growth)}
+        return {n: e for n, e in self.edges.items() if not e.is_tumor_spread}
 
     @property
     def growth_edges(self) -> dict[str, Edge]:

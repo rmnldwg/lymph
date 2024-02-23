@@ -311,7 +311,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         random_diagnoses = self.create_random_diagnoses()
 
         posterior = self.model.comp_posterior_joint_state_dist(
-            given_param_kwargs=random_parameters,
+            given_params=random_parameters,
             given_diagnoses=random_diagnoses,
         )
         self.assertEqual(posterior.shape, (num_states, num_states))
@@ -330,7 +330,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
 
         risk = self.model.risk(
             involvement=random_pattern,
-            given_param_kwargs=random_parameters,
+            given_params=random_parameters,
             given_diagnoses=random_diagnoses,
             t_stage=random_t_stage,
         )
