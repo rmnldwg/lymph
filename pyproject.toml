@@ -105,8 +105,14 @@ body = """
 {% endif %}\
 {% for group, commits in commits | group_by(attribute="group") %}
     ### {{ group | upper_first }}
-    {% for commit in commits %}
-        - {% if commit.breaking %}⚠ **BREAKING** {% endif %}{% if commit.scope %}(**{{ commit.scope }}**) {% endif %}{{ commit.message | upper_first }}\
+    {% for c in commits %}
+        - {% if c.breaking %}⚠ **BREAKING** {% endif -%}
+        {% if c.scope %}(**{{ c.scope }}**) {% endif -%}
+        {{ c.message | upper_first }}.
+        {%- if c.footers %}{% for f in c.footers %}{% if not f.breaking %} {{ f.token }} [{{ f.value }}].{% endif %}{% endfor %}{% endif %}
+        {%- if c.body %}\\
+        {{ c.body | indent(prefix="  ", first=True) }}
+        {% endif -%}
     {% endfor %}
 {% endfor %}\n
 """
