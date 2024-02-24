@@ -58,6 +58,7 @@ class Midline(
         is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
         use_central: bool = True,
+        use_midext_evo: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
         **_kwargs
     ):
@@ -74,6 +75,10 @@ class Midline(
         whether to use the above described mixture of spread parameters from tumor to
         the LNLs. And ``use_central``, which controls whether to use a third
         :py:class:`~.Bilateral` model for the case of a central tumor location.
+
+        The parameter ``use_midext_evo`` decides whether the tumor's midline extions
+        should be considered a random variable, in which case it is evolved like the
+        state of the LNLs, or not.
 
         The ``unilateral_kwargs`` are passed to all bilateral models.
 
@@ -104,7 +109,15 @@ class Midline(
             unilateral_kwargs=unilateral_kwargs,
             is_symmetric=self.is_symmetric,
         )
-        central_child = {}
+
+        self.use_midext_evo = use_midext_evo
+        if self.use_midext_evo and use_central:
+            raise ValueError(
+                "Evolution to central tumor not yet implemented. Choose to use either "
+                "the central model or the midline extension evolution."
+                # Actually, this shouldn't be too hard, but we still need to think
+                # about it for a bit.
+            )
         if use_central:
             self._central = models.Bilateral(
                 graph_dict=graph_dict,
@@ -118,6 +131,8 @@ class Midline(
 
         if use_mixing:
             self.mixing_param = 0.
+
+        self.midext_prob = 0.
 
         diagnose_times.Composite.__init__(
             self,
@@ -152,11 +167,25 @@ class Midline(
 
 
     @property
+    def midext_prob(self) -> float:
+        """Return the probability of midline extension."""
+        if hasattr(self, "_midext_prob"):
+            return self._midext_prob
+        return 0.
+
+    @midext_prob.setter
+    def midext_prob(self, value: float) -> None:
+        """Set the probability of midline extension."""
+        if value is not None and not 0. <= value <= 1.:
+            raise ValueError("The midline extension prob must be in the range [0, 1].")
+        self._midext_prob = value
+
+
+    @property
     def mixing_param(self) -> float | None:
         """Return the mixing parameter."""
         if hasattr(self, "_mixing_param"):
             return self._mixing_param
-
         return None
 
     @mixing_param.setter
@@ -164,7 +193,6 @@ class Midline(
         """Set the mixing parameter."""
         if value is not None and not 0. <= value <= 1.:
             raise ValueError("The mixing parameter must be in the range [0, 1].")
-
         self._mixing_param = value
 
     @property
@@ -288,6 +316,8 @@ class Midline(
         """
         params = self.get_spread_params(as_flat=as_flat)
         params.update(self.get_distribution_params(as_flat=as_flat))
+        params["mixing"] = self.mixing_param
+        params["midext_prob"] = self.midext_prob
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -405,6 +435,10 @@ class Midline(
         :py:meth:`set_distribution_params`.
         """
         args = self.set_spread_params(*args, **kwargs)
+        first, args = popfirst(args)
+        self.mixing_param = kwargs.get("mixing", first) or self.mixing_param
+        first, args = popfirst(args)
+        self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
         return self.set_distribution_params(*args, **kwargs)
 
 
@@ -443,11 +477,50 @@ class Midline(
             self.ext.load_patient_data(patient_data[~is_lateralized], mapping)
 
 
+    def comp_contra_dist_evolution(self) -> tuple[np.ndarray, np.ndarray]:
+        """Evolve contra side as mixture of with & without midline extension."""
+        noext_contra_dist_evo = np.zeros(
+            shape=(self.max_time + 1, len(self.noext.contra.state_list))
+        )
+        noext_contra_dist_evo[0,0] = 1.
+
+        ext_contra_dist_evo = np.zeros(
+            shape=(self.max_time + 1, len(self.ext.contra.state_list))
+        )
+        if not self.use_midext_evo:
+            noext_contra_dist_evo[0,0] = (1. - self.midext_prob)
+            ext_contra_dist_evo[0,0] = self.midext_prob
+
+        for t in range(self.max_time):
+            # When evolving over the midline extension state, there's a chance at any
+            # time step that the tumor grows over the midline and starts spreading to
+            # the contralateral side more aggressively.
+            if self.use_midext_evo:
+                noext_contra_dist_evo[t+1] = (
+                    (1. - self.midext_prob) * noext_contra_dist_evo[t]
+                ) @ self.noext.contra.transition_matrix
+                ext_contra_dist_evo[t+1] = (
+                    self.midext_prob * noext_contra_dist_evo[t]
+                    + ext_contra_dist_evo[t]
+                ) @ self.ext.contra.transition_matrix
+
+            # When we do not evolve, the tumor is considered lateralized or extending
+            # over the midline from the start.
+            else:
+                noext_contra_dist_evo[t+1] = (
+                    noext_contra_dist_evo[t] @ self.noext.contra.transition_matrix
+                )
+                ext_contra_dist_evo[t+1] = (
+                    ext_contra_dist_evo[t] @ self.ext.contra.transition_matrix
+                )
+
+        return noext_contra_dist_evo, ext_contra_dist_evo
+
+
     def likelihood(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = "HMM",
         for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
@@ -455,9 +528,9 @@ class Midline(
         See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
         information on how to use the ``given_params`` parameter.
 
-        Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
-        determines whether the likelihood is computed for the hidden Markov model
-        (``"HMM"``) or the Bayesian network (``"BN"``).
+        Returns the log-likelihood if ``log`` is set to ``True``. Note that in contrast
+        to the :py:class:`~.Bilateral` model, the midline model does not support the
+        Bayesian network mode.
 
         Note:
             The computation is much faster if no parameters are given, since then the
@@ -479,18 +552,39 @@ class Midline(
         except ValueError:
             return -np.inf if log else 0.
 
-        kwargs = {"log": log, "mode": mode, "for_t_stage": for_t_stage}
         llh = 0. if log else 1.
-        if log:
-            llh += self.ext.likelihood(**kwargs)
-            llh += self.noext.likelihood(**kwargs)
-            if self.use_central:
-                llh += self.central.likelihood(**kwargs)
-        else:
-            llh *= self.ext.likelihood(**kwargs)
-            llh *= self.noext.likelihood(**kwargs)
-            if self.use_central:
-                llh *= self.central.likelihood(**kwargs)
+
+        ipsi_dist_evo = self.ext.ipsi.comp_dist_evolution()
+        contra_dist_evo = {}
+        contra_dist_evo["ext"], contra_dist_evo["noext"] = self.comp_contra_dist_evolution()
+
+        t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
+        for stage in t_stages:
+            diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
+            # see the `Bilateral` model for why this is done in this way.
+            for case in ["ext", "noext"]:
+                joint_state_dist = (
+                    ipsi_dist_evo.T
+                    @ diag_time_matrix
+                    @ contra_dist_evo[case]
+                )
+                joint_diagnose_dist = np.sum(
+                    getattr(self, case).ipsi.diagnose_matrices[stage]
+                    * (
+                        joint_state_dist
+                        @ getattr(self, case).contra.diagnose_matrices[stage]
+                    )
+                )
+                if log:
+                    llh += np.sum(np.log(joint_diagnose_dist))
+                else:
+                    llh *= np.prod(joint_diagnose_dist)
+
+        if self.use_central:
+            if log:
+                llh += self.central.likelihood(log=log, for_t_stage=for_t_stage)
+            else:
+                llh *= self.central.likelihood(log=log, for_t_stage=for_t_stage)
 
         return llh
 

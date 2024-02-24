@@ -316,3 +316,21 @@ class DiagnoseUserDict(AbstractLookupDict):
     def __missing__(self, t_stage: str):
         """Create the diagnose matrix for a specific T-stage if necessary."""
         return self[t_stage]
+
+
+@lru_cache
+def evolve_midext(max_time: int, midext_prob: int) -> np.ndarray:
+    """Compute the evolution over the state of a tumor's midline extension."""
+    midext_states = np.zeros(shape=(max_time + 1, 2), dtype=float)
+    midext_states[0,0] = 1.
+
+    midext_transition_matrix = np.array([
+        [1 - midext_prob, midext_prob],
+        [0.             , 1.         ],
+    ])
+
+    # compute midext prob for all time steps
+    for i in range(len(midext_states) - 1):
+        midext_states[i+1,:] = midext_states[i,:] @ midext_transition_matrix
+
+    return midext_states
