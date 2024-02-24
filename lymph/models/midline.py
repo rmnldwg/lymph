@@ -88,10 +88,11 @@ class Midline(
             tumor and one for the case of no such extension.
         """
         if is_symmetric is None:
-            is_symmetric = {
-                "tumor_spread": False,
-                "lnl_spread": True,
-            }
+            is_symmetric = {}
+
+        is_symmetric["tumor_spread"] = is_symmetric.get("tumor_spread", False)
+        is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
+
         if is_symmetric["tumor_spread"]:
             raise ValueError(
                 "If you want the tumor spread to be symmetric, consider using the "

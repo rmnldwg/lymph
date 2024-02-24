@@ -78,10 +78,11 @@ class Bilateral(
         )
 
         if is_symmetric is None:
-            is_symmetric = {
-                "tumor_spread": False,
-                "lnl_spread": True,
-            }
+            is_symmetric = {}
+
+        is_symmetric["tumor_spread"] = is_symmetric.get("tumor_spread", False)
+        is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
+
         self.is_symmetric = is_symmetric
 
         diagnose_times.Composite.__init__(
