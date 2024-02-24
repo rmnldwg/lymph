@@ -119,6 +119,7 @@ class Midline(
                 # Actually, this shouldn't be too hard, but we still need to think
                 # about it for a bit.
             )
+        central_child = {}
         if use_central:
             self._central = models.Bilateral(
                 graph_dict=graph_dict,
