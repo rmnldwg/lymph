@@ -482,12 +482,12 @@ class Midline(
     def comp_contra_dist_evolution(self) -> tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension."""
         noext_contra_dist_evo = np.zeros(
-            shape=(self.max_time + 1, len(self.noext.contra.state_list))
+            shape=(self.max_time + 1, len(self.noext.contra.graph.state_list))
         )
         noext_contra_dist_evo[0,0] = 1.
 
         ext_contra_dist_evo = np.zeros(
-            shape=(self.max_time + 1, len(self.ext.contra.state_list))
+            shape=(self.max_time + 1, len(self.ext.contra.graph.state_list))
         )
         if not self.use_midext_evo:
             noext_contra_dist_evo[0,0] = (1. - self.midext_prob)
@@ -500,20 +500,20 @@ class Midline(
             if self.use_midext_evo:
                 noext_contra_dist_evo[t+1] = (
                     (1. - self.midext_prob) * noext_contra_dist_evo[t]
-                ) @ self.noext.contra.transition_matrix
+                ) @ self.noext.contra.transition_matrix()
                 ext_contra_dist_evo[t+1] = (
                     self.midext_prob * noext_contra_dist_evo[t]
                     + ext_contra_dist_evo[t]
-                ) @ self.ext.contra.transition_matrix
+                ) @ self.ext.contra.transition_matrix()
 
             # When we do not evolve, the tumor is considered lateralized or extending
             # over the midline from the start.
             else:
                 noext_contra_dist_evo[t+1] = (
-                    noext_contra_dist_evo[t] @ self.noext.contra.transition_matrix
+                    noext_contra_dist_evo[t] @ self.noext.contra.transition_matrix()
                 )
                 ext_contra_dist_evo[t+1] = (
-                    ext_contra_dist_evo[t] @ self.ext.contra.transition_matrix
+                    ext_contra_dist_evo[t] @ self.ext.contra.transition_matrix()
                 )
 
         return noext_contra_dist_evo, ext_contra_dist_evo
