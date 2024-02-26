@@ -5,6 +5,7 @@ import unittest
 from typing import Literal
 
 import numpy as np
+import pandas as pd
 
 from lymph import models
 
@@ -68,3 +69,63 @@ class MidlineSetParamsTestCase(unittest.TestCase):
             self.model.ext.ipsi.get_tumor_spread_params(),
             self.model.noext.ipsi.get_tumor_spread_params(),
         )
+
+
+class MidlineLikelihoodTestCase(unittest.TestCase):
+    """Check that the likelihood function works correctly."""
+
+    def setUp(
+        self,
+        seed: int = 42,
+        graph_size: Literal["small", "medium", "large"] = "small",
+        use_mixing: bool = True,
+        use_central: bool = False,
+        use_midext_evo: bool = True,
+        is_symmetric: dict[str, bool] | None = None,
+    ) -> None:
+        super().setUp()
+        self.rng = np.random.default_rng(seed)
+        graph_dict = fixtures.get_graph(graph_size)
+        if is_symmetric is None:
+            is_symmetric = {"tumor_spread": False, "lnl_spread": True}
+
+        self.model = models.Midline(
+            graph_dict=graph_dict,
+            is_symmetric=is_symmetric,
+            use_mixing=use_mixing,
+            use_central=use_central,
+            use_midext_evo=use_midext_evo,
+        )
+        self.model.set_distribution(
+            "early",
+            fixtures.create_random_dist(
+                type_="frozen",
+                max_time=self.model.max_time,
+                rng=self.rng,
+            ),
+        )
+        self.model.set_distribution(
+            "late",
+            fixtures.create_random_dist(
+                type_="parametric",
+                max_time=self.model.max_time,
+                rng=self.rng,
+            ),
+        )
+        self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
+        self.model.load_patient_data(pd.read_csv("./tests/data/2021-clb-oropharynx.csv", header=[0,1,2]))
+
+
+    def test_likelihood(self) -> None:
+        """Check that the likelihood function works correctly."""
+        params_to_set = {k: self.rng.uniform() for k in self.model.get_params().keys()}
+        self.model.set_params(**params_to_set)
+
+        # Check that the likelihood is a number
+        self.assertTrue(np.isscalar(self.model.likelihood()))
+
+        # Check that the likelihood is not NaN
+        self.assertFalse(np.isnan(self.model.likelihood()))
+
+        # Check that the log-likelihood is smaller than 0
+        self.assertLessEqual(self.model.likelihood(), 0)
