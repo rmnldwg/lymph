@@ -592,7 +592,7 @@ class Midline(
                         joint_state_dist
                         @ getattr(self, case).contra.diagnose_matrices[stage]
                     ),
-                    axis=1,
+                    axis=0,
                 )
                 if log:
                     llh += np.sum(np.log(joint_diagnose_dist))
