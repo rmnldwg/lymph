@@ -479,6 +479,22 @@ class Midline(
             self.ext.load_patient_data(patient_data[~is_lateralized], mapping)
 
 
+    def comp_midext_evolution(self) -> np.ndarray:
+        """Evolve only the state of the midline extension."""
+        midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
+        midext_states[0,0] = 1.
+
+        midextransition_matrix = np.array([
+            [1 - self.midext_prob, self.midext_prob],
+            [0.                  , 1.              ],
+        ])
+
+        # compute involvement for all time steps
+        for i in range(len(midext_states)-1):
+            midext_states[i+1,:] = midext_states[i,:] @ midextransition_matrix
+        return midext_states
+
+
     def comp_contra_dist_evolution(self) -> tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension."""
         noext_contra_dist_evo = np.zeros(
@@ -558,7 +574,7 @@ class Midline(
 
         ipsi_dist_evo = self.ext.ipsi.comp_dist_evolution()
         contra_dist_evo = {}
-        contra_dist_evo["ext"], contra_dist_evo["noext"] = self.comp_contra_dist_evolution()
+        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.comp_contra_dist_evolution()
 
         t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
         for stage in t_stages:
@@ -575,7 +591,8 @@ class Midline(
                     * (
                         joint_state_dist
                         @ getattr(self, case).contra.diagnose_matrices[stage]
-                    )
+                    ),
+                    axis=1,
                 )
                 if log:
                     llh += np.sum(np.log(joint_diagnose_dist))
