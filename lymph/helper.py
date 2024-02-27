@@ -443,3 +443,25 @@ def synchronize_params(
     """Get the parameters from one object and set them to another."""
     for key, obj in set_to.items():
         obj.set_params(**get_from[key].get_params(as_dict=True))
+
+
+def draw_diagnoses(
+    diagnose_times: list[int],
+    state_evolution: np.ndarray,
+    observation_matrix: np.ndarray,
+    possible_diagnoses: np.ndarray,
+    rng: np.random.Generator | None = None,
+    seed: int = 42,
+) -> np.ndarray:
+    """Given the ``diagnose_times`` and a hidden ``state_evolution``, draw diagnoses."""
+    if rng is None:
+        rng = np.random.default_rng(seed)
+
+    state_dists_given_time = state_evolution[diagnose_times]
+    observation_dists_given_time = state_dists_given_time @ observation_matrix
+
+    drawn_observation_idxs = [
+        rng.choice(np.arange(len(possible_diagnoses)), p=dist)
+        for dist in observation_dists_given_time
+    ]
+    return possible_diagnoses[drawn_observation_idxs].astype(bool)

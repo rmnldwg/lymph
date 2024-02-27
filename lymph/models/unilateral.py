@@ -822,7 +822,32 @@ class Unilateral(
         rng: np.random.Generator | None = None,
         seed: int = 42,
     ) -> np.ndarray:
-        """Given some ``diag_times``, draw diagnoses for each LNL."""
+        """Given some ``diag_times``, draw diagnoses for each LNL.
+
+        >>> model = Unilateral(graph_dict={
+        ...     ("tumor", "T"): ["II" , "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.set_modality("CT", spec=0.8, sens=0.8)
+        >>> model.draw_diagnoses([0, 1, 2, 3, 4])       # doctest: +NORMALIZE_WHITESPACE
+        array([[False,  True],
+               [False, False],
+               [ True, False],
+               [False,  True],
+               [False, False]])
+        >>> draw_diagnoses(                   # this is the same as the previous example
+        ...     diagnose_times=[0, 1, 2, 3, 4],
+        ...     state_evolution=model.comp_dist_evolution(),
+        ...     observation_matrix=model.observation_matrix(),
+        ...     possible_diagnoses=model.obs_list,
+        ... )
+        array([[False,  True],
+               [False, False],
+               [ True, False],
+               [False,  True],
+               [False, False]])
+        """
         if rng is None:
             rng = np.random.default_rng(seed)
 
@@ -831,7 +856,7 @@ class Unilateral(
 
         obs_indices = np.arange(len(self.obs_list))
         drawn_obs_idx = [
-            np.random.choice(obs_indices, p=obs_prob)
+            rng.choice(obs_indices, p=obs_prob)
             for obs_prob in obs_probs_given_time
         ]
 
