@@ -9,6 +9,7 @@ import pandas as pd
 
 from lymph import diagnose_times, modalities, models, types
 from lymph.helper import (
+    draw_diagnoses,
     early_late_mapping,
     flatten,
     popfirst,
@@ -317,9 +318,9 @@ class Midline(
         and the distribution parameters from the call to :py:meth:`get_distribution_params`.
         """
         params = self.get_spread_params(as_flat=as_flat)
-        params.update(self.get_distribution_params(as_flat=as_flat))
         params["mixing"] = self.mixing_param
         params["midext_prob"] = self.midext_prob
+        params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
             params = flatten(params)
@@ -437,8 +438,6 @@ class Midline(
         :py:meth:`set_distribution_params`.
         """
         args = self.set_spread_params(*args, **kwargs)
-        first, args = popfirst(args)
-        self.mixing_param = kwargs.get("mixing", first) or self.mixing_param
         first, args = popfirst(args)
         self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
         return self.set_distribution_params(*args, **kwargs)
@@ -655,3 +654,91 @@ class Midline(
             involvement=involvement,
             mode=mode,
         )
+
+
+    def draw_patients(
+        self,
+        num: int,
+        stage_dist: Iterable[float],
+        rng: np.random.Generator | None = None,
+        seed: int = 42,
+    ) -> pd.DataFrame:
+        """Draw ``num`` patients from the parameterized model."""
+        if rng is None:
+            rng = np.random.default_rng(seed)
+
+        if sum(stage_dist) != 1.:
+            warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
+            stage_dist = np.array(stage_dist) / sum(stage_dist)
+
+        if self.use_central:
+            raise NotImplementedError(
+                "Drawing patients from the central model not yet supported."
+            )
+
+        drawn_t_stages = rng.choice(
+            a=self.t_stages,
+            p=stage_dist,
+            size=num,
+        )
+        distributions = self.get_all_distributions()
+        drawn_diag_times = [
+            distributions[t_stage].draw_diag_times(rng=rng)
+            for t_stage in drawn_t_stages
+        ]
+
+        ipsi_evo = self.ext.ipsi.comp_dist_evolution()
+        contra_evo = {}
+        contra_evo["noext"], contra_evo["ext"] = self.comp_contra_dist_evolution()
+
+        if self.use_midext_evo:
+            midext_evo = self.comp_midext_evolution()
+            drawn_midexts = [
+                rng.choice(a=[False, True], p=midext_evo[t])
+                for t in drawn_diag_times
+            ]
+        else:
+            drawn_midexts = rng.choice(
+                a=[False, True],
+                p=[1. - self.midext_prob, self.midext_prob],
+                size=num,
+            )
+
+        drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
+        for case in ["ext", "noext"]:
+            drawn_ipsi_diags = draw_diagnoses(
+                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+                state_evolution=ipsi_evo,
+                observation_matrix=getattr(self, case).ipsi.observation_matrix,
+                possible_diagnoses=getattr(self, case).ipsi.obs_list,
+                rng=rng,
+                seed=seed,
+            )
+            drawn_contra_diags = draw_diagnoses(
+                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+                state_evolution=contra_evo[case],
+                observation_matrix=getattr(self, case).contra.observation_matrix,
+                possible_diagnoses=getattr(self, case).contra.obs_list,
+                rng=rng,
+                seed=seed,
+            )
+            drawn_case_diags = np.concatenate([drawn_ipsi_diags, drawn_contra_diags], axis=1)
+            drawn_diags[drawn_midexts == (case == "ext")] = drawn_case_diags
+
+        # construct MultiIndex with "ipsi" and "contra" at top level to allow
+        # concatenation of the two separate drawn diagnoses
+        sides = ["ipsi", "contra"]
+        modality_names = list(self.get_all_modalities().keys())
+        lnl_names = [lnl for lnl in self.ext.ipsi.graph.lnls.keys()]
+        multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
+
+        # reorder the column levels and thus also the individual columns to match the
+        # LyProX format without mixing up the data
+        dataset = pd.DataFrame(drawn_diags, columns=multi_cols)
+        dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
+        dataset = dataset.sort_index(axis="columns", level=0)
+        dataset["tumor", "1", "t_stage"] = drawn_t_stages
+        dataset["tumor", "1", "extension"] = drawn_midexts
+        dataset["patient", "#", "diagnose_time"] = drawn_diag_times
+
+        return dataset
