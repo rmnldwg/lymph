@@ -736,21 +736,17 @@ class Midline(
             size=num,
         )
         distributions = self.get_all_distributions()
-        drawn_diag_times = [
+        drawn_diag_times = np.array([
             distributions[t_stage].draw_diag_times(rng=rng)
             for t_stage in drawn_t_stages
-        ]
-
-        ipsi_evo = self.ext.ipsi.comp_dist_evolution()
-        contra_evo = {}
-        contra_evo["noext"], contra_evo["ext"] = self.comp_contra_dist_evolution()
+        ])
 
         if self.use_midext_evo:
             midext_evo = self.comp_midext_evolution()
-            drawn_midexts = [
+            drawn_midexts = np.array([
                 rng.choice(a=[False, True], p=midext_evo[t])
                 for t in drawn_diag_times
-            ]
+            ])
         else:
             drawn_midexts = rng.choice(
                 a=[False, True],
@@ -758,21 +754,23 @@ class Midline(
                 size=num,
             )
 
+        ipsi_evo = self.ext.ipsi.comp_dist_evolution()
         drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
         for case in ["ext", "noext"]:
+            case_model = getattr(self, case)
             drawn_ipsi_diags = draw_diagnoses(
                 diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=ipsi_evo,
-                observation_matrix=getattr(self, case).ipsi.observation_matrix,
-                possible_diagnoses=getattr(self, case).ipsi.obs_list,
+                observation_matrix=case_model.ipsi.observation_matrix(),
+                possible_diagnoses=case_model.ipsi.obs_list,
                 rng=rng,
                 seed=seed,
             )
             drawn_contra_diags = draw_diagnoses(
                 diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
-                state_evolution=contra_evo[case],
-                observation_matrix=getattr(self, case).contra.observation_matrix,
-                possible_diagnoses=getattr(self, case).contra.obs_list,
+                state_evolution=case_model.contra.comp_dist_evolution(),
+                observation_matrix=case_model.contra.observation_matrix(),
+                possible_diagnoses=case_model.contra.obs_list,
                 rng=rng,
                 seed=seed,
             )

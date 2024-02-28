@@ -461,7 +461,7 @@ def draw_diagnoses(
     observation_dists_given_time = state_dists_given_time @ observation_matrix
 
     drawn_observation_idxs = [
-        rng.choice(np.arange(len(possible_diagnoses)), p=dist)
+        rng.choice(a=np.arange(len(possible_diagnoses)), p=dist)
         for dist in observation_dists_given_time
     ]
     return possible_diagnoses[drawn_observation_idxs].astype(bool)

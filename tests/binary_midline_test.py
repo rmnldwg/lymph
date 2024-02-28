@@ -130,3 +130,44 @@ class MidlineLikelihoodTestCase(unittest.TestCase):
 
         # Check that the log-likelihood is smaller than 0
         self.assertLessEqual(self.model.likelihood(), 0)
+
+
+class MidlineDrawPatientsTestCase(unittest.TestCase):
+    """Check the data generation."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.rng = np.random.default_rng(42)
+        graph_dict = {
+            ("tumor", "T"): ["A"],
+            ("lnl", "A"): ["B"],
+            ("lnl", "B"): [],
+        }
+        self.model = models.Midline(
+            graph_dict=graph_dict,
+            use_mixing=True,
+            use_central=False,
+            use_midext_evo=True,
+            marginalize_unknown=False,
+            unilateral_kwargs={"max_time": 2},
+        )
+        self.model.set_distribution("early", [0., 1., 0.])
+        self.model.set_distribution("late", [0., 0., 1.])
+        self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
+
+
+    def test_draw_patients(self) -> None:
+        """Check that the data generation works correctly."""
+        self.model.set_params(
+            ipsi_TtoA_spread=1.0,
+            contra_TtoA_spread=0.0,
+            AtoB_spread=1.0,
+            mixing=0.5,
+            midext_prob=0.5,
+        )
+        drawn_data = self.model.draw_patients(
+            num=100,
+            stage_dist=[0.5, 0.5],
+            rng=self.rng,
+        )
+        self.assertEqual(len(drawn_data), 100)
