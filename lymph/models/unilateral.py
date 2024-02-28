@@ -9,8 +9,10 @@ import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, graph, matrix, modalities, types
-from lymph.helper import (
+from lymph.helper import (  # nopycln: import
+    add_or_mult,
     dict_to_func,
+    draw_diagnoses,
     early_late_mapping,
     flatten,
     get_params_from,
@@ -575,7 +577,7 @@ class Unilateral(
         return state_dists
 
 
-    def comp_state_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
+    def comp_state_dist(self, t_stage: str = "early", mode: Literal["HMM", "BN"] = "HMM") -> np.ndarray:
         """Compute the distribution over possible states.
 
         Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``,
@@ -604,7 +606,7 @@ class Unilateral(
             return state_dist
 
 
-    def comp_obs_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
+    def comp_obs_dist(self, t_stage: str = "early", mode: Literal["HMM", "BN"] = "HMM") -> np.ndarray:
         """Compute the distribution over all possible observations for a given T-stage.
 
         Returns an array of probabilities for each possible complete observation. This
@@ -626,13 +628,9 @@ class Unilateral(
             t_stage = "_BN"
 
         state_dist = self.comp_state_dist(mode="BN")
-        patient_likelihoods = state_dist @ self.diagnose_matrices[t_stage]
+        patient_llhs = state_dist @ self.diagnose_matrices[t_stage]
 
-        if log:
-            llh = np.sum(np.log(patient_likelihoods))
-        else:
-            llh = np.prod(patient_likelihoods)
-        return llh
+        return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
@@ -646,15 +644,12 @@ class Unilateral(
             t_stages = [t_stage]
 
         for t_stage in t_stages:
-            patient_likelihoods = (
+            patient_llhs = (
                 self.get_distribution(t_stage).pmf
                 @ evolved_model
                 @ self.diagnose_matrices[t_stage]
             )
-            if log:
-                llh += np.sum(np.log(patient_likelihoods))
-            else:
-                llh *= np.prod(patient_likelihoods)
+            llh = add_or_mult(llh, patient_llhs, log)
 
         return llh
 
@@ -663,7 +658,7 @@ class Unilateral(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
@@ -720,7 +715,7 @@ class Unilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the posterior distribution over hidden states given a diagnosis.
 
@@ -778,7 +773,7 @@ class Unilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         **_kwargs,
     ) -> float | np.ndarray:
         """Compute risk of a certain involvement, given a patient's diagnosis.

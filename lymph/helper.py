@@ -465,3 +465,10 @@ def draw_diagnoses(
         for dist in observation_dists_given_time
     ]
     return possible_diagnoses[drawn_observation_idxs].astype(bool)
+
+
+def add_or_mult(llh: float, arr: np.ndarray, log: bool = True) -> float:
+    """Add or multiply the log-likelihood with the given array."""
+    if log:
+        return llh + np.sum(np.log(arr))
+    return llh * np.prod(arr)

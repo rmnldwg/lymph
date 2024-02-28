@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, matrix, modalities, models, types
 from lymph.helper import (
+    add_or_mult,
     early_late_mapping,
     flatten,
     synchronize_params,
@@ -379,10 +380,10 @@ class Bilateral(
         self.contra.load_patient_data(patient_data, "contra", mapping)
 
 
-    def comp_joint_state_dist(
+    def comp_state_dist(
         self,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral hidden states.
 
@@ -393,7 +394,9 @@ class Bilateral(
 
         See Also:
             :py:meth:`lymph.models.Unilateral.comp_state_dist`
-                The corresponding unilateral function.
+                The corresponding unilateral function. Note that this method returns
+                a 2D array, because it computes the probability of any possible
+                combination of ipsi- and contralateral states.
         """
         if mode == "HMM":
             ipsi_state_evo = self.ipsi.comp_dist_evolution()
@@ -405,31 +408,31 @@ class Bilateral(
                 @ time_marg_matrix
                 @ contra_state_evo
             )
-
         elif mode == "BN":
             ipsi_state_dist = self.ipsi.comp_state_dist(mode=mode)
             contra_state_dist = self.contra.comp_state_dist(mode=mode)
 
             result = np.outer(ipsi_state_dist, contra_state_dist)
-
         else:
             raise ValueError(f"Unknown mode '{mode}'.")
 
         return result
 
 
-    def comp_joint_obs_dist(
+    def comp_obs_dist(
         self,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral observations.
 
         See Also:
             :py:meth:`lymph.models.Unilateral.comp_obs_dist`
-                The corresponding unilateral function.
+                The corresponding unilateral function. Note that this method returns
+                a 2D array, because it computes the probability of any possible
+                combination of ipsi- and contralateral observations.
         """
-        joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         return (
             self.ipsi.observation_matrix().T
             @ joint_state_dist
@@ -437,25 +440,32 @@ class Bilateral(
         )
 
 
+    def comp_patient_llhs(
+        self,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
+        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
+        return matrix.fast_trace(
+            self.ipsi.diagnose_matrices[t_stage].T,
+            joint_state_dist @ self.contra.diagnose_matrices[t_stage],
+        )
+
+
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
-        llh = 0. if log else 1.
-
         if t_stage is None:
             t_stage = "_BN"
 
-        joint_state_dist = self.comp_joint_state_dist(mode="BN")
-        joint_diagnose_dist = np.sum(
+        joint_state_dist = self.comp_state_dist(mode="BN")
+        patient_llhs = np.sum(
             self.ipsi.diagnose_matrices[t_stage]
             * (joint_state_dist @ self.contra.diagnose_matrices[t_stage]),
             axis=0,
         )
 
-        if log:
-            llh += np.sum(np.log(joint_diagnose_dist))
-        else:
-            llh *= np.prod(joint_diagnose_dist)
-        return llh
+        return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
@@ -480,21 +490,11 @@ class Bilateral(
                 @ diag_time_matrix
                 @ contra_dist_evo
             )
-            # the computation below is a trick to make the computation fatser:
-            # What we want to compute is the sum over the diagonal of the matrix
-            # product of the ipsi diagnose matrix with the joint state distribution
-            # and the contra diagnose matrix.
-            # Source: https://stackoverflow.com/a/18854776
-            joint_diagnose_dist = np.sum(
-                self.ipsi.diagnose_matrices[stage]
-                * (joint_state_dist @ self.contra.diagnose_matrices[stage]),
-                axis=0,
+            patient_llhs = matrix.fast_trace(
+                self.ipsi.diagnose_matrices[stage].T,
+                joint_state_dist @ self.contra.diagnose_matrices[stage],
             )
-
-            if log:
-                llh += np.sum(np.log(joint_diagnose_dist))
-            else:
-                llh *= np.prod(joint_diagnose_dist)
+            llh = add_or_mult(llh, patient_llhs, log)
 
         return llh
 
@@ -503,7 +503,7 @@ class Bilateral(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
     ):
         """Compute the (log-)likelihood of the stored data given the model (and params).
@@ -548,7 +548,7 @@ class Bilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str | int = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute joint post. dist. over ipsi & contra states, ``given_diagnoses``.
 
@@ -585,7 +585,7 @@ class Bilateral(
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
             diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
 
-        joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
         joint_diagnose_and_state = np.outer(
             diagnose_given_state["ipsi"],
@@ -602,7 +602,7 @@ class Bilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
         """Compute risk of an ``involvement`` pattern, given parameters and diagnoses.
 

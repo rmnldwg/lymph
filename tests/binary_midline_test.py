@@ -34,6 +34,7 @@ class MidlineSetParamsTestCase(unittest.TestCase):
             is_symmetric=is_symmetric,
             use_mixing=use_mixing,
             use_central=use_central,
+            use_midext_evo=False,
         )
 
 

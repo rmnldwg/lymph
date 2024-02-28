@@ -334,3 +334,17 @@ def evolve_midext(max_time: int, midext_prob: int) -> np.ndarray:
         midext_states[i+1,:] = midext_states[i,:] @ midext_transition_matrix
 
     return midext_states
+
+
+def fast_trace(
+    left: np.ndarray,
+    right: np.ndarray,
+) -> np.ndarray:
+    """Compute the trace of a product of two matrices (``left`` and ``right``).
+
+    This is based on the observation that the trace of a product of two matrices is
+    equal to the sum of the element-wise products of the two matrices. See
+    `Wikipedia <https://en.wikipedia.org/wiki/Trace_(linear_algebra)#Properties>`_ and
+    `StackOverflow <https://stackoverflow.com/a/18854776>`_ for more information.
+    """
+    return np.sum(left.T * right, axis=0)

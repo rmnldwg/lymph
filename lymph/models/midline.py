@@ -7,8 +7,9 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, modalities, models, types
+from lymph import diagnose_times, matrix, modalities, models, types
 from lymph.helper import (
+    add_or_mult,
     draw_diagnoses,
     early_late_mapping,
     flatten,
@@ -60,6 +61,7 @@ class Midline(
         use_mixing: bool = True,
         use_central: bool = True,
         use_midext_evo: bool = True,
+        marginalize_unknown: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
         **_kwargs
     ):
@@ -81,12 +83,22 @@ class Midline(
         should be considered a random variable, in which case it is evolved like the
         state of the LNLs, or not.
 
+        With ``marginalize_unknown`` (default: ``True``), the model will also load
+        patients with unknown midline extension status into the model and marginalize
+        over their state of midline extension when computing the likelihood. This extra
+        data is stored in a :py:class:`~.Bilateral` instance accessible via the
+        attribute ``"unknown"``. Note that this bilateral instance does not get updated
+        parameters or any other kind of attention. It is solely used to store the data
+        and generate diagnose matrices for those data.
+
         The ``unilateral_kwargs`` are passed to all bilateral models.
 
         See Also:
-            :py:class:`Bilateral`: Two of these are held as attributes by this
+            :py:class:`Bilateral`: Two to four of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
-            tumor and one for the case of no such extension.
+            tumor, one for the case of no such extension, (possibly) one for the case of
+            a central/symmetric tumor, and (possibly) one for the case of unknown
+            midline extension status.
         """
         if is_symmetric is None:
             is_symmetric = {}
@@ -120,7 +132,7 @@ class Midline(
                 # Actually, this shouldn't be too hard, but we still need to think
                 # about it for a bit.
             )
-        central_child = {}
+        other_children = {}
         if use_central:
             self._central = models.Bilateral(
                 graph_dict=graph_dict,
@@ -130,7 +142,15 @@ class Midline(
                     "lnl_spread": self.is_symmetric["lnl_spread"],
                 },
             )
-            central_child = {"central": self.central}
+            other_children["central"] = self.central
+
+        if marginalize_unknown:
+            self._unknown = models.Bilateral(
+                graph_dict=graph_dict,
+                unilateral_kwargs=unilateral_kwargs,
+                is_symmetric=self.is_symmetric,
+            )
+            other_children["unknown"] = self._unknown
 
         if use_mixing:
             self.mixing_param = 0.
@@ -139,12 +159,12 @@ class Midline(
 
         diagnose_times.Composite.__init__(
             self,
-            distribution_children={"ext": self.ext, "noext": self.noext, **central_child},
+            distribution_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_distribution_leaf=False,
         )
         modalities.Composite.__init__(
             self,
-            modality_children={"ext": self.ext, "noext": self.noext, **central_child},
+            modality_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_modality_leaf=False,
         )
 
@@ -211,7 +231,23 @@ class Midline(
     @property
     def central(self) -> models.Bilateral:
         """Return the central model."""
-        return self._central
+        if self.use_central:
+            return self._central
+        raise AttributeError("This instance does not account for central tumors.")
+
+    @property
+    def marginalize_unknown(self) -> bool:
+        """Return whether the model marginalizes over unknown midline extension."""
+        return hasattr(self, "_unknown")
+
+    @property
+    def unknown(self) -> models.Bilateral:
+        """Return the model storing the patients with unknown midline extension."""
+        if self.marginalize_unknown:
+            return self._unknown
+        raise AttributeError(
+            "This instance does not marginalize over unknown midline extension."
+        )
 
 
     def get_tumor_spread_params(
@@ -467,15 +503,25 @@ class Midline(
         """
         # pylint: disable=singleton-comparison
         is_lateralized = patient_data[EXT_COL] == False
+        has_extension = patient_data[EXT_COL] == True
+        is_unknown = patient_data[EXT_COL].isna()
         self.noext.load_patient_data(patient_data[is_lateralized], mapping)
 
         if self.use_central:
             is_central = patient_data[CENTRAL_COL] == True
+            has_extension = has_extension & ~is_central
             self.central.load_patient_data(patient_data[is_central], mapping)
-            self.ext.load_patient_data(patient_data[~is_lateralized & ~is_central], mapping)
 
+        self.ext.load_patient_data(patient_data[has_extension], mapping)
+
+        if self.marginalize_unknown and is_unknown.sum() > 0:
+            self.unknown.load_patient_data(patient_data[is_unknown], mapping)
         else:
-            self.ext.load_patient_data(patient_data[~is_lateralized], mapping)
+            warnings.warn(
+                f"Discarding {is_unknown.sum()} patients where midline extension "
+                "is unknown."
+            )
+
 
 
     def comp_midext_evolution(self) -> np.ndarray:
@@ -578,6 +624,8 @@ class Midline(
         t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
         for stage in t_stages:
             diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
+            num_states = ipsi_dist_evo.shape[1]
+            marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
             # see the `Bilateral` model for why this is done in this way.
             for case in ["ext", "noext"]:
                 joint_state_dist = (
@@ -585,18 +633,24 @@ class Midline(
                     @ diag_time_matrix
                     @ contra_dist_evo[case]
                 )
-                joint_diagnose_dist = np.sum(
-                    getattr(self, case).ipsi.diagnose_matrices[stage]
-                    * (
-                        joint_state_dist
-                        @ getattr(self, case).contra.diagnose_matrices[stage]
-                    ),
-                    axis=0,
+                marg_joint_state_dist += joint_state_dist
+                _model = getattr(self, case)
+                patient_llhs = matrix.fast_trace(
+                    _model.ipsi.diagnose_matrices[stage].T,
+                    joint_state_dist @ _model.contra.diagnose_matrices[stage]
                 )
-                if log:
-                    llh += np.sum(np.log(joint_diagnose_dist))
-                else:
-                    llh *= np.prod(joint_diagnose_dist)
+                llh = add_or_mult(llh, patient_llhs, log=log)
+
+            try:
+                marg_patient_llhs = matrix.fast_trace(
+                    self.unknown.ipsi.diagnose_matrices[stage].T,
+                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrices[stage]
+                )
+                llh = add_or_mult(llh, marg_patient_llhs, log=log)
+            except AttributeError:
+                # an AttributeError is raised both when the model has no `unknown`
+                # attribute and when no data is loaded in the `unknown` model.
+                pass
 
         if self.use_central:
             if log:
@@ -615,7 +669,7 @@ class Midline(
         t_stage: str = "early",
         midline_extension: bool = False,
         central: bool = False,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
         """Compute the risk of nodal involvement ``given_diagnoses``.
 
