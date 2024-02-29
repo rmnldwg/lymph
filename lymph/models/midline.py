@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -580,41 +580,8 @@ class Midline(
         return noext_contra_dist_evo, ext_contra_dist_evo
 
 
-    def likelihood(
-        self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
-        log: bool = True,
-        for_t_stage: str | None = None,
-    ) -> float:
-        """Compute the (log-)likelihood of the stored data given the model (and params).
-
-        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
-        information on how to use the ``given_params`` parameter.
-
-        Returns the log-likelihood if ``log`` is set to ``True``. Note that in contrast
-        to the :py:class:`~.Bilateral` model, the midline model does not support the
-        Bayesian network mode.
-
-        Note:
-            The computation is much faster if no parameters are given, since then the
-            transition matrix does not need to be recomputed.
-
-        See Also:
-            :py:meth:`lymph.models.Unilateral.likelihood`
-                The corresponding unilateral function.
-        """
-        try:
-            # all functions and methods called here should raise a ValueError if the
-            # given parameters are invalid...
-            if given_params is None:
-                pass
-            elif isinstance(given_params, dict):
-                self.set_params(**given_params)
-            else:
-                self.set_params(*given_params)
-        except ValueError:
-            return -np.inf if log else 0.
-
+    def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
+        """Compute the likelihood of the stored data under the hidden Markov model."""
         llh = 0. if log else 1.
 
         ipsi_dist_evo = self.ext.ipsi.comp_dist_evolution()
@@ -659,6 +626,48 @@ class Midline(
                 llh *= self.central.likelihood(log=log, for_t_stage=for_t_stage)
 
         return llh
+
+
+    def likelihood(
+        self,
+        given_params: Iterable[float] | dict[str, float] | None = None,
+        log: bool = True,
+        mode: Literal["HMM", "BN"] = "HMM",
+        for_t_stage: str | None = None,
+    ) -> float:
+        """Compute the (log-)likelihood of the stored data given the model (and params).
+
+        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        information on how to use the ``given_params`` parameter.
+
+        Returns the log-likelihood if ``log`` is set to ``True``. Note that in contrast
+        to the :py:class:`~.Bilateral` model, the midline model does not support the
+        Bayesian network mode.
+
+        Note:
+            The computation is faster if no parameters are given, since then the
+            transition matrix does not need to be recomputed.
+
+        See Also:
+            :py:meth:`lymph.models.Unilateral.likelihood`
+                The corresponding unilateral function.
+        """
+        try:
+            # all functions and methods called here should raise a ValueError if the
+            # given parameters are invalid...
+            if given_params is None:
+                pass
+            elif isinstance(given_params, dict):
+                self.set_params(**given_params)
+            else:
+                self.set_params(*given_params)
+        except ValueError:
+            return -np.inf if log else 0.
+
+        if mode == "HMM":
+            return self._hmm_likelihood(log, for_t_stage)
+
+        raise NotImplementedError("Only HMM mode is supported as of now.")
 
 
     def risk(
