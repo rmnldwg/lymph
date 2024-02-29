@@ -283,10 +283,9 @@ cached_generate_diagnose = arg0_cache(maxsize=128, cache_class=LRUCache)(generat
 
 The decorated function expects an additional first argument that should be unique for
 the combination of modalities and patient data. It is intended to be used with the
-joint hash of the modalities
-(:py:meth:`~modalities.Composite.modalities_hash`) and the
-patient data hash that is always precomputed when a new dataset is loaded into the
-model (:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
+joint hash of the modalities (:py:meth:`.modalities_hash`) and the patient data hash
+that is always precomputed when a new dataset is loaded into the model
+(:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
 """
 
 
@@ -300,7 +299,7 @@ class DiagnoseUserDict(AbstractLookupDict):
     the patient data (meaning the data matrix needs to be updated) change.
 
     See Also:
-        :py:attr:`~lymph.models.Unilateral.diagnose_matrices`
+        :py:attr:`.Unilateral.diagnose_matrices`
     """
     model: models.Unilateral
 

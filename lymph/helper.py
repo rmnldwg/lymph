@@ -33,23 +33,15 @@ def check_unique_names(graph: dict):
 
 
 def check_spsn(spsn: list[float]):
-    """Private method that checks whether specificity and sensitvity
-    are valid.
-
-    Args:
-        spsn (list): list with specificity and sensiticity
-
-    Raises:
-        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-    """
+    """Check whether specificity and sensitivity are valid."""
     has_len_2 = len(spsn) == 2
     is_above_lb = np.all(np.greater_equal(spsn, 0.5))
     is_below_ub = np.all(np.less_equal(spsn, 1.))
     if not has_len_2 or not is_above_lb or not is_below_ub:
-        msg = ("For each modality provide a list of two decimals "
-            "between 0.5 and 1.0 as specificity & sensitivity "
-            "respectively.")
-        raise ValueError(msg)
+        raise ValueError(
+            "For each modality provide a list of two decimals between 0.5 and 1.0 as "
+            "specificity & sensitivity respectively."
+        )
 
 
 @lru_cache
@@ -105,14 +97,9 @@ def comp_transition_tensor(
 
 
 def clinical(spsn: list) -> np.ndarray:
-    """produces the confusion matrix of a clinical modality, i.e. a modality
-    that can not detect microscopic metastases
+    """Produce the confusion matrix of a clinical modality.
 
-    Args:
-        spsn (list): list with specificity and sensitivity of modality
-
-    Returns:
-        np.ndarray: confusion matrix of modality
+    A clinical modality can by definition *not* detect microscopic metastases.
     """
     check_spsn(spsn)
     sp, sn = spsn
@@ -125,14 +112,10 @@ def clinical(spsn: list) -> np.ndarray:
 
 
 def pathological(spsn: list) -> np.ndarray:
-    """produces the confusion matrix of a pathological modality, i.e. a modality
-    that can detect microscopic metastases
+    """Produce the confusion matrix of a pathological modality.
 
-    Args:
-        spsn (list): list with specificity and sensitivity of modality
-
-    Returns:
-        np.ndarray: confusion matrix of modality
+    A pathological modality can detect microscopic disease, but is unable to
+    differentiante between micro- and macroscopic involvement.
     """
     check_spsn(spsn)
     sp, sn = spsn

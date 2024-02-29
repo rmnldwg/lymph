@@ -150,6 +150,12 @@ class Distribution:
         return len(self.support)
 
     def __hash__(self) -> int:
+        """Return a hash of the distribution.
+
+        This is computed from the stored frozen distribution and -- if
+        :py:meth:`.is_updateable` returns ``True`` -- the stored keyword arguments of
+        the parametric distribution.
+        """
         kwarg_tpl = tuple(self._kwargs.items())
         return hash((self.is_updateable, kwarg_tpl, self.pmf.tobytes()))
 
@@ -376,8 +382,8 @@ class Composite(ABC):
         This will issue a warning if it finds that not all distributions of the
         composite are equal. Note that it will always return the distributions of the
         first child. This means one should NOT try to set the distributions via the
-        returned dictionary of this method. Instead, use the :py:meth:`set_modality`
-        method.
+        returned dictionary of this method. Instead, use the
+        :py:meth:`.set_distribution` method.
         """
         if self._is_distribution_leaf:
             return self._distributions
