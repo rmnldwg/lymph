@@ -283,10 +283,9 @@ cached_generate_diagnose = arg0_cache(maxsize=128, cache_class=LRUCache)(generat
 
 The decorated function expects an additional first argument that should be unique for
 the combination of modalities and patient data. It is intended to be used with the
-joint hash of the modalities
-(:py:meth:`~modalities.Composite.modalities_hash`) and the
-patient data hash that is always precomputed when a new dataset is loaded into the
-model (:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
+joint hash of the modalities (:py:meth:`.modalities_hash`) and the patient data hash
+that is always precomputed when a new dataset is loaded into the model
+(:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
 """
 
 
@@ -300,7 +299,7 @@ class DiagnoseUserDict(AbstractLookupDict):
     the patient data (meaning the data matrix needs to be updated) change.
 
     See Also:
-        :py:attr:`~lymph.models.Unilateral.diagnose_matrices`
+        :py:attr:`.Unilateral.diagnose_matrices`
     """
     model: models.Unilateral
 
@@ -316,3 +315,35 @@ class DiagnoseUserDict(AbstractLookupDict):
     def __missing__(self, t_stage: str):
         """Create the diagnose matrix for a specific T-stage if necessary."""
         return self[t_stage]
+
+
+@lru_cache
+def evolve_midext(max_time: int, midext_prob: int) -> np.ndarray:
+    """Compute the evolution over the state of a tumor's midline extension."""
+    midext_states = np.zeros(shape=(max_time + 1, 2), dtype=float)
+    midext_states[0,0] = 1.
+
+    midext_transition_matrix = np.array([
+        [1 - midext_prob, midext_prob],
+        [0.             , 1.         ],
+    ])
+
+    # compute midext prob for all time steps
+    for i in range(len(midext_states) - 1):
+        midext_states[i+1,:] = midext_states[i,:] @ midext_transition_matrix
+
+    return midext_states
+
+
+def fast_trace(
+    left: np.ndarray,
+    right: np.ndarray,
+) -> np.ndarray:
+    """Compute the trace of a product of two matrices (``left`` and ``right``).
+
+    This is based on the observation that the trace of a product of two matrices is
+    equal to the sum of the element-wise products of the two matrices. See
+    `Wikipedia <https://en.wikipedia.org/wiki/Trace_(linear_algebra)#Properties>`_ and
+    `StackOverflow <https://stackoverflow.com/a/18854776>`_ for more information.
+    """
+    return np.sum(left.T * right, axis=0)

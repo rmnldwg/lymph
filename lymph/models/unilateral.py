@@ -9,8 +9,10 @@ import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, graph, matrix, modalities, types
-from lymph.helper import (
+from lymph.helper import (  # nopycln: import
+    add_or_mult,
     dict_to_func,
+    draw_diagnoses,
     early_late_mapping,
     flatten,
     get_params_from,
@@ -334,8 +336,8 @@ class Unilateral(
     def obs_list(self):
         """Return the list of all possible observations.
 
-        They are ordered the same way as the :py:attr:`~Unilateral.state_list`, but
-        additionally by modality. E.g., for two LNLs II, III and two modalities CT,
+        They are ordered the same way as the :py:attr:`.graph.Representation.state_list`,
+        but additionally by modality. E.g., for two LNLs II, III and two modalities CT,
         pathology, the list would look like this:
 
         >>> model = Unilateral(graph_dict={
@@ -376,7 +378,7 @@ class Unilateral(
         :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
         The :math:`i`-th row and :math:`j`-th column encodes the probability to
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
-        are ordered as in the :py:attr:`lymph.graph.state_list`.
+        are ordered as in the :py:attr:`.graph.Representation.state_list`.
 
         See Also:
             :py:func:`~lymph.descriptors.matrix.generate_transition`
@@ -526,11 +528,11 @@ class Unilateral(
     def patient_data(self) -> pd.DataFrame:
         """Return the patient data loaded into the model.
 
-        After succesfully loading the data with the method :py:meth:`load_patient_data`,
+        After succesfully loading the data with the method :py:meth:`.load_patient_data`,
         the copied patient data now contains the additional top-level header
         ``"_model"``. Under it, the observed per LNL involvement is listed for every
-        diagnostic modality in the dictionary :py:attr:`~modalities` and for each of
-        the LNLs in the list :py:attr:`~lnls`.
+        diagnostic modality in the dictionary returned by :py:meth:`.get_all_modalities`
+        and for each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
 
         It also contains information on the patient's T-stage under the header
         ``("_model", "#", "t_stage")``.
@@ -564,7 +566,7 @@ class Unilateral(
 
         Note that at this point, the distributions are not weighted with the
         distribution over diagnose times that are stored and managed for each T-stage
-        in the dictionary :py:attr:`~diag_time_dists`.
+        in the dictionary returned by :py:meth:`.get_all_distributions`.
         """
         state_dists = np.zeros(shape=(self.max_time + 1, len(self.graph.state_list)))
         state_dists[0, 0] = 1.
@@ -575,14 +577,14 @@ class Unilateral(
         return state_dists
 
 
-    def comp_state_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
+    def comp_state_dist(self, t_stage: str = "early", mode: Literal["HMM", "BN"] = "HMM") -> np.ndarray:
         """Compute the distribution over possible states.
 
         Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``,
         which is essentially a marginalization of the evolution over the possible
-        states as computed by :py:meth:`~comp_dist_evolution` with the distribution
-        over diagnose times for the given T-stage from the dictionary
-        :py:attr:`~diag_time_dists`.
+        states as computed by :py:meth:`.comp_dist_evolution` with the distribution
+        over diagnose times for the given T-stage from the dictionary returned by
+        :py:meth:`.get_all_dsitributions`.
 
         Or, when ``mode`` is set to ``"BN"``, compute the distribution over states for
         the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
@@ -604,7 +606,7 @@ class Unilateral(
             return state_dist
 
 
-    def comp_obs_dist(self, t_stage: str = "early", mode: str = "HMM") -> np.ndarray:
+    def comp_obs_dist(self, t_stage: str = "early", mode: Literal["HMM", "BN"] = "HMM") -> np.ndarray:
         """Compute the distribution over all possible observations for a given T-stage.
 
         Returns an array of probabilities for each possible complete observation. This
@@ -626,13 +628,9 @@ class Unilateral(
             t_stage = "_BN"
 
         state_dist = self.comp_state_dist(mode="BN")
-        patient_likelihoods = state_dist @ self.diagnose_matrices[t_stage]
+        patient_llhs = state_dist @ self.diagnose_matrices[t_stage]
 
-        if log:
-            llh = np.sum(np.log(patient_likelihoods))
-        else:
-            llh = np.prod(patient_likelihoods)
-        return llh
+        return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
@@ -646,15 +644,12 @@ class Unilateral(
             t_stages = [t_stage]
 
         for t_stage in t_stages:
-            patient_likelihoods = (
+            patient_llhs = (
                 self.get_distribution(t_stage).pmf
                 @ evolved_model
                 @ self.diagnose_matrices[t_stage]
             )
-            if log:
-                llh += np.sum(np.log(patient_likelihoods))
-            else:
-                llh *= np.prod(patient_likelihoods)
+            llh = add_or_mult(llh, patient_llhs, log)
 
         return llh
 
@@ -663,7 +658,7 @@ class Unilateral(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
@@ -720,7 +715,7 @@ class Unilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the posterior distribution over hidden states given a diagnosis.
 
@@ -778,7 +773,7 @@ class Unilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         **_kwargs,
     ) -> float | np.ndarray:
         """Compute risk of a certain involvement, given a patient's diagnosis.
@@ -822,7 +817,32 @@ class Unilateral(
         rng: np.random.Generator | None = None,
         seed: int = 42,
     ) -> np.ndarray:
-        """Given some ``diag_times``, draw diagnoses for each LNL."""
+        """Given some ``diag_times``, draw diagnoses for each LNL.
+
+        >>> model = Unilateral(graph_dict={
+        ...     ("tumor", "T"): ["II" , "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> model.set_modality("CT", spec=0.8, sens=0.8)
+        >>> model.draw_diagnoses([0, 1, 2, 3, 4])       # doctest: +NORMALIZE_WHITESPACE
+        array([[False,  True],
+               [False, False],
+               [ True, False],
+               [False,  True],
+               [False, False]])
+        >>> draw_diagnoses(                   # this is the same as the previous example
+        ...     diagnose_times=[0, 1, 2, 3, 4],
+        ...     state_evolution=model.comp_dist_evolution(),
+        ...     observation_matrix=model.observation_matrix(),
+        ...     possible_diagnoses=model.obs_list,
+        ... )
+        array([[False,  True],
+               [False, False],
+               [ True, False],
+               [False,  True],
+               [False, False]])
+        """
         if rng is None:
             rng = np.random.default_rng(seed)
 
@@ -831,7 +851,7 @@ class Unilateral(
 
         obs_indices = np.arange(len(self.obs_list))
         drawn_obs_idx = [
-            np.random.choice(obs_indices, p=obs_prob)
+            rng.choice(obs_indices, p=obs_prob)
             for obs_prob in obs_probs_given_time
         ]
 
@@ -850,7 +870,8 @@ class Unilateral(
 
         For this, a ``stage_dist``, i.e., a distribution over the T-stages, needs to
         be defined. This must be an iterable of probabilities with as many elements as
-        there are defined T-stages in the model's :py:attr:`diag_time_dists` attribute.
+        there are defined T-stages in the model (accessible via
+        :py:meth:`.get_all_distributions`).
 
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).

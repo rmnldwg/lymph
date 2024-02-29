@@ -32,6 +32,10 @@ class Modality:
 
 
     def __hash__(self) -> int:
+        """Return a hash of the modality.
+
+        This is computed from the confusion matrix of the modality.
+        """
         return hash(self.confusion_matrix.tobytes())
 
 
@@ -199,7 +203,7 @@ class Composite(ABC):
 
 
     def get_modality(self: MC, name: str) -> Modality:
-        """Return the modality with the given name."""
+        """Return the modality with the given ``name``."""
         return self.get_all_modalities()[name]
 
 
@@ -209,7 +213,7 @@ class Composite(ABC):
         This will issue a warning if it finds that not all modalities of the composite
         are equal. Note that it will always return the modalities of the first child.
         This means one should NOT try to set the modalities via the returned dictionary
-        of this method. Instead, use the :py:meth:`set_modality` method.
+        of this method. Instead, use the :py:meth:`.set_modality` method.
         """
         if self._is_modality_leaf:
             return self._modalities
@@ -235,7 +239,7 @@ class Composite(ABC):
         sens: float,
         kind: Literal["clinical", "pathological"] = "clinical",
     ) -> None:
-        """Set the modality with the given name."""
+        """Set the modality with the given ``name``."""
         if self._is_modality_leaf:
             cls = Pathological if kind == "pathological" else Clinical
             self._modalities[name] = cls(spec, sens, self.is_trinary)
@@ -246,7 +250,7 @@ class Composite(ABC):
 
 
     def del_modality(self: MC, name: str) -> None:
-        """Delete the modality with the given name."""
+        """Delete the modality with the given ``name``."""
         if self._is_modality_leaf:
             del self._modalities[name]
 
@@ -256,7 +260,7 @@ class Composite(ABC):
 
 
     def replace_all_modalities(self: MC, modalities: dict[str, Modality]) -> None:
-        """Replace all modalities of the composite."""
+        """Replace all modalities of the composite with new ``modalities``."""
         if self._is_modality_leaf:
             self.clear_modalities()
             for name, modality in modalities.items():
@@ -269,7 +273,10 @@ class Composite(ABC):
 
 
     def modalities_hash(self: MC) -> int:
-        """Compute a hash from all modalities."""
+        """Compute a hash from all stored modalities.
+
+        See the :py:meth:`.Modality.__hash__` method for more information.
+        """
         hash_res = 0
         if self._is_modality_leaf:
             for name, modality in self._modalities.items():

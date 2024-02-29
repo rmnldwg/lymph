@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, matrix, modalities, models, types
 from lymph.helper import (
+    add_or_mult,
     early_late_mapping,
     flatten,
     synchronize_params,
@@ -33,9 +34,8 @@ class Bilateral(
 
     See Also:
         :py:class:`~lymph.models.Unilateral`
-            Two instances of this class are created as attributes.
-        :py:class:`~lymph.descriptors.Distribution`
-            A class to store fixed and parametric distributions over diagnose times.
+            Two instances of this class are created as attributes. One for the ipsi- and
+            one for the contralateral side of the neck.
     """
     def __init__(
         self,
@@ -46,11 +46,11 @@ class Bilateral(
         contralateral_kwargs: dict[str, Any] | None = None,
         **_kwargs,
     ) -> None:
-        """Initialize both sides of the neck as :py:class:`~lymph.models.Unilateral`.
+        """Initialize both sides of the neck as :py:class:`.models.Unilateral`.
 
         The ``graph_dict`` is a dictionary of tuples as keys and lists of strings as
-        values. It is passed to both :py:class:`~lymph.models.Unilateral` instances,
-        which in turn pass it to the :py:class:`~lymph.graph.Representation` class that
+        values. It is passed to both :py:class:`.models.Unilateral` instances,
+        which in turn pass it to the :py:class:`.graph.Representation` class that
         stores the graph.
 
         With the dictionary ``is_symmetric`` the user can specify which aspects of the
@@ -59,10 +59,10 @@ class Bilateral(
 
         Note:
             The symmetries of tumor and LNL spread are only guaranteed if the
-            respective parameters are set via the :py:meth:`~set_params()` method of
+            respective parameters are set via the :py:meth:`.set_params()` method of
             this bilateral model. It is still possible to set different parameters for
             the ipsi- and contralateral side by using their respective
-            :py:meth:`~lymph.models.Unilateral.set_params()` method.
+            :py:meth:`.Unilateral.set_params()` method.
 
         The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
         while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
@@ -78,10 +78,11 @@ class Bilateral(
         )
 
         if is_symmetric is None:
-            is_symmetric = {
-                "tumor_spread": False,
-                "lnl_spread": True,
-            }
+            is_symmetric = {}
+
+        is_symmetric["tumor_spread"] = is_symmetric.get("tumor_spread", False)
+        is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
+
         self.is_symmetric = is_symmetric
 
         diagnose_times.Composite.__init__(
@@ -121,14 +122,24 @@ class Bilateral(
 
     @classmethod
     def binary(cls, *args, **kwargs) -> Bilateral:
-        """Initialize a binary bilateral model."""
+        """Initialize a binary bilateral model.
+
+        This is a convenience method that sets the ``allowed_states`` of the
+        ``unilateral_kwargs`` to ``[0, 1]``. All other ``args`` and ``kwargs`` are
+        passed to the :py:meth:`.__init__` method.
+        """
         unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
         unilateral_kwargs["allowed_states"] = [0, 1]
         return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
 
     @classmethod
     def trinary(cls, *args, **kwargs) -> Bilateral:
-        """Initialize a trinary bilateral model."""
+        """Initialize a trinary bilateral model.
+
+        This is a convenience method that sets the ``allowed_states`` of the
+        ``unilateral_kwargs`` to ``[0, 1, 2]``. All other ``args`` and ``kwargs`` are
+        passed to the :py:meth:`.__init__` method.
+        """
         unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
         unilateral_kwargs["allowed_states"] = [0, 1, 2]
         return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
@@ -156,7 +167,13 @@ class Bilateral(
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> Iterable[float] | dict[str, float]:
-        """Return the parameters of the model's spread from tumor to LNLs."""
+        """Return the parameters of the model's spread from tumor to LNLs.
+
+        If the attribute dictionary :py:attr:`.is_symmetric` stores the key-value pair
+        ``"tumor_spread": True``, the parameters are returned as a single dictionary,
+        since they are the same ipsi- and contralaterally. Otherwise, the parameters
+        are returned as a dictionary with two keys, ``"ipsi"`` and ``"contra"``.
+        """
         params = {
             "ipsi": self.ipsi.get_tumor_spread_params(as_flat=as_flat),
             "contra": self.contra.get_tumor_spread_params(as_flat=as_flat),
@@ -182,7 +199,13 @@ class Bilateral(
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> Iterable[float] | dict[str, float]:
-        """Return the parameters of the model's spread from LNLs to tumor."""
+        """Return the parameters of the model's spread from LNLs to tumor.
+
+        Similarily to the :py:meth:`.get_tumor_spread_params` method, this returns only
+        one dictionary if the attribute dictionary :py:attr:`.is_symmetric` stores the
+        key-value pair ``"lnl_spread": True``. Otherwise, the parameters are returned
+        as a dictionary with two keys, ``"ipsi"`` and ``"contra"``.
+        """
         params = {
             "ipsi": self.ipsi.get_lnl_spread_params(as_flat=as_flat),
             "contra": self.contra.get_lnl_spread_params(as_flat=as_flat),
@@ -265,13 +288,13 @@ class Bilateral(
     ) -> Iterable[float] | dict[str, float]:
         """Return the parameters of the model.
 
-        It returns the combination of the call to the
-        :py:meth:`lymph.models.Unilateral.get_params` of the ipsi- and contralateral
-        side. For the use of the ``as_dict`` and ``as_flat`` arguments, see the
-        documentation of the :py:meth:`lymph.types.Model.get_params` method.
+        It returns the combination of the call to the :py:meth:`.Unilateral.get_params`
+        of the ipsi- and contralateral side. For the use of the ``as_dict`` and
+        ``as_flat`` arguments, see the documentation of the
+        :py:meth:`.types.Model.get_params` method.
 
-        Also see the :py:meth:`lymph.models.Bilateral.get_spread_params` method to
-        understand how the symmetry settings affect the return value.
+        Also see the :py:meth:`.get_spread_params` method to understand how the
+        symmetry settings affect the return value.
         """
         params = self.get_spread_params(as_flat=as_flat)
         params.update(self.get_distribution_params(as_flat=as_flat))
@@ -334,9 +357,9 @@ class Bilateral(
         """Set new parameters to the model.
 
         This works almost exactly as the unilateral model's
-        :py:meth:`~lymph.models.Unilateral.set_params` method. However, this one
-        allows the user to set the parameters of individual sides of the neck by
-        prefixing the keyword arguments' names with ``"ipsi_"`` or ``"contra_"``.
+        :py:meth:`.Unilateral.set_params` method. However, this one allows the user to
+        set the parameters of individual sides of the neck by prefixing the keyword
+        arguments' names with ``"ipsi_"`` or ``"contra_"``.
 
         Anything not prefixed by ``"ipsi_"`` or ``"contra_"`` is passed to both sides
         of the neck. This does obviously not work with positional arguments.
@@ -345,17 +368,21 @@ class Bilateral(
         important:
 
         1. The parameters of the edges from tumor to LNLs:
-            1. first the ipsilateral parameters,
-            2. if ``is_symmetric["tumor_spread"]`` is ``False``, the contralateral
-                parameters. Otherwise, the ipsilateral parameters are used for both
-                sides.
+
+           1. first the ipsilateral parameters,
+           2. if ``is_symmetric["tumor_spread"]`` is ``False``, the contralateral
+              parameters. Otherwise, the ipsilateral parameters are used for both
+              sides.
+
         2. The parameters of the edges from LNLs to tumor:
-            1. again, first the ipsilateral parameters,
-            2. if ``is_symmetric["lnl_spread"]`` is ``False``, the contralateral
-                parameters. Otherwise, the ipsilateral parameters are used for both
-                sides.
+
+           1. again, first the ipsilateral parameters,
+           2. if ``is_symmetric["lnl_spread"]`` is ``False``, the contralateral
+              parameters. Otherwise, the ipsilateral parameters are used for both
+              sides.
+
         3. The parameters of the parametric distributions for marginalizing over
-            diagnose times.
+           diagnose times.
 
         When still some positional arguments remain after that, they are returned
         in a tuple.
@@ -378,10 +405,10 @@ class Bilateral(
         self.contra.load_patient_data(patient_data, "contra", mapping)
 
 
-    def comp_joint_state_dist(
+    def comp_state_dist(
         self,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral hidden states.
 
@@ -391,8 +418,10 @@ class Bilateral(
         ``t_stage``.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.comp_state_dist`
-                The corresponding unilateral function.
+            :py:meth:`.Unilateral.comp_state_dist`
+                The corresponding unilateral function. Note that this method returns
+                a 2D array, because it computes the probability of any possible
+                combination of ipsi- and contralateral states.
         """
         if mode == "HMM":
             ipsi_state_evo = self.ipsi.comp_dist_evolution()
@@ -404,31 +433,31 @@ class Bilateral(
                 @ time_marg_matrix
                 @ contra_state_evo
             )
-
         elif mode == "BN":
             ipsi_state_dist = self.ipsi.comp_state_dist(mode=mode)
             contra_state_dist = self.contra.comp_state_dist(mode=mode)
 
             result = np.outer(ipsi_state_dist, contra_state_dist)
-
         else:
             raise ValueError(f"Unknown mode '{mode}'.")
 
         return result
 
 
-    def comp_joint_obs_dist(
+    def comp_obs_dist(
         self,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral observations.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.comp_obs_dist`
-                The corresponding unilateral function.
+            :py:meth:`.Unilateral.comp_obs_dist`
+                The corresponding unilateral function. Note that this method returns
+                a 2D array, because it computes the probability of any possible
+                combination of ipsi- and contralateral observations.
         """
-        joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         return (
             self.ipsi.observation_matrix().T
             @ joint_state_dist
@@ -436,25 +465,32 @@ class Bilateral(
         )
 
 
+    def comp_patient_llhs(
+        self,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
+        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
+        return matrix.fast_trace(
+            self.ipsi.diagnose_matrices[t_stage].T,
+            joint_state_dist @ self.contra.diagnose_matrices[t_stage],
+        )
+
+
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
-        llh = 0. if log else 1.
-
         if t_stage is None:
             t_stage = "_BN"
 
-        joint_state_dist = self.comp_joint_state_dist(mode="BN")
-        joint_diagnose_dist = np.sum(
+        joint_state_dist = self.comp_state_dist(mode="BN")
+        patient_llhs = np.sum(
             self.ipsi.diagnose_matrices[t_stage]
             * (joint_state_dist @ self.contra.diagnose_matrices[t_stage]),
             axis=0,
         )
 
-        if log:
-            llh += np.sum(np.log(joint_diagnose_dist))
-        else:
-            llh *= np.prod(joint_diagnose_dist)
-        return llh
+        return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
@@ -479,21 +515,11 @@ class Bilateral(
                 @ diag_time_matrix
                 @ contra_dist_evo
             )
-            # the computation below is a trick to make the computation fatser:
-            # What we want to compute is the sum over the diagonal of the matrix
-            # product of the ipsi diagnose matrix with the joint state distribution
-            # and the contra diagnose matrix.
-            # Source: https://stackoverflow.com/a/18854776
-            joint_diagnose_dist = np.sum(
-                self.ipsi.diagnose_matrices[stage]
-                * (joint_state_dist @ self.contra.diagnose_matrices[stage]),
-                axis=0,
+            patient_llhs = matrix.fast_trace(
+                self.ipsi.diagnose_matrices[stage].T,
+                joint_state_dist @ self.contra.diagnose_matrices[stage],
             )
-
-            if log:
-                llh += np.sum(np.log(joint_diagnose_dist))
-            else:
-                llh *= np.prod(joint_diagnose_dist)
+            llh = add_or_mult(llh, patient_llhs, log)
 
         return llh
 
@@ -502,12 +528,12 @@ class Bilateral(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
     ):
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
-        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        See the documentation of :py:meth:`.types.Model.likelihood` for more
         information on how to use the ``given_params`` parameter.
 
         Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
@@ -519,7 +545,7 @@ class Bilateral(
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.likelihood`
+            :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
         """
         try:
@@ -547,12 +573,12 @@ class Bilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str | int = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute joint post. dist. over ipsi & contra states, ``given_diagnoses``.
 
-        The ``given_diagnoses`` is a dictionary storing a :py:class:`types.DiagnoseType` for
-        the ``"ipsi"`` and ``"contra"`` side of the neck.
+        The ``given_diagnoses`` is a dictionary storing a :py:class:`types.DiagnoseType`
+        for the ``"ipsi"`` and ``"contra"`` side of the neck.
 
         Essentially, this is the risk for any possible combination of ipsi- and
         contralateral involvement, given the provided diagnoses.
@@ -562,7 +588,7 @@ class Bilateral(
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.comp_posterior_state_dist`
+            :py:meth:`.Unilateral.comp_posterior_state_dist`
         """
         if isinstance(given_params, dict):
             self.set_params(**given_params)
@@ -584,7 +610,7 @@ class Bilateral(
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
             diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
 
-        joint_state_dist = self.comp_joint_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
         joint_diagnose_and_state = np.outer(
             diagnose_given_state["ipsi"],
@@ -601,23 +627,23 @@ class Bilateral(
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
         """Compute risk of an ``involvement`` pattern, given parameters and diagnoses.
 
-        The parameters can be set via the ``given_params`` and
-        ``given_params``, both of which are passed to the
-        :py:meth:`~set_params` method. The ``given_diagnoses`` must be a dictionary
-        mapping the side of the neck to a :py:class:`types.DiagnoseType`.
+        The parameters can be set via the ``given_params`` and ``given_params``, both
+        of which are passed to the :py:meth:`.set_params` method. The
+        ``given_diagnoses`` must be a dictionary mapping the side of the neck to a
+        :py:class:`.types.DiagnoseType`.
 
         Note:
             The computation is much faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.risk`
+            :py:meth:`.Unilateral.risk`
                 The unilateral method for computing the risk of an involvment pattern.
-            :py:meth:`lymph.models.Bilateral.comp_posterior_joint_state_dist`
+            :py:meth:`.Bilateral.comp_posterior_joint_state_dist`
                 This method computes the joint distribution over ipsi- and
                 contralateral states, given the parameters and diagnoses. The risk then
                 only marginalizes over the states that match the involvement pattern.
@@ -659,11 +685,11 @@ class Bilateral(
         """Draw ``num`` random patients from the parametrized model.
 
         See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.draw_diag_times`
+            :py:meth:`.diagnose_times.Distribution.draw_diag_times`
                 Method to draw diagnose times from a distribution.
-            :py:meth:`lymph.models.Unilateral.draw_diagnoses`
+            :py:meth:`.Unilateral.draw_diagnoses`
                 Method to draw individual diagnoses from a unilateral model.
-            :py:meth:`lymph.models.Unilateral.draw_patients`
+            :py:meth:`.Unilateral.draw_patients`
                 The unilateral method to draw a synthetic dataset.
         """
         if rng is None:

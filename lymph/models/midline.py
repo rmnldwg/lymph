@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, modalities, models, types
+from lymph import diagnose_times, matrix, modalities, models, types
 from lymph.helper import (
+    add_or_mult,
+    draw_diagnoses,
     early_late_mapping,
     flatten,
     popfirst,
@@ -58,6 +60,8 @@ class Midline(
         is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
         use_central: bool = True,
+        use_midext_evo: bool = True,
+        marginalize_unknown: bool = True,
         unilateral_kwargs: dict[str, Any] | None = None,
         **_kwargs
     ):
@@ -75,18 +79,33 @@ class Midline(
         the LNLs. And ``use_central``, which controls whether to use a third
         :py:class:`~.Bilateral` model for the case of a central tumor location.
 
+        The parameter ``use_midext_evo`` decides whether the tumor's midline extions
+        should be considered a random variable, in which case it is evolved like the
+        state of the LNLs, or not.
+
+        With ``marginalize_unknown`` (default: ``True``), the model will also load
+        patients with unknown midline extension status into the model and marginalize
+        over their state of midline extension when computing the likelihood. This extra
+        data is stored in a :py:class:`~.Bilateral` instance accessible via the
+        attribute ``"unknown"``. Note that this bilateral instance does not get updated
+        parameters or any other kind of attention. It is solely used to store the data
+        and generate diagnose matrices for those data.
+
         The ``unilateral_kwargs`` are passed to all bilateral models.
 
         See Also:
-            :py:class:`Bilateral`: Two of these are held as attributes by this
+            :py:class:`Bilateral`: Two to four of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
-            tumor and one for the case of no such extension.
+            tumor, one for the case of no such extension, (possibly) one for the case of
+            a central/symmetric tumor, and (possibly) one for the case of unknown
+            midline extension status.
         """
         if is_symmetric is None:
-            is_symmetric = {
-                "tumor_spread": False,
-                "lnl_spread": True,
-            }
+            is_symmetric = {}
+
+        is_symmetric["tumor_spread"] = is_symmetric.get("tumor_spread", False)
+        is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
+
         if is_symmetric["tumor_spread"]:
             raise ValueError(
                 "If you want the tumor spread to be symmetric, consider using the "
@@ -104,7 +123,16 @@ class Midline(
             unilateral_kwargs=unilateral_kwargs,
             is_symmetric=self.is_symmetric,
         )
-        central_child = {}
+
+        self.use_midext_evo = use_midext_evo
+        if self.use_midext_evo and use_central:
+            raise ValueError(
+                "Evolution to central tumor not yet implemented. Choose to use either "
+                "the central model or the midline extension evolution."
+                # Actually, this shouldn't be too hard, but we still need to think
+                # about it for a bit.
+            )
+        other_children = {}
         if use_central:
             self._central = models.Bilateral(
                 graph_dict=graph_dict,
@@ -114,19 +142,29 @@ class Midline(
                     "lnl_spread": self.is_symmetric["lnl_spread"],
                 },
             )
-            central_child = {"central": self.central}
+            other_children["central"] = self.central
+
+        if marginalize_unknown:
+            self._unknown = models.Bilateral(
+                graph_dict=graph_dict,
+                unilateral_kwargs=unilateral_kwargs,
+                is_symmetric=self.is_symmetric,
+            )
+            other_children["unknown"] = self._unknown
 
         if use_mixing:
             self.mixing_param = 0.
 
+        self.midext_prob = 0.
+
         diagnose_times.Composite.__init__(
             self,
-            distribution_children={"ext": self.ext, "noext": self.noext, **central_child},
+            distribution_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_distribution_leaf=False,
         )
         modalities.Composite.__init__(
             self,
-            modality_children={"ext": self.ext, "noext": self.noext, **central_child},
+            modality_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_modality_leaf=False,
         )
 
@@ -152,11 +190,25 @@ class Midline(
 
 
     @property
+    def midext_prob(self) -> float:
+        """Return the probability of midline extension."""
+        if hasattr(self, "_midext_prob"):
+            return self._midext_prob
+        return 0.
+
+    @midext_prob.setter
+    def midext_prob(self, value: float) -> None:
+        """Set the probability of midline extension."""
+        if value is not None and not 0. <= value <= 1.:
+            raise ValueError("The midline extension prob must be in the range [0, 1].")
+        self._midext_prob = value
+
+
+    @property
     def mixing_param(self) -> float | None:
         """Return the mixing parameter."""
         if hasattr(self, "_mixing_param"):
             return self._mixing_param
-
         return None
 
     @mixing_param.setter
@@ -164,7 +216,6 @@ class Midline(
         """Set the mixing parameter."""
         if value is not None and not 0. <= value <= 1.:
             raise ValueError("The mixing parameter must be in the range [0, 1].")
-
         self._mixing_param = value
 
     @property
@@ -180,7 +231,23 @@ class Midline(
     @property
     def central(self) -> models.Bilateral:
         """Return the central model."""
-        return self._central
+        if self.use_central:
+            return self._central
+        raise AttributeError("This instance does not account for central tumors.")
+
+    @property
+    def marginalize_unknown(self) -> bool:
+        """Return whether the model marginalizes over unknown midline extension."""
+        return hasattr(self, "_unknown")
+
+    @property
+    def unknown(self) -> models.Bilateral:
+        """Return the model storing the patients with unknown midline extension."""
+        if self.marginalize_unknown:
+            return self._unknown
+        raise AttributeError(
+            "This instance does not marginalize over unknown midline extension."
+        )
 
 
     def get_tumor_spread_params(
@@ -287,6 +354,8 @@ class Midline(
         and the distribution parameters from the call to :py:meth:`get_distribution_params`.
         """
         params = self.get_spread_params(as_flat=as_flat)
+        params["mixing"] = self.mixing_param
+        params["midext_prob"] = self.midext_prob
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
@@ -401,10 +470,12 @@ class Midline(
     ) -> Iterable[float] | dict[str, float]:
         """Set all parameters of the model.
 
-        Combines the calls to :py:meth:`set_spread_params` and
-        :py:meth:`set_distribution_params`.
+        Combines the calls to :py:meth:`.set_spread_params` and
+        :py:meth:`.set_distribution_params`.
         """
         args = self.set_spread_params(*args, **kwargs)
+        first, args = popfirst(args)
+        self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
         return self.set_distribution_params(*args, **kwargs)
 
 
@@ -416,55 +487,169 @@ class Midline(
         """Load patient data into the model.
 
         This amounts to sorting the patients into three bins:
-        1. Patients whose tumor is clearly laterlaized, meaning the column
-            ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
-            the :py:attr:`noext` attribute.
-        2. Those with a central tumor, indicated by ``True`` in the column
-            ``("tumor", "1", "central")``. If the :py:attr:`use_central` attribute is
-            set to ``True``, these patients are assigned to the :py:attr:`central`
-            model. Otherwise, they are assigned to the :py:attr:`ext` model.
-        3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
-            line but is not central, i.e., symmetric w.r.t to the mid-sagittal line.
-            These are assigned to the :py:attr:`ext` model.
 
-        The split data is sent to the :py:meth:`lymph.models.Bilateral.load_patient_data`
-        method of the respective models.
+        1. Patients whose tumor is clearly laterlaized, meaning the column
+           ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+           the :py:attr:`.noext` attribute.
+        2. Those with a central tumor, indicated by ``True`` in the column
+           ``("tumor", "1", "central")``. If the :py:attr:`.use_central` attribute is
+           set to ``True``, these patients are assigned to the :py:attr:`.central`
+           model. Otherwise, they are assigned to the :py:attr:`.ext` model.
+        3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
+           line but is not central, i.e., symmetric w.r.t to the mid-sagittal line.
+           These are assigned to the :py:attr:`.ext` model.
+
+        The split data is sent to the :py:meth:`.Bilateral.load_patient_data` method of
+        the respective models.
         """
         # pylint: disable=singleton-comparison
         is_lateralized = patient_data[EXT_COL] == False
+        has_extension = patient_data[EXT_COL] == True
+        is_unknown = patient_data[EXT_COL].isna()
         self.noext.load_patient_data(patient_data[is_lateralized], mapping)
 
         if self.use_central:
             is_central = patient_data[CENTRAL_COL] == True
+            has_extension = has_extension & ~is_central
             self.central.load_patient_data(patient_data[is_central], mapping)
-            self.ext.load_patient_data(patient_data[~is_lateralized & ~is_central], mapping)
 
+        self.ext.load_patient_data(patient_data[has_extension], mapping)
+
+        if self.marginalize_unknown and is_unknown.sum() > 0:
+            self.unknown.load_patient_data(patient_data[is_unknown], mapping)
         else:
-            self.ext.load_patient_data(patient_data[~is_lateralized], mapping)
+            warnings.warn(
+                f"Discarding {is_unknown.sum()} patients where midline extension "
+                "is unknown."
+            )
+
+
+    def comp_midext_evolution(self) -> np.ndarray:
+        """Evolve only the state of the midline extension."""
+        midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
+        midext_states[0,0] = 1.
+
+        midextransition_matrix = np.array([
+            [1 - self.midext_prob, self.midext_prob],
+            [0.                  , 1.              ],
+        ])
+
+        # compute involvement for all time steps
+        for i in range(len(midext_states)-1):
+            midext_states[i+1,:] = midext_states[i,:] @ midextransition_matrix
+        return midext_states
+
+
+    def comp_contra_dist_evolution(self) -> tuple[np.ndarray, np.ndarray]:
+        """Evolve contra side as mixture of with & without midline extension."""
+        noext_contra_dist_evo = np.zeros(
+            shape=(self.max_time + 1, len(self.noext.contra.graph.state_list))
+        )
+        noext_contra_dist_evo[0,0] = 1.
+
+        ext_contra_dist_evo = np.zeros(
+            shape=(self.max_time + 1, len(self.ext.contra.graph.state_list))
+        )
+        if not self.use_midext_evo:
+            noext_contra_dist_evo[0,0] = (1. - self.midext_prob)
+            ext_contra_dist_evo[0,0] = self.midext_prob
+
+        for t in range(self.max_time):
+            # When evolving over the midline extension state, there's a chance at any
+            # time step that the tumor grows over the midline and starts spreading to
+            # the contralateral side more aggressively.
+            if self.use_midext_evo:
+                noext_contra_dist_evo[t+1] = (
+                    (1. - self.midext_prob) * noext_contra_dist_evo[t]
+                ) @ self.noext.contra.transition_matrix()
+                ext_contra_dist_evo[t+1] = (
+                    self.midext_prob * noext_contra_dist_evo[t]
+                    + ext_contra_dist_evo[t]
+                ) @ self.ext.contra.transition_matrix()
+
+            # When we do not evolve, the tumor is considered lateralized or extending
+            # over the midline from the start.
+            else:
+                noext_contra_dist_evo[t+1] = (
+                    noext_contra_dist_evo[t] @ self.noext.contra.transition_matrix()
+                )
+                ext_contra_dist_evo[t+1] = (
+                    ext_contra_dist_evo[t] @ self.ext.contra.transition_matrix()
+                )
+
+        return noext_contra_dist_evo, ext_contra_dist_evo
+
+
+    def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
+        """Compute the likelihood of the stored data under the hidden Markov model."""
+        llh = 0. if log else 1.
+
+        ipsi_dist_evo = self.ext.ipsi.comp_dist_evolution()
+        contra_dist_evo = {}
+        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.comp_contra_dist_evolution()
+
+        t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
+        for stage in t_stages:
+            diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
+            num_states = ipsi_dist_evo.shape[1]
+            marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
+            # see the `Bilateral` model for why this is done in this way.
+            for case in ["ext", "noext"]:
+                joint_state_dist = (
+                    ipsi_dist_evo.T
+                    @ diag_time_matrix
+                    @ contra_dist_evo[case]
+                )
+                marg_joint_state_dist += joint_state_dist
+                _model = getattr(self, case)
+                patient_llhs = matrix.fast_trace(
+                    _model.ipsi.diagnose_matrices[stage].T,
+                    joint_state_dist @ _model.contra.diagnose_matrices[stage]
+                )
+                llh = add_or_mult(llh, patient_llhs, log=log)
+
+            try:
+                marg_patient_llhs = matrix.fast_trace(
+                    self.unknown.ipsi.diagnose_matrices[stage].T,
+                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrices[stage]
+                )
+                llh = add_or_mult(llh, marg_patient_llhs, log=log)
+            except AttributeError:
+                # an AttributeError is raised both when the model has no `unknown`
+                # attribute and when no data is loaded in the `unknown` model.
+                pass
+
+        if self.use_central:
+            if log:
+                llh += self.central.likelihood(log=log, for_t_stage=for_t_stage)
+            else:
+                llh *= self.central.likelihood(log=log, for_t_stage=for_t_stage)
+
+        return llh
 
 
     def likelihood(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
-        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        See the documentation of :py:meth:`.types.Model.likelihood` for more
         information on how to use the ``given_params`` parameter.
 
-        Returns the log-likelihood if ``log`` is set to ``True``. The ``mode`` parameter
-        determines whether the likelihood is computed for the hidden Markov model
-        (``"HMM"``) or the Bayesian network (``"BN"``).
+        Returns the log-likelihood if ``log`` is set to ``True``. Note that in contrast
+        to the :py:class:`.Bilateral` model, the midline model does not support the
+        Bayesian network mode.
 
         Note:
-            The computation is much faster if no parameters are given, since then the
+            The computation is faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.likelihood`
+            :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
         """
         try:
@@ -479,20 +664,10 @@ class Midline(
         except ValueError:
             return -np.inf if log else 0.
 
-        kwargs = {"log": log, "mode": mode, "for_t_stage": for_t_stage}
-        llh = 0. if log else 1.
-        if log:
-            llh += self.ext.likelihood(**kwargs)
-            llh += self.noext.likelihood(**kwargs)
-            if self.use_central:
-                llh += self.central.likelihood(**kwargs)
-        else:
-            llh *= self.ext.likelihood(**kwargs)
-            llh *= self.noext.likelihood(**kwargs)
-            if self.use_central:
-                llh *= self.central.likelihood(**kwargs)
+        if mode == "HMM":
+            return self._hmm_likelihood(log, for_t_stage)
 
-        return llh
+        raise NotImplementedError("Only HMM mode is supported as of now.")
 
 
     def risk(
@@ -503,7 +678,7 @@ class Midline(
         t_stage: str = "early",
         midline_extension: bool = False,
         central: bool = False,
-        mode: str = "HMM",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
         """Compute the risk of nodal involvement ``given_diagnoses``.
 
@@ -542,3 +717,89 @@ class Midline(
             involvement=involvement,
             mode=mode,
         )
+
+
+    def draw_patients(
+        self,
+        num: int,
+        stage_dist: Iterable[float],
+        rng: np.random.Generator | None = None,
+        seed: int = 42,
+    ) -> pd.DataFrame:
+        """Draw ``num`` patients from the parameterized model."""
+        if rng is None:
+            rng = np.random.default_rng(seed)
+
+        if sum(stage_dist) != 1.:
+            warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
+            stage_dist = np.array(stage_dist) / sum(stage_dist)
+
+        if self.use_central:
+            raise NotImplementedError(
+                "Drawing patients from the central model not yet supported."
+            )
+
+        drawn_t_stages = rng.choice(
+            a=self.t_stages,
+            p=stage_dist,
+            size=num,
+        )
+        distributions = self.get_all_distributions()
+        drawn_diag_times = np.array([
+            distributions[t_stage].draw_diag_times(rng=rng)
+            for t_stage in drawn_t_stages
+        ])
+
+        if self.use_midext_evo:
+            midext_evo = self.comp_midext_evolution()
+            drawn_midexts = np.array([
+                rng.choice(a=[False, True], p=midext_evo[t])
+                for t in drawn_diag_times
+            ])
+        else:
+            drawn_midexts = rng.choice(
+                a=[False, True],
+                p=[1. - self.midext_prob, self.midext_prob],
+                size=num,
+            )
+
+        ipsi_evo = self.ext.ipsi.comp_dist_evolution()
+        drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
+        for case in ["ext", "noext"]:
+            case_model = getattr(self, case)
+            drawn_ipsi_diags = draw_diagnoses(
+                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+                state_evolution=ipsi_evo,
+                observation_matrix=case_model.ipsi.observation_matrix(),
+                possible_diagnoses=case_model.ipsi.obs_list,
+                rng=rng,
+                seed=seed,
+            )
+            drawn_contra_diags = draw_diagnoses(
+                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+                state_evolution=case_model.contra.comp_dist_evolution(),
+                observation_matrix=case_model.contra.observation_matrix(),
+                possible_diagnoses=case_model.contra.obs_list,
+                rng=rng,
+                seed=seed,
+            )
+            drawn_case_diags = np.concatenate([drawn_ipsi_diags, drawn_contra_diags], axis=1)
+            drawn_diags[drawn_midexts == (case == "ext")] = drawn_case_diags
+
+        # construct MultiIndex with "ipsi" and "contra" at top level to allow
+        # concatenation of the two separate drawn diagnoses
+        sides = ["ipsi", "contra"]
+        modality_names = list(self.get_all_modalities().keys())
+        lnl_names = [lnl for lnl in self.ext.ipsi.graph.lnls.keys()]
+        multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
+
+        # reorder the column levels and thus also the individual columns to match the
+        # LyProX format without mixing up the data
+        dataset = pd.DataFrame(drawn_diags, columns=multi_cols)
+        dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
+        dataset = dataset.sort_index(axis="columns", level=0)
+        dataset["tumor", "1", "t_stage"] = drawn_t_stages
+        dataset["tumor", "1", "extension"] = drawn_midexts
+        dataset["patient", "#", "diagnose_time"] = drawn_diag_times
+
+        return dataset

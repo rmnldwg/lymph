@@ -14,7 +14,7 @@ Diagnostic Modalities
 
 .. automodule:: lymph.modalities
     :members:
-    :special-members: __init__
+    :special-members: __init__, __hash__
     :show-inheritance:
 
 
@@ -23,7 +23,7 @@ Marginalization over Diagnose Times
 
 .. automodule:: lymph.diagnose_times
     :members:
-    :special-members: __init__
+    :special-members: __init__, __hash__
     :show-inheritance:
 
 Matrices
