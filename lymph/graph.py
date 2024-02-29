@@ -312,8 +312,19 @@ class Edge:
     def get_name(self, middle='to') -> str:
         """Return the name of the edge.
 
+        An edge's name is simply the name of the parent node and the child node,
+        connected by the string provided via the ``middle`` argument.
+
         This is used to identify and assign spread probabilities to it e.g. in the
         :py:class:`~models.Unilateral.set_params()` method and elsewhere.
+
+        >>> lnl_II = LymphNodeLevel("II")
+        >>> lnl_III = LymphNodeLevel("III")
+        >>> edge = Edge(lnl_II, lnl_III)
+        >>> edge.get_name()
+        'IItoIII'
+        >>> edge.get_name(middle='->')
+        'II->III'
         """
         if self.is_growth:
             return self.parent.name

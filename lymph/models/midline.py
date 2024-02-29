@@ -470,8 +470,8 @@ class Midline(
     ) -> Iterable[float] | dict[str, float]:
         """Set all parameters of the model.
 
-        Combines the calls to :py:meth:`set_spread_params` and
-        :py:meth:`set_distribution_params`.
+        Combines the calls to :py:meth:`.set_spread_params` and
+        :py:meth:`.set_distribution_params`.
         """
         args = self.set_spread_params(*args, **kwargs)
         first, args = popfirst(args)
@@ -487,19 +487,20 @@ class Midline(
         """Load patient data into the model.
 
         This amounts to sorting the patients into three bins:
-        1. Patients whose tumor is clearly laterlaized, meaning the column
-            ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
-            the :py:attr:`noext` attribute.
-        2. Those with a central tumor, indicated by ``True`` in the column
-            ``("tumor", "1", "central")``. If the :py:attr:`use_central` attribute is
-            set to ``True``, these patients are assigned to the :py:attr:`central`
-            model. Otherwise, they are assigned to the :py:attr:`ext` model.
-        3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
-            line but is not central, i.e., symmetric w.r.t to the mid-sagittal line.
-            These are assigned to the :py:attr:`ext` model.
 
-        The split data is sent to the :py:meth:`lymph.models.Bilateral.load_patient_data`
-        method of the respective models.
+        1. Patients whose tumor is clearly laterlaized, meaning the column
+           ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+           the :py:attr:`.noext` attribute.
+        2. Those with a central tumor, indicated by ``True`` in the column
+           ``("tumor", "1", "central")``. If the :py:attr:`.use_central` attribute is
+           set to ``True``, these patients are assigned to the :py:attr:`.central`
+           model. Otherwise, they are assigned to the :py:attr:`.ext` model.
+        3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
+           line but is not central, i.e., symmetric w.r.t to the mid-sagittal line.
+           These are assigned to the :py:attr:`.ext` model.
+
+        The split data is sent to the :py:meth:`.Bilateral.load_patient_data` method of
+        the respective models.
         """
         # pylint: disable=singleton-comparison
         is_lateralized = patient_data[EXT_COL] == False
@@ -521,7 +522,6 @@ class Midline(
                 f"Discarding {is_unknown.sum()} patients where midline extension "
                 "is unknown."
             )
-
 
 
     def comp_midext_evolution(self) -> np.ndarray:
@@ -637,11 +637,11 @@ class Midline(
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
-        See the documentation of :py:meth:`lymph.types.Model.likelihood` for more
+        See the documentation of :py:meth:`.types.Model.likelihood` for more
         information on how to use the ``given_params`` parameter.
 
         Returns the log-likelihood if ``log`` is set to ``True``. Note that in contrast
-        to the :py:class:`~.Bilateral` model, the midline model does not support the
+        to the :py:class:`.Bilateral` model, the midline model does not support the
         Bayesian network mode.
 
         Note:
@@ -649,7 +649,7 @@ class Midline(
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`lymph.models.Unilateral.likelihood`
+            :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
         """
         try:

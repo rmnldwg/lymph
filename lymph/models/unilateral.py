@@ -336,8 +336,8 @@ class Unilateral(
     def obs_list(self):
         """Return the list of all possible observations.
 
-        They are ordered the same way as the :py:attr:`~Unilateral.state_list`, but
-        additionally by modality. E.g., for two LNLs II, III and two modalities CT,
+        They are ordered the same way as the :py:attr:`.graph.Representation.state_list`,
+        but additionally by modality. E.g., for two LNLs II, III and two modalities CT,
         pathology, the list would look like this:
 
         >>> model = Unilateral(graph_dict={
@@ -378,7 +378,7 @@ class Unilateral(
         :math:`2^N \\times 2^N` where :math:`N` is the number of nodes in the graph.
         The :math:`i`-th row and :math:`j`-th column encodes the probability to
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
-        are ordered as in the :py:attr:`lymph.graph.state_list`.
+        are ordered as in the :py:attr:`.graph.Representation.state_list`.
 
         See Also:
             :py:func:`~lymph.descriptors.matrix.generate_transition`
@@ -528,11 +528,11 @@ class Unilateral(
     def patient_data(self) -> pd.DataFrame:
         """Return the patient data loaded into the model.
 
-        After succesfully loading the data with the method :py:meth:`load_patient_data`,
+        After succesfully loading the data with the method :py:meth:`.load_patient_data`,
         the copied patient data now contains the additional top-level header
         ``"_model"``. Under it, the observed per LNL involvement is listed for every
-        diagnostic modality in the dictionary :py:attr:`~modalities` and for each of
-        the LNLs in the list :py:attr:`~lnls`.
+        diagnostic modality in the dictionary returned by :py:meth:`.get_all_modalities`
+        and for each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
 
         It also contains information on the patient's T-stage under the header
         ``("_model", "#", "t_stage")``.
@@ -566,7 +566,7 @@ class Unilateral(
 
         Note that at this point, the distributions are not weighted with the
         distribution over diagnose times that are stored and managed for each T-stage
-        in the dictionary :py:attr:`~diag_time_dists`.
+        in the dictionary returned by :py:meth:`.get_all_distributions`.
         """
         state_dists = np.zeros(shape=(self.max_time + 1, len(self.graph.state_list)))
         state_dists[0, 0] = 1.
@@ -582,9 +582,9 @@ class Unilateral(
 
         Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``,
         which is essentially a marginalization of the evolution over the possible
-        states as computed by :py:meth:`~comp_dist_evolution` with the distribution
-        over diagnose times for the given T-stage from the dictionary
-        :py:attr:`~diag_time_dists`.
+        states as computed by :py:meth:`.comp_dist_evolution` with the distribution
+        over diagnose times for the given T-stage from the dictionary returned by
+        :py:meth:`.get_all_dsitributions`.
 
         Or, when ``mode`` is set to ``"BN"``, compute the distribution over states for
         the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
@@ -870,7 +870,8 @@ class Unilateral(
 
         For this, a ``stage_dist``, i.e., a distribution over the T-stages, needs to
         be defined. This must be an iterable of probabilities with as many elements as
-        there are defined T-stages in the model's :py:attr:`diag_time_dists` attribute.
+        there are defined T-stages in the model (accessible via
+        :py:meth:`.get_all_distributions`).
 
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).
