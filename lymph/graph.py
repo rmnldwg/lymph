@@ -18,7 +18,14 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import check_unique_names, comp_transition_tensor, trigger
+from lymph.helper import (
+    check_unique_names,
+    comp_transition_tensor,
+    flatten,
+    popfirst,
+    set_params_for,
+    trigger,
+)
 
 
 class AbstractNode:
@@ -68,6 +75,10 @@ class AbstractNode:
             f"state={self.state!r}, "
             f"allowed_states={self.allowed_states!r})"
         )
+
+    def __hash__(self) -> int:
+        """Return a hash of the node's name and state."""
+        return hash((self.name, self.state, tuple(self.allowed_states)))
 
 
     @property
@@ -232,7 +243,11 @@ class Edge:
         self.parent: Tumor | LymphNodeLevel = parent
         self.child: LymphNodeLevel = child
 
-        if self.child.is_trinary:
+        if (
+            not isinstance(self.parent, Tumor)
+            and self.parent.is_trinary
+            and not self.is_growth
+        ):
             self.micro_mod = micro_mod
 
         self.spread_prob = spread_prob
@@ -240,7 +255,7 @@ class Edge:
 
     def __str__(self) -> str:
         """Print basic info."""
-        return f"Edge {self.name.replace('_', ' ')}"
+        return f"Edge {self.get_name(middle=' to ')}"
 
     def __repr__(self) -> str:
         """Print basic info."""
@@ -253,6 +268,10 @@ class Edge:
             f"micro_mod={self.micro_mod!r})"
         )
 
+    def __hash__(self) -> int:
+        """Return a hash of the edge's transition tensor."""
+        return hash((self.get_name(), self.transition_tensor.tobytes()))
+
 
     @property
     def parent(self) -> Tumor | LymphNodeLevel:
@@ -260,7 +279,6 @@ class Edge:
         return self._parent
 
     @parent.setter
-    @trigger
     def parent(self, new_parent: Tumor | LymphNodeLevel) -> None:
         """Set the parent node of the edge."""
         if hasattr(self, '_parent'):
@@ -279,7 +297,6 @@ class Edge:
         return self._child
 
     @child.setter
-    @trigger
     def child(self, new_child: LymphNodeLevel) -> None:
         """Set the end (child) node of the edge."""
         if hasattr(self, '_child'):
@@ -292,17 +309,27 @@ class Edge:
         self.child.inc.append(self)
 
 
-    @property
-    def name(self) -> str:
+    def get_name(self, middle='to') -> str:
         """Return the name of the edge.
 
-        This is used to identify and assign spread probabilities to it in the
-        :py:class:`~models.Unilateral` class.
+        An edge's name is simply the name of the parent node and the child node,
+        connected by the string provided via the ``middle`` argument.
+
+        This is used to identify and assign spread probabilities to it e.g. in the
+        :py:class:`~models.Unilateral.set_params()` method and elsewhere.
+
+        >>> lnl_II = LymphNodeLevel("II")
+        >>> lnl_III = LymphNodeLevel("III")
+        >>> edge = Edge(lnl_II, lnl_III)
+        >>> edge.get_name()
+        'IItoIII'
+        >>> edge.get_name(middle='->')
+        'II->III'
         """
         if self.is_growth:
             return self.parent.name
 
-        return self.parent.name + '_to_' + self.child.name
+        return f"{self.parent.name}{middle}{self.child.name}"
 
 
     @property
@@ -319,14 +346,21 @@ class Edge:
 
     def get_micro_mod(self) -> float:
         """Return the spread probability."""
-        if not hasattr(self, "_micro_mod") or self.child.is_binary:
+        if (
+            not hasattr(self, "_micro_mod")
+            or isinstance(self.parent, Tumor)
+            or self.parent.is_binary
+        ):
             self._micro_mod = 1.
         return self._micro_mod
 
     @trigger
-    def set_micro_mod(self, new_micro_mod: float) -> None:
+    def set_micro_mod(self, new_micro_mod: float | None) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
-        if self.child.is_binary:
+        if new_micro_mod is None:
+            return
+
+        if isinstance(self.parent, Tumor) or self.parent.is_binary:
             warnings.warn("Microscopic spread modifier is not used for binary nodes!")
 
         if not 0. <= new_micro_mod <= 1.:
@@ -348,10 +382,14 @@ class Edge:
         return self._spread_prob
 
     @trigger
-    def set_spread_prob(self, new_spread_prob):
+    def set_spread_prob(self, new_spread_prob: float | None) -> None:
         """Set the spread probability of the edge."""
+        if new_spread_prob is None:
+            return
+
         if not 0. <= new_spread_prob <= 1.:
             raise ValueError("Spread probability must be between 0 and 1!")
+
         self._spread_prob = new_spread_prob
 
     spread_prob = property(
@@ -363,9 +401,9 @@ class Edge:
 
     def get_params(
         self,
-        param: str | None = None,
-        as_dict: bool = False,
-    ) -> float | Iterable[float] | dict[str, float]:
+        as_dict: bool = True,
+        **_kwargs,
+    ) -> Iterable[float] | dict[str, float]:
         """Return the value of the parameter ``param`` or all params in a dict.
 
         See Also:
@@ -376,37 +414,56 @@ class Edge:
         """
         if self.is_growth:
             params = {"growth": self.get_spread_prob()}
-            return params if as_dict else params[param]
+            return params if as_dict else params.values()
 
         params = {"spread": self.get_spread_prob()}
         if self.child.is_trinary and not self.is_tumor_spread:
             params["micro"] = self.get_micro_mod()
 
-        if param is not None:
-            return params[param]
-
         return params if as_dict else params.values()
 
 
-    def set_params(
-        self,
-        growth: float | None = None,
-        spread: float | None = None,
-        micro: float | None = None,
-    ) -> None:
+    def set_params(self, *args, **kwargs) -> tuple[float]:
         """Set the values of the edge's parameters.
 
-        See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.set_params`
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.set_params`
-        """
-        if self.is_growth:
-            return self.set_spread_prob(growth) if growth is not None else None
+        If provided as positional arguments, the edge connects to a trinary node, and
+        is not a growth node, the first argument is the spread probability and the
+        second argument is the microscopic spread modifier. Otherwise it only consumes
+        one argument, which is the growth or spread probability.
 
-        if spread is not None:
-            self.set_spread_prob(spread)
-        if self.child.is_trinary and not self.is_tumor_spread and micro is not None:
-            self.set_micro_mod(micro)
+        Keyword arguments (i.e., ``"growth"``, ``"spread"``, and ``"micro"``) override
+        positional arguments. Unused args are returned.
+
+        >>> edge = Edge(LymphNodeLevel("II", allowed_states=[0, 1, 2]), LymphNodeLevel("III"))
+        >>> _ = edge.set_params(0.1, 0.2)
+        >>> edge.spread_prob
+        0.1
+        >>> edge.micro_mod
+        0.2
+        >>> _ = edge.set_params(spread=0.3, micro=0.4)
+        >>> edge.spread_prob
+        0.3
+        >>> edge.micro_mod
+        0.4
+        """
+        first, args = popfirst(args)
+        value = first or self.get_spread_prob()
+
+        if self.is_growth:
+            self.set_spread_prob(kwargs.get("growth", value))
+        else:
+            self.set_spread_prob(kwargs.get("spread", value))
+
+        if (
+            not isinstance(self.parent, Tumor)
+            and self.parent.is_trinary
+            and not self.is_growth
+        ):
+            first, args = popfirst(args)
+            value = first or self.get_micro_mod()
+            self.set_micro_mod(kwargs.get("micro", value))
+
+        return args
 
 
     @property
@@ -414,7 +471,7 @@ class Edge:
         """Return the transition tensor of the edge.
 
         See Also:
-            :py:function:`lymph.helper.comp_transition_tensor`
+            :py:func:`lymph.helper.comp_transition_tensor`
         """
         return comp_transition_tensor(
             num_parent=len(self.parent.allowed_states),
@@ -547,12 +604,12 @@ class Representation:
             start = self.nodes[start_name]
             if isinstance(start, LymphNodeLevel) and start.is_trinary:
                 growth_edge = Edge(parent=start, child=start, callbacks=on_edge_change)
-                self._edges[growth_edge.name] = growth_edge
+                self._edges[growth_edge.get_name()] = growth_edge
 
             for end_name in end_names:
                 end = self.nodes[end_name]
                 new_edge = Edge(parent=start, child=end, callbacks=on_edge_change)
-                self._edges[new_edge.name] = new_edge
+                self._edges[new_edge.get_name()] = new_edge
 
 
     @property
@@ -574,9 +631,9 @@ class Representation:
         """List of all LNL :py:class:`~Edge` instances in the graph.
 
         This contains all edges who's parents and children are instances of
-        :py:class:`~LymphNodeLevel` and that are not growth edges.
+        :py:class:`~LymphNodeLevel`, including growth edges (if the graph is trinary).
         """
-        return {n: e for n, e in self.edges.items() if not (e.is_tumor_spread or e.is_growth)}
+        return {n: e for n, e in self.edges.items() if not e.is_tumor_spread}
 
     @property
     def growth_edges(self) -> dict[str, Edge]:
@@ -589,50 +646,17 @@ class Representation:
         return {n: e for n, e in self.edges.items() if e.is_growth}
 
 
-    def parameter_hash(self) -> int:
-        """Compute a hash of the graph.
-
-        Note:
-            This is used to check if the graph has changed and the transition matrix
-            needs to be recomputed. It should not be used as a replacement for the
-            ``__hash__`` method, for two reasons:
-
-            1. It may change over the lifetime of the object, whereas ``__hash__``
-                should be constant.
-            2. It only takes into account the ``transition_tensor`` of the edges,
-                nothing else.
-
-        Example:
-
-        >>> graph_dict = {
-        ...    ('tumor', 'T'): ['II', 'III'],
-        ...    ('lnl', 'II'): ['III'],
-        ...    ('lnl', 'III'): [],
-        ... }
-        >>> one_graph = Representation(graph_dict)
-        >>> another_graph = Representation(graph_dict)
-        >>> rng = np.random.default_rng(42)
-        >>> for one_edge, another_edge in zip(
-        ...     one_graph.edges.values(), another_graph.edges.values()
-        ... ):
-        ...     params_dict = one_edge.get_params(as_dict=True)
-        ...     params_to_set = {k: rng.uniform() for k in params_dict}
-        ...     one_edge.set_params(**params_to_set)
-        ...     another_edge.set_params(**params_to_set)
-        >>> one_graph.parameter_hash() == another_graph.parameter_hash()
-        True
-        """
-        tensor_bytes = b""
+    def __hash__(self) -> int:
+        """Return a hash of the graph."""
+        hash_res = 0
         for edge in self.edges.values():
-            tensor_bytes += edge.transition_tensor.tobytes()
+            hash_res = hash((hash_res, hash(edge)))
 
-        return hash(tensor_bytes)
+        return hash_res
 
 
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
         """Returns graph representing this instance's nodes and egdes as dictionary.
-
-        Example:
 
         >>> graph_dict = {
         ...    ('tumor', 'T'): ['II', 'III'],
@@ -653,17 +677,15 @@ class Representation:
     def get_mermaid(self) -> str:
         """Prints the graph in mermaid format.
 
-        Example:
-
         >>> graph_dict = {
         ...    ('tumor', 'T'): ['II', 'III'],
         ...    ('lnl', 'II'): ['III'],
         ...    ('lnl', 'III'): [],
         ... }
         >>> graph = Representation(graph_dict)
-        >>> graph.edges["T_to_II"].spread_prob = 0.1
-        >>> graph.edges["T_to_III"].spread_prob = 0.2
-        >>> graph.edges["II_to_III"].spread_prob = 0.3
+        >>> graph.edges["TtoII"].spread_prob = 0.1
+        >>> graph.edges["TtoIII"].spread_prob = 0.2
+        >>> graph.edges["IItoIII"].spread_prob = 0.3
         >>> print(graph.get_mermaid())  # doctest: +NORMALIZE_WHITESPACE
         flowchart TD
             T-->|10%| II
@@ -763,3 +785,52 @@ class Representation:
         except AttributeError:
             self._gen_state_list()
             return self._state_list
+
+
+    def get_params(
+        self,
+        as_dict: bool = True,
+        as_flat: bool = True,
+    ) -> Iterable[float] | dict[str, float]:
+        """Return the parameters of the edges in the graph.
+
+        If ``as_dict`` is ``False``, return an iterable of all parameter values. If
+        ``as_dict`` is ``True``, return a nested dictionary with the edges' names as
+        keys and the edges' parameter dicts as values.
+
+        If ``as_flat`` is ``True``, return a flat dictionary with the T-stages and
+        parameters as keys and values, respectively. This is the result of passing the
+        nested dictionary to :py:meth:`~lymph.helper.flatten`.
+        """
+        params = {}
+        for edge in self.edges.values():
+            params[edge.get_name()] = edge.get_params(as_flat=as_flat)
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
+
+
+    def set_params(self, *args, **kwargs) -> tuple[float]:
+        """Set the parameters of the edges in the graph.
+
+        The arguments are passed to the :py:meth:`~lymph.graph.Edge.set_params` method
+        of the edges. Global keyword arguments (e.g. ``"spread"``) are passed to each
+        edge's ``set_params`` method. Unused args are returned.
+
+        Specific keyword arguments take precedence over global ones which in turn take
+        precedence over positional arguments.
+
+        >>> graph = Representation(graph_dict={
+        ...     ("tumor", "T"): ["II" , "III"],
+        ...     ("lnl", "II"): ["III"],
+        ...     ("lnl", "III"): [],
+        ... })
+        >>> _ = graph.set_params(0.1, 0.2, 0.3, spread=0.4, TtoII_spread=0.5)
+        >>> graph.get_params(as_dict=True)   # doctest: +NORMALIZE_WHITESPACE
+        {'TtoII_spread': 0.5,
+         'TtoIII_spread': 0.4,
+         'IItoIII_spread': 0.4}
+        """
+        return set_params_for(self.edges, *args, **kwargs)

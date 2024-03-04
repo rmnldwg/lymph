@@ -3,8 +3,9 @@ Test the Bayesian Unilateral Model.
 """
 import unittest
 
-import fixtures
 import numpy as np
+
+from . import fixtures
 
 
 class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -12,8 +13,8 @@ class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unitt
 
     def setUp(self):
         super().setUp()
-        self.model.assign_params(**self.create_random_params())
-        self.model.modalities = fixtures.MODALITIES
+        self.model.set_params(**self.create_random_params())
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_state_dist(self):
@@ -37,7 +38,7 @@ class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unitt
         for name in random_params:
             random_params[name] += 1.
         likelihood = self.model.likelihood(
-            given_param_kwargs=random_params,
+            given_params=random_params,
             log=True,
             mode="BN",
         )

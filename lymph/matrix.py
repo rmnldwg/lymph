@@ -5,13 +5,14 @@ Methods & classes to manage matrices of the :py:class:`~lymph.models.Unilateral`
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from functools import lru_cache
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
 from cachetools import LRUCache
 
-from lymph import models
+from lymph import graph, models
 from lymph.helper import (
     AbstractLookupDict,
     arg0_cache,
@@ -19,16 +20,20 @@ from lymph.helper import (
     row_wise_kron,
     tile_and_repeat,
 )
+from lymph.modalities import Modality
 
 
-def generate_transition(instance: models.Unilateral) -> np.ndarray:
+@lru_cache(maxsize=128)
+def generate_transition(
+    lnls: Iterable[graph.LymphNodeLevel],
+    num_states: int,
+) -> np.ndarray:
     """Compute the transition matrix of the lymph model."""
-    lnls_list = list(instance.graph.lnls.values())
-    num_lnls = len(lnls_list)
-    num_states = 3 if instance.graph.is_trinary else 2
+    lnls = list(lnls)   # necessary for `index()` call
+    num_lnls = len(lnls)
     transition_matrix = np.ones(shape=(num_states**num_lnls, num_states**num_lnls))
 
-    for i, lnl in enumerate(lnls_list):
+    for i, lnl in enumerate(lnls):
         current_state_idx = get_state_idx_matrix(
             lnl_idx=i,
             num_lnls=num_lnls,
@@ -47,7 +52,7 @@ def generate_transition(instance: models.Unilateral) -> np.ndarray:
                     0, current_state_idx, new_state_idx
                 ]
             else:
-                parent_node_i = lnls_list.index(edge.parent)
+                parent_node_i = lnls.index(edge.parent)
                 parent_state_idx = get_state_idx_matrix(
                     lnl_idx=parent_node_i,
                     num_lnls=num_lnls,
@@ -74,40 +79,24 @@ def generate_transition(instance: models.Unilateral) -> np.ndarray:
     return transition_matrix
 
 
-cached_generate_transition = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_transition)
-"""Cached version of :py:func:`generate_transition`.
-
-This expects the first argument to be a hashable object that is used instrad of the
-``instance`` argument of :py:func:`generate_transition`. It is intended to be used with
-the :py:meth:`~lymph.graph.Representation.parameter_hash` method of the graph.
-"""
-
-
-def generate_observation(instance: models.Unilateral) -> np.ndarray:
+@lru_cache(maxsize=128)
+def generate_observation(
+    modalities: Iterable[Modality],
+    num_lnls: int,
+    base: int = 2,
+) -> np.ndarray:
     """Generate the observation matrix of the lymph model."""
-    num_lnls = len(instance.graph.lnls)
-    base = 2 if instance.graph.is_binary else 3
     shape = (base ** num_lnls, 1)
     observation_matrix = np.ones(shape=shape)
 
-    for modality in instance.modalities.values():
+    for modality in modalities:
         mod_obs_matrix = np.ones(shape=(1,1))
-        for _ in instance.graph.lnls:
+        for _ in range(num_lnls):
             mod_obs_matrix = np.kron(mod_obs_matrix, modality.confusion_matrix)
 
         observation_matrix = row_wise_kron(observation_matrix, mod_obs_matrix)
 
     return observation_matrix
-
-
-cached_generate_observation = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_observation)
-"""Cached version of :py:func:`generate_observation`.
-
-This expects the first argument to be a hashable object that is used instrad of the
-``instance`` argument of :py:func:`generate_observation`. It is intended to be used
-with the hash of all confusion matrices of the model's modalities, which is returned
-by the method :py:meth:`~lymph.modalities.ModalitiesUserDict.confusion_matrices_hash`.
-"""
 
 
 def compute_encoding(
@@ -141,7 +130,6 @@ def compute_encoding(
 
     Missing values are treated as unknown involvement.
 
-    Examples:
     >>> compute_encoding(["II", "III"], {"II": True, "III": False})
     array([False, False,  True, False])
     >>> compute_encoding(["II", "III"], {"II": "involved"})
@@ -237,7 +225,7 @@ def generate_data_encoding(
 
     for i, (_, patient_row) in enumerate(selected_patients["_model"].iterrows()):
         patient_encoding = np.ones(shape=1, dtype=bool)
-        for modality_name in model.modalities.keys():
+        for modality_name in model.get_all_modalities().keys():
             if modality_name not in patient_row:
                 continue
             diagnose_encoding = compute_encoding(
@@ -295,10 +283,9 @@ cached_generate_diagnose = arg0_cache(maxsize=128, cache_class=LRUCache)(generat
 
 The decorated function expects an additional first argument that should be unique for
 the combination of modalities and patient data. It is intended to be used with the
-joint hash of the modalities
-(:py:meth:`~lymph.modalities.ModalitiesUserDict.confusion_matrices_hash`) and the
-patient data hash that is always precomputed when a new dataset is loaded into the
-model (:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
+joint hash of the modalities (:py:meth:`.modalities_hash`) and the patient data hash
+that is always precomputed when a new dataset is loaded into the model
+(:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
 """
 
 
@@ -312,7 +299,7 @@ class DiagnoseUserDict(AbstractLookupDict):
     the patient data (meaning the data matrix needs to be updated) change.
 
     See Also:
-        :py:attr:`~lymph.models.Unilateral.diagnose_matrices`
+        :py:attr:`.Unilateral.diagnose_matrices`
     """
     model: models.Unilateral
 
@@ -320,7 +307,7 @@ class DiagnoseUserDict(AbstractLookupDict):
         warnings.warn("Setting the diagnose matrices is not supported.")
 
     def __getitem__(self, key: Any) -> Any:
-        modalities_hash = self.model.modalities.confusion_matrices_hash()
+        modalities_hash = self.model.modalities_hash()
         patient_data_hash = self.model.patient_data_hash
         joint_hash = hash((modalities_hash, patient_data_hash, key))
         return cached_generate_diagnose(joint_hash, self.model, key)
@@ -328,3 +315,35 @@ class DiagnoseUserDict(AbstractLookupDict):
     def __missing__(self, t_stage: str):
         """Create the diagnose matrix for a specific T-stage if necessary."""
         return self[t_stage]
+
+
+@lru_cache
+def evolve_midext(max_time: int, midext_prob: int) -> np.ndarray:
+    """Compute the evolution over the state of a tumor's midline extension."""
+    midext_states = np.zeros(shape=(max_time + 1, 2), dtype=float)
+    midext_states[0,0] = 1.
+
+    midext_transition_matrix = np.array([
+        [1 - midext_prob, midext_prob],
+        [0.             , 1.         ],
+    ])
+
+    # compute midext prob for all time steps
+    for i in range(len(midext_states) - 1):
+        midext_states[i+1,:] = midext_states[i,:] @ midext_transition_matrix
+
+    return midext_states
+
+
+def fast_trace(
+    left: np.ndarray,
+    right: np.ndarray,
+) -> np.ndarray:
+    """Compute the trace of a product of two matrices (``left`` and ``right``).
+
+    This is based on the observation that the trace of a product of two matrices is
+    equal to the sum of the element-wise products of the two matrices. See
+    `Wikipedia <https://en.wikipedia.org/wiki/Trace_(linear_algebra)#Properties>`_ and
+    `StackOverflow <https://stackoverflow.com/a/18854776>`_ for more information.
+    """
+    return np.sum(left.T * right, axis=0)

@@ -1,0 +1,11 @@
+/* Indent by four spaces */
+.sig-param::before {
+    content: "\a\20\20\20\20";
+    white-space: pre;
+}
+
+/* Don't indent closing bracket */
+dt em.sig-param:last-of-type::after {
+    content: "\a";
+    white-space: pre;
+}

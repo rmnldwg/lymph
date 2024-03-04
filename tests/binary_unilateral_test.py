@@ -1,11 +1,11 @@
 """Test the binary unilateral system."""
 import unittest
 
-import fixtures
 import numpy as np
 
 from lymph.graph import LymphNodeLevel, Tumor
-from lymph.modalities import Pathological
+
+from . import fixtures
 
 
 class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -79,47 +79,7 @@ class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
             self.assertEqual(edge.parent.name, "T")
             self.assertIn(edge.child.name, receiving_lnls)
             self.assertTrue(edge.is_tumor_spread)
-            self.assertIn(edge.name, connecting_edge_names)
-
-
-class DelegationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
-    """Test the delegation of parameters via the `DelegatorMixing`."""
-
-    def test_delegation(self):
-        """Make sure the specified attributes from graph are delegated upwards."""
-        self.assertEqual(
-            self.model.graph.is_binary,
-            self.model.is_binary,
-        )
-        self.assertEqual(
-            self.model.graph.is_trinary,
-            self.model.is_trinary,
-        )
-        self.assertEqual(
-            self.model.graph.get_state(),
-            self.model.get_state(),
-        )
-        self.assertEqual(
-            self.model.graph.lnls,
-            self.model.lnls,
-        )
-
-    def test_set_state_delegation(self):
-        """Check that the ``set_state`` method is also correctly delegated."""
-        old_state = self.model.get_state()
-        choice = [0,1]
-        if self.model.is_trinary:
-            choice.append(2)
-
-        new_state = self.rng.choice(a=choice, size=len(old_state))
-        self.model.set_state(*new_state)
-        self.assertTrue(np.all(self.model.get_state() == new_state))
-        self.assertTrue(np.all(self.model.graph.get_state() == new_state))
-
-        new_state = self.rng.choice(a=choice, size=len(old_state))
-        self.model.graph.set_state(*new_state)
-        self.assertTrue(np.all(self.model.get_state() == new_state))
-        self.assertTrue(np.all(self.model.graph.get_state() == new_state))
+            self.assertIn(edge.get_name(middle="_to_"), connecting_edge_names)
 
 
 class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
@@ -129,28 +89,28 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params()
         edges_and_dists = self.model.graph.edges.copy()
-        edges_and_dists.update(self.model.diag_time_dists)
+        edges_and_dists.update(self.model.get_all_distributions())
 
         for param_name, value in params_to_set.items():
             name, type_ = param_name.rsplit("_", maxsplit=1)
             edges_and_dists[name].set_params(**{type_: value})
             self.assertEqual(
-                edges_and_dists[name].get_params(type_),
+                edges_and_dists[name].get_params()[type_],
                 value,
             )
 
     def test_params_assignment_via_method(self):
         """Make sure the spread parameters are assigned correctly."""
         params_to_set = self.create_random_params()
-        self.model.assign_params(**params_to_set)
+        self.model.set_params(**params_to_set)
 
         edges_and_dists = self.model.graph.edges.copy()
-        edges_and_dists.update(self.model.diag_time_dists)
+        edges_and_dists.update(self.model.get_all_distributions())
 
         for param_name, value in params_to_set.items():
             name, type_ = param_name.rsplit("_", maxsplit=1)
             self.assertEqual(
-                edges_and_dists[name].get_params(type_),
+                edges_and_dists[name].get_params()[type_],
                 value,
             )
 
@@ -158,7 +118,7 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         """Check if the transition matrix gets deleted when a parameter is set."""
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
         trans_mat = self.model.transition_matrix()
-        self.model.graph.edges[f"T_to_{first_lnl_name}"].set_spread_prob(0.5)
+        self.model.graph.edges[f"Tto{first_lnl_name}"].set_spread_prob(0.5)
         self.assertFalse(np.all(
             trans_mat == self.model.transition_matrix()
         ))
@@ -170,7 +130,7 @@ class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Tes
     def setUp(self):
         """Initialize a simple binary model."""
         super().setUp()
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
@@ -209,12 +169,12 @@ class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Te
     def setUp(self):
         """Initialize a simple binary model."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
 
     def test_shape(self):
         """Make sure the observation matrix has the correct shape."""
         num_lnls = len(self.model.graph.lnls)
-        num_modalities = len(self.model.modalities)
+        num_modalities = len(self.model.get_all_modalities())
         expected_shape = (2**num_lnls, 2**(num_lnls * num_modalities))
         self.assertEqual(self.model.observation_matrix().shape, expected_shape)
 
@@ -230,9 +190,9 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
     def setUp(self):
         """Load patient data."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric", foo="frozen")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_load_patient_data(self):
@@ -244,9 +204,9 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
 
     def test_t_stages(self):
         """Make sure all T-stages are present."""
-        t_stages_in_data = self.model.patient_data["_model", "#" ,"t_stage"].unique()
-        t_stages_in_diag_time_dists = self.model.diag_time_dists.keys()
-        t_stages_in_model = list(self.model.t_stages)
+        t_stages_in_data = self.model.get_t_stages("data")
+        t_stages_in_diag_time_dists = self.model.get_t_stages("distributions")
+        t_stages_in_model = self.model.get_t_stages("valid")
         t_stages_intersection = set(t_stages_in_data).intersection(t_stages_in_diag_time_dists)
 
         self.assertNotIn("foo", t_stages_in_model)
@@ -309,9 +269,9 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
     def setUp(self):
         """Load patient data."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
     def test_log_likelihood_smaller_zero(self):
@@ -325,7 +285,7 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         for name in random_params:
             random_params[name] += 1.
         likelihood = self.model.likelihood(
-            given_param_kwargs=random_params,
+            given_params=random_params,
             log=True,
             mode="HMM",
         )
@@ -338,16 +298,16 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     def setUp(self):
         """Load params."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def create_random_diagnoses(self):
         """Create a random diagnosis for each modality and LNL."""
         lnl_names = list(self.model.graph.lnls.keys())
         diagnoses = {}
 
-        for modality in self.model.modalities:
+        for modality in self.model.get_all_modalities():
             diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
 
         return diagnoses
@@ -355,7 +315,8 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     def test_comp_diagnose_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
         random_diagnoses = self.create_random_diagnoses()
-        num_lnls, num_mods = len(self.model.graph.lnls), len(self.model.modalities)
+        num_lnls = len(self.model.graph.lnls)
+        num_mods = len(self.model.get_all_modalities())
         num_posible_diagnoses = 2**(num_lnls * num_mods)
 
         diagnose_encoding = self.model.comp_diagnose_encoding(random_diagnoses)
@@ -365,7 +326,7 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
     def test_posterior_state_dist(self):
         """Make sure the posterior state dist is correctly computed."""
         posterior_state_dist = self.model.comp_posterior_state_dist(
-            given_param_kwargs=self.create_random_params(),
+            given_params=self.create_random_params(),
             given_diagnoses=self.create_random_diagnoses(),
             t_stage=self.rng.choice(["early", "late"]),
         )
@@ -382,7 +343,7 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
         risk = self.model.risk(
             involvement=random_pattern,
-            given_param_kwargs=random_params,
+            given_params=random_params,
             given_diagnoses=random_diagnoses,
             t_stage=random_t_stage,
         )
@@ -397,9 +358,9 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
     def setUp(self):
         """Load params."""
         super().setUp()
-        self.model.modalities = fixtures.MODALITIES
+        self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.assign_params(**self.create_random_params())
+        self.model.set_params(**self.create_random_params())
 
     def test_generate_early_patients(self):
         """Check that generating only early T-stage patients works."""
@@ -432,17 +393,18 @@ class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestC
             lnl_edge.set_spread_prob(0.)
 
         # make all patients diagnosed after exactly one time-step
-        self.model.diag_time_dists["early"] = [0,1,0,0,0,0,0,0,0,0,0]
+        self.model.set_distribution("early", [0,1,0,0,0,0,0,0,0,0,0])
 
         # assign only one pathology modality
-        self.model.modalities = {"tmp": Pathological(specificity=1., sensitivity=1.)}
+        self.model.clear_modalities()
+        self.model.set_modality("tmp", spec=1., sens=1.)
 
         # extract the tumor spread parameters
         params = self.model.get_params(as_dict=True)
         params = {
-            key.replace("T_to_", "").replace("_spread", ""): value
+            key.replace("Tto", "").replace("_spread", ""): value
             for key, value in params.items()
-            if "T_to_" in key
+            if "Tto" in key
         }
 
         # draw large enough amount of patients

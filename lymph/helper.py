@@ -1,112 +1,18 @@
 """
 Module containing supporting classes and functions used accross the project.
 """
-import warnings
+import logging
 from collections import UserDict
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Callable
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 from cachetools import LRUCache
-from pandas._libs.missing import NAType
 
-PatternType = dict[str, bool | NAType | None]
-"""Type alias for an involvement pattern."""
+from lymph.types import HasGetParams, HasSetParams
 
-DiagnoseType = dict[str, PatternType]
-"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
+logger = logging.getLogger(__name__)
 
-
-class DelegatorMixin:
-    """Mixin class that allows the delegation of attributes from another object."""
-    def __init__(self):
-        self._delegated = {}
-
-
-    def init_delegation(self, **from_to) -> None:
-        """Initialize the delegation of attributes.
-
-        For each keyword argument that is an attribute of ``self``, the value is a
-        list of attributes to delegate to ``self``.
-
-        Inspiration from this came from the `delegation pattern`_.
-
-        .. _delegation pattern: https://github.com/faif/python-patterns/blob/master/patterns/fundamental/delegation_pattern.py
-
-        Example:
-
-        >>> class Delegate:
-        ...     def __init__(self):
-        ...         self.fancy_attr = "foo"
-        ...     @property
-        ...     def property_attr(self):
-        ...         return "bar"
-        ...     @cached_property
-        ...     def cached_attr(self):
-        ...         return "baz"
-        >>> class A(DelegatorMixin):
-        ...     def __init__(self):
-        ...         super().__init__()
-        ...         self.delegated = "hello world"
-        ...         self.also_delegated = Delegate()
-        ...         self.normal_attr = 42
-        ...         self.init_delegation(
-        ...             delegated=["count"],
-        ...             also_delegated=["fancy_attr", "property_attr", "cached_attr"],
-        ...         )
-        >>> a = A()
-        >>> a.delegated.count("l")
-        3
-        >>> a.count("l")
-        3
-        >>> a.also_delegated.fancy_attr
-        'foo'
-        >>> a.fancy_attr
-        'foo'
-        >>> a.also_delegated.property_attr
-        'bar'
-        >>> a.property_attr
-        'bar'
-        >>> a.also_delegated.cached_attr
-        'baz'
-        >>> a.cached_attr
-        'baz'
-        >>> a.normal_attr
-        42
-        >>> a.non_existent
-        Traceback (most recent call last):
-        ...
-        AttributeError: 'A' object has no attribute 'non_existent'
-        """
-        for attr, sub_attrs in from_to.items():
-            attr_obj = getattr(self, attr)
-
-            for sub_attr in sub_attrs:
-                if not hasattr(attr_obj, sub_attr):
-                    raise AttributeError(
-                        f"Attribute '{sub_attr}' not found in '{attr_obj}'"
-                    )
-
-                if sub_attr in self._delegated:
-                    warnings.warn(
-                        f"Attribute '{sub_attr}' already delegated. Overwriting."
-                    )
-                self._delegated[sub_attr] = (attr_obj, sub_attr)
-
-    def __getattr__(self, name):
-        if name in self._delegated:
-            attr = getattr(*self._delegated[name])
-
-            if not callable(attr):
-                return attr
-
-            @wraps(attr)
-            def wrapper(*args, **kwargs):
-                return attr(*args, **kwargs)
-
-            return wrapper
-
-        return super().__getattribute__(name)
 
 
 def check_unique_names(graph: dict):
@@ -127,74 +33,15 @@ def check_unique_names(graph: dict):
 
 
 def check_spsn(spsn: list[float]):
-    """Private method that checks whether specificity and sensitvity
-    are valid.
-
-    Args:
-        spsn (list): list with specificity and sensiticity
-
-    Raises:
-        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-    """
+    """Check whether specificity and sensitivity are valid."""
     has_len_2 = len(spsn) == 2
     is_above_lb = np.all(np.greater_equal(spsn, 0.5))
     is_below_ub = np.all(np.less_equal(spsn, 1.))
     if not has_len_2 or not is_above_lb or not is_below_ub:
-        msg = ("For each modality provide a list of two decimals "
-            "between 0.5 and 1.0 as specificity & sensitivity "
-            "respectively.")
-        raise ValueError(msg)
-
-
-def change_base(
-    number: int,
-    base: int,
-    reverse: bool = False,
-    length: int | None = None
-) -> str:
-    """Convert an integer into another base.
-
-    Args:
-        number: Number to convert
-        base: Base of the resulting converted number
-        reverse: If true, the converted number will be printed in reverse order.
-        length: Length of the returned string. If longer than would be
-            necessary, the output will be padded.
-
-    Returns:
-        The (padded) string of the converted number.
-    """
-    if number < 0:
-        raise ValueError("Cannot convert negative numbers")
-    if base > 16:
-        raise ValueError("Base must be 16 or smaller!")
-    elif base < 2:
-        raise ValueError("There is no unary number system, base must be > 2")
-
-    convert_string = "0123456789ABCDEF"
-    result = ''
-
-    if number == 0:
-        result += '0'
-    else:
-        while number >= base:
-            result += convert_string[number % base]
-            number = number//base
-        if number > 0:
-            result += convert_string[number]
-
-    if length is None:
-        length = len(result)
-    elif length < len(result):
-        length = len(result)
-        warnings.warn("Length cannot be shorter than converted number.")
-
-    pad = '0' * (length - len(result))
-
-    if reverse:
-        return result + pad
-    else:
-        return pad + result[::-1]
+        raise ValueError(
+            "For each modality provide a list of two decimals between 0.5 and 1.0 as "
+            "specificity & sensitivity respectively."
+        )
 
 
 @lru_cache
@@ -249,41 +96,10 @@ def comp_transition_tensor(
     return tensor
 
 
-def check_modality(modality: str, spsn: list):
-    """Private method that checks whether all inserted values
-    are valid for a confusion matrix.
-
-    Args:
-        modality (str): name of the modality
-        spsn (list): list with specificity and sensiticity
-
-    Raises:
-        TypeError: returns a type error if the modality is not a string
-        ValueError: raises a value error if the spec or sens is not a number btw. 0.5 and 1.0
-    """
-    if not isinstance(modality, str):
-        raise TypeError("Modality names must be strings.")
-
-    has_len_2 = len(spsn) == 2
-    is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-    is_below_ub = np.all(np.less_equal(spsn, 1.))
-
-    if not has_len_2 or not is_above_lb or not is_below_ub:
-        raise ValueError(
-            "For each modality provide a list of two decimals between 0.5 and 1.0 "
-            "as specificity & sensitivity respectively."
-        )
-
-
 def clinical(spsn: list) -> np.ndarray:
-    """produces the confusion matrix of a clinical modality, i.e. a modality
-    that can not detect microscopic metastases
+    """Produce the confusion matrix of a clinical modality.
 
-    Args:
-        spsn (list): list with specificity and sensitivity of modality
-
-    Returns:
-        np.ndarray: confusion matrix of modality
+    A clinical modality can by definition *not* detect microscopic metastases.
     """
     check_spsn(spsn)
     sp, sn = spsn
@@ -296,14 +112,10 @@ def clinical(spsn: list) -> np.ndarray:
 
 
 def pathological(spsn: list) -> np.ndarray:
-    """produces the confusion matrix of a pathological modality, i.e. a modality
-    that can detect microscopic metastases
+    """Produce the confusion matrix of a pathological modality.
 
-    Args:
-        spsn (list): list with specificity and sensitivity of modality
-
-    Returns:
-        np.ndarray: confusion matrix of modality
+    A pathological modality can detect microscopic disease, but is unable to
+    differentiante between micro- and macroscopic involvement.
     """
     check_spsn(spsn)
     sp, sn = spsn
@@ -324,8 +136,6 @@ def tile_and_repeat(
 
     .. _tile: https://numpy.org/doc/stable/reference/generated/numpy.tile.html
     .. _repeat: https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
-
-    Example:
 
     >>> mat = np.array([[1, 2], [3, 4]])
     >>> tile_and_repeat(mat, (2, 2), (2, 2))
@@ -353,8 +163,6 @@ def tile_and_repeat(
 @lru_cache
 def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
     """Return the indices for the transition tensor correpsonding to ``lnl_idx``.
-
-    Example:
 
     >>> get_state_idx_matrix(1, 3, 2)
     array([[0, 0, 0, 0, 0, 0, 0, 0],
@@ -386,8 +194,6 @@ def row_wise_kron(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
     .. _kronecker product: https://en.wikipedia.org/wiki/Kronecker_product
 
-    Example:
-
     >>> a = np.array([[1, 2], [3, 4]])
     >>> b = np.array([[5, 6], [7, 8]])
     >>> row_wise_kron(a, b)
@@ -415,7 +221,7 @@ def early_late_mapping(t_stage: int | str) -> str:
 
 
 def trigger(func: callable) -> callable:
-    """Method decorator that runs instance's ``trigger()`` when the method is called."""
+    """Decorator that runs instance's ``trigger_callbacks`` when called."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
@@ -423,11 +229,6 @@ def trigger(func: callable) -> callable:
             callback()
         return result
     return wrapper
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
 
 
 class AbstractLookupDict(UserDict):
@@ -473,15 +274,6 @@ class AbstractLookupDict(UserDict):
                 return False
 
         return False
-
-
-    def clear_without_trigger(self) -> None:
-        """Clear the dictionary without triggering the callbacks."""
-        self.__dict__["data"].clear()
-
-    def update_without_trigger(self, other=(), /, **kwargs):
-        """Update the dictionary without triggering the callbacks."""
-        self.__dict__["data"].update(other, **kwargs)
 
 
 class smart_updating_dict_cached_property(cached_property):
@@ -533,3 +325,133 @@ def dict_to_func(mapping: dict[Any, Any]) -> callable:
         return mapping[key]
 
     return callable_mapping
+
+
+def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
+    """Return the first element of a sequence and the sequence without it.
+
+    If the sequence is empty, the first element will be ``None`` and the second just
+    the empty sequence. Example:
+
+    >>> popfirst([1, 2, 3])
+    (1, [2, 3])
+    >>> popfirst([])
+    (None, [])
+    """
+    try:
+        return seq[0], seq[1:]
+    except IndexError:
+        return None, seq
+
+
+def flatten(mapping, parent_key='', sep='_') -> dict:
+    """Flatten a nested dictionary.
+
+    >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
+    {'a_b': 1, 'a_c': 2, 'd': 3}
+    """
+    items = []
+    for k, v in mapping.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def unflatten_and_split(
+    mapping: dict,
+    expected_keys: list[str],
+    sep: str = "_",
+) -> tuple[dict, dict]:
+    """Unflatten the part of a dict containing ``expected_keys`` and return the rest.
+
+    >>> unflatten_and_split({'a_b': 1, 'a_c_x': 2, 'd_y': 3}, expected_keys=['a'])
+    ({'a': {'b': 1, 'c_x': 2}}, {'d_y': 3})
+    """
+    split_kwargs, global_kwargs = {}, {}
+    for key, value in mapping.items():
+        left, _, right = key.partition(sep)
+        if left not in expected_keys:
+            global_kwargs[key] = value
+            continue
+
+        tmp = split_kwargs
+        if left not in tmp:
+            tmp[left] = {}
+
+        tmp = tmp[left]
+        tmp[right] = value
+
+    return split_kwargs, global_kwargs
+
+
+def get_params_from(
+    objects: dict[str, HasGetParams],
+    as_dict: bool = True,
+    as_flat: bool = True,
+) -> Iterable[float] | dict[str, float]:
+    """Get the parameters from each ``get_params()`` method of the ``objects``."""
+    params = {}
+    for key, obj in objects.items():
+        params[key] = obj.get_params(as_flat=as_flat)
+
+    if as_flat or not as_dict:
+        params = flatten(params)
+
+    return params if as_dict else params.values()
+
+
+def set_params_for(
+    objects: dict[str, HasSetParams],
+    *args: float,
+    **kwargs: float,
+) -> tuple[float]:
+    """Pass arguments to each ``set_params()`` method of the ``objects``."""
+    kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=objects.keys())
+
+    for key, obj in objects.items():
+        obj_kwargs = global_kwargs.copy()
+        obj_kwargs.update(kwargs.get(key, {}))
+        args = obj.set_params(*args, **obj_kwargs)
+
+    return args
+
+
+def synchronize_params(
+    get_from: dict[str, HasGetParams],
+    set_to: dict[str, HasSetParams],
+) -> None:
+    """Get the parameters from one object and set them to another."""
+    for key, obj in set_to.items():
+        obj.set_params(**get_from[key].get_params(as_dict=True))
+
+
+def draw_diagnoses(
+    diagnose_times: list[int],
+    state_evolution: np.ndarray,
+    observation_matrix: np.ndarray,
+    possible_diagnoses: np.ndarray,
+    rng: np.random.Generator | None = None,
+    seed: int = 42,
+) -> np.ndarray:
+    """Given the ``diagnose_times`` and a hidden ``state_evolution``, draw diagnoses."""
+    if rng is None:
+        rng = np.random.default_rng(seed)
+
+    state_dists_given_time = state_evolution[diagnose_times]
+    observation_dists_given_time = state_dists_given_time @ observation_matrix
+
+    drawn_observation_idxs = [
+        rng.choice(a=np.arange(len(possible_diagnoses)), p=dist)
+        for dist in observation_dists_given_time
+    ]
+    return possible_diagnoses[drawn_observation_idxs].astype(bool)
+
+
+def add_or_mult(llh: float, arr: np.ndarray, log: bool = True) -> float:
+    """Add or multiply the log-likelihood with the given array."""
+    if log:
+        return llh + np.sum(np.log(arr))
+    return llh * np.prod(arr)
