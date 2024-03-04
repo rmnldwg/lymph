@@ -37,6 +37,7 @@ dynamic = ["version"]
 test = [
     "scipy < 2",
     "coverage < 8",
+    "emcee < 4",
 ]
 dev = [
     "pre-commit",
