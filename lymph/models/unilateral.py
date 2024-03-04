@@ -774,7 +774,6 @@ class Unilateral(
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
-        **_kwargs,
     ) -> float | np.ndarray:
         """Compute risk of a certain involvement, given a patient's diagnosis.
 

@@ -26,10 +26,23 @@ class HasGetParams(Protocol):
 
 
 PatternType = dict[str, bool | NAType | None]
-"""Type alias for an involvement pattern."""
+"""Type alias for an involvement pattern.
+
+An involvement pattern is a dictionary with keys for the lymph node levels and values
+for the involvement of the respective lymph nodes. The values are either True, False,
+or None, which means that the involvement is unknown.
+
+>>> pattern = {"I": True, "II": False, "III": None}
+"""
 
 DiagnoseType = dict[str, PatternType]
-"""Type alias for a diagnose, which is a involvement pattern per diagnostic modality."""
+"""Type alias for a diagnose, which is an involvement pattern per diagnostic modality.
+
+>>> diagnose = {
+...     "CT": {"I": True, "II": False, "III": None},
+...     "MRI": {"I": True, "II": True, "III": None},
+... }
+"""
 
 
 M = TypeVar("M", bound="Model")
@@ -54,6 +67,7 @@ class Model(ABC):
         the ``get_params`` method of other instances, which can be fused to get a
         flat dictionary.
         """
+        raise NotImplementedError
 
     def get_num_dims(self: M, mode: Literal["HMM", "BN"] = "HMM") -> int:
         """Return the number of dimensions of the parameter space.
@@ -77,6 +91,7 @@ class Model(ABC):
         arguments are used up one by one by the ``set_params`` methods the model calls.
         Keyword arguments override the positional arguments.
         """
+        raise NotImplementedError
 
     @abstractmethod
     def load_patient_data(
@@ -87,6 +102,7 @@ class Model(ABC):
 
         .. _LyProX: https://lyprox.org/
         """
+        raise NotImplementedError
 
     @abstractmethod
     def likelihood(
@@ -100,6 +116,7 @@ class Model(ABC):
         otherwise. The parameters may be passed as positional or keyword arguments.
         They are then passed to the :py:meth:`set_params` method first.
         """
+        raise NotImplementedError
 
     @abstractmethod
     def risk(
@@ -109,3 +126,4 @@ class Model(ABC):
         given_diagnoses: dict[str, PatternType] | None = None,
     ) -> float | np.ndarray:
         """Return the risk of ``involvement``, given the parameters and diagnoses."""
+        raise NotImplementedError
