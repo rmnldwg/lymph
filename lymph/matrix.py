@@ -222,7 +222,7 @@ def generate_data_encoding(
         result[:,i] = patient_encoding
 
     mi = pd.MultiIndex.from_product([
-        ["_model"], ["encoding"], range(result.shape[0]),
+        ["_model"], ["_encoding"], range(result.shape[0]),
     ])
     return pd.DataFrame(result.T, columns=mi)
 
@@ -238,7 +238,7 @@ def generate_diagnose_probs(
     """
     result = observation_matrix @ data_matrix.T
     mi = pd.MultiIndex.from_product([
-        ["_model"], ["diagnose_prob"], range(result.shape[0]),
+        ["_model"], ["_diagnose_prob"], range(result.shape[0]),
     ])
     return pd.DataFrame(result.T, columns=mi)
 
