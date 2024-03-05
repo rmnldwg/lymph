@@ -4,6 +4,7 @@ import unittest
 import numpy as np
 
 from lymph.graph import LymphNodeLevel, Tumor
+from lymph.modalities import Clinical
 
 from . import fixtures
 
@@ -259,6 +260,12 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 np.isclose(diagnose_matrix, 1.)
                 | np.less_equal(diagnose_matrix, 1.)
             ))
+
+    def test_modality_replacement(self) -> None:
+        """Check if the patient data gets updated when the modalities change."""
+        self.model.replace_all_modalities({"PET": Clinical(spec=0.8, sens=0.8)})
+        self.assertTrue("PET" in self.model.patient_data["_model"].columns)
+        self.assertFalse("CT" in self.model.patient_data["_model"].columns)
 
 
 class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):

@@ -523,27 +523,28 @@ class Unilateral(
         patient_data = (
             patient_data
             .copy()
+            .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
-            .sort_index(axis=1, level=[0,1,2])
+            .sort_index(axis="columns", level=[0,1,2])
         )
         mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
         lambda_mapping = lambda row: mapping(row["tumor", "1", "t_stage"])
 
-        for modality_name in self.get_all_modalities().keys():
-            if modality_name not in patient_data:
-                raise ValueError(f"Modality '{modality_name}' not found in data.")
+        for modality in self.get_all_modalities().keys():
+            if modality not in patient_data.columns.levels[0]:
+                raise ValueError(f"{modality} data not found.")
 
-            if side not in patient_data[modality_name]:
+            if side not in patient_data[modality]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
             for name in self.graph.lnls.keys():
-                modality_side_data = patient_data[modality_name, side]
+                modality_side_data = patient_data[modality, side]
 
                 if name not in modality_side_data:
                     raise ValueError(f"Involvement data for LNL {name} not found.")
 
-                column = patient_data[modality_name, side, name]
-                patient_data["_model", modality_name, name] = column
+                column = patient_data[modality, side, name]
+                patient_data["_model", modality, name] = column
 
         patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
         self._patient_data = patient_data.sort_index(axis=1, level=[0,1,2])
@@ -576,8 +577,8 @@ class Unilateral(
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
 
-        _hash = hash((None, self.modalities_hash(), self._cache_version))
-        if _hash not in self._data_matrix_cache:
+        current_hash = hash((None, self.modalities_hash(), self._cache_version))
+        if current_hash not in self._data_matrix_cache:
             self.del_data_matrix()
             data_encoding = matrix.generate_data_encoding(
                 patient_data=self._patient_data,
@@ -589,11 +590,11 @@ class Unilateral(
                 axis=1,
             ).sort_index(axis=1, level=[0,1,2])
             data_matrix = self._patient_data[ENCODING_COL].to_numpy()
-            self._data_matrix_cache[_hash] = data_matrix
+            self._data_matrix_cache[current_hash] = data_matrix
         else:
             data_matrix = self.data_matrix()
 
-        if _hash not in self._diagnose_matrix_cache:
+        if current_hash not in self._diagnose_matrix_cache:
             self.del_diagnose_matrix()
             diagnose_probs = matrix.generate_diagnose_probs(
                 self.observation_matrix(), data_matrix,
@@ -603,7 +604,7 @@ class Unilateral(
                 axis=1,
             ).sort_index(axis=1, level=[0,1,2])
             diagnose_matrix = self._patient_data[DIAG_PROB_COL].to_numpy()
-            self._diagnose_matrix_cache[_hash] = diagnose_matrix
+            self._diagnose_matrix_cache[current_hash] = diagnose_matrix
 
         return self._patient_data
 
