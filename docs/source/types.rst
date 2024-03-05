@@ -8,4 +8,4 @@ Types
 
 .. automodule:: lymph.types
     :members:
-    :special-members: __init__
+    :show-inheritance:

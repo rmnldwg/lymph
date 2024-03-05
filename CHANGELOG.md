@@ -2,6 +2,170 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.0.0.rc1"></a>
+## [1.0.0.rc1] - 2024-03-04
+
+This release hopefully represents the last major change before releasing version 1.0.0. It was necessary because during the implementation of the midline model, managing the symmetries in a transparent and user-friendly way became impossible in the old implementation.
+
+Now, a [composite pattern] is used for both the modalities and the distributions over diagnose times. This furhter separates the logic and will allow more hierarchical models based on the ones provided here to work seamlessly almost out of the box. This may become relevant with the mixture model.
+
+[composite pattern]: https://refactoring.guru/design-patterns/composite
+
+
+### Add
+
+- First version of midline module added.
+
+### Bug Fixes
+
+- (**diag**) Delete frozen distributions when params change.
+- (**diag**) Correct max time & params.\
+  The `max_time` is now correctly accessed and set. Also, the distribution
+  params are not used up by synched distributions, but only by the
+  distributions in composite leafs.
+- (**graph**) Avoid warning for micro mod setting.
+- ⚠ **BREAKING** Make likelihood work with emcee again.\
+  The way the likelihood was defined, it did not actually play nicely with
+  how the emcee package works. This is now fixed.
+- (**bi**) Fix uninitialized `is_symmetric` dict.
+- (**mid**) Add missing dict in init.
+- (**mid**) Update call to `transition_matrix()` & `state_list`.
+- (**mid**) Finish `draw_patients` method.\
+  Some bugs in the method for drawing synthetic patients from the
+  `Midline` were fixed. This seems to be working now.
+
+
+### Documentation
+
+- (**mid**) Improve midline docstrings slightly.
+- Go over `set_params()` docstrings.
+- Update quickstart guide to new API.
+- Adapt tests to new API (now passing).
+- Update index & fix some docstrings.
+- Fix some typos and cross-references.
+
+### Features
+
+- (**helper**) Add `popfirst()` and `flatten()`.\
+  Two new helper function in relation to getting and setting params.
+- (**type**) Add model ABC to inherit from.\
+  I added an abstract base class from which all model-like classes should
+  inherit. It defines all the methods that need to be present in a model.\
+  The idea behind this is that any subclass of this can be part of a
+  composite that correctly delegates getting/setting parameters,
+  diagnose time distributions, and modalities.
+- ⚠ **BREAKING** (**graph**) Add `__hash__` to edge, node, graph.\
+  This replaces the dedicated `parameter_hash()` method.
+- (**mod**) Add method to delete modality `del_modality()`.
+- Add more get/set params methods.
+- (**mid**) Implement `set_params`.
+- (**mid**) Implement the `load_patient_data` meth.
+- (**mid**) Finish midline (feature complete).
+- Complete set/get methods on model classes.\
+  The `Unilateral`, `Bilateral`, and `Midline` model now all have the six
+  methods `set_tumor_spread_params`, `set_lnl_spread_params`,
+  `set_spread_params`, `set_params`, `get_tumor_spread_params`,
+  `get_lnl_spread_params`, `get_spread_params`, and `get_params`.
+- (**mid**) Reimplement the midline evolution.\
+  The midline evolution that Lars Widmer worked on is now reimplemented.
+  However, although this implementation is analogous to the one used in
+  previsou version of the code and should thus work, it is still untested
+  at this point.
+- Add helper to draw diagnoses.\
+  The new helper function`draw_diagnoses` is a re-implementation of the
+  `Unilateral` class's method with the same name for easier reusing.
+- (**mid**) Allow marginalization over unknown midline extension.\
+  This is implemented differently than before: If data with unknown
+  midline extension is added, it gets loaded into an attribute named
+  `unknown`, which is a `Bilateral` model only used to store that data and
+  generate diagnose matrices.
+
+
+### Miscellaneous Tasks
+
+- Move timing data.
+- Make changelog super detailed.
+
+### Refactor
+
+- (**mid**) Split likelihood method.
+
+### Testing
+
+- Fix long-running test.
+- Add integration tests with emcee.
+- Add checks for bilateral symmetries.
+- (**mid**) Add first check of `set_params()` method.
+- (**mid**) Check likelihood function.
+
+### Add
+
+- Added doc strings.
+
+### Change
+
+- Non-mixture midline implemented.\
+  fixed the non mixture midline extension model and added documentation
+- ⚠ **BREAKING** Make `get_params()` uniform and chainable.\
+  The API of all `get_params()` methods is now nice and uniform, allowing
+  arbitrary chaining of these methods.
+- ⚠ **BREAKING** Make `set_params()` uniform and chainable.\
+  The API of all `set_params()` methods is now nice and uniform,
+  allowing arbitrary chaining of these methods.
+- ⚠ **BREAKING** Make `set_params()` not return kwargs.\
+  It does make sense to "use up" the positional arguments one by one in
+  the `set_params()` methods, but doing the same thing with keyword
+  arguments is pointless, difficult and error prone.
+- ⚠ **BREAKING** (**graph**) Replace `name` with `get_name()`.\
+  In the `Edge` class, the `name` property is replaced by a function
+  `get_name()` that is more flexible and allows us to have edge names
+  without underscores when we need it.
+- ⚠ **BREAKING** (**bi**) Reintroduce `is_symmetric` attribute.\
+  This will once again manage the symmetry of the `Bilateral` class's
+  different ipsi- and contralateral attributes.
+- ⚠ **BREAKING** (**diag**) Use composite for distributions.\
+  Instead of a dict that holds the T-stages and corresponding
+  distributions over diagnose times, this implements them as a composite
+  pattern. This replaces the dict-like API entirely with methods. This has
+  several advantages:
+  1. It is more explicit and thus more readable
+  2. The composite pattern is designed to work naturally with tree-like
+  structures, which we have here when dealing with bilateral models.
+- ⚠ **BREAKING** (**mod**) Use composite for modalities.\
+  Instead of a dict that holds the names and corresponding
+  sens/spec for diagnostic modalities, this implements them as a composite
+  pattern. This replaces the dict-like API entirely with methods. This has
+  several advantages:
+  1. It is more explicit and thus more readable
+  2. The composite pattern is designed to work naturally with tree-like
+  structures, which we have here when dealing with bilateral models.
+- ⚠ **BREAKING** (**uni**) Transform to composite pattern.\
+  Use the new composite pattern for the distribution over diagnose times
+  and modalities.
+- (**bi**) Update for new composite API.
+- ⚠ **BREAKING** (**mod**) Shorten to sens/spec.\
+  Also, add a `clear_modalities()` and a `clear_distributions()` method to
+  the respective composites.
+- (**matrix**) Use hashables over arg0 cache.\
+  Instead of using this weird `arg0_cache` for the observation and
+  transition matrix, I use the necessary arguments only, which are all
+  hashable now.
+- ⚠ **BREAKING** Adapt risk to likelihood call signature.
+- (**type**) Add risk to abstract methods.
+- (**type**) Abstract methods raise error.
+
+### Merge
+
+- Branch 'yoel-dev' into 'dev'.
+- Branch '74-synchronization-is-unreadable-and-error-prone' into 'dev'. Fixes [#74].
+- Branch 'main' into 'dev'.
+- Branch 'add-midext-evolution' into 'dev'.
+
+### Remove
+
+- Unused helper functions.
+
+
 <a name="1.0.0.a6"></a>
 ## [1.0.0.a6] - 2024-02-15
 
@@ -326,7 +490,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.a6...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc1...HEAD
+[1.0.0.rc1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a6...1.0.0.rc1
 [1.0.0.a6]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...1.0.0.a6
 [1.0.0.a5]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...1.0.0.a5
 [1.0.0.a4]: https://github.com/rmnldwg/lymph/compare/1.0.0.a3...1.0.0.a4
@@ -339,6 +504,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#74]: https://github.com/rmnldwg/lymph/issues/74
 [#72]: https://github.com/rmnldwg/lymph/issues/72
 [#69]: https://github.com/rmnldwg/lymph/issues/69
 [#68]: https://github.com/rmnldwg/lymph/issues/68
