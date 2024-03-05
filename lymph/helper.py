@@ -2,12 +2,10 @@
 Module containing supporting classes and functions used accross the project.
 """
 import logging
-from collections import UserDict
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 import numpy as np
-from cachetools import LRUCache
 
 from lymph.types import HasGetParams, HasSetParams
 
@@ -231,51 +229,6 @@ def trigger(func: callable) -> callable:
     return wrapper
 
 
-class AbstractLookupDict(UserDict):
-    """Abstract ``UserDict`` subclass that can lazily and dynamically return values.
-
-    This class is meant to be subclassed. If one wants to use the functionality
-    of lazy and dynamic value retrieval, the subclass must implement a ``__missing__``
-    method that returns the value for the given key and raises a ``KeyError`` if
-    the value for a key cannot be computed.
-    """
-    trigger_callbacks: list[Callable]
-
-    def __init__(self, dict=None, /, trigger_callbacks=None, **kwargs):
-        """Use keyword arguments to set attributes of the instance.
-
-        In contrast to the default ``UserDict`` constructor, this one instantiates
-        any keyword arguments as attributes of the instance and does not put them
-        into the dictionary itself.
-        """
-        super().__init__(dict)
-
-        if trigger_callbacks is None:
-            trigger_callbacks = []
-
-        self.trigger_callbacks = trigger_callbacks
-
-        for attr_name, attr_value in kwargs.items():
-            if hasattr(self, attr_name):
-                raise AttributeError("Cannot set attribute that already exists.")
-            setattr(self, attr_name, attr_value)
-
-
-    def __contains__(self, key: object) -> bool:
-        """This exists to trigger ``__missing__`` when checking ``is in``."""
-        if super().__contains__(key):
-            return True
-
-        if hasattr(self.__class__, "__missing__"):
-            try:
-                self.__class__.__missing__(self, key)
-                return True
-            except KeyError:
-                return False
-
-        return False
-
-
 class smart_updating_dict_cached_property(cached_property):
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
     def __set__(self, instance: object, value: Any) -> None:
@@ -286,31 +239,6 @@ class smart_updating_dict_cached_property(cached_property):
     def __delete__(self, instance: object) -> None:
         dict_like = self.__get__(instance)
         dict_like.clear()
-
-
-def arg0_cache(maxsize: int = 128, cache_class = LRUCache) -> callable:
-    """Cache a function only based on its first argument.
-
-    One may choose which ``cache_class`` to use. This will be created with the
-    argument ``maxsize``.
-
-    Note:
-        The first argument is not passed on to the decorated function. It is basically
-        used as a key for the cache and it trusts the user to be sure that this is
-        sufficient.
-    """
-    def decorator(func: callable) -> callable:
-        cache = cache_class(maxsize=maxsize)
-
-        @wraps(func)
-        def wrapper(arg0, *args, **kwargs):
-            if arg0 not in cache:
-                cache[arg0] = func(*args, **kwargs)
-            return cache[arg0]
-
-        return wrapper
-
-    return decorator
 
 
 def dict_to_func(mapping: dict[Any, Any]) -> callable:
