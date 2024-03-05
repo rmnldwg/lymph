@@ -35,7 +35,7 @@ repos:
     - build       # changes of the build system or dependencies
     - change      # commit alters the implementation of an existing feature
     - chore       # technical or maintenance task not related to feature or user story
-    - ci          # edits to the cintinuous integration scripts/configuration
+    - ci          # edits to the continuous integration scripts/configuration
     - deprecate   # a feature or functionality will be deprecated
     - docs        # add, update of revise the documentation
     - feat        # a new feature was implemented (bump MINOR version)

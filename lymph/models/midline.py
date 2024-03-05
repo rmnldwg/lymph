@@ -551,7 +551,7 @@ class Midline(
             shape=(self.max_time + 1, len(self.ext.contra.graph.state_list))
         )
         if not self.use_midext_evo:
-            noext_contra_dist_evo[0,0] = (1. - self.midext_prob)
+            noext_contra_dist_evo[0,0] = 1. - self.midext_prob
             ext_contra_dist_evo[0,0] = self.midext_prob
 
         for t in range(self.max_time):
@@ -603,15 +603,15 @@ class Midline(
                 marg_joint_state_dist += joint_state_dist
                 _model = getattr(self, case)
                 patient_llhs = matrix.fast_trace(
-                    _model.ipsi.diagnose_matrices[stage].T,
-                    joint_state_dist @ _model.contra.diagnose_matrices[stage]
+                    _model.ipsi.diagnose_matrix(stage),
+                    joint_state_dist @ _model.contra.diagnose_matrix(stage).T
                 )
                 llh = add_or_mult(llh, patient_llhs, log=log)
 
             try:
                 marg_patient_llhs = matrix.fast_trace(
-                    self.unknown.ipsi.diagnose_matrices[stage].T,
-                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrices[stage]
+                    self.unknown.ipsi.diagnose_matrix(stage),
+                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrix(stage).T
                 )
                 llh = add_or_mult(llh, marg_patient_llhs, log=log)
             except AttributeError:
