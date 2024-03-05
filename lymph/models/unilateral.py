@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-from functools import cached_property
 from itertools import product
 from typing import Any, Iterable, Literal
 
@@ -9,6 +8,8 @@ import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, graph, matrix, modalities, types
+
+# pylint: disable=unused-import
 from lymph.helper import (  # nopycln: import
     add_or_mult,
     dict_to_func,
@@ -17,7 +18,6 @@ from lymph.helper import (  # nopycln: import
     flatten,
     get_params_from,
     set_params_for,
-    smart_updating_dict_cached_property,
 )
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
@@ -94,6 +94,7 @@ class Unilateral(
 
         diagnose_times.Composite.__init__(self, max_time=max_time, is_distribution_leaf=True)
         modalities.Composite.__init__(self, is_modality_leaf=True)
+        self._patient_data: pd.DataFrame | None = None
 
 
     @classmethod
@@ -423,28 +424,82 @@ class Unilateral(
         )
 
 
-    @smart_updating_dict_cached_property
-    def data_matrices(self) -> matrix.DataEncodingUserDict:
-        """Holds the data encoding in matrix form for every T-stage.
+    def data_matrix(self, t_stage: str | None = None) -> np.ndarray:
+        """Extract the data matrix for a given ``t_stage``."""
+        if ("_model", "encoding") not in self.patient_data.columns:
+            data_encoding = matrix.generate_data_encoding(
+                patient_data=self.patient_data,
+                modalities=self.get_all_modalities(),
+                lnls=list(self.graph.lnls.keys()),
+            )
+            self._patient_data = pd.concat(
+                [self._patient_data, data_encoding],
+                axis=1,
+            ).sort_index(axis=1, level=[0,1,2])
 
-        See Also:
-            :py:class:`~lymph.descriptors.matrix.DataEncodingUserDict`
+        has_t_stage = self.patient_data[("_model", "#", "t_stage")] == t_stage
+        has_t_stage = slice(None) if t_stage is None else has_t_stage
+        return self.patient_data.loc[has_t_stage, ("_model", "encoding")].to_numpy()
+
+    def del_data_matrix(self) -> None:
+        """Delete the data matrix."""
+        if (
+            self._patient_data is not None
+            and ("_model", "encoding") in self.patient_data.columns
+        ):
+            del self._patient_data[("_model", "encoding")]
+
+
+    def diagnose_matrix(self, t_stage: str | None = None) -> np.ndarray:
+        """Extract the diagnose matrix for a given ``t_stage``."""
+        if ("_model", "diagnose_prob") not in self.patient_data.columns:
+            diagnose_probs = matrix.generate_diagnose_probs(
+                self.observation_matrix(), self.data_matrix(),
+            )
+            self._patient_data = pd.concat(
+                [self._patient_data, diagnose_probs],
+                axis=1,
+            ).sort_index(axis=1, level=[0,1,2])
+
+        has_t_stage = self.patient_data[("_model", "#", "t_stage")] == t_stage
+        has_t_stage = slice(None) if t_stage is None else has_t_stage
+        return self.patient_data.loc[has_t_stage, ("_model", "diagnose_prob")].to_numpy()
+
+    def del_diagnose_matrix(self) -> None:
+        """Delete the diagnose matrix."""
+        if (
+            self._patient_data is not None
+            and ("_model", "diagnose_prob") in self.patient_data.columns
+        ):
+            del self._patient_data[("_model", "diagnose_prob")]
+
+
+    def set_modality(self, *args, **kwargs) -> None:
+        """Trigger setting of confusion matrix before calling super.
+
+        See :py:meth:`.modalities.Composite.set_modality` for more information.
         """
-        return matrix.DataEncodingUserDict(model=self)
+        self.del_data_matrix()
+        self.del_diagnose_matrix()
+        return super().set_modality(*args, **kwargs)
 
+    def del_modality(self, *args, **kwargs) -> None:
+        """Trigger deletion of data & diagnose matrices before calling super.
 
-    @smart_updating_dict_cached_property
-    def diagnose_matrices(self) -> matrix.DiagnoseUserDict:
-        """Holds the probability of a patient's diagnosis, given any hidden state.
-
-        Essentially, this is just the data encoding matrix of a certain T-stage
-        multiplied with the observation matrix. It is thus also a dictionary with
-        keys of T-stages and values of matrices.
-
-        See Also:
-            :py:class:`~lymph.descriptors.matrix.DiagnoseUserDict`
+        See :py:meth:`.modalities.Composite.del_modality` for more information.
         """
-        return matrix.DiagnoseUserDict(model=self)
+        self.del_data_matrix()
+        self.del_diagnose_matrix()
+        return super().del_modality(*args, **kwargs)
+
+    def clear_modalities(self) -> None:
+        """Trigger deletion of data & diagnose matrices before calling super.
+
+        See :py:meth:`.modalities.Composite.clear_modalities` for more information.
+        """
+        self.del_data_matrix()
+        self.del_diagnose_matrix()
+        return super().clear_modalities()
 
 
     def load_patient_data(
@@ -471,7 +526,7 @@ class Unilateral(
 
         .. _LyProX: https://lyprox.org/
         """
-        patient_data = patient_data.copy()
+        patient_data = patient_data.copy().reset_index(drop=True)
 
         if isinstance(mapping, dict):
             mapping = dict_to_func(mapping)
@@ -496,32 +551,14 @@ class Unilateral(
         patient_data["_model", "#", "t_stage"] = patient_data.apply(
             lambda row: mapping(row["tumor", "1", "t_stage"]), axis=1
         )
+        self._patient_data = patient_data.sort_index(axis=1, level=[0,1,2])
 
         for t_stage in self.get_t_stages("distributions"):
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
-        self._patient_data = patient_data
-        # Changes to the patient data require a recomputation of the data and
-        # diagnose matrices. For the data matrix, it is enough to clear the respective
-        # ``UserDict``. For the diagnose matrices, we need to delete the hash value of
-        # the patient data, so that the next time it is requested, a cache miss occurs
-        # and they are recomputed.
-        self.data_matrices.clear()
-        try:
-            del self.patient_data_hash
-        except AttributeError:
-            pass
-
-
-    @cached_property
-    def patient_data_hash(self) -> int:
-        """Hash of the patient data.
-
-        This is used to check if the patient data has changed since the last time
-        the data and diagnose matrices were computed. If so, they are recomputed.
-        """
-        return hash(self.patient_data.to_numpy().tobytes())
+        self.del_data_matrix()
+        self.del_diagnose_matrix()
 
 
     @property
@@ -537,7 +574,7 @@ class Unilateral(
         It also contains information on the patient's T-stage under the header
         ``("_model", "#", "t_stage")``.
         """
-        if not hasattr(self, "_patient_data"):
+        if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
 
         return self._patient_data
@@ -577,7 +614,11 @@ class Unilateral(
         return state_dists
 
 
-    def comp_state_dist(self, t_stage: str = "early", mode: Literal["HMM", "BN"] = "HMM") -> np.ndarray:
+    def comp_state_dist(
+        self,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
         """Compute the distribution over possible states.
 
         Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``,
@@ -606,7 +647,11 @@ class Unilateral(
             return state_dist
 
 
-    def comp_obs_dist(self, t_stage: str = "early", mode: Literal["HMM", "BN"] = "HMM") -> np.ndarray:
+    def comp_obs_dist(
+        self,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
         """Compute the distribution over all possible observations for a given T-stage.
 
         Returns an array of probabilities for each possible complete observation. This
@@ -628,7 +673,7 @@ class Unilateral(
             t_stage = "_BN"
 
         state_dist = self.comp_state_dist(mode="BN")
-        patient_llhs = state_dist @ self.diagnose_matrices[t_stage]
+        patient_llhs = state_dist @ self.diagnose_matrix(t_stage).T
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
@@ -647,7 +692,7 @@ class Unilateral(
             patient_llhs = (
                 self.get_distribution(t_stage).pmf
                 @ evolved_model
-                @ self.diagnose_matrices[t_stage]
+                @ self.diagnose_matrix(t_stage).T
             )
             llh = add_or_mult(llh, patient_llhs, log)
 

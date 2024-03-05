@@ -473,8 +473,8 @@ class Bilateral(
         """Compute the likelihood of each patient individually."""
         joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
         return matrix.fast_trace(
-            self.ipsi.diagnose_matrices[t_stage].T,
-            joint_state_dist @ self.contra.diagnose_matrices[t_stage],
+            self.ipsi.diagnose_matrix(t_stage),
+            joint_state_dist @ self.contra.diagnose_matrix(t_stage).T,
         )
 
 
@@ -484,10 +484,9 @@ class Bilateral(
             t_stage = "_BN"
 
         joint_state_dist = self.comp_state_dist(mode="BN")
-        patient_llhs = np.sum(
-            self.ipsi.diagnose_matrices[t_stage]
-            * (joint_state_dist @ self.contra.diagnose_matrices[t_stage]),
-            axis=0,
+        patient_llhs = matrix.fast_trace(
+            self.ipsi.diagnose_matrix(t_stage),
+            joint_state_dist @ self.contra.diagnose_matrix(t_stage).T,
         )
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
@@ -516,8 +515,8 @@ class Bilateral(
                 @ contra_dist_evo
             )
             patient_llhs = matrix.fast_trace(
-                self.ipsi.diagnose_matrices[stage].T,
-                joint_state_dist @ self.contra.diagnose_matrices[stage],
+                self.ipsi.diagnose_matrix(stage),
+                joint_state_dist @ self.contra.diagnose_matrix(stage).T,
             )
             llh = add_or_mult(llh, patient_llhs, log)
 
