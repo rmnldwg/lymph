@@ -225,9 +225,8 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            data_matrix = self.model.data_matrices[t_stage]
+            data_matrix = self.model.data_matrix(t_stage).T
 
-            self.assertTrue(t_stage in self.model.data_matrices)
             self.assertEqual(
                 data_matrix.shape[0],
                 self.model.observation_matrix().shape[1],
@@ -244,9 +243,8 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            diagnose_matrix = self.model.diagnose_matrices[t_stage]
+            diagnose_matrix = self.model.diagnose_matrix(t_stage).T
 
-            self.assertTrue(t_stage in self.model.diagnose_matrices)
             self.assertEqual(
                 diagnose_matrix.shape[0],
                 self.model.transition_matrix().shape[1],

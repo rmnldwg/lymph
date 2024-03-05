@@ -98,7 +98,7 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
         for t_stage in ["early", "late"]:
             num_lnls = len(self.model.graph.lnls)
             num_patients = (self.model.patient_data["_model", "#", "t_stage"] == t_stage).sum()
-            diagnose_matrix = self.model.diagnose_matrices[t_stage]
+            diagnose_matrix = self.model.diagnose_matrix(t_stage).T
             self.assertEqual(diagnose_matrix.shape, (3 ** num_lnls, num_patients))
 
 
