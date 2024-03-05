@@ -608,7 +608,7 @@ class Unilateral(
         return self._patient_data
 
 
-    def evolve_dist(self, state_dist: np.ndarray, num_steps: int) -> np.ndarray:
+    def evolve(self, state_dist: np.ndarray, num_steps: int) -> np.ndarray:
         """Evolve the ``state_dist`` of possible states over ``num_steps``.
 
         This is done by multiplying the ``state_dist`` with the transition matrix
@@ -622,8 +622,8 @@ class Unilateral(
         return state_dist
 
 
-    def comp_dist_evolution(self) -> np.ndarray:
-        """Compute a complete evolution of the model.
+    def state_dist_evo(self) -> np.ndarray:
+        """Compute an evolution of the model's state distribution over time steps.
 
         This returns a matrix with the distribution over the possible states for
         each time step from :math:`t = 0` to :math:`t = T`, where :math:`T` is the
@@ -637,12 +637,12 @@ class Unilateral(
         state_dists[0, 0] = 1.
 
         for t in range(1, self.max_time + 1):
-            state_dists[t] = self.evolve_dist(state_dists[t-1], num_steps=1)
+            state_dists[t] = self.evolve(state_dists[t-1], num_steps=1)
 
         return state_dists
 
 
-    def comp_state_dist(
+    def state_dist(
         self,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -651,7 +651,7 @@ class Unilateral(
 
         Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``,
         which is essentially a marginalization of the evolution over the possible
-        states as computed by :py:meth:`.comp_dist_evolution` with the distribution
+        states as computed by :py:meth:`.state_dist_evo` with the distribution
         over diagnose times for the given T-stage from the dictionary returned by
         :py:meth:`.get_all_dsitributions`.
 
@@ -659,7 +659,7 @@ class Unilateral(
         the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
         """
         if mode == "HMM":
-            state_dists = self.comp_dist_evolution()
+            state_dists = self.state_dist_evo()
             diag_time_dist = self.get_distribution(t_stage).pmf
 
             return diag_time_dist @ state_dists
@@ -675,7 +675,7 @@ class Unilateral(
             return state_dist
 
 
-    def comp_obs_dist(
+    def obs_dist(
         self,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -684,20 +684,20 @@ class Unilateral(
 
         Returns an array of probabilities for each possible complete observation. This
         entails multiplying the distribution over states as returned by the
-        :py:meth:`~comp_state_dist` method with the :py:attr:`~observation_matrix`.
+        :py:meth:`.state_dist` method with the :py:attr:`.observation_matrix`.
 
-        Note that since the :py:attr:`~observation_matrix` can become very large, this
+        Note that since the :py:attr:`.observation_matrix` can become very large, this
         method is not very efficient for inference. Instead, we compute the
-        :py:attr:`~diagnose_matrices` from the :py:attr:`~observation_matrix` and
-        the :py:attr:`~data_matrices` and use these to compute the likelihood.
+        :py:attr:`.diagnose_matrices` from the :py:attr:`.observation_matrix` and
+        the :py:attr:`.data_matrices` and use these to compute the likelihood.
         """
-        state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
+        state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return state_dist @ self.observation_matrix()
 
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
-        state_dist = self.comp_state_dist(mode="BN")
+        state_dist = self.state_dist(mode="BN")
         patient_llhs = state_dist @ self.diagnose_matrix(t_stage).T
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
@@ -705,7 +705,7 @@ class Unilateral(
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood, using the stored params."""
-        evolved_model = self.comp_dist_evolution()
+        evolved_model = self.state_dist_evo()
         llh = 0. if log else 1.
 
         if t_stage is None:
@@ -760,7 +760,7 @@ class Unilateral(
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
 
-    def comp_diagnose_encoding(
+    def compute_encoding(
         self,
         given_diagnoses: types.DiagnoseType | None = None,
     ) -> np.ndarray:
@@ -780,7 +780,7 @@ class Unilateral(
         return diagnose_encoding
 
 
-    def comp_posterior_state_dist(
+    def posterior_state_dist(
         self,
         given_params: Iterable[float] | dict[str, float] | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
@@ -822,12 +822,12 @@ class Unilateral(
         if given_diagnoses is None:
             given_diagnoses = {}
 
-        diagnose_encoding = self.comp_diagnose_encoding(given_diagnoses)
+        diagnose_encoding = self.compute_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
         diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
 
         # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
-        state_dist = self.comp_state_dist(t_stage, mode=mode)
+        state_dist = self.state_dist(t_stage, mode=mode)
 
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
         joint_diagnose_and_state = state_dist * diagnose_given_state
@@ -860,9 +860,9 @@ class Unilateral(
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`comp_posterior_state_dist`
+            :py:meth:`posterior_state_dist`
         """
-        posterior_state_dist = self.comp_posterior_state_dist(
+        posterior_state_dist = self.posterior_state_dist(
             given_params, given_diagnoses, t_stage, mode,
         )
 
@@ -902,7 +902,7 @@ class Unilateral(
                [False, False]])
         >>> draw_diagnoses(                   # this is the same as the previous example
         ...     diagnose_times=[0, 1, 2, 3, 4],
-        ...     state_evolution=model.comp_dist_evolution(),
+        ...     state_evolution=model.state_dist_evo(),
         ...     observation_matrix=model.observation_matrix(),
         ...     possible_diagnoses=model.obs_list,
         ... )
@@ -915,7 +915,7 @@ class Unilateral(
         if rng is None:
             rng = np.random.default_rng(seed)
 
-        state_probs_given_time = self.comp_dist_evolution()[diag_times]
+        state_probs_given_time = self.state_dist_evo()[diag_times]
         obs_probs_given_time = state_probs_given_time @ self.observation_matrix()
 
         obs_indices = np.arange(len(self.obs_list))

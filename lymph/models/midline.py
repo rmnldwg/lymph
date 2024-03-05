@@ -524,7 +524,7 @@ class Midline(
             )
 
 
-    def comp_midext_evolution(self) -> np.ndarray:
+    def midext_evo(self) -> np.ndarray:
         """Evolve only the state of the midline extension."""
         midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
         midext_states[0,0] = 1.
@@ -540,7 +540,7 @@ class Midline(
         return midext_states
 
 
-    def comp_contra_dist_evolution(self) -> tuple[np.ndarray, np.ndarray]:
+    def contra_state_dist_evo(self) -> tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension."""
         noext_contra_dist_evo = np.zeros(
             shape=(self.max_time + 1, len(self.noext.contra.graph.state_list))
@@ -584,9 +584,9 @@ class Midline(
         """Compute the likelihood of the stored data under the hidden Markov model."""
         llh = 0. if log else 1.
 
-        ipsi_dist_evo = self.ext.ipsi.comp_dist_evolution()
+        ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
-        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.comp_contra_dist_evolution()
+        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
 
         t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
         for stage in t_stages:
@@ -751,7 +751,7 @@ class Midline(
         ])
 
         if self.use_midext_evo:
-            midext_evo = self.comp_midext_evolution()
+            midext_evo = self.midext_evo()
             drawn_midexts = np.array([
                 rng.choice(a=[False, True], p=midext_evo[t])
                 for t in drawn_diag_times
@@ -763,7 +763,7 @@ class Midline(
                 size=num,
             )
 
-        ipsi_evo = self.ext.ipsi.comp_dist_evolution()
+        ipsi_evo = self.ext.ipsi.state_dist_evo()
         drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
@@ -777,7 +777,7 @@ class Midline(
             )
             drawn_contra_diags = draw_diagnoses(
                 diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
-                state_evolution=case_model.contra.comp_dist_evolution(),
+                state_evolution=case_model.contra.state_dist_evo(),
                 observation_matrix=case_model.contra.observation_matrix(),
                 possible_diagnoses=case_model.contra.obs_list,
                 rng=rng,

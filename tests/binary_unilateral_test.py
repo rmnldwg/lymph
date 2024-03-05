@@ -310,20 +310,20 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
         return diagnoses
 
-    def test_comp_diagnose_encoding(self):
+    def test_compute_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
         random_diagnoses = self.create_random_diagnoses()
         num_lnls = len(self.model.graph.lnls)
         num_mods = len(self.model.get_all_modalities())
         num_posible_diagnoses = 2**(num_lnls * num_mods)
 
-        diagnose_encoding = self.model.comp_diagnose_encoding(random_diagnoses)
+        diagnose_encoding = self.model.compute_encoding(random_diagnoses)
         self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
         self.assertEqual(diagnose_encoding.dtype, bool)
 
     def test_posterior_state_dist(self):
         """Make sure the posterior state dist is correctly computed."""
-        posterior_state_dist = self.model.comp_posterior_state_dist(
+        posterior_state_dist = self.model.posterior_state_dist(
             given_params=self.create_random_params(),
             given_diagnoses=self.create_random_diagnoses(),
             t_stage=self.rng.choice(["early", "late"]),
