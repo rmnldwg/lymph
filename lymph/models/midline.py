@@ -551,7 +551,7 @@ class Midline(
             shape=(self.max_time + 1, len(self.ext.contra.graph.state_list))
         )
         if not self.use_midext_evo:
-            noext_contra_dist_evo[0,0] = (1. - self.midext_prob)
+            noext_contra_dist_evo[0,0] = 1. - self.midext_prob
             ext_contra_dist_evo[0,0] = self.midext_prob
 
         for t in range(self.max_time):

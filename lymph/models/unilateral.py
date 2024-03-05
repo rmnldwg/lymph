@@ -697,9 +697,6 @@ class Unilateral(
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
-        if t_stage is None:
-            t_stage = "_BN"
-
         state_dist = self.comp_state_dist(mode="BN")
         patient_llhs = state_dist @ self.diagnose_matrix(t_stage).T
 

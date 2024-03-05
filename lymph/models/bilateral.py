@@ -480,9 +480,6 @@ class Bilateral(
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
-        if t_stage is None:
-            t_stage = "_BN"
-
         joint_state_dist = self.comp_state_dist(mode="BN")
         patient_llhs = matrix.fast_trace(
             self.ipsi.diagnose_matrix(t_stage),
