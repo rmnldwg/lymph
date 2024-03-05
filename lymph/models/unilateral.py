@@ -6,6 +6,7 @@ from typing import Any, Iterable, Literal
 
 import numpy as np
 import pandas as pd
+from cachetools import LRUCache
 
 from lymph import diagnose_times, graph, matrix, modalities, types
 
@@ -95,6 +96,9 @@ class Unilateral(
         diagnose_times.Composite.__init__(self, max_time=max_time, is_distribution_leaf=True)
         modalities.Composite.__init__(self, is_modality_leaf=True)
         self._patient_data: pd.DataFrame | None = None
+        self._cache_version: int = 0
+        self._data_matrix_cache: LRUCache = LRUCache(maxsize=64)
+        self._diagnose_matrix_cache: LRUCache = LRUCache(maxsize=64)
 
 
     @classmethod
@@ -426,20 +430,26 @@ class Unilateral(
 
     def data_matrix(self, t_stage: str | None = None) -> np.ndarray:
         """Extract the data matrix for a given ``t_stage``."""
-        if ("_model", "encoding") not in self.patient_data.columns:
-            data_encoding = matrix.generate_data_encoding(
-                patient_data=self.patient_data,
-                modalities=self.get_all_modalities(),
-                lnls=list(self.graph.lnls.keys()),
-            )
-            self._patient_data = pd.concat(
-                [self._patient_data, data_encoding],
-                axis=1,
-            ).sort_index(axis=1, level=[0,1,2])
+        _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
+        if _hash in self._data_matrix_cache:
+            return self._data_matrix_cache[_hash]
+
+        self.del_data_matrix()
+        data_encoding = matrix.generate_data_encoding(
+            patient_data=self.patient_data,
+            modalities=self.get_all_modalities(),
+            lnls=list(self.graph.lnls.keys()),
+        )
+        self._patient_data = pd.concat(
+            [self._patient_data, data_encoding],
+            axis=1,
+        ).sort_index(axis=1, level=[0,1,2])
 
         has_t_stage = self.patient_data[("_model", "#", "t_stage")] == t_stage
         has_t_stage = slice(None) if t_stage is None else has_t_stage
-        return self.patient_data.loc[has_t_stage, ("_model", "encoding")].to_numpy()
+        result = self.patient_data.loc[has_t_stage, ("_model", "encoding")].to_numpy()
+        self._data_matrix_cache[_hash] = result
+        return result
 
     def del_data_matrix(self) -> None:
         """Delete the data matrix."""
@@ -452,18 +462,24 @@ class Unilateral(
 
     def diagnose_matrix(self, t_stage: str | None = None) -> np.ndarray:
         """Extract the diagnose matrix for a given ``t_stage``."""
-        if ("_model", "diagnose_prob") not in self.patient_data.columns:
-            diagnose_probs = matrix.generate_diagnose_probs(
-                self.observation_matrix(), self.data_matrix(),
-            )
-            self._patient_data = pd.concat(
-                [self._patient_data, diagnose_probs],
-                axis=1,
-            ).sort_index(axis=1, level=[0,1,2])
+        _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
+        if _hash in self._diagnose_matrix_cache:
+            return self._diagnose_matrix_cache[_hash]
+
+        self.del_diagnose_matrix()
+        diagnose_probs = matrix.generate_diagnose_probs(
+            self.observation_matrix(), self.data_matrix(),
+        )
+        self._patient_data = pd.concat(
+            [self._patient_data, diagnose_probs],
+            axis=1,
+        ).sort_index(axis=1, level=[0,1,2])
 
         has_t_stage = self.patient_data[("_model", "#", "t_stage")] == t_stage
         has_t_stage = slice(None) if t_stage is None else has_t_stage
-        return self.patient_data.loc[has_t_stage, ("_model", "diagnose_prob")].to_numpy()
+        result = self.patient_data.loc[has_t_stage, ("_model", "diagnose_prob")].to_numpy()
+        self._diagnose_matrix_cache[_hash] = result
+        return result
 
     def del_diagnose_matrix(self) -> None:
         """Delete the diagnose matrix."""
@@ -472,34 +488,6 @@ class Unilateral(
             and ("_model", "diagnose_prob") in self.patient_data.columns
         ):
             del self._patient_data[("_model", "diagnose_prob")]
-
-
-    def set_modality(self, *args, **kwargs) -> None:
-        """Trigger setting of confusion matrix before calling super.
-
-        See :py:meth:`.modalities.Composite.set_modality` for more information.
-        """
-        self.del_data_matrix()
-        self.del_diagnose_matrix()
-        return super().set_modality(*args, **kwargs)
-
-    def del_modality(self, *args, **kwargs) -> None:
-        """Trigger deletion of data & diagnose matrices before calling super.
-
-        See :py:meth:`.modalities.Composite.del_modality` for more information.
-        """
-        self.del_data_matrix()
-        self.del_diagnose_matrix()
-        return super().del_modality(*args, **kwargs)
-
-    def clear_modalities(self) -> None:
-        """Trigger deletion of data & diagnose matrices before calling super.
-
-        See :py:meth:`.modalities.Composite.clear_modalities` for more information.
-        """
-        self.del_data_matrix()
-        self.del_diagnose_matrix()
-        return super().clear_modalities()
 
 
     def load_patient_data(
@@ -557,8 +545,7 @@ class Unilateral(
             if t_stage not in patient_data["_model", "#", "t_stage"].values:
                 warnings.warn(f"No data for T-stage {t_stage} found.")
 
-        self.del_data_matrix()
-        self.del_diagnose_matrix()
+        self._cache_version += 1
 
 
     @property
