@@ -2,7 +2,6 @@
 Full integration test directly taken from the quickstart guide. Aimed at checking the
 computed value of the likelihood function.
 """
-import unittest
 
 import numpy as np
 import scipy as sp
@@ -17,7 +16,10 @@ def late_binomial(support: np.ndarray, p: float = 0.5) -> np.ndarray:
     return sp.stats.binom.pmf(support, n=support[-1], p=p)
 
 
-class IntegrationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class IntegrationTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Run a stripped down version of the quickstart guide."""
 
     def setUp(self):

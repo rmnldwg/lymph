@@ -1,7 +1,6 @@
 """
 Make sure the models work with the emcee package.
 """
-import unittest
 
 import emcee
 import numpy as np
@@ -9,7 +8,10 @@ import numpy as np
 from . import fixtures
 
 
-class UnilateralEmceeTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class UnilateralEmceeTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the emcee package with the Unilateral model."""
 
     def setUp(self):

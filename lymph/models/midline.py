@@ -62,7 +62,7 @@ class Midline(
         use_central: bool = True,
         use_midext_evo: bool = True,
         marginalize_unknown: bool = True,
-        unilateral_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
         **_kwargs
     ):
         """Initialize the model.
@@ -91,7 +91,7 @@ class Midline(
         parameters or any other kind of attention. It is solely used to store the data
         and generate diagnose matrices for those data.
 
-        The ``unilateral_kwargs`` are passed to all bilateral models.
+        The ``uni_kwargs`` are passed to all bilateral models.
 
         See Also:
             :py:class:`Bilateral`: Two to four of these are held as attributes by this
@@ -115,12 +115,12 @@ class Midline(
 
         self.ext = models.Bilateral(
             graph_dict=graph_dict,
-            unilateral_kwargs=unilateral_kwargs,
+            uni_kwargs=uni_kwargs,
             is_symmetric=self.is_symmetric,
         )
         self.noext = models.Bilateral(
             graph_dict=graph_dict,
-            unilateral_kwargs=unilateral_kwargs,
+            uni_kwargs=uni_kwargs,
             is_symmetric=self.is_symmetric,
         )
 
@@ -136,7 +136,7 @@ class Midline(
         if use_central:
             self._central = models.Bilateral(
                 graph_dict=graph_dict,
-                unilateral_kwargs=unilateral_kwargs,
+                uni_kwargs=uni_kwargs,
                 is_symmetric={
                     "tumor_spread": True,
                     "lnl_spread": self.is_symmetric["lnl_spread"],
@@ -147,7 +147,7 @@ class Midline(
         if marginalize_unknown:
             self._unknown = models.Bilateral(
                 graph_dict=graph_dict,
-                unilateral_kwargs=unilateral_kwargs,
+                uni_kwargs=uni_kwargs,
                 is_symmetric=self.is_symmetric,
             )
             other_children["unknown"] = self._unknown
@@ -172,9 +172,9 @@ class Midline(
     @classmethod
     def trinary(cls, *args, **kwargs) -> Midline:
         """Create a trinary model."""
-        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
-        unilateral_kwargs["allowed_states"] = [0, 1, 2]
-        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
 
     @property
@@ -524,7 +524,7 @@ class Midline(
             )
 
 
-    def comp_midext_evolution(self) -> np.ndarray:
+    def midext_evo(self) -> np.ndarray:
         """Evolve only the state of the midline extension."""
         midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
         midext_states[0,0] = 1.
@@ -540,7 +540,7 @@ class Midline(
         return midext_states
 
 
-    def comp_contra_dist_evolution(self) -> tuple[np.ndarray, np.ndarray]:
+    def contra_state_dist_evo(self) -> tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension."""
         noext_contra_dist_evo = np.zeros(
             shape=(self.max_time + 1, len(self.noext.contra.graph.state_list))
@@ -551,7 +551,7 @@ class Midline(
             shape=(self.max_time + 1, len(self.ext.contra.graph.state_list))
         )
         if not self.use_midext_evo:
-            noext_contra_dist_evo[0,0] = (1. - self.midext_prob)
+            noext_contra_dist_evo[0,0] = 1. - self.midext_prob
             ext_contra_dist_evo[0,0] = self.midext_prob
 
         for t in range(self.max_time):
@@ -584,9 +584,9 @@ class Midline(
         """Compute the likelihood of the stored data under the hidden Markov model."""
         llh = 0. if log else 1.
 
-        ipsi_dist_evo = self.ext.ipsi.comp_dist_evolution()
+        ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
-        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.comp_contra_dist_evolution()
+        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
 
         t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
         for stage in t_stages:
@@ -603,15 +603,15 @@ class Midline(
                 marg_joint_state_dist += joint_state_dist
                 _model = getattr(self, case)
                 patient_llhs = matrix.fast_trace(
-                    _model.ipsi.diagnose_matrices[stage].T,
-                    joint_state_dist @ _model.contra.diagnose_matrices[stage]
+                    _model.ipsi.diagnose_matrix(stage),
+                    joint_state_dist @ _model.contra.diagnose_matrix(stage).T
                 )
                 llh = add_or_mult(llh, patient_llhs, log=log)
 
             try:
                 marg_patient_llhs = matrix.fast_trace(
-                    self.unknown.ipsi.diagnose_matrices[stage].T,
-                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrices[stage]
+                    self.unknown.ipsi.diagnose_matrix(stage),
+                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrix(stage).T
                 )
                 llh = add_or_mult(llh, marg_patient_llhs, log=log)
             except AttributeError:
@@ -751,7 +751,7 @@ class Midline(
         ])
 
         if self.use_midext_evo:
-            midext_evo = self.comp_midext_evolution()
+            midext_evo = self.midext_evo()
             drawn_midexts = np.array([
                 rng.choice(a=[False, True], p=midext_evo[t])
                 for t in drawn_diag_times
@@ -763,7 +763,7 @@ class Midline(
                 size=num,
             )
 
-        ipsi_evo = self.ext.ipsi.comp_dist_evolution()
+        ipsi_evo = self.ext.ipsi.state_dist_evo()
         drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
@@ -777,7 +777,7 @@ class Midline(
             )
             drawn_contra_diags = draw_diagnoses(
                 diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
-                state_evolution=case_model.contra.comp_dist_evolution(),
+                state_evolution=case_model.contra.state_dist_evo(),
                 observation_matrix=case_model.contra.observation_matrix(),
                 possible_diagnoses=case_model.contra.obs_list,
                 rng=rng,

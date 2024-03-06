@@ -1,14 +1,17 @@
 """Test the binary unilateral system."""
-import unittest
 
 import numpy as np
 
 from lymph.graph import LymphNodeLevel, Tumor
+from lymph.modalities import Clinical
 
 from . import fixtures
 
 
-class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class InitTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the initialization of a binary model."""
 
     def test_value_errors(self):
@@ -82,7 +85,10 @@ class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
             self.assertIn(edge.get_name(middle="_to_"), connecting_edge_names)
 
 
-class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class ParameterAssignmentTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the assignment of parameters in a binary model."""
 
     def test_params_assignment_via_lookup(self):
@@ -124,7 +130,10 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         ))
 
 
-class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class TransitionMatrixTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the generation of the transition matrix in a binary model."""
 
     def setUp(self):
@@ -163,7 +172,10 @@ class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Tes
         self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix()))
 
 
-class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class ObservationMatrixTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the generation of the observation matrix in a binary model."""
 
     def setUp(self):
@@ -184,7 +196,10 @@ class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Te
         self.assertTrue(np.allclose(row_sums, 1.))
 
 
-class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class PatientDataTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test loading the patient data."""
 
     def setUp(self):
@@ -225,9 +240,8 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            data_matrix = self.model.data_matrices[t_stage]
+            data_matrix = self.model.data_matrix(t_stage).T
 
-            self.assertTrue(t_stage in self.model.data_matrices)
             self.assertEqual(
                 data_matrix.shape[0],
                 self.model.observation_matrix().shape[1],
@@ -244,9 +258,8 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            diagnose_matrix = self.model.diagnose_matrices[t_stage]
+            diagnose_matrix = self.model.diagnose_matrix(t_stage).T
 
-            self.assertTrue(t_stage in self.model.diagnose_matrices)
             self.assertEqual(
                 diagnose_matrix.shape[0],
                 self.model.transition_matrix().shape[1],
@@ -262,8 +275,17 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
                 | np.less_equal(diagnose_matrix, 1.)
             ))
 
+    def test_modality_replacement(self) -> None:
+        """Check if the patient data gets updated when the modalities change."""
+        self.model.replace_all_modalities({"PET": Clinical(spec=0.8, sens=0.8)})
+        self.assertTrue("PET" in self.model.patient_data["_model"].columns)
+        self.assertFalse("CT" in self.model.patient_data["_model"].columns)
 
-class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+
+class LikelihoodTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the likelihood of a model."""
 
     def setUp(self):
@@ -292,7 +314,10 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         self.assertEqual(likelihood, -np.inf)
 
 
-class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class RiskTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test anything related to the risk computation."""
 
     def setUp(self):
@@ -312,20 +337,20 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
 
         return diagnoses
 
-    def test_comp_diagnose_encoding(self):
+    def test_compute_encoding(self):
         """Check computation of one-hot encoding of diagnoses."""
         random_diagnoses = self.create_random_diagnoses()
         num_lnls = len(self.model.graph.lnls)
         num_mods = len(self.model.get_all_modalities())
         num_posible_diagnoses = 2**(num_lnls * num_mods)
 
-        diagnose_encoding = self.model.comp_diagnose_encoding(random_diagnoses)
+        diagnose_encoding = self.model.compute_encoding(random_diagnoses)
         self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
         self.assertEqual(diagnose_encoding.dtype, bool)
 
     def test_posterior_state_dist(self):
         """Make sure the posterior state dist is correctly computed."""
-        posterior_state_dist = self.model.comp_posterior_state_dist(
+        posterior_state_dist = self.model.posterior_state_dist(
             given_params=self.create_random_params(),
             given_diagnoses=self.create_random_diagnoses(),
             t_stage=self.rng.choice(["early", "late"]),
@@ -352,7 +377,10 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         self.assertLessEqual(risk, 1.)
 
 
-class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class DataGenerationTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Check the data generation utilities."""
 
     def setUp(self):

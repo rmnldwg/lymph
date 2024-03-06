@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import Literal, TypeVar
 
 import numpy as np
@@ -181,7 +182,7 @@ class Composite(ABC):
             modality_children = {}   # ignore any provided children
 
         self._modality_children = modality_children
-        super().__init__()
+        self._stored_modalities_hash = self.modalities_hash()
 
 
     @property
@@ -200,6 +201,49 @@ class Composite(ABC):
     @abstractmethod
     def is_trinary(self: MC) -> bool:
         """Return whether the modality is trinary."""
+
+
+    def modalities_hash(self: MC) -> int:
+        """Compute a hash from all stored modalities.
+
+        See the :py:meth:`.Modality.__hash__` method for more information.
+        """
+        hash_res = 0
+        if self._is_modality_leaf:
+            for name, modality in self._modalities.items():
+                hash_res = hash((hash_res, name, hash(modality)))
+
+        else:
+            for child in self._modality_children.values():
+                hash_res = hash((hash_res, child.modalities_hash()))
+
+        return hash_res
+
+
+    def have_modalities_changed(self: MC) -> bool:
+        """Return whether the modalities have changed since the last check."""
+        return self._stored_modalities_hash != self.modalities_hash()
+
+    def acknowledge_modalities_change(self: MC) -> None:
+        """Acknowledge that the modalities have changed."""
+        self._stored_modalities_hash = self.modalities_hash()
+
+
+    @contextmanager
+    def modality_context(self: MC):
+        """Context that yields the check if the modalities have changed.
+
+        The context binds the result of calling :py:meth:`.have_modalities_changed` to
+        the ``as`` clause. Then, inside the ``with`` block, one can check if the
+        modalities have changed since the last check. Upon exiting the ``with``
+        context, the stored hash of the modalities is updated and
+        :py:meth:`.have_modalities_changed` will return ``False`` until the
+        modalities are changed again.
+        """
+        try:
+            yield self.have_modalities_changed()
+        finally:
+            self.acknowledge_modalities_change()
 
 
     def get_modality(self: MC, name: str) -> Modality:
@@ -270,23 +314,6 @@ class Composite(ABC):
         else:
             for child in self._modality_children.values():
                 child.replace_all_modalities(modalities)
-
-
-    def modalities_hash(self: MC) -> int:
-        """Compute a hash from all stored modalities.
-
-        See the :py:meth:`.Modality.__hash__` method for more information.
-        """
-        hash_res = 0
-        if self._is_modality_leaf:
-            for name, modality in self._modalities.items():
-                hash_res = hash((hash_res, name, hash(modality)))
-
-        else:
-            for child in self._modality_children.values():
-                hash_res = hash((hash_res, child.modalities_hash()))
-
-        return hash_res
 
 
     def clear_modalities(self: MC) -> None:

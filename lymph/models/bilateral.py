@@ -41,9 +41,9 @@ class Bilateral(
         self,
         graph_dict: dict[tuple[str], list[str]],
         is_symmetric: dict[str, bool] | None = None,
-        unilateral_kwargs: dict[str, Any] | None = None,
-        ipsilateral_kwargs: dict[str, Any] | None = None,
-        contralateral_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
+        ipsi_kwargs: dict[str, Any] | None = None,
+        contra_kwargs: dict[str, Any] | None = None,
         **_kwargs,
     ) -> None:
         """Initialize both sides of the neck as :py:class:`.models.Unilateral`.
@@ -64,17 +64,17 @@ class Bilateral(
             the ipsi- and contralateral side by using their respective
             :py:meth:`.Unilateral.set_params()` method.
 
-        The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
-        while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
-        ipsi- and contralateral side, respectively. The ipsi- and contralateral kwargs
-        override the unilateral kwargs and may also override the ``graph_dict``. This
-        allows the user to specify different graphs for the two sides of the neck.
+        The ``uni_kwargs`` are passed to both instances of the unilateral model, while
+        the ``ipsi_kwargs`` and ``contra_kwargs`` are passed to the ipsi- and
+        contralateral side, respectively. The ipsi- and contralateral kwargs override
+        the unilateral kwargs and may also override the ``graph_dict``. This allows the
+        user to specify different graphs for the two sides of the neck.
         """
         self._init_models(
             graph_dict=graph_dict,
-            unilateral_kwargs=unilateral_kwargs,
-            ipsilateral_kwargs=ipsilateral_kwargs,
-            contralateral_kwargs=contralateral_kwargs,
+            uni_kwargs=uni_kwargs,
+            ipsi_kwargs=ipsi_kwargs,
+            contra_kwargs=contra_kwargs,
         )
 
         if is_symmetric is None:
@@ -100,24 +100,24 @@ class Bilateral(
     def _init_models(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        unilateral_kwargs: dict[str, Any] | None = None,
-        ipsilateral_kwargs: dict[str, Any] | None = None,
-        contralateral_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
+        ipsi_kwargs: dict[str, Any] | None = None,
+        contra_kwargs: dict[str, Any] | None = None,
     ):
         """Initialize the two unilateral models."""
-        if unilateral_kwargs is None:
-            unilateral_kwargs = {}
+        if uni_kwargs is None:
+            uni_kwargs = {}
 
-        ipsi_kwargs = unilateral_kwargs.copy()
-        ipsi_kwargs["graph_dict"] = graph_dict
-        ipsi_kwargs.update(ipsilateral_kwargs or {})
+        _ipsi_kwargs = uni_kwargs.copy()
+        _ipsi_kwargs["graph_dict"] = graph_dict
+        _ipsi_kwargs.update(ipsi_kwargs or {})
 
-        contra_kwargs = unilateral_kwargs.copy()
-        contra_kwargs["graph_dict"] = graph_dict
-        contra_kwargs.update(contralateral_kwargs or {})
+        _contra_kwargs = uni_kwargs.copy()
+        _contra_kwargs["graph_dict"] = graph_dict
+        _contra_kwargs.update(contra_kwargs or {})
 
-        self.ipsi   = models.Unilateral(**ipsi_kwargs)
-        self.contra = models.Unilateral(**contra_kwargs)
+        self.ipsi   = models.Unilateral(**_ipsi_kwargs)
+        self.contra = models.Unilateral(**_contra_kwargs)
 
 
     @classmethod
@@ -125,24 +125,24 @@ class Bilateral(
         """Initialize a binary bilateral model.
 
         This is a convenience method that sets the ``allowed_states`` of the
-        ``unilateral_kwargs`` to ``[0, 1]``. All other ``args`` and ``kwargs`` are
+        ``uni_kwargs`` to ``[0, 1]``. All other ``args`` and ``kwargs`` are
         passed to the :py:meth:`.__init__` method.
         """
-        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
-        unilateral_kwargs["allowed_states"] = [0, 1]
-        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
     @classmethod
     def trinary(cls, *args, **kwargs) -> Bilateral:
         """Initialize a trinary bilateral model.
 
         This is a convenience method that sets the ``allowed_states`` of the
-        ``unilateral_kwargs`` to ``[0, 1, 2]``. All other ``args`` and ``kwargs`` are
+        ``uni_kwargs`` to ``[0, 1, 2]``. All other ``args`` and ``kwargs`` are
         passed to the :py:meth:`.__init__` method.
         """
-        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
-        unilateral_kwargs["allowed_states"] = [0, 1, 2]
-        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
 
     @property
@@ -405,7 +405,7 @@ class Bilateral(
         self.contra.load_patient_data(patient_data, "contra", mapping)
 
 
-    def comp_state_dist(
+    def state_dist(
         self,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -418,14 +418,14 @@ class Bilateral(
         ``t_stage``.
 
         See Also:
-            :py:meth:`.Unilateral.comp_state_dist`
+            :py:meth:`.Unilateral.state_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral states.
         """
         if mode == "HMM":
-            ipsi_state_evo = self.ipsi.comp_dist_evolution()
-            contra_state_evo = self.contra.comp_dist_evolution()
+            ipsi_state_evo = self.ipsi.state_dist_evo()
+            contra_state_evo = self.contra.state_dist_evo()
             time_marg_matrix = np.diag(self.get_distribution(t_stage).pmf)
 
             result = (
@@ -434,8 +434,8 @@ class Bilateral(
                 @ contra_state_evo
             )
         elif mode == "BN":
-            ipsi_state_dist = self.ipsi.comp_state_dist(mode=mode)
-            contra_state_dist = self.contra.comp_state_dist(mode=mode)
+            ipsi_state_dist = self.ipsi.state_dist(mode=mode)
+            contra_state_dist = self.contra.state_dist(mode=mode)
 
             result = np.outer(ipsi_state_dist, contra_state_dist)
         else:
@@ -444,7 +444,7 @@ class Bilateral(
         return result
 
 
-    def comp_obs_dist(
+    def obs_dist(
         self,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -452,12 +452,12 @@ class Bilateral(
         """Compute the joint distribution over the ipsi- & contralateral observations.
 
         See Also:
-            :py:meth:`.Unilateral.comp_obs_dist`
+            :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral observations.
         """
-        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return (
             self.ipsi.observation_matrix().T
             @ joint_state_dist
@@ -465,29 +465,25 @@ class Bilateral(
         )
 
 
-    def comp_patient_llhs(
+    def patient_likelihoods(
         self,
-        t_stage: str = "early",
+        t_stage: str,
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the likelihood of each patient individually."""
-        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return matrix.fast_trace(
-            self.ipsi.diagnose_matrices[t_stage].T,
-            joint_state_dist @ self.contra.diagnose_matrices[t_stage],
+            self.ipsi.diagnose_matrix(t_stage),
+            joint_state_dist @ self.contra.diagnose_matrix(t_stage).T,
         )
 
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
-        if t_stage is None:
-            t_stage = "_BN"
-
-        joint_state_dist = self.comp_state_dist(mode="BN")
-        patient_llhs = np.sum(
-            self.ipsi.diagnose_matrices[t_stage]
-            * (joint_state_dist @ self.contra.diagnose_matrices[t_stage]),
-            axis=0,
+        joint_state_dist = self.state_dist(mode="BN")
+        patient_llhs = matrix.fast_trace(
+            self.ipsi.diagnose_matrix(t_stage),
+            joint_state_dist @ self.contra.diagnose_matrix(t_stage).T,
         )
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
@@ -497,8 +493,8 @@ class Bilateral(
         """Compute the HMM likelihood of data, using the stored params."""
         llh = 0. if log else 1.
 
-        ipsi_dist_evo = self.ipsi.comp_dist_evolution()
-        contra_dist_evo = self.contra.comp_dist_evolution()
+        ipsi_dist_evo = self.ipsi.state_dist_evo()
+        contra_dist_evo = self.contra.state_dist_evo()
 
         if t_stage is None:
             t_stages = self.t_stages
@@ -516,8 +512,8 @@ class Bilateral(
                 @ contra_dist_evo
             )
             patient_llhs = matrix.fast_trace(
-                self.ipsi.diagnose_matrices[stage].T,
-                joint_state_dist @ self.contra.diagnose_matrices[stage],
+                self.ipsi.diagnose_matrix(stage),
+                joint_state_dist @ self.contra.diagnose_matrix(stage).T,
             )
             llh = add_or_mult(llh, patient_llhs, log)
 
@@ -588,7 +584,7 @@ class Bilateral(
             transition matrix does not need to be recomputed.
 
         See Also:
-            :py:meth:`.Unilateral.comp_posterior_state_dist`
+            :py:meth:`.Unilateral.posterior_state_dist`
         """
         if isinstance(given_params, dict):
             self.set_params(**given_params)
@@ -603,14 +599,14 @@ class Bilateral(
             if side not in given_diagnoses:
                 warnings.warn(f"No diagnoses given for {side}lateral side.")
 
-            diagnose_encoding = getattr(self, side).comp_diagnose_encoding(
+            diagnose_encoding = getattr(self, side).compute_encoding(
                 given_diagnoses.get(side, {})
             )
             observation_matrix = getattr(self, side).observation_matrix()
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
             diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
 
-        joint_state_dist = self.comp_state_dist(t_stage=t_stage, mode=mode)
+        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
         joint_diagnose_and_state = np.outer(
             diagnose_given_state["ipsi"],

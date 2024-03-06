@@ -1,7 +1,6 @@
 """
 Test the midline model for the binary case.
 """
-import unittest
 from typing import Literal
 
 import numpy as np
@@ -12,7 +11,7 @@ from lymph import models
 from . import fixtures
 
 
-class MidlineSetParamsTestCase(unittest.TestCase):
+class MidlineSetParamsTestCase(fixtures.IgnoreWarningsTestCase):
     """Check that the complex parameter assignment works correctly."""
 
     def setUp(
@@ -72,7 +71,7 @@ class MidlineSetParamsTestCase(unittest.TestCase):
         )
 
 
-class MidlineLikelihoodTestCase(unittest.TestCase):
+class MidlineLikelihoodTestCase(fixtures.IgnoreWarningsTestCase):
     """Check that the likelihood function works correctly."""
 
     def setUp(
@@ -132,7 +131,7 @@ class MidlineLikelihoodTestCase(unittest.TestCase):
         self.assertLessEqual(self.model.likelihood(), 0)
 
 
-class MidlineDrawPatientsTestCase(unittest.TestCase):
+class MidlineDrawPatientsTestCase(fixtures.IgnoreWarningsTestCase):
     """Check the data generation."""
 
     def setUp(self) -> None:
@@ -149,7 +148,7 @@ class MidlineDrawPatientsTestCase(unittest.TestCase):
             use_central=False,
             use_midext_evo=True,
             marginalize_unknown=False,
-            unilateral_kwargs={"max_time": 2},
+            uni_kwargs={"max_time": 2},
         )
         self.model.set_distribution("early", [0., 1., 0.])
         self.model.set_distribution("late", [0., 0., 1.])

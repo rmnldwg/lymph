@@ -4,22 +4,14 @@ Methods & classes to manage matrices of the :py:class:`~lymph.models.Unilateral`
 # pylint: disable=too-few-public-methods
 from __future__ import annotations
 
-import warnings
 from functools import lru_cache
-from typing import Any, Iterable
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from cachetools import LRUCache
 
-from lymph import graph, models
-from lymph.helper import (
-    AbstractLookupDict,
-    arg0_cache,
-    get_state_idx_matrix,
-    row_wise_kron,
-    tile_and_repeat,
-)
+from lymph import graph
+from lymph.helper import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 from lymph.modalities import Modality
 
 
@@ -193,9 +185,10 @@ def compute_encoding(
 
 
 def generate_data_encoding(
-    model: models.Unilateral,
-    t_stage: str,
-) -> np.ndarray:
+    patient_data: pd.DataFrame,
+    modalities: dict[str, Modality],
+    lnls: list[str],
+) -> pd.DataFrame:
     """Generate the data matrix for a specific T-stage from patient data.
 
     The :py:attr:`~lymph.models.Unilateral.patient_data` needs to contain the column
@@ -209,27 +202,18 @@ def generate_data_encoding(
     number of diagnostic modalities and :math:`M` is the number of patients with the
     given ``t_stage`` (or just all patients).
     """
-    if t_stage == "_BN":
-        has_t_stage = slice(None)
-    else:
-        has_t_stage = model.patient_data["_model", "#", "t_stage"] == t_stage
-
-    selected_patients = model.patient_data[has_t_stage]
-    if len(selected_patients) == 0:
-        raise ValueError(f"No patients with T-stage {t_stage}.")
-
     result = np.ones(
-        shape=(model.observation_matrix().shape[1], len(selected_patients)),
+        shape=(2 ** (len(lnls) * len(modalities)), len(patient_data)),
         dtype=bool,
     )
 
-    for i, (_, patient_row) in enumerate(selected_patients["_model"].iterrows()):
+    for i, (_, patient_row) in enumerate(patient_data["_model"].iterrows()):
         patient_encoding = np.ones(shape=1, dtype=bool)
-        for modality_name in model.get_all_modalities().keys():
+        for modality_name in modalities.keys():
             if modality_name not in patient_row:
                 continue
             diagnose_encoding = compute_encoding(
-                lnls=model.graph.lnls.keys(),
+                lnls=lnls,
                 pattern=patient_row[modality_name],
                 base=2,   # observations are always binary!
             )
@@ -237,84 +221,26 @@ def generate_data_encoding(
 
         result[:,i] = patient_encoding
 
-    return result
+    mi = pd.MultiIndex.from_product([
+        ["_model"], ["_encoding"], range(result.shape[0]),
+    ])
+    return pd.DataFrame(result.T, columns=mi)
 
 
-class DataEncodingUserDict(AbstractLookupDict):
-    """``UserDict`` that dynamically generates the data matrices for each T-stage.
-
-    The data matrix is a binary encoding of all complete diagnoses that are plausible
-    for an actual patient with possibly incomplete information. So, every columns may
-    contain multiple ones, each for a complete diagnosis that could have led to the
-    observed data.
-
-    When multiplying a distribution over possible complete observations with the data
-    matrix, the result is essentially an array of likelihoods for each patient.
-
-    See Also:
-        :py:attr:`~lymph.models.Unilateral.data_matrices`
-    """
-    model: models.Unilateral
-
-    def __setitem__(self, __key, __value) -> None:
-        warnings.warn("Setting the data matrices is not supported.")
-
-    def __missing__(self, t_stage: str):
-        """Create the data matrix for a specific T-stage if necessary."""
-        try:
-            self.data[t_stage] = generate_data_encoding(self.model, t_stage)
-        except ValueError as val_err:
-            raise KeyError(f"No data matrix for T-stage {t_stage}.") from val_err
-
-        return self[t_stage]
-
-
-def generate_diagnose(model: models.Unilateral, t_stage: str) -> np.ndarray:
+def generate_diagnose_probs(
+    observation_matrix: np.ndarray,
+    data_matrix: np.ndarray,
+) -> pd.DataFrame:
     """Generate the diagnose matrix for a specific T-stage.
 
     The diagnose matrix is the product of the observation matrix and the data matrix
     for the given ``t_stage``.
     """
-    return model.observation_matrix() @ model.data_matrices[t_stage]
-
-
-cached_generate_diagnose = arg0_cache(maxsize=128, cache_class=LRUCache)(generate_diagnose)
-"""Cached version of :py:func:`generate_diagnose`.
-
-The decorated function expects an additional first argument that should be unique for
-the combination of modalities and patient data. It is intended to be used with the
-joint hash of the modalities (:py:meth:`.modalities_hash`) and the patient data hash
-that is always precomputed when a new dataset is loaded into the model
-(:py:meth:`~lymph.models.Unilateral.patient_data_hash`).
-"""
-
-
-class DiagnoseUserDict(AbstractLookupDict):
-    """``UserDict`` that dynamically generates the diagnose matrices for each T-stage.
-
-    A diagnose matrix for a T-stage is simply the product of the observation matrix and
-    the data matrix for that T-stage. Precomputing and caching this matrix is useful,
-    because it does not depend on the model parameters and can be reused until either
-    the diagnostic modalities (meaning the observation matrix needs to be updated) or
-    the patient data (meaning the data matrix needs to be updated) change.
-
-    See Also:
-        :py:attr:`.Unilateral.diagnose_matrices`
-    """
-    model: models.Unilateral
-
-    def __setitem__(self, __key, __value) -> None:
-        warnings.warn("Setting the diagnose matrices is not supported.")
-
-    def __getitem__(self, key: Any) -> Any:
-        modalities_hash = self.model.modalities_hash()
-        patient_data_hash = self.model.patient_data_hash
-        joint_hash = hash((modalities_hash, patient_data_hash, key))
-        return cached_generate_diagnose(joint_hash, self.model, key)
-
-    def __missing__(self, t_stage: str):
-        """Create the diagnose matrix for a specific T-stage if necessary."""
-        return self[t_stage]
+    result = observation_matrix @ data_matrix.T
+    mi = pd.MultiIndex.from_product([
+        ["_model"], ["_diagnose_prob"], range(result.shape[0]),
+    ])
+    return pd.DataFrame(result.T, columns=mi)
 
 
 @lru_cache

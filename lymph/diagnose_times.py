@@ -309,8 +309,6 @@ class Composite(ABC):
 
         self._distribution_children = distribution_children
 
-        super().__init__()
-
 
     @property
     def _is_distribution_leaf(self: DC) -> bool:

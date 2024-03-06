@@ -1,7 +1,3 @@
-.. module: api
-
-.. _api:
-
 Detailed API
 ============
 
