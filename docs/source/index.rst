@@ -18,7 +18,7 @@ Documentation
     :caption: Content
 
     install
-    quickstart_unilateral
+    quickstart
     api
     license
 
