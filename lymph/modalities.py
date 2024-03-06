@@ -183,7 +183,6 @@ class Composite(ABC):
 
         self._modality_children = modality_children
         self._stored_modalities_hash = self.modalities_hash()
-        super().__init__()
 
 
     @property

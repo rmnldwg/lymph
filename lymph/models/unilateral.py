@@ -151,19 +151,22 @@ class Unilateral(
         which: Literal["valid", "distributions", "data"] = "valid",
     ) -> list[str]:
         """Return the T-stages of the model."""
-        distribution_t_stages = super().t_stages
+        if which in ("valid", "distributions"):
+            distribution_t_stages = super().t_stages
+            if which == "distributions":
+                return distribution_t_stages
 
-        try:
-            data_t_stages = self.patient_data[T_STAGE_COL].unique()
-        except AttributeError:
-            data_t_stages = []
+        if which in ("valid", "data"):
+            try:
+                data_t_stages = self.patient_data[T_STAGE_COL].unique()
+            except AttributeError:
+                data_t_stages = []
+
+            if which == "data":
+                return data_t_stages
 
         if which == "valid":
             return sorted(set(distribution_t_stages) & set(data_t_stages))
-        if which == "distributions":
-            return distribution_t_stages
-        if which == "data":
-            return data_t_stages
 
         raise ValueError(
             f"Invalid value for 'which': {which}. Must be either 'valid', "
@@ -449,6 +452,9 @@ class Unilateral(
             :py:func:`.matrix.generate_data_encoding`
                 This function actually computes the data encoding.
         """
+        if self._patient_data is None:
+            raise AttributeError("No patient data loaded yet.")
+
         # Compute entire data matrix and store it in the patient data DataFrame if it
         # is not in the cache
         _hash = hash((None, self.modalities_hash(), self._cache_version))
@@ -459,12 +465,8 @@ class Unilateral(
                 modalities=self.get_all_modalities(),
                 lnls=list(self.graph.lnls.keys()),
             )
-            self._patient_data = pd.concat(
-                [self._patient_data, data_encoding],
-                axis=1,
-            ).sort_index(axis=1, level=[0,1,2])
-            data_matrix = self._patient_data[ENCODING_COL].to_numpy()
-            self._data_matrix_cache[_hash] = data_matrix
+            self._patient_data = pd.concat([self._patient_data, data_encoding], axis=1)
+            self._data_matrix_cache[_hash] = self._patient_data[ENCODING_COL].to_numpy()
 
         # Return a cache hit
         _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
@@ -505,10 +507,7 @@ class Unilateral(
             diagnose_probs = matrix.generate_diagnose_probs(
                 self.observation_matrix(), self.data_matrix(),
             )
-            self._patient_data = pd.concat(
-                [self._patient_data, diagnose_probs],
-                axis=1,
-            ).sort_index(axis=1, level=[0,1,2])
+            self._patient_data = pd.concat([self._patient_data, diagnose_probs], axis=1)
             diagnose_matrix = self._patient_data[DIAG_PROB_COL].to_numpy()
             self._diagnose_matrix_cache[_hash] = diagnose_matrix
 
@@ -564,7 +563,6 @@ class Unilateral(
             .copy()
             .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
-            .sort_index(axis="columns", level=[0,1,2])
         )
         mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
         lambda_mapping = lambda row: mapping(row["tumor", "1", "t_stage"])
@@ -586,7 +584,7 @@ class Unilateral(
                 patient_data["_model", modality, name] = column
 
         patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
-        self._patient_data = patient_data.sort_index(axis=1, level=[0,1,2])
+        self._patient_data = patient_data
 
         for t_stage in self.get_t_stages("distributions"):
             if t_stage not in patient_data[T_STAGE_COL].values:
@@ -606,15 +604,25 @@ class Unilateral(
         and for each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
 
         It also contains information on the patient's T-stage under the header
-        ``T_STAGE_COL``.
+        ``("_model", "#", "t_stage")``.
 
-        It will also hold the data encodings and probability of diagnosis given the
+        Additionally, it holds the data encodings and probability of diagnosis given the
         hidden states for each patient under the headers ``("_model", "_encoding",
         <obs_state>)`` and ``("_model", "_diagnose_prob", <hidden_state>)``,
         respectively.
         """
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
+
+        with self.modality_context() as has_changed:
+            # we need to reload the patient data when the modalities have changed,
+            # since it stores only those diagnoses under the ``"_model"`` header that
+            # are relevant for the current modalities (which can change).
+            if has_changed:
+                self.load_patient_data(self._patient_data)
+
+        # if not present, this will recompute the full data and diagnose matrices
+        _ = self.diagnose_matrix()
 
         return self._patient_data
 
