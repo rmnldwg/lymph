@@ -148,7 +148,7 @@ class MidlineDrawPatientsTestCase(fixtures.IgnoreWarningsTestCase):
             use_central=False,
             use_midext_evo=True,
             marginalize_unknown=False,
-            unilateral_kwargs={"max_time": 2},
+            uni_kwargs={"max_time": 2},
         )
         self.model.set_distribution("early", [0., 1., 0.])
         self.model.set_distribution("late", [0., 0., 1.])

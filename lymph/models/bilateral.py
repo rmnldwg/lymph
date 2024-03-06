@@ -41,9 +41,9 @@ class Bilateral(
         self,
         graph_dict: dict[tuple[str], list[str]],
         is_symmetric: dict[str, bool] | None = None,
-        unilateral_kwargs: dict[str, Any] | None = None,
-        ipsilateral_kwargs: dict[str, Any] | None = None,
-        contralateral_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
+        ipsi_kwargs: dict[str, Any] | None = None,
+        contra_kwargs: dict[str, Any] | None = None,
         **_kwargs,
     ) -> None:
         """Initialize both sides of the neck as :py:class:`.models.Unilateral`.
@@ -64,17 +64,17 @@ class Bilateral(
             the ipsi- and contralateral side by using their respective
             :py:meth:`.Unilateral.set_params()` method.
 
-        The ``unilateral_kwargs`` are passed to both instances of the unilateral model,
-        while the ``ipsilateral_kwargs`` and ``contralateral_kwargs`` are passed to the
-        ipsi- and contralateral side, respectively. The ipsi- and contralateral kwargs
-        override the unilateral kwargs and may also override the ``graph_dict``. This
-        allows the user to specify different graphs for the two sides of the neck.
+        The ``uni_kwargs`` are passed to both instances of the unilateral model, while
+        the ``ipsi_kwargs`` and ``contra_kwargs`` are passed to the ipsi- and
+        contralateral side, respectively. The ipsi- and contralateral kwargs override
+        the unilateral kwargs and may also override the ``graph_dict``. This allows the
+        user to specify different graphs for the two sides of the neck.
         """
         self._init_models(
             graph_dict=graph_dict,
-            unilateral_kwargs=unilateral_kwargs,
-            ipsilateral_kwargs=ipsilateral_kwargs,
-            contralateral_kwargs=contralateral_kwargs,
+            uni_kwargs=uni_kwargs,
+            ipsi_kwargs=ipsi_kwargs,
+            contra_kwargs=contra_kwargs,
         )
 
         if is_symmetric is None:
@@ -100,21 +100,21 @@ class Bilateral(
     def _init_models(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        unilateral_kwargs: dict[str, Any] | None = None,
-        ipsilateral_kwargs: dict[str, Any] | None = None,
-        contralateral_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
+        ipsi_kwargs: dict[str, Any] | None = None,
+        contra_kwargs: dict[str, Any] | None = None,
     ):
         """Initialize the two unilateral models."""
-        if unilateral_kwargs is None:
-            unilateral_kwargs = {}
+        if uni_kwargs is None:
+            uni_kwargs = {}
 
-        ipsi_kwargs = unilateral_kwargs.copy()
+        ipsi_kwargs = uni_kwargs.copy()
         ipsi_kwargs["graph_dict"] = graph_dict
-        ipsi_kwargs.update(ipsilateral_kwargs or {})
+        ipsi_kwargs.update(ipsi_kwargs or {})
 
-        contra_kwargs = unilateral_kwargs.copy()
+        contra_kwargs = uni_kwargs.copy()
         contra_kwargs["graph_dict"] = graph_dict
-        contra_kwargs.update(contralateral_kwargs or {})
+        contra_kwargs.update(contra_kwargs or {})
 
         self.ipsi   = models.Unilateral(**ipsi_kwargs)
         self.contra = models.Unilateral(**contra_kwargs)

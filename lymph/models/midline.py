@@ -62,7 +62,7 @@ class Midline(
         use_central: bool = True,
         use_midext_evo: bool = True,
         marginalize_unknown: bool = True,
-        unilateral_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
         **_kwargs
     ):
         """Initialize the model.
@@ -91,7 +91,7 @@ class Midline(
         parameters or any other kind of attention. It is solely used to store the data
         and generate diagnose matrices for those data.
 
-        The ``unilateral_kwargs`` are passed to all bilateral models.
+        The ``uni_kwargs`` are passed to all bilateral models.
 
         See Also:
             :py:class:`Bilateral`: Two to four of these are held as attributes by this
@@ -115,12 +115,12 @@ class Midline(
 
         self.ext = models.Bilateral(
             graph_dict=graph_dict,
-            unilateral_kwargs=unilateral_kwargs,
+            uni_kwargs=uni_kwargs,
             is_symmetric=self.is_symmetric,
         )
         self.noext = models.Bilateral(
             graph_dict=graph_dict,
-            unilateral_kwargs=unilateral_kwargs,
+            uni_kwargs=uni_kwargs,
             is_symmetric=self.is_symmetric,
         )
 
@@ -136,7 +136,7 @@ class Midline(
         if use_central:
             self._central = models.Bilateral(
                 graph_dict=graph_dict,
-                unilateral_kwargs=unilateral_kwargs,
+                uni_kwargs=uni_kwargs,
                 is_symmetric={
                     "tumor_spread": True,
                     "lnl_spread": self.is_symmetric["lnl_spread"],
@@ -147,7 +147,7 @@ class Midline(
         if marginalize_unknown:
             self._unknown = models.Bilateral(
                 graph_dict=graph_dict,
-                unilateral_kwargs=unilateral_kwargs,
+                uni_kwargs=uni_kwargs,
                 is_symmetric=self.is_symmetric,
             )
             other_children["unknown"] = self._unknown

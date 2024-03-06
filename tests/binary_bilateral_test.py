@@ -62,7 +62,7 @@ class BilateralInitTest(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTes
 
         model = models.Bilateral(
             graph_dict=ipsi_graph,
-            contralateral_kwargs={"graph_dict": contra_graph},
+            contra_kwargs={"graph_dict": contra_graph},
         )
 
         self.assertEqual(
