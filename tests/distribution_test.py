@@ -1,11 +1,12 @@
 """Check functionality of the distribution over diagnose times."""
-import unittest
 import warnings
 
 import numpy as np
 import scipy as sp
 
 from lymph.diagnose_times import Distribution
+
+from . import fixtures
 
 
 class FixtureMixin:
@@ -34,7 +35,7 @@ class FixtureMixin:
         self.func_arg = lambda support, p=0.5: self.binom_pmf(support, self.max_time, p)
 
 
-class DistributionTestCase(FixtureMixin, unittest.TestCase):
+class DistributionTestCase(FixtureMixin, fixtures.IgnoreWarningsTestCase):
     """Test the distribution dictionary."""
 
     def test_frozen_distribution_without_max_time(self):

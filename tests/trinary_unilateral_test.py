@@ -1,5 +1,4 @@
 """Test the trinary unilateral system."""
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -10,7 +9,10 @@ from lymph.helper import set_params_for
 from . import fixtures
 
 
-class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryInitTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Testing the basic initialization of a trinary model."""
 
     def test_is_trinary(self) -> None:
@@ -28,7 +30,10 @@ class TrinaryInitTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
             self.assertEqual(lnl.allowed_states, model_allowed_states)
 
 
-class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryTransitionMatrixTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the transition matrix of a trinary model."""
 
     def setUp(self):
@@ -61,7 +66,10 @@ class TrinaryTransitionMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
         self.assertTrue(np.allclose(row_sums, 1.0))
 
 
-class TrinaryObservationMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryObservationMatrixTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the observation matrix of a trinary model."""
 
     def setUp(self):
@@ -81,7 +89,10 @@ class TrinaryObservationMatrixTestCase(fixtures.TrinaryFixtureMixin, unittest.Te
         self.assertTrue(np.allclose(row_sums, 1.0))
 
 
-class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryDiagnoseMatricesTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the diagnose matrix of a trinary model."""
 
     def setUp(self):
@@ -102,7 +113,10 @@ class TrinaryDiagnoseMatricesTestCase(fixtures.TrinaryFixtureMixin, unittest.Tes
             self.assertEqual(diagnose_matrix.shape, (3 ** num_lnls, num_patients))
 
 
-class TrinaryParamAssignmentTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryParamAssignmentTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the assignment of parameters in a trinary model."""
 
     def setUp(self):
@@ -125,7 +139,10 @@ class TrinaryParamAssignmentTestCase(fixtures.TrinaryFixtureMixin, unittest.Test
             self.assertEqual(params_to_set[param], retrieved_params[param])
 
 
-class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryLikelihoodTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the likelihood of a trinary model."""
 
     def setUp(self):
@@ -154,7 +171,10 @@ class TrinaryLikelihoodTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase)
         self.assertEqual(likelihood, -np.inf)
 
 
-class TrinaryRiskTestCase(fixtures.TrinaryFixtureMixin, unittest.TestCase):
+class TrinaryRiskTestCase(
+    fixtures.TrinaryFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the risk of a trinary model."""
 
     def setUp(self):

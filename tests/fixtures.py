@@ -2,6 +2,7 @@
 Fxitures for tests.
 """
 import logging
+import unittest
 import warnings
 from pathlib import Path
 from typing import Any, Callable
@@ -21,6 +22,15 @@ MODALITIES = {
     "FNA": Pathological(spec=0.95, sens=0.81),
 }
 RNG = np.random.default_rng(42)
+
+
+class IgnoreWarningsTestCase(unittest.TestCase):
+    """Test case that ignores warnings."""
+
+    def setUp(self) -> None:
+        """Ignore warnings."""
+        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
+        super().setUp()
 
 
 def get_graph(size: str = "large") -> dict[tuple[str, str], list[str]]:
@@ -115,6 +125,7 @@ class BinaryUnilateralModelMixin:
 
     def setUp(self, graph_size: str = "large"):
         """Initialize a simple binary model."""
+        super().setUp()
         self.rng = np.random.default_rng(42)
         self.graph_dict = get_graph(size=graph_size)
         self.model = Unilateral.binary(graph_dict=self.graph_dict)

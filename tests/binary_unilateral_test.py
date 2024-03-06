@@ -1,5 +1,4 @@
 """Test the binary unilateral system."""
-import unittest
 
 import numpy as np
 
@@ -9,7 +8,10 @@ from lymph.modalities import Clinical
 from . import fixtures
 
 
-class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class InitTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the initialization of a binary model."""
 
     def test_value_errors(self):
@@ -83,7 +85,10 @@ class InitTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
             self.assertIn(edge.get_name(middle="_to_"), connecting_edge_names)
 
 
-class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class ParameterAssignmentTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the assignment of parameters in a binary model."""
 
     def test_params_assignment_via_lookup(self):
@@ -125,7 +130,10 @@ class ParameterAssignmentTestCase(fixtures.BinaryUnilateralModelMixin, unittest.
         ))
 
 
-class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class TransitionMatrixTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the generation of the transition matrix in a binary model."""
 
     def setUp(self):
@@ -164,7 +172,10 @@ class TransitionMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Tes
         self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix()))
 
 
-class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class ObservationMatrixTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the generation of the observation matrix in a binary model."""
 
     def setUp(self):
@@ -185,7 +196,10 @@ class ObservationMatrixTestCase(fixtures.BinaryUnilateralModelMixin, unittest.Te
         self.assertTrue(np.allclose(row_sums, 1.))
 
 
-class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class PatientDataTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test loading the patient data."""
 
     def setUp(self):
@@ -268,7 +282,10 @@ class PatientDataTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase
         self.assertFalse("CT" in self.model.patient_data["_model"].columns)
 
 
-class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class LikelihoodTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the likelihood of a model."""
 
     def setUp(self):
@@ -297,7 +314,10 @@ class LikelihoodTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase)
         self.assertEqual(likelihood, -np.inf)
 
 
-class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class RiskTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test anything related to the risk computation."""
 
     def setUp(self):
@@ -357,7 +377,10 @@ class RiskTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
         self.assertLessEqual(risk, 1.)
 
 
-class DataGenerationTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class DataGenerationTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Check the data generation utilities."""
 
     def setUp(self):

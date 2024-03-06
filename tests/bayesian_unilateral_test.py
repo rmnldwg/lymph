@@ -1,14 +1,15 @@
 """
 Test the Bayesian Unilateral Model.
 """
-import unittest
-
 import numpy as np
 
 from . import fixtures
 
 
-class BayesianUnilateralModelTestCase(fixtures.BinaryUnilateralModelMixin, unittest.TestCase):
+class BayesianUnilateralModelTestCase(
+    fixtures.BinaryUnilateralModelMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Test the Bayesian Unilateral Model."""
 
     def setUp(self):
