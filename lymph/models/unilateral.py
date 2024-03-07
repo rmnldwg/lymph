@@ -455,39 +455,25 @@ class Unilateral(
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
 
-        # Compute entire data matrix and store it in the patient data DataFrame if it
-        # is not in the cache
-        _hash = hash((None, self.modalities_hash(), self._cache_version))
-        if _hash not in self._data_matrix_cache:
-            self.del_data_matrix()
-            data_encoding = matrix.generate_data_encoding(
+        # Compute entire data matrix if it is not in the cache
+        full_hash = hash((None, self.modalities_hash(), self._cache_version))
+        if full_hash not in self._data_matrix_cache:
+            self._data_matrix_cache[full_hash] = matrix.generate_data_encoding(
                 patient_data=self._patient_data,
                 modalities=self.get_all_modalities(),
                 lnls=list(self.graph.lnls.keys()),
             )
-            self._patient_data = pd.concat([self._patient_data, data_encoding], axis=1)
-            self._data_matrix_cache[_hash] = self._patient_data[ENCODING_COL].to_numpy()
 
-        # Return a cache hit
-        _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
-        if _hash in self._data_matrix_cache:
-            return self._data_matrix_cache[_hash]
+        # Extract a subset of the data matrix for a given T-stage. If `t_stage` is
+        # `None`, this will be skipped and the entire data matrix will be returned.
+        t_hash = hash((t_stage, self.modalities_hash(), self._cache_version))
+        if t_hash not in self._data_matrix_cache:
+            has_t_stage = self.patient_data[T_STAGE_COL] == t_stage
+            full_data_matrix = self._data_matrix_cache[full_hash]
+            t_data_matrix = full_data_matrix[has_t_stage]
+            self._data_matrix_cache[t_hash] = t_data_matrix
 
-        # Extract a subset of the data matrix for a given T-stage from the entire
-        # data matrix and store it in the cache
-        has_t_stage = self.patient_data[T_STAGE_COL] == t_stage
-        has_t_stage = slice(None) if t_stage is None else has_t_stage
-        result = self.patient_data.loc[has_t_stage, ENCODING_COL].to_numpy()
-        self._data_matrix_cache[_hash] = result
-        return result
-
-    def del_data_matrix(self) -> None:
-        """Delete the data matrix."""
-        if (
-            self._patient_data is not None
-            and ENCODING_COL in self._patient_data.columns
-        ):
-            self._patient_data.drop(columns=ENCODING_COL, inplace=True)
+        return self._data_matrix_cache[t_hash]
 
 
     def diagnose_matrix(self, t_stage: str | None = None) -> np.ndarray:
@@ -495,42 +481,18 @@ class Unilateral(
 
         For every patient this matrix stores the probability to observe this patient's
         diagnosis, given one of the possible hidden states of the model. It is computed
-        by multiplying the :py:attr:`~data_matrix` with the
-        :py:attr:`~observation_matrix`.
+        by multiplying the :py:meth:`.data_matrix` with the
+        :py:meth:`.observation_matrix`.
         """
-        # Compute the entire diagnose matrix and store it in the patient data DataFrame
-        # if it is not in the cache. Note that this requires the data matrix to be
-        # computed as well.
-        _hash = hash((None, self.modalities_hash(), self._cache_version))
-        if _hash not in self._diagnose_matrix_cache:
-            self.del_diagnose_matrix()
-            diagnose_probs = matrix.generate_diagnose_probs(
-                self.observation_matrix(), self.data_matrix(),
-            )
-            self._patient_data = pd.concat([self._patient_data, diagnose_probs], axis=1)
-            diagnose_matrix = self._patient_data[DIAG_PROB_COL].to_numpy()
-            self._diagnose_matrix_cache[_hash] = diagnose_matrix
-
-        # Return a cache hit
+        # Compute the entire diagnose matrix if it is not in the cache. Note that this
+        # requires the data matrix to be computed as well.
         _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
-        if _hash in self._diagnose_matrix_cache:
-            return self._diagnose_matrix_cache[_hash]
+        if _hash not in self._diagnose_matrix_cache:
+            self._diagnose_matrix_cache[_hash] = (
+                self.observation_matrix() @ self.data_matrix(t_stage).T
+            )
 
-        # Extract a subset of the diagnose matrix for a given T-stage from the entire
-        # diagnose matrix and store it in the cache
-        has_t_stage = self.patient_data[T_STAGE_COL] == t_stage
-        has_t_stage = slice(None) if t_stage is None else has_t_stage
-        result = self.patient_data.loc[has_t_stage, DIAG_PROB_COL].to_numpy()
-        self._diagnose_matrix_cache[_hash] = result
-        return result
-
-    def del_diagnose_matrix(self) -> None:
-        """Delete the diagnose matrix."""
-        if (
-            self._patient_data is not None
-            and DIAG_PROB_COL in self._patient_data.columns
-        ):
-            self._patient_data.drop(columns=DIAG_PROB_COL, inplace=True)
+        return self._diagnose_matrix_cache[_hash].T
 
 
     def load_patient_data(
@@ -564,8 +526,6 @@ class Unilateral(
             .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
         )
-        mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
-        lambda_mapping = lambda row: mapping(row["tumor", "1", "t_stage"])
 
         for modality in self.get_all_modalities().keys():
             if modality not in patient_data.columns.levels[0]:
@@ -586,6 +546,8 @@ class Unilateral(
         if len(patient_data) == 0:
             patient_data[T_STAGE_COL] = None
         else:
+            mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
+            lambda_mapping = lambda row: mapping(row["tumor", "1", "t_stage"])
             patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
 
         self._patient_data = patient_data

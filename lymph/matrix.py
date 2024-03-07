@@ -188,19 +188,16 @@ def generate_data_encoding(
     patient_data: pd.DataFrame,
     modalities: dict[str, Modality],
     lnls: list[str],
-) -> pd.DataFrame:
+) -> np.ndarray:
     """Generate the data matrix for a specific T-stage from patient data.
 
-    The :py:attr:`~lymph.models.Unilateral.patient_data` needs to contain the column
+    The :py:attr:`.models.Unilateral.patient_data` needs to contain the column
     ``"_model"``, which is constructed when loading the data into the model. From this,
-    a data matrix is constructed for the given ``t_stage``. If ``"_BN"`` is selected,
-    as T-stage, the data matrix for all patients is returned. This is mainly used for
-    the computation of the Bayesian network likelihood.
+    a data matrix is constructed for all present diagnostic modalities.
 
     The returned matrix has the shape :math:`2^{N \\cdot \\mathcal{O}} \\times M`,
     where :math:`N` is the number of lymph node levels, :math:`\\mathcal{O}` is the
-    number of diagnostic modalities and :math:`M` is the number of patients with the
-    given ``t_stage`` (or just all patients).
+    number of diagnostic modalities and :math:`M` is the number of patients.
     """
     result = np.ones(
         shape=(2 ** (len(lnls) * len(modalities)), len(patient_data)),
@@ -221,26 +218,7 @@ def generate_data_encoding(
 
         result[:,i] = patient_encoding
 
-    mi = pd.MultiIndex.from_product([
-        ["_model"], ["_encoding"], range(result.shape[0]),
-    ])
-    return pd.DataFrame(result.T, columns=mi)
-
-
-def generate_diagnose_probs(
-    observation_matrix: np.ndarray,
-    data_matrix: np.ndarray,
-) -> pd.DataFrame:
-    """Generate the diagnose matrix for a specific T-stage.
-
-    The diagnose matrix is the product of the observation matrix and the data matrix
-    for the given ``t_stage``.
-    """
-    result = observation_matrix @ data_matrix.T
-    mi = pd.MultiIndex.from_product([
-        ["_model"], ["_diagnose_prob"], range(result.shape[0]),
-    ])
-    return pd.DataFrame(result.T, columns=mi)
+    return result.T
 
 
 @lru_cache

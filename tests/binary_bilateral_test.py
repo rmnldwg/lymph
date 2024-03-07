@@ -287,8 +287,10 @@ class LikelihoodTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTe
 
     def test_compute_likelihood_twice(self):
         """Test that the likelihood is computed correctly."""
+        tmp = hash(1)
         first_llh = self.model.likelihood(log=True)
         second_llh = self.model.likelihood(log=True)
+        self.assertEqual(tmp, hash(1))
         self.assertEqual(first_llh, second_llh)
 
 

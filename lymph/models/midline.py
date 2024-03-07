@@ -353,8 +353,9 @@ class Midline(
         This includes the spread parameters from the call to :py:meth:`get_spread_params`
         and the distribution parameters from the call to :py:meth:`get_distribution_params`.
         """
-        params = self.get_spread_params(as_flat=as_flat)
+        params = {}
         params["mixing"] = self.mixing_param
+        params.update(self.get_spread_params(as_flat=as_flat))
         params["midext_prob"] = self.midext_prob
         params.update(self.get_distribution_params(as_flat=as_flat))
 
@@ -473,9 +474,9 @@ class Midline(
         Combines the calls to :py:meth:`.set_spread_params` and
         :py:meth:`.set_distribution_params`.
         """
-        args = self.set_spread_params(*args, **kwargs)
         first, args = popfirst(args)
         self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
+        args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
 
