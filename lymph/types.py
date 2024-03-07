@@ -9,6 +9,10 @@ import pandas as pd
 from pandas._libs.missing import NAType
 
 
+class MissingTStageWarning(UserWarning):
+    """Warning that is raised when a defined T-stage is missing from the data."""
+
+
 class HasSetParams(Protocol):
     """Protocol for classes that have a ``set_params`` method."""
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
