@@ -319,6 +319,12 @@ class LikelihoodTestCase(
         )
         self.assertEqual(likelihood, -np.inf)
 
+    def test_compute_likelihood_twice(self):
+        """Make sure the likelihood is the same when computed twice."""
+        likelihood = self.model.likelihood(log=True, mode="HMM")
+        likelihood_again = self.model.likelihood(log=True, mode="HMM")
+        self.assertEqual(likelihood, likelihood_again)
+
 
 class RiskTestCase(
     fixtures.BinaryUnilateralModelMixin,
