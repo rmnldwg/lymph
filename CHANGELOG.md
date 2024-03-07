@@ -2,6 +2,83 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.0.0.rc2"></a>
+## [1.0.0.rc2] - 2024-03-06
+
+Implementing the [lymixture] brought to light a shortcoming in the way the data and diagnose matrices are computed and stored. As mentioned in issue [#77], their rows are now aligned with the patient data, which may have some advantages for different use cases.
+
+Also, since this is probably the last pre-release, I took the liberty to go over some method names once more and make them clearer.
+
+
+### Bug Fixes
+
+- Don't use fake T-stage for BN model. Related [#77].\
+  Since we now have access to the full diagnose matrix by default, there
+  is no need for the Bayesian network T-stage fix anymore.
+- (**uni**) Reload data when modalities change.\
+  Because we only store those diagnoses that are relevant to the model
+  under the "_model" header in the `patient_data` table, we need to reload
+  the patient data whenever we modify the modalities.
+
+
+### Documentation
+
+- Update to slightly changed API.
+- (**bi**) Add bilateral quickstart to docs.
+
+### Features
+
+- (**mod**) Add utils to check for modality changes.
+
+### Performance
+
+- (**uni**) Make data & diagnose matrices faster. Related [#77].\
+  The last change caused a dramatic slowdown (factor 500) of the data and
+  diagnose matrix access, because it needed to index them from a
+  `DataFrame`. Now, I implemented a basic caching scheme with a patient
+  data cache version that brought back the original speed.
+  Also, apparently `del dataframe[column]` is much slower than
+  `dataframe.drop(columns)`. I replaced the former with the latter and now
+  the tests are fast again.
+
+
+### Refactor
+
+- ⚠ **BREAKING** Rename methods for brevity & clarity.\
+  Method names have been changed, e.g `comp_dist_evolution()` has been
+  renamed to `state_dist_evo()` which is both shorter and (imho) clearer.
+- (**uni**) Move data/diag matrix generation.
+
+### Testing
+
+- Update to slightly changed API.
+- (**uni**) Check reset of data on modality change.\
+  Added a test to make sure the patient data gets reloaded when the
+  modalities change. This test is still failing.
+- Finally suppress all `PerformanceWarnings`.
+
+### Change
+
+- ⚠ **BREAKING** Store data & diagnose matrices in data. Fixes [#77].\
+  Instead of weird, dedicated `UserDict`s, I simply use the patient data
+  to store the data encoding and diagnose probabilities for each patient.
+  This has the advantage that the entire matrix (irrespective of T-stage)
+  is aligned with the patients.
+- ⚠ **BREAKING** (**bi**) Shorten kwargs.\
+  The `(uni|ipsi|contra)lateral_kwargs` in the `Bilateral` constructor
+  were shortened by removing the "lateral".
+
+
+### Merge
+
+- Branch 'main' into 'dev'.
+- Branch '77-diagnose-matrices-not-aligned-with-data' into 'dev'.
+
+### Remove
+
+- Unused helpers.
+
+
 <a name="1.0.0.rc1"></a>
 ## [1.0.0.rc1] - 2024-03-04
 
@@ -490,7 +567,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc1...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...HEAD
+[1.0.0.rc2]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc1...1.0.0.rc2
 [1.0.0.rc1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a6...1.0.0.rc1
 [1.0.0.a6]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...1.0.0.a6
 [1.0.0.a5]: https://github.com/rmnldwg/lymph/compare/1.0.0.a4...1.0.0.a5
@@ -504,6 +582,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#77]: https://github.com/rmnldwg/lymph/issues/77
 [#74]: https://github.com/rmnldwg/lymph/issues/74
 [#72]: https://github.com/rmnldwg/lymph/issues/72
 [#69]: https://github.com/rmnldwg/lymph/issues/69

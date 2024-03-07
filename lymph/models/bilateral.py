@@ -108,16 +108,16 @@ class Bilateral(
         if uni_kwargs is None:
             uni_kwargs = {}
 
-        ipsi_kwargs = uni_kwargs.copy()
-        ipsi_kwargs["graph_dict"] = graph_dict
-        ipsi_kwargs.update(ipsi_kwargs or {})
+        _ipsi_kwargs = uni_kwargs.copy()
+        _ipsi_kwargs["graph_dict"] = graph_dict
+        _ipsi_kwargs.update(ipsi_kwargs or {})
 
-        contra_kwargs = uni_kwargs.copy()
-        contra_kwargs["graph_dict"] = graph_dict
-        contra_kwargs.update(contra_kwargs or {})
+        _contra_kwargs = uni_kwargs.copy()
+        _contra_kwargs["graph_dict"] = graph_dict
+        _contra_kwargs.update(contra_kwargs or {})
 
-        self.ipsi   = models.Unilateral(**ipsi_kwargs)
-        self.contra = models.Unilateral(**contra_kwargs)
+        self.ipsi   = models.Unilateral(**_ipsi_kwargs)
+        self.contra = models.Unilateral(**_contra_kwargs)
 
 
     @classmethod
@@ -125,24 +125,24 @@ class Bilateral(
         """Initialize a binary bilateral model.
 
         This is a convenience method that sets the ``allowed_states`` of the
-        ``unilateral_kwargs`` to ``[0, 1]``. All other ``args`` and ``kwargs`` are
+        ``uni_kwargs`` to ``[0, 1]``. All other ``args`` and ``kwargs`` are
         passed to the :py:meth:`.__init__` method.
         """
-        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
-        unilateral_kwargs["allowed_states"] = [0, 1]
-        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
     @classmethod
     def trinary(cls, *args, **kwargs) -> Bilateral:
         """Initialize a trinary bilateral model.
 
         This is a convenience method that sets the ``allowed_states`` of the
-        ``unilateral_kwargs`` to ``[0, 1, 2]``. All other ``args`` and ``kwargs`` are
+        ``uni_kwargs`` to ``[0, 1, 2]``. All other ``args`` and ``kwargs`` are
         passed to the :py:meth:`.__init__` method.
         """
-        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
-        unilateral_kwargs["allowed_states"] = [0, 1, 2]
-        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
 
     @property

@@ -172,9 +172,9 @@ class Midline(
     @classmethod
     def trinary(cls, *args, **kwargs) -> Midline:
         """Create a trinary model."""
-        unilateral_kwargs = kwargs.pop("unilateral_kwargs", {})
-        unilateral_kwargs["allowed_states"] = [0, 1, 2]
-        return cls(*args, unilateral_kwargs=unilateral_kwargs, **kwargs)
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1, 2]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
 
     @property
