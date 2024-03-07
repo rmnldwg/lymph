@@ -4,6 +4,7 @@ Methods & classes to manage matrices of the :py:class:`~lymph.models.Unilateral`
 # pylint: disable=too-few-public-methods
 from __future__ import annotations
 
+import warnings
 from functools import lru_cache
 from typing import Iterable
 
@@ -208,6 +209,7 @@ def generate_data_encoding(
         patient_encoding = np.ones(shape=1, dtype=bool)
         for modality_name in modalities.keys():
             if modality_name not in patient_row:
+                warnings.warn(f"Modality {modality_name} not in data. Skipping.")
                 continue
             diagnose_encoding = compute_encoding(
                 lnls=lnls,

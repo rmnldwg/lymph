@@ -527,10 +527,8 @@ class Unilateral(
             .reset_index(drop=True)
         )
 
-        for modality in self.get_all_modalities().keys():
-            if modality not in patient_data.columns.levels[0]:
-                raise ValueError(f"{modality} data not found.")
-
+        data_modalities = set(patient_data.columns.levels[0]) - {"patient", "tumor"}
+        for modality in data_modalities:
             if side not in patient_data[modality]:
                 raise ValueError(f"{side}lateral involvement data not found.")
 
@@ -547,8 +545,10 @@ class Unilateral(
             patient_data[T_STAGE_COL] = None
         else:
             mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
-            lambda_mapping = lambda row: mapping(row["tumor", "1", "t_stage"])
-            patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
+            patient_data[T_STAGE_COL] = patient_data.apply(
+                lambda row: mapping(row["tumor", "1", "t_stage"]),
+                axis=1,
+            )
 
         self._patient_data = patient_data
         self._cache_version += 1
@@ -582,13 +582,6 @@ class Unilateral(
         """
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
-
-        with self.modality_context() as has_changed:
-            # we need to reload the patient data when the modalities have changed,
-            # since it stores only those diagnoses under the ``"_model"`` header that
-            # are relevant for the current modalities (which can change).
-            if has_changed:
-                self.load_patient_data(self._patient_data)
 
         # if not present, this will recompute the full data and diagnose matrices
         _ = self.diagnose_matrix()

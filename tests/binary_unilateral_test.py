@@ -282,10 +282,18 @@ class PatientDataTestCase(
             ))
 
     def test_modality_replacement(self) -> None:
-        """Check if the patient data gets updated when the modalities change."""
+        """Check if the data & diagnose matrices get updated when modalities change."""
+        data_matrix = self.model.data_matrix()
+        diagnose_matrix = self.model.diagnose_matrix()
         self.model.replace_all_modalities({"PET": Clinical(spec=0.8, sens=0.8)})
-        self.assertTrue("PET" in self.model.patient_data["_model"].columns)
-        self.assertFalse("CT" in self.model.patient_data["_model"].columns)
+        self.assertNotEqual(
+            hash(data_matrix.tobytes()),
+            hash(self.model.data_matrix().tobytes()),
+        )
+        self.assertNotEqual(
+            hash(diagnose_matrix.tobytes()),
+            hash(self.model.diagnose_matrix().tobytes()),
+        )
 
 
 class LikelihoodTestCase(
