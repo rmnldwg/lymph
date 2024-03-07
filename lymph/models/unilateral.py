@@ -583,14 +583,21 @@ class Unilateral(
                 column = patient_data[modality, side, name]
                 patient_data["_model", modality, name] = column
 
-        patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
+        if len(patient_data) == 0:
+            patient_data[T_STAGE_COL] = None
+        else:
+            patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
+
         self._patient_data = patient_data
+        self._cache_version += 1
 
         for t_stage in self.get_t_stages("distributions"):
             if t_stage not in patient_data[T_STAGE_COL].values:
-                warnings.warn(f"No data for T-stage {t_stage} found.")
+                warnings.warn(
+                    message=f"No data for T-stage {t_stage} found.",
+                    category=types.MissingTStageWarning,
+                )
 
-        self._cache_version += 1
 
 
     @property

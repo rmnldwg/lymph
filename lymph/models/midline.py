@@ -517,7 +517,7 @@ class Midline(
 
         if self.marginalize_unknown and is_unknown.sum() > 0:
             self.unknown.load_patient_data(patient_data[is_unknown], mapping)
-        else:
+        elif is_unknown.sum() > 0:
             warnings.warn(
                 f"Discarding {is_unknown.sum()} patients where midline extension "
                 "is unknown."

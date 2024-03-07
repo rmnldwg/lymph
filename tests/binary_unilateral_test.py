@@ -210,6 +210,12 @@ class PatientDataTestCase(
         self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
+    def test_load_empty_dataframe(self):
+        """Make sure the patient data is loaded correctly."""
+        self.model.load_patient_data(self.raw_data.iloc[:0])
+        self.assertEqual(len(self.model.patient_data), 0)
+        self.assertEqual(self.model.likelihood(), 0.)
+
     def test_load_patient_data(self):
         """Make sure the patient data is loaded correctly."""
         self.assertEqual(len(self.model.patient_data), len(self.raw_data))
