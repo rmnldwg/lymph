@@ -11,7 +11,7 @@ from cachetools import LRUCache
 from lymph import diagnose_times, graph, matrix, modalities, types
 
 # pylint: disable=unused-import
-from lymph.helper import (  # nopycln: import
+from lymph.utils import (  # nopycln: import
     add_or_mult,
     dict_to_func,
     draw_diagnoses,
@@ -23,9 +23,9 @@ from lymph.helper import (  # nopycln: import
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
-ENCODING_COL = ("_model", "_encoding")
-DIAG_PROB_COL = ("_model", "_diagnose_prob")
-T_STAGE_COL = ("_model", "#", "t_stage")
+
+MAP_T_COL = ("_model", "#", "t_stage")
+RAW_T_COL = ("tumor", "1", "t_stage")
 
 
 class Unilateral(
@@ -158,7 +158,7 @@ class Unilateral(
 
         if which in ("valid", "data"):
             try:
-                data_t_stages = self.patient_data[T_STAGE_COL].unique()
+                data_t_stages = self.patient_data[MAP_T_COL].unique()
             except AttributeError:
                 data_t_stages = []
 
@@ -290,7 +290,7 @@ class Unilateral(
         return self.set_distribution_params(*args, **kwargs)
 
 
-    def comp_transition_prob(
+    def transition_prob(
         self,
         newstate: list[int],
         assign: bool = False
@@ -313,7 +313,7 @@ class Unilateral(
         return trans_prob
 
 
-    def comp_diagnose_prob(
+    def diagnose_prob(
         self,
         diagnoses: pd.Series | dict[str, dict[str, bool]]
     ) -> float:
@@ -468,7 +468,7 @@ class Unilateral(
         # `None`, this will be skipped and the entire data matrix will be returned.
         t_hash = hash((t_stage, self.modalities_hash(), self._cache_version))
         if t_hash not in self._data_matrix_cache:
-            has_t_stage = self.patient_data[T_STAGE_COL] == t_stage
+            has_t_stage = self.patient_data[MAP_T_COL] == t_stage
             full_data_matrix = self._data_matrix_cache[full_hash]
             t_data_matrix = full_data_matrix[has_t_stage]
             self._data_matrix_cache[t_hash] = t_data_matrix
@@ -542,11 +542,11 @@ class Unilateral(
                 patient_data["_model", modality, name] = column
 
         if len(patient_data) == 0:
-            patient_data[T_STAGE_COL] = None
+            patient_data[MAP_T_COL] = None
         else:
             mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
-            patient_data[T_STAGE_COL] = patient_data.apply(
-                lambda row: mapping(row["tumor", "1", "t_stage"]),
+            patient_data[MAP_T_COL] = patient_data.apply(
+                lambda row: mapping(row[RAW_T_COL]),
                 axis=1,
             )
 
@@ -554,7 +554,7 @@ class Unilateral(
         self._cache_version += 1
 
         for t_stage in self.get_t_stages("distributions"):
-            if t_stage not in patient_data[T_STAGE_COL].values:
+            if t_stage not in patient_data[MAP_T_COL].values:
                 warnings.warn(
                     message=f"No data for T-stage {t_stage} found.",
                     category=types.MissingTStageWarning,
@@ -959,6 +959,6 @@ class Unilateral(
         multi_cols = pd.MultiIndex.from_product([modality_names, ["ipsi"], lnl_names])
 
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
+        dataset[(RAW_T_COL)] = drawn_t_stages
 
         return dataset
