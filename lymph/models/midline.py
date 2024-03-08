@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, matrix, modalities, models, types
-from lymph.helper import (
+from lymph.utils import (
     add_or_mult,
     draw_diagnoses,
     early_late_mapping,

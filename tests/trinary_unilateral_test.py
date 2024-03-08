@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from lymph.graph import LymphNodeLevel
-from lymph.helper import set_params_for
+from lymph.utils import set_params_for
 
 from . import fixtures
 

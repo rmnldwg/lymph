@@ -18,7 +18,7 @@ from typing import Iterable
 
 import numpy as np
 
-from lymph.helper import (
+from lymph.utils import (
     check_unique_names,
     comp_transition_tensor,
     flatten,

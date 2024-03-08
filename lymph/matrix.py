@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from lymph import graph
-from lymph.helper import get_state_idx_matrix, row_wise_kron, tile_and_repeat
+from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 from lymph.modalities import Modality
 
 

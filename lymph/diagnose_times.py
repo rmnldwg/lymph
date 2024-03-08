@@ -21,7 +21,7 @@ from typing import Any, Iterable, TypeVar
 
 import numpy as np
 
-from lymph.helper import flatten, popfirst, unflatten_and_split
+from lymph.utils import flatten, popfirst, unflatten_and_split
 
 logger = logging.getLogger(__name__)
 

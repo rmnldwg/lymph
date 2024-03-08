@@ -5,7 +5,7 @@ Test the bilateral model.
 import numpy as np
 
 from lymph import models
-from lymph.helper import flatten
+from lymph.utils import flatten
 
 from . import fixtures
 
