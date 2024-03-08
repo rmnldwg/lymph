@@ -9,6 +9,10 @@ import pandas as pd
 from pandas._libs.missing import NAType
 
 
+class InvalidDataModalityWarning(UserWarning):
+    """Warning that is raised when a header in the data is not a valid modality."""
+
+
 class MissingTStageWarning(UserWarning):
     """Warning that is raised when a defined T-stage is missing from the data."""
 

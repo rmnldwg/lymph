@@ -9,7 +9,7 @@ Detailed API
     models
     components
     types
-    helper
+    utils
 
 
 Index & search

@@ -202,10 +202,13 @@ class Unilateral(
         as_flat: bool = True,
     ) -> Iterable[float] | dict[str, float]:
         """Get the parameters of the spread edges."""
-        return {
-            **self.get_tumor_spread_params(as_dict, as_flat),
-            **self.get_lnl_spread_params(as_dict, as_flat),
-        }
+        params = self.get_tumor_spread_params(as_flat=as_flat)
+        params.update(self.get_lnl_spread_params(as_flat=as_flat))
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
 
 
     def get_params(
@@ -530,7 +533,12 @@ class Unilateral(
         data_modalities = set(patient_data.columns.levels[0]) - {"patient", "tumor"}
         for modality in data_modalities:
             if side not in patient_data[modality]:
-                raise ValueError(f"{side}lateral involvement data not found.")
+                warnings.warn(
+                    f"{side}lateral involvement data not found. Skipping "
+                    f"modality {modality}.",
+                    category=types.InvalidDataModalityWarning,
+                )
+                continue
 
             for name in self.graph.lnls.keys():
                 modality_side_data = patient_data[modality, side]
