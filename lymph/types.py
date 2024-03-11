@@ -9,11 +9,19 @@ import pandas as pd
 from pandas._libs.missing import NAType
 
 
-class InvalidDataModalityWarning(UserWarning):
-    """Warning that is raised when a header in the data is not a valid modality."""
+class DataWarning(UserWarning):
+    """Parent class of all warnings related to potential data issues."""
 
 
-class MissingTStageWarning(UserWarning):
+class MissingLNLWarning(DataWarning):
+    """Raised when a lymph node level is missing from the data."""
+
+
+class MissingLateralisationWarning(DataWarning):
+    """Raised when a lateralisation is missing from the data."""
+
+
+class MissingTStageWarning(DataWarning):
     """Warning that is raised when a defined T-stage is missing from the data."""
 
 

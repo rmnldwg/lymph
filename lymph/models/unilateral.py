@@ -536,18 +536,24 @@ class Unilateral(
                 warnings.warn(
                     f"{side}lateral involvement data not found. Skipping "
                     f"modality {modality}.",
-                    category=types.InvalidDataModalityWarning,
+                    category=types.MissingLateralisationWarning,
                 )
                 continue
 
-            for name in self.graph.lnls.keys():
+            for lnl in self.graph.lnls.keys():
                 modality_side_data = patient_data[modality, side]
 
-                if name not in modality_side_data:
-                    raise ValueError(f"Involvement data for LNL {name} not found.")
+                if lnl not in modality_side_data:
+                    warnings.warn(
+                        f"Modality {modality} does not contain involvement data for "
+                        f"LNL {lnl}. Assuming unknown.",
+                        category=types.MissingLNLWarning,
+                    )
+                    column = None
+                else:
+                    column = patient_data[modality, side, lnl]
 
-                column = patient_data[modality, side, name]
-                patient_data["_model", modality, name] = column
+                patient_data["_model", modality, lnl] = column
 
         if len(patient_data) == 0:
             patient_data[MAP_T_COL] = None

@@ -15,7 +15,7 @@ import lymph
 from lymph import diagnose_times
 from lymph.modalities import Clinical, Modality, Pathological
 from lymph.models import Unilateral
-from lymph.types import MissingTStageWarning, PatternType
+from lymph.types import DataWarning, PatternType
 
 MODALITIES = {
     "CT": Clinical(spec=0.81, sens=0.86),
@@ -30,7 +30,7 @@ class IgnoreWarningsTestCase(unittest.TestCase):
     def setUp(self) -> None:
         """Ignore warnings."""
         warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-        warnings.simplefilter("ignore", category=MissingTStageWarning)
+        warnings.simplefilter("ignore", category=DataWarning)
         super().setUp()
 
 
