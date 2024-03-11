@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, matrix, modalities, models, types
+from lymph.types import DiagnoseType, PatternType
 from lymph.utils import (
     add_or_mult,
     draw_diagnoses,
@@ -16,7 +17,6 @@ from lymph.utils import (
     popfirst,
     unflatten_and_split,
 )
-from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -354,9 +354,8 @@ class Midline(
         and the distribution parameters from the call to :py:meth:`get_distribution_params`.
         """
         params = {}
-        params["mixing"] = self.mixing_param
-        params.update(self.get_spread_params(as_flat=as_flat))
         params["midext_prob"] = self.midext_prob
+        params.update(self.get_spread_params(as_flat=as_flat))
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:

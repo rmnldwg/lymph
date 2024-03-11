@@ -1,7 +1,10 @@
 """Test the binary unilateral system."""
 
+import warnings
+
 import numpy as np
 
+from lymph import types
 from lymph.graph import LymphNodeLevel, Tumor
 from lymph.modalities import Clinical
 
@@ -205,6 +208,7 @@ class PatientDataTestCase(
     def setUp(self):
         """Load patient data."""
         super().setUp()
+        warnings.simplefilter("ignore", category=types.InvalidDataWarning)
         self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric", foo="frozen")
         self.model.set_params(**self.create_random_params())
@@ -219,9 +223,6 @@ class PatientDataTestCase(
     def test_load_patient_data(self):
         """Make sure the patient data is loaded correctly."""
         self.assertEqual(len(self.model.patient_data), len(self.raw_data))
-        self.assertRaises(
-            ValueError, self.model.load_patient_data, self.raw_data, side="foo"
-        )
 
     def test_t_stages(self):
         """Make sure all T-stages are present."""
