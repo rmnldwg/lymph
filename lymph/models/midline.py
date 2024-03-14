@@ -56,7 +56,7 @@ class Midline(
     """
     def __init__(
         self,
-        graph_dict: dict[tuple[str], list[str]],
+        graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
         use_central: bool = True,

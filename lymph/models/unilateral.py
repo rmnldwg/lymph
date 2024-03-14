@@ -43,7 +43,7 @@ class Unilateral(
     """
     def __init__(
         self,
-        graph_dict: dict[tuple[str], list[str]],
+        graph_dict: types.GraphDictType,
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,

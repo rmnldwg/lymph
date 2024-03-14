@@ -41,12 +41,29 @@ class HasGetParams(Protocol):
         ...
 
 
-PatternType = dict[str, bool | NAType | None]
+GraphDictType = dict[tuple[str, str], list[str]]
+"""Type alias for a graph dictionary.
+
+A dictionary of this form specifies the structure of the underlying graph. Example:
+
+>>> graph_dict = {
+...     ("tumor", "T"): ["I", "II", "III"],
+...     ("lnl", "I"): ["II"],
+...     ("lnl", "II"): ["III"],
+...     ("lnl", "III"): [],
+... }
+"""
+
+
+PatternType = dict[str, bool | str | NAType | None]
 """Type alias for an involvement pattern.
 
 An involvement pattern is a dictionary with keys for the lymph node levels and values
 for the involvement of the respective lymph nodes. The values are either True, False,
 or None, which means that the involvement is unknown.
+
+TODO: Document the new possibilities to specify trinary involvment.
+See :py:func:`.matrix.compute_encoding`
 
 >>> pattern = {"I": True, "II": False, "III": None}
 """

@@ -39,7 +39,7 @@ class Bilateral(
     """
     def __init__(
         self,
-        graph_dict: dict[tuple[str], list[str]],
+        graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
         uni_kwargs: dict[str, Any] | None = None,
         ipsi_kwargs: dict[str, Any] | None = None,
