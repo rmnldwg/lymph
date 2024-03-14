@@ -78,7 +78,7 @@ DiagnoseType = dict[str, PatternType]
 """
 
 
-M = TypeVar("M", bound="Model")
+ModelT = TypeVar("ModelT", bound="Model")
 
 class Model(ABC):
     """Abstract base class for models.
@@ -88,7 +88,7 @@ class Model(ABC):
     """
     @abstractmethod
     def get_params(
-        self: M,
+        self: ModelT,
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> Iterable[float] | dict[str, float]:
@@ -102,7 +102,7 @@ class Model(ABC):
         """
         raise NotImplementedError
 
-    def get_num_dims(self: M, mode: Literal["HMM", "BN"] = "HMM") -> int:
+    def get_num_dims(self: ModelT, mode: Literal["HMM", "BN"] = "HMM") -> int:
         """Return the number of dimensions of the parameter space.
 
         A hidden Markov model (``mode="HMM"``) typically has more parameters than a
@@ -117,7 +117,7 @@ class Model(ABC):
         return num
 
     @abstractmethod
-    def set_params(self: M, *args: float, **kwargs: float) -> tuple[float]:
+    def set_params(self: ModelT, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model.
 
         The parameters may be passed as positional or keyword arguments. The positional
@@ -128,7 +128,7 @@ class Model(ABC):
 
     @abstractmethod
     def load_patient_data(
-        self: M,
+        self: ModelT,
         patient_data: pd.DataFrame,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
@@ -139,7 +139,7 @@ class Model(ABC):
 
     @abstractmethod
     def likelihood(
-        self: M,
+        self: ModelT,
         given_params: Iterable[float] | dict[str, float] | None = None,
         log: bool = True,
     ) -> float:

@@ -208,7 +208,7 @@ class PatientDataTestCase(
     def setUp(self):
         """Load patient data."""
         super().setUp()
-        warnings.simplefilter("ignore", category=types.InvalidDataWarning)
+        warnings.simplefilter("ignore", category=types.DataWarning)
         self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric", foo="frozen")
         self.model.set_params(**self.create_random_params())

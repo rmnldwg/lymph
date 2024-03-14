@@ -17,6 +17,7 @@ import inspect
 import logging
 import warnings
 from abc import ABC
+from functools import partial
 from typing import Any, Iterable, TypeVar
 
 import numpy as np
@@ -36,6 +37,7 @@ class Distribution:
         self,
         distribution: Iterable[float] | callable,
         max_time: int | None = None,
+        **kwargs,
     ) -> None:
         """Initialize a distribution over diagnose times.
 
@@ -59,23 +61,29 @@ class Distribution:
         ``max_time`` + 1 don't match, in case it is accidentally provided.
         """
         if callable(distribution):
-            self._init_from_callable(distribution, max_time)
+            self._init_from_callable(distribution, max_time, **kwargs)
         elif isinstance(distribution, Distribution):
             self._init_from_instance(distribution)
         else:
             self._init_from_frozen(distribution, max_time)
 
 
-    def _init_from_callable(self, distribution: callable, max_time: int | None = None):
+    def _init_from_callable(
+        self,
+        distribution: callable,
+        max_time: int | None = None,
+        **kwargs,
+    ):
         """Initialize the distribution from a callable distribution."""
         if max_time is None:
             raise ValueError("max_time must be provided if a function is passed")
         if max_time < 0:
             raise ValueError("max_time must be a positive integer")
 
+        func_kwargs = self.extract_kwargs(distribution)
+        func_kwargs.update(kwargs)
         self.max_time = max_time
-        self._kwargs = self.extract_kwargs(distribution)
-        self._func = distribution
+        self._func = partial(distribution, **func_kwargs)
         self._frozen = self.pmf
 
 
@@ -85,8 +93,7 @@ class Distribution:
             self._init_from_frozen(instance.pmf, instance.max_time)
         else:
             self.max_time = instance.max_time
-            self._kwargs = instance._kwargs.copy()
-            self._func = instance._func
+            self._func = partial(instance._func, **instance._func.keywords)
             self._frozen = self.pmf
 
 
@@ -102,7 +109,6 @@ class Distribution:
             )
 
         self.max_time = max_time
-        self._kwargs = {}
         self._func = None
         self._frozen = self.normalize(distribution)
 
@@ -140,9 +146,12 @@ class Distribution:
         if not isinstance(other, Distribution):
             return False
 
+        if not self.is_updateable and not other.is_updateable:
+            return np.all(self.pmf == other.pmf)
+
         return (
             self.is_updateable == other.is_updateable
-            and self._kwargs == other._kwargs
+            and self._func.keywords == other._func.keywords
             and np.all(self.pmf == other.pmf)
         )
 
@@ -156,8 +165,8 @@ class Distribution:
         :py:meth:`.is_updateable` returns ``True`` -- the stored keyword arguments of
         the parametric distribution.
         """
-        kwarg_tpl = tuple(self._kwargs.items())
-        return hash((self.is_updateable, kwarg_tpl, self.pmf.tobytes()))
+        args_and_kwargs_tpl = self._func.args + tuple(self._func.keywords.items())
+        return hash((self.is_updateable, args_and_kwargs_tpl, self.pmf.tobytes()))
 
 
     @property
@@ -186,7 +195,7 @@ class Distribution:
     def pmf(self) -> np.ndarray:
         """Return the probability mass function of the distribution if it is frozen."""
         if not hasattr(self, "_frozen") or self._frozen is None:
-            self._frozen = self.normalize(self._func(self.support, **self._kwargs))
+            self._frozen = self.normalize(self._func(self.support))
         return self._frozen
 
 
@@ -213,7 +222,7 @@ class Distribution:
             warnings.warn("Distribution is not updateable, returning empty dict")
             return {} if as_dict else None
 
-        return self._kwargs if as_dict else self._kwargs.values()
+        return self._func.keywords if as_dict else self._func.keywords.values()
 
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
@@ -231,18 +240,18 @@ class Distribution:
             warnings.warn("Distribution is not updateable, ignoring parameters")
             return args
 
-        old_kwargs = self._kwargs.copy()
+        old_kwargs = self._func.keywords.copy()
 
-        for name, value in self._kwargs.items():
+        for name, value in self._func.keywords.items():
             first, args = popfirst(args)
-            self._kwargs[name] = first or kwargs.get(name, value)
+            self._func.keywords[name] = first or kwargs.get(name, value)
             if hasattr(self, "_frozen"):
                 del self._frozen
 
         try:
             _ = self.pmf
         except ValueError as val_err:
-            self._kwargs = old_kwargs
+            self._func.keywords.update(old_kwargs)
             raise ValueError("Invalid params provided to distribution") from val_err
 
         return args
