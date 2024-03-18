@@ -11,7 +11,7 @@ from cachetools import LRUCache
 from lymph import diagnose_times, graph, matrix, modalities, types
 
 # pylint: disable=unused-import
-from lymph.helper import (  # nopycln: import
+from lymph.utils import (  # nopycln: import
     add_or_mult,
     dict_to_func,
     draw_diagnoses,
@@ -23,9 +23,9 @@ from lymph.helper import (  # nopycln: import
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
-ENCODING_COL = ("_model", "_encoding")
-DIAG_PROB_COL = ("_model", "_diagnose_prob")
-T_STAGE_COL = ("_model", "#", "t_stage")
+
+MAP_T_COL = ("_model", "#", "t_stage")
+RAW_T_COL = ("tumor", "1", "t_stage")
 
 
 class Unilateral(
@@ -43,7 +43,7 @@ class Unilateral(
     """
     def __init__(
         self,
-        graph_dict: dict[tuple[str], list[str]],
+        graph_dict: types.GraphDictType,
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
@@ -106,13 +106,13 @@ class Unilateral(
 
 
     @classmethod
-    def binary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def binary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with binary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1], **kwargs)
 
 
     @classmethod
-    def trinary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def trinary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with trinary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
 
@@ -120,19 +120,6 @@ class Unilateral(
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
-
-
-    def print_info(self):
-        """Print detailed information about the instance."""
-        num_tumors = len(self.graph.tumors)
-        num_lnls   = len(self.graph.lnls)
-        string = (
-            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
-            f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.lnl_edges])
-            + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
-        )
-        print(string)
 
 
     @property
@@ -158,7 +145,7 @@ class Unilateral(
 
         if which in ("valid", "data"):
             try:
-                data_t_stages = self.patient_data[T_STAGE_COL].unique()
+                data_t_stages = self.patient_data[MAP_T_COL].unique()
             except AttributeError:
                 data_t_stages = []
 
@@ -178,7 +165,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the tumor spread edges."""
         return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
 
@@ -187,7 +174,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the LNL spread edges.
 
         In the trinary case, this includes the growth parameters as well as the
@@ -200,19 +187,22 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the spread edges."""
-        return {
-            **self.get_tumor_spread_params(as_dict, as_flat),
-            **self.get_lnl_spread_params(as_dict, as_flat),
-        }
+        params = self.get_tumor_spread_params(as_flat=as_flat)
+        params.update(self.get_lnl_spread_params(as_flat=as_flat))
+
+        if as_flat or not as_dict:
+            params = flatten(params)
+
+        return params if as_dict else params.values()
 
 
     def get_params(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the model.
 
         If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
@@ -290,7 +280,7 @@ class Unilateral(
         return self.set_distribution_params(*args, **kwargs)
 
 
-    def comp_transition_prob(
+    def transition_prob(
         self,
         newstate: list[int],
         assign: bool = False
@@ -313,7 +303,7 @@ class Unilateral(
         return trans_prob
 
 
-    def comp_diagnose_prob(
+    def diagnose_prob(
         self,
         diagnoses: pd.Series | dict[str, dict[str, bool]]
     ) -> float:
@@ -455,39 +445,25 @@ class Unilateral(
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
 
-        # Compute entire data matrix and store it in the patient data DataFrame if it
-        # is not in the cache
-        _hash = hash((None, self.modalities_hash(), self._cache_version))
-        if _hash not in self._data_matrix_cache:
-            self.del_data_matrix()
-            data_encoding = matrix.generate_data_encoding(
+        # Compute entire data matrix if it is not in the cache
+        full_hash = hash((None, self.modalities_hash(), self._cache_version))
+        if full_hash not in self._data_matrix_cache:
+            self._data_matrix_cache[full_hash] = matrix.generate_data_encoding(
                 patient_data=self._patient_data,
                 modalities=self.get_all_modalities(),
                 lnls=list(self.graph.lnls.keys()),
             )
-            self._patient_data = pd.concat([self._patient_data, data_encoding], axis=1)
-            self._data_matrix_cache[_hash] = self._patient_data[ENCODING_COL].to_numpy()
 
-        # Return a cache hit
-        _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
-        if _hash in self._data_matrix_cache:
-            return self._data_matrix_cache[_hash]
+        # Extract a subset of the data matrix for a given T-stage. If `t_stage` is
+        # `None`, this will be skipped and the entire data matrix will be returned.
+        t_hash = hash((t_stage, self.modalities_hash(), self._cache_version))
+        if t_hash not in self._data_matrix_cache:
+            has_t_stage = self.patient_data[MAP_T_COL] == t_stage
+            full_data_matrix = self._data_matrix_cache[full_hash]
+            t_data_matrix = full_data_matrix[has_t_stage]
+            self._data_matrix_cache[t_hash] = t_data_matrix
 
-        # Extract a subset of the data matrix for a given T-stage from the entire
-        # data matrix and store it in the cache
-        has_t_stage = self.patient_data[T_STAGE_COL] == t_stage
-        has_t_stage = slice(None) if t_stage is None else has_t_stage
-        result = self.patient_data.loc[has_t_stage, ENCODING_COL].to_numpy()
-        self._data_matrix_cache[_hash] = result
-        return result
-
-    def del_data_matrix(self) -> None:
-        """Delete the data matrix."""
-        if (
-            self._patient_data is not None
-            and ENCODING_COL in self._patient_data.columns
-        ):
-            self._patient_data.drop(columns=ENCODING_COL, inplace=True)
+        return self._data_matrix_cache[t_hash]
 
 
     def diagnose_matrix(self, t_stage: str | None = None) -> np.ndarray:
@@ -495,49 +471,25 @@ class Unilateral(
 
         For every patient this matrix stores the probability to observe this patient's
         diagnosis, given one of the possible hidden states of the model. It is computed
-        by multiplying the :py:attr:`~data_matrix` with the
-        :py:attr:`~observation_matrix`.
+        by multiplying the :py:meth:`.data_matrix` with the
+        :py:meth:`.observation_matrix`.
         """
-        # Compute the entire diagnose matrix and store it in the patient data DataFrame
-        # if it is not in the cache. Note that this requires the data matrix to be
-        # computed as well.
-        _hash = hash((None, self.modalities_hash(), self._cache_version))
-        if _hash not in self._diagnose_matrix_cache:
-            self.del_diagnose_matrix()
-            diagnose_probs = matrix.generate_diagnose_probs(
-                self.observation_matrix(), self.data_matrix(),
-            )
-            self._patient_data = pd.concat([self._patient_data, diagnose_probs], axis=1)
-            diagnose_matrix = self._patient_data[DIAG_PROB_COL].to_numpy()
-            self._diagnose_matrix_cache[_hash] = diagnose_matrix
-
-        # Return a cache hit
+        # Compute the entire diagnose matrix if it is not in the cache. Note that this
+        # requires the data matrix to be computed as well.
         _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
-        if _hash in self._diagnose_matrix_cache:
-            return self._diagnose_matrix_cache[_hash]
+        if _hash not in self._diagnose_matrix_cache:
+            self._diagnose_matrix_cache[_hash] = (
+                self.observation_matrix() @ self.data_matrix(t_stage).T
+            )
 
-        # Extract a subset of the diagnose matrix for a given T-stage from the entire
-        # diagnose matrix and store it in the cache
-        has_t_stage = self.patient_data[T_STAGE_COL] == t_stage
-        has_t_stage = slice(None) if t_stage is None else has_t_stage
-        result = self.patient_data.loc[has_t_stage, DIAG_PROB_COL].to_numpy()
-        self._diagnose_matrix_cache[_hash] = result
-        return result
-
-    def del_diagnose_matrix(self) -> None:
-        """Delete the diagnose matrix."""
-        if (
-            self._patient_data is not None
-            and DIAG_PROB_COL in self._patient_data.columns
-        ):
-            self._patient_data.drop(columns=DIAG_PROB_COL, inplace=True)
+        return self._diagnose_matrix_cache[_hash].T
 
 
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
         side: str = "ipsi",
-        mapping: callable | dict[int, Any] = early_late_mapping,
+        mapping: callable | dict[int, Any] | None = None,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -557,6 +509,9 @@ class Unilateral(
 
         .. _LyProX: https://lyprox.org/
         """
+        if mapping is None:
+            mapping = early_late_mapping
+
         # pylint: disable=unnecessary-lambda-assignment
         patient_data = (
             patient_data
@@ -564,33 +519,51 @@ class Unilateral(
             .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
         )
-        mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
-        lambda_mapping = lambda row: mapping(row["tumor", "1", "t_stage"])
 
-        for modality in self.get_all_modalities().keys():
-            if modality not in patient_data.columns.levels[0]:
-                raise ValueError(f"{modality} data not found.")
-
+        data_modalities = set(patient_data.columns.levels[0]) - {"patient", "tumor"}
+        for modality in data_modalities:
             if side not in patient_data[modality]:
-                raise ValueError(f"{side}lateral involvement data not found.")
+                warnings.warn(
+                    f"{side}lateral involvement data not found. Skipping "
+                    f"modality {modality}.",
+                    category=types.DataWarning,
+                )
+                continue
 
-            for name in self.graph.lnls.keys():
+            for lnl in self.graph.lnls.keys():
                 modality_side_data = patient_data[modality, side]
 
-                if name not in modality_side_data:
-                    raise ValueError(f"Involvement data for LNL {name} not found.")
+                if lnl not in modality_side_data:
+                    warnings.warn(
+                        f"Modality {modality} does not contain involvement data for "
+                        f"LNL {lnl}. Assuming unknown.",
+                        category=types.DataWarning,
+                    )
+                    column = None
+                else:
+                    column = patient_data[modality, side, lnl]
 
-                column = patient_data[modality, side, name]
-                patient_data["_model", modality, name] = column
+                patient_data["_model", modality, lnl] = column
 
-        patient_data[T_STAGE_COL] = patient_data.apply(lambda_mapping, axis=1)
+        if len(patient_data) == 0:
+            patient_data[MAP_T_COL] = None
+        else:
+            mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
+            patient_data[MAP_T_COL] = patient_data.apply(
+                lambda row: mapping(row[RAW_T_COL]),
+                axis=1,
+            )
+
         self._patient_data = patient_data
+        self._cache_version += 1
 
         for t_stage in self.get_t_stages("distributions"):
-            if t_stage not in patient_data[T_STAGE_COL].values:
-                warnings.warn(f"No data for T-stage {t_stage} found.")
+            if t_stage not in patient_data[MAP_T_COL].values:
+                warnings.warn(
+                    message=f"No data for T-stage {t_stage} found.",
+                    category=types.DataWarning,
+                )
 
-        self._cache_version += 1
 
 
     @property
@@ -613,13 +586,6 @@ class Unilateral(
         """
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
-
-        with self.modality_context() as has_changed:
-            # we need to reload the patient data when the modalities have changed,
-            # since it stores only those diagnoses under the ``"_model"`` header that
-            # are relevant for the current modalities (which can change).
-            if has_changed:
-                self.load_patient_data(self._patient_data)
 
         # if not present, this will recompute the full data and diagnose matrices
         _ = self.diagnose_matrix()
@@ -672,7 +638,7 @@ class Unilateral(
         which is essentially a marginalization of the evolution over the possible
         states as computed by :py:meth:`.state_dist_evo` with the distribution
         over diagnose times for the given T-stage from the dictionary returned by
-        :py:meth:`.get_all_dsitributions`.
+        :py:meth:`.get_all_distributions`.
 
         Or, when ``mode`` is set to ``"BN"``, compute the distribution over states for
         the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
@@ -703,12 +669,12 @@ class Unilateral(
 
         Returns an array of probabilities for each possible complete observation. This
         entails multiplying the distribution over states as returned by the
-        :py:meth:`.state_dist` method with the :py:attr:`.observation_matrix`.
+        :py:meth:`.state_dist` method with the :py:meth:`.observation_matrix`.
 
         Note that since the :py:attr:`.observation_matrix` can become very large, this
         method is not very efficient for inference. Instead, we compute the
-        :py:attr:`.diagnose_matrices` from the :py:attr:`.observation_matrix` and
-        the :py:attr:`.data_matrices` and use these to compute the likelihood.
+        :py:meth:`.diagnose_matrix` from the :py:meth:`.observation_matrix` and
+        the :py:meth:`.data_matrix` and use these to compute the likelihood.
         """
         state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return state_dist @ self.observation_matrix()
@@ -745,7 +711,7 @@ class Unilateral(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -801,7 +767,7 @@ class Unilateral(
 
     def posterior_state_dist(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -859,7 +825,7 @@ class Unilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -997,6 +963,6 @@ class Unilateral(
         multi_cols = pd.MultiIndex.from_product([modality_names, ["ipsi"], lnl_names])
 
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
+        dataset[(RAW_T_COL)] = drawn_t_stages
 
         return dataset

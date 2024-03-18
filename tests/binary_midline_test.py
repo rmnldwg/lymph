@@ -71,6 +71,17 @@ class MidlineSetParamsTestCase(fixtures.IgnoreWarningsTestCase):
         )
 
 
+    def test_get_set_params_order(self) -> None:
+        """Check if the order of getter and setter is the same."""
+        num_dims = self.model.get_num_dims()
+        params_to_set = np.linspace(0., 1., num_dims + 1)
+        unused_param = self.model.set_params(*params_to_set)
+        returned_params = list(self.model.get_params(as_dict=False))
+
+        self.assertEqual(unused_param, params_to_set[-1])
+        self.assertEqual(params_to_set[:-1].tolist(), returned_params)
+
+
 class MidlineLikelihoodTestCase(fixtures.IgnoreWarningsTestCase):
     """Check that the likelihood function works correctly."""
 

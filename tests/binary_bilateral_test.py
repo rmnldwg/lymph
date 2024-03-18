@@ -5,7 +5,7 @@ Test the bilateral model.
 import numpy as np
 
 from lymph import models
-from lymph.helper import flatten
+from lymph.utils import flatten
 
 from . import fixtures
 
@@ -318,7 +318,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
         random_parameters = self.create_random_params()
         random_diagnoses = self.create_random_diagnoses()
 
-        posterior = self.model.comp_posterior_joint_state_dist(
+        posterior = self.model.posterior_joint_state_dist(
             given_params=random_parameters,
             given_diagnoses=random_diagnoses,
         )

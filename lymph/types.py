@@ -9,6 +9,10 @@ import pandas as pd
 from pandas._libs.missing import NAType
 
 
+class DataWarning(UserWarning):
+    """Warnings related to potential data issues."""
+
+
 class HasSetParams(Protocol):
     """Protocol for classes that have a ``set_params`` method."""
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
@@ -25,12 +29,34 @@ class HasGetParams(Protocol):
         ...
 
 
-PatternType = dict[str, bool | NAType | None]
+GraphDictType = dict[tuple[str, str], list[str]]
+"""Type alias for a graph dictionary.
+
+A dictionary of this form specifies the structure of the underlying graph. Example:
+
+>>> graph_dict = {
+...     ("tumor", "T"): ["I", "II", "III"],
+...     ("lnl", "I"): ["II"],
+...     ("lnl", "II"): ["III"],
+...     ("lnl", "III"): [],
+... }
+"""
+
+ParamsType = Iterable[float] | dict[str, float]
+"""Type alias for how parameters are passed around.
+
+This is e.g. the type that the :py:meth:`Model.get_params` method returns.
+"""
+
+PatternType = dict[str, bool | str | NAType | None]
 """Type alias for an involvement pattern.
 
 An involvement pattern is a dictionary with keys for the lymph node levels and values
 for the involvement of the respective lymph nodes. The values are either True, False,
 or None, which means that the involvement is unknown.
+
+TODO: Document the new possibilities to specify trinary involvment.
+See :py:func:`.matrix.compute_encoding`
 
 >>> pattern = {"I": True, "II": False, "III": None}
 """
@@ -45,7 +71,7 @@ DiagnoseType = dict[str, PatternType]
 """
 
 
-M = TypeVar("M", bound="Model")
+ModelT = TypeVar("ModelT", bound="Model")
 
 class Model(ABC):
     """Abstract base class for models.
@@ -55,10 +81,10 @@ class Model(ABC):
     """
     @abstractmethod
     def get_params(
-        self: M,
+        self: ModelT,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> ParamsType:
         """Return the parameters of the model.
 
         The parameters are returned as a dictionary if ``as_dict`` is True, and as
@@ -69,7 +95,7 @@ class Model(ABC):
         """
         raise NotImplementedError
 
-    def get_num_dims(self: M, mode: Literal["HMM", "BN"] = "HMM") -> int:
+    def get_num_dims(self: ModelT, mode: Literal["HMM", "BN"] = "HMM") -> int:
         """Return the number of dimensions of the parameter space.
 
         A hidden Markov model (``mode="HMM"``) typically has more parameters than a
@@ -84,7 +110,7 @@ class Model(ABC):
         return num
 
     @abstractmethod
-    def set_params(self: M, *args: float, **kwargs: float) -> tuple[float]:
+    def set_params(self: ModelT, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model.
 
         The parameters may be passed as positional or keyword arguments. The positional
@@ -95,7 +121,7 @@ class Model(ABC):
 
     @abstractmethod
     def load_patient_data(
-        self: M,
+        self: ModelT,
         patient_data: pd.DataFrame,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
@@ -106,8 +132,8 @@ class Model(ABC):
 
     @abstractmethod
     def likelihood(
-        self: M,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        self: ModelT,
+        given_params: ParamsType | None = None,
         log: bool = True,
     ) -> float:
         """Return the likelihood of the model given the parameters.
@@ -122,7 +148,7 @@ class Model(ABC):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: ParamsType | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
     ) -> float | np.ndarray:
         """Return the risk of ``involvement``, given the parameters and diagnoses."""

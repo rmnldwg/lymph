@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 
 from lymph import diagnose_times, matrix, modalities, models, types
-from lymph.helper import (
+from lymph.types import DiagnoseType, PatternType
+from lymph.utils import (
     add_or_mult,
     draw_diagnoses,
     early_late_mapping,
@@ -16,7 +17,6 @@ from lymph.helper import (
     popfirst,
     unflatten_and_split,
 )
-from lymph.types import DiagnoseType, PatternType
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class Midline(
     """
     def __init__(
         self,
-        graph_dict: dict[tuple[str], list[str]],
+        graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
         use_central: bool = True,
@@ -347,15 +347,16 @@ class Midline(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return all the parameters of the model.
 
         This includes the spread parameters from the call to :py:meth:`get_spread_params`
-        and the distribution parameters from the call to :py:meth:`get_distribution_params`.
+        and the distribution parameters from the call to
+        :py:meth:`~.diagnose_times.Composite.get_distribution_params`.
         """
-        params = self.get_spread_params(as_flat=as_flat)
-        params["mixing"] = self.mixing_param
+        params = {}
         params["midext_prob"] = self.midext_prob
+        params.update(self.get_spread_params(as_flat=as_flat))
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
@@ -366,7 +367,7 @@ class Midline(
 
     def set_tumor_spread_params(
         self, *args: float, **kwargs: float,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Set the spread parameters of the midline model.
 
         In analogy to the :py:meth:`get_tumor_spread_params` method, this method sets
@@ -467,15 +468,15 @@ class Midline(
 
     def set_params(
         self, *args: float, **kwargs: float,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Set all parameters of the model.
 
         Combines the calls to :py:meth:`.set_spread_params` and
         :py:meth:`.set_distribution_params`.
         """
-        args = self.set_spread_params(*args, **kwargs)
         first, args = popfirst(args)
         self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
+        args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
 
@@ -517,7 +518,7 @@ class Midline(
 
         if self.marginalize_unknown and is_unknown.sum() > 0:
             self.unknown.load_patient_data(patient_data[is_unknown], mapping)
-        else:
+        elif is_unknown.sum() > 0:
             warnings.warn(
                 f"Discarding {is_unknown.sum()} patients where midline extension "
                 "is unknown."
@@ -630,7 +631,7 @@ class Midline(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -673,7 +674,7 @@ class Midline(
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
         midline_extension: bool = False,

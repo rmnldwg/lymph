@@ -1,7 +1,10 @@
 """Test the binary unilateral system."""
 
+import warnings
+
 import numpy as np
 
+from lymph import types
 from lymph.graph import LymphNodeLevel, Tumor
 from lymph.modalities import Clinical
 
@@ -205,17 +208,21 @@ class PatientDataTestCase(
     def setUp(self):
         """Load patient data."""
         super().setUp()
+        warnings.simplefilter("ignore", category=types.DataWarning)
         self.model.replace_all_modalities(fixtures.MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric", foo="frozen")
         self.model.set_params(**self.create_random_params())
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
+    def test_load_empty_dataframe(self):
+        """Make sure the patient data is loaded correctly."""
+        self.model.load_patient_data(self.raw_data.iloc[:0])
+        self.assertEqual(len(self.model.patient_data), 0)
+        self.assertEqual(self.model.likelihood(), 0.)
+
     def test_load_patient_data(self):
         """Make sure the patient data is loaded correctly."""
         self.assertEqual(len(self.model.patient_data), len(self.raw_data))
-        self.assertRaises(
-            ValueError, self.model.load_patient_data, self.raw_data, side="foo"
-        )
 
     def test_t_stages(self):
         """Make sure all T-stages are present."""
@@ -276,10 +283,18 @@ class PatientDataTestCase(
             ))
 
     def test_modality_replacement(self) -> None:
-        """Check if the patient data gets updated when the modalities change."""
+        """Check if the data & diagnose matrices get updated when modalities change."""
+        data_matrix = self.model.data_matrix()
+        diagnose_matrix = self.model.diagnose_matrix()
         self.model.replace_all_modalities({"PET": Clinical(spec=0.8, sens=0.8)})
-        self.assertTrue("PET" in self.model.patient_data["_model"].columns)
-        self.assertFalse("CT" in self.model.patient_data["_model"].columns)
+        self.assertNotEqual(
+            hash(data_matrix.tobytes()),
+            hash(self.model.data_matrix().tobytes()),
+        )
+        self.assertNotEqual(
+            hash(diagnose_matrix.tobytes()),
+            hash(self.model.diagnose_matrix().tobytes()),
+        )
 
 
 class LikelihoodTestCase(
@@ -312,6 +327,12 @@ class LikelihoodTestCase(
             mode="HMM",
         )
         self.assertEqual(likelihood, -np.inf)
+
+    def test_compute_likelihood_twice(self):
+        """Make sure the likelihood is the same when computed twice."""
+        likelihood = self.model.likelihood(log=True, mode="HMM")
+        likelihood_again = self.model.likelihood(log=True, mode="HMM")
+        self.assertEqual(likelihood, likelihood_again)
 
 
 class RiskTestCase(
