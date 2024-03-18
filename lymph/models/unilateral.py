@@ -106,13 +106,13 @@ class Unilateral(
 
 
     @classmethod
-    def binary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def binary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with binary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1], **kwargs)
 
 
     @classmethod
-    def trinary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def trinary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with trinary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
 
@@ -120,19 +120,6 @@ class Unilateral(
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
-
-
-    def print_info(self):
-        """Print detailed information about the instance."""
-        num_tumors = len(self.graph.tumors)
-        num_lnls   = len(self.graph.lnls)
-        string = (
-            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
-            f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.lnl_edges])
-            + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
-        )
-        print(string)
 
 
     @property
