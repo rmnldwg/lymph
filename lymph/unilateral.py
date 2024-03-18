@@ -169,7 +169,6 @@ class Unilateral:
         for i, node in enumerate(self.lnls):  # only set lnl's states
             node.state = newstate[i]
 
-
     @property
     def base_probs(self):
         """The spread probablities parametrizing the edges that represent the
@@ -496,7 +495,6 @@ class Unilateral:
         except AttributeError:
             self._gen_transition_matrix()
             return self._transition_matrix
-
 
     @property
     def modalities(self):

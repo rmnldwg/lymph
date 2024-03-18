@@ -26,6 +26,6 @@ __all__ = [
     "Edge",
     "Unilateral", "System",
     "Bilateral", "BilateralSystem",
-    "MidlineBilateral",
+    "MidlineBilateral", "MidlineBilateraltime",
     "Marginalizor", "MarginalizorDict",
 ]

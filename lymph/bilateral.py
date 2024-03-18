@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import pdb
 
 from .timemarg import MarginalizorDict
 from .unilateral import Unilateral
@@ -427,6 +428,26 @@ class Bilateral:
 
         self.spread_probs = new_spread_probs
 
+    def t_stages(self):
+        stored_t_stages = set(self.ipsi.diagnose_matrices.keys())
+        provided_t_stages = set(self.ipsi.diag_time_dists.keys())
+        t_stages = list(stored_t_stages.intersection(provided_t_stages))
+
+        return t_stages
+    
+    def state_probs_ipsi(self):
+        max_t = self.diag_time_dists.max_t
+        state_probs = {}
+        state_probs["ipsi"] = self.ipsi._evolve(t_last=max_t)
+
+        return state_probs["ipsi"]
+
+    def state_probs_contra(self):
+        max_t = self.diag_time_dists.max_t
+        state_probs = {}
+        state_probs["contra"] = self.contra._evolve(t_last=max_t)
+
+        return state_probs["contra"]
 
     def _likelihood(
         self,
@@ -466,7 +487,6 @@ class Bilateral:
                 llh *= np.prod(p)
 
         return llh
-
 
     def likelihood(
         self,
