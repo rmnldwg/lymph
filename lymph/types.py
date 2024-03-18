@@ -10,19 +10,7 @@ from pandas._libs.missing import NAType
 
 
 class DataWarning(UserWarning):
-    """Parent class of all warnings related to potential data issues."""
-
-
-class MissingLNLWarning(DataWarning):
-    """Raised when a lymph node level is missing from the data."""
-
-
-class MissingLateralisationWarning(DataWarning):
-    """Raised when a lateralisation is missing from the data."""
-
-
-class MissingTStageWarning(DataWarning):
-    """Warning that is raised when a defined T-stage is missing from the data."""
+    """Warnings related to potential data issues."""
 
 
 class HasSetParams(Protocol):

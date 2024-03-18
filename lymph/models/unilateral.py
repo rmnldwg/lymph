@@ -539,7 +539,7 @@ class Unilateral(
                 warnings.warn(
                     f"{side}lateral involvement data not found. Skipping "
                     f"modality {modality}.",
-                    category=types.MissingLateralisationWarning,
+                    category=types.DataWarning,
                 )
                 continue
 
@@ -550,7 +550,7 @@ class Unilateral(
                     warnings.warn(
                         f"Modality {modality} does not contain involvement data for "
                         f"LNL {lnl}. Assuming unknown.",
-                        category=types.MissingLNLWarning,
+                        category=types.DataWarning,
                     )
                     column = None
                 else:
@@ -574,7 +574,7 @@ class Unilateral(
             if t_stage not in patient_data[MAP_T_COL].values:
                 warnings.warn(
                     message=f"No data for T-stage {t_stage} found.",
-                    category=types.MissingTStageWarning,
+                    category=types.DataWarning,
                 )
 
 
