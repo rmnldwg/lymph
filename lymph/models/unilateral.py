@@ -165,7 +165,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the tumor spread edges."""
         return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
 
@@ -174,7 +174,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the LNL spread edges.
 
         In the trinary case, this includes the growth parameters as well as the
@@ -187,7 +187,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the spread edges."""
         params = self.get_tumor_spread_params(as_flat=as_flat)
         params.update(self.get_lnl_spread_params(as_flat=as_flat))
@@ -202,7 +202,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the model.
 
         If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
@@ -711,7 +711,7 @@ class Unilateral(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -767,7 +767,7 @@ class Unilateral(
 
     def posterior_state_dist(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -825,7 +825,7 @@ class Unilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",

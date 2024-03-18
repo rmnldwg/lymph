@@ -3,11 +3,11 @@ Module containing supporting classes and functions used accross the project.
 """
 import logging
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
-from lymph.types import HasGetParams, HasSetParams
+from lymph import types
 
 logger = logging.getLogger(__name__)
 
@@ -316,10 +316,10 @@ def unflatten_and_split(
 
 
 def get_params_from(
-    objects: dict[str, HasGetParams],
+    objects: dict[str, types.HasGetParams],
     as_dict: bool = True,
     as_flat: bool = True,
-) -> Iterable[float] | dict[str, float]:
+) -> types.ParamsType:
     """Get the parameters from each ``get_params()`` method of the ``objects``."""
     params = {}
     for key, obj in objects.items():
@@ -332,7 +332,7 @@ def get_params_from(
 
 
 def set_params_for(
-    objects: dict[str, HasSetParams],
+    objects: dict[str, types.HasSetParams],
     *args: float,
     **kwargs: float,
 ) -> tuple[float]:
@@ -348,8 +348,8 @@ def set_params_for(
 
 
 def synchronize_params(
-    get_from: dict[str, HasGetParams],
-    set_to: dict[str, HasSetParams],
+    get_from: dict[str, types.HasGetParams],
+    set_to: dict[str, types.HasSetParams],
 ) -> None:
     """Get the parameters from one object and set them to another."""
     for key, obj in set_to.items():

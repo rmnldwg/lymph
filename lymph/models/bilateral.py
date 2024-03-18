@@ -166,7 +166,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model's spread from tumor to LNLs.
 
         If the attribute dictionary :py:attr:`.is_symmetric` stores the key-value pair
@@ -198,7 +198,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model's spread from LNLs to tumor.
 
         Similarily to the :py:meth:`.get_tumor_spread_params` method, this returns only
@@ -230,7 +230,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model's spread edges.
 
         Depending on the symmetries (i.e. the ``is_symmetric`` attribute), this returns
@@ -285,7 +285,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model.
 
         It returns the combination of the call to the :py:meth:`.Unilateral.get_params`
@@ -522,7 +522,7 @@ class Bilateral(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -566,7 +566,7 @@ class Bilateral(
 
     def comp_posterior_joint_state_dist(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -620,7 +620,7 @@ class Bilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
