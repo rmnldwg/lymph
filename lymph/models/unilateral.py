@@ -638,7 +638,7 @@ class Unilateral(
         which is essentially a marginalization of the evolution over the possible
         states as computed by :py:meth:`.state_dist_evo` with the distribution
         over diagnose times for the given T-stage from the dictionary returned by
-        :py:meth:`.get_all_dsitributions`.
+        :py:meth:`.get_all_distributions`.
 
         Or, when ``mode`` is set to ``"BN"``, compute the distribution over states for
         the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
@@ -669,12 +669,12 @@ class Unilateral(
 
         Returns an array of probabilities for each possible complete observation. This
         entails multiplying the distribution over states as returned by the
-        :py:meth:`.state_dist` method with the :py:attr:`.observation_matrix`.
+        :py:meth:`.state_dist` method with the :py:meth:`.observation_matrix`.
 
         Note that since the :py:attr:`.observation_matrix` can become very large, this
         method is not very efficient for inference. Instead, we compute the
-        :py:attr:`.diagnose_matrices` from the :py:attr:`.observation_matrix` and
-        the :py:attr:`.data_matrices` and use these to compute the likelihood.
+        :py:meth:`.diagnose_matrix` from the :py:meth:`.observation_matrix` and
+        the :py:meth:`.data_matrix` and use these to compute the likelihood.
         """
         state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return state_dist @ self.observation_matrix()

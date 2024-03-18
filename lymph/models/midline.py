@@ -351,7 +351,8 @@ class Midline(
         """Return all the parameters of the model.
 
         This includes the spread parameters from the call to :py:meth:`get_spread_params`
-        and the distribution parameters from the call to :py:meth:`get_distribution_params`.
+        and the distribution parameters from the call to
+        :py:meth:`~.diagnose_times.Composite.get_distribution_params`.
         """
         params = {}
         params["midext_prob"] = self.midext_prob
