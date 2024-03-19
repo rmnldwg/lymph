@@ -1,7 +1,6 @@
 """
 Test the midline model for the binary case.
 """
-from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -11,31 +10,11 @@ from lymph import models
 from . import fixtures
 
 
-class MidlineSetParamsTestCase(fixtures.IgnoreWarningsTestCase):
+class MidlineSetParamsTestCase(
+    fixtures.MidlineFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Check that the complex parameter assignment works correctly."""
-
-    def setUp(
-        self,
-        seed: int = 42,
-        graph_size: Literal["small", "medium", "large"] = "small",
-        use_mixing: bool = True,
-        use_central: bool = True,
-        is_symmetric: dict[str, bool] | None = None,
-    ) -> None:
-        super().setUp()
-        self.rng = np.random.default_rng(seed)
-        graph_dict = fixtures.get_graph(graph_size)
-        if is_symmetric is None:
-            is_symmetric = {"tumor_spread": False, "lnl_spread": True}
-
-        self.model = models.Midline(
-            graph_dict=graph_dict,
-            is_symmetric=is_symmetric,
-            use_mixing=use_mixing,
-            use_central=use_central,
-            use_midext_evo=False,
-        )
-
 
     def test_init(self) -> None:
         """Check some basic attributes."""
@@ -82,49 +61,20 @@ class MidlineSetParamsTestCase(fixtures.IgnoreWarningsTestCase):
         self.assertEqual(params_to_set[:-1].tolist(), returned_params)
 
 
-class MidlineLikelihoodTestCase(fixtures.IgnoreWarningsTestCase):
+class MidlineLikelihoodTestCase(
+    fixtures.MidlineFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
     """Check that the likelihood function works correctly."""
 
-    def setUp(
-        self,
-        seed: int = 42,
-        graph_size: Literal["small", "medium", "large"] = "small",
-        use_mixing: bool = True,
-        use_central: bool = False,
-        use_midext_evo: bool = True,
-        is_symmetric: dict[str, bool] | None = None,
-    ) -> None:
+    def setUp(self) -> None:
+        """Set up the test case."""
         super().setUp()
-        self.rng = np.random.default_rng(seed)
-        graph_dict = fixtures.get_graph(graph_size)
-        if is_symmetric is None:
-            is_symmetric = {"tumor_spread": False, "lnl_spread": True}
-
-        self.model = models.Midline(
-            graph_dict=graph_dict,
-            is_symmetric=is_symmetric,
-            use_mixing=use_mixing,
-            use_central=use_central,
-            use_midext_evo=use_midext_evo,
-        )
-        self.model.set_distribution(
-            "early",
-            fixtures.create_random_dist(
-                type_="frozen",
-                max_time=self.model.max_time,
-                rng=self.rng,
-            ),
-        )
-        self.model.set_distribution(
-            "late",
-            fixtures.create_random_dist(
-                type_="parametric",
-                max_time=self.model.max_time,
-                rng=self.rng,
-            ),
-        )
+        self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
-        self.model.load_patient_data(pd.read_csv("./tests/data/2021-clb-oropharynx.csv", header=[0,1,2]))
+        self.model.load_patient_data(
+            pd.read_csv("./tests/data/2021-clb-oropharynx.csv", header=[0,1,2]),
+        )
 
 
     def test_likelihood(self) -> None:
@@ -140,6 +90,79 @@ class MidlineLikelihoodTestCase(fixtures.IgnoreWarningsTestCase):
 
         # Check that the log-likelihood is smaller than 0
         self.assertLessEqual(self.model.likelihood(), 0)
+
+
+class MidlineRiskTestCase(
+    fixtures.MidlineFixtureMixin,
+    fixtures.IgnoreWarningsTestCase,
+):
+    """Check that the risk method works correctly."""
+
+    def setUp(self) -> None:
+        """Set up the test case."""
+        super().setUp()
+        self.init_diag_time_dists(early="frozen", late="parametric")
+        self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
+        self.model.set_params(
+            midext_prob=0.1,
+            ipsi_TtoII_spread=0.35,
+            ipsi_TtoIII_spread=0.0,
+            contra_TtoII_spread=0.05,
+            contra_TtoIII_spread=0.0,
+            mixing=0.5,
+            IItoIII_spread=0.1,
+            late_p=0.5,
+        )
+
+
+    def test_risk(self) -> None:
+        """Check that the risk method works correctly."""
+        plain_risk = self.model.risk()
+        self.assertEqual(plain_risk.shape, (4,4))
+        self.assertTrue(np.isclose(plain_risk.sum(), 1.0))
+        self.assertTrue(np.allclose(plain_risk[1,:], 0.))
+        self.assertTrue(np.allclose(plain_risk[:,1], 0.))
+
+        lnlIII_risk = self.model.risk(involvement={"ipsi": {"II": False, "III": True}})
+        self.assertTrue(np.isscalar(lnlIII_risk))
+        self.assertAlmostEqual(lnlIII_risk, 0.0)
+
+        ipsi_lnlII_risk = self.model.risk(involvement={"ipsi": {"II": True}})
+        contra_lnlII_risk = self.model.risk(involvement={"contra": {"II": True}})
+        self.assertGreater(ipsi_lnlII_risk, contra_lnlII_risk)
+        ext_contra_lnlII_risk = self.model.risk(
+            involvement={"contra": {"II": True}},
+            midext=True,
+        )
+        self.assertGreater(ipsi_lnlII_risk, ext_contra_lnlII_risk)
+        self.assertGreater(ext_contra_lnlII_risk, contra_lnlII_risk)
+        noext_contra_lnlII_risk = self.model.risk(
+            involvement={"contra": {"II": True}},
+            midext=False,
+        )
+        self.assertGreater(contra_lnlII_risk, noext_contra_lnlII_risk)
+        self.assertGreater(ext_contra_lnlII_risk, noext_contra_lnlII_risk)
+
+
+    def test_risk_given_state_dist(self) -> None:
+        """Check how providing a state distribution works correctly."""
+        state_dist_3d = self.model.state_dist(t_stage="early")
+        self.assertEqual(state_dist_3d.shape, (2, 4, 4))
+
+        risk_from_state_dist = self.model.risk(given_state_dist=state_dist_3d, midext=True)
+        risk_direct = self.model.risk(midext=True)
+        self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
+
+        state_dist_2d = state_dist_3d[0] / state_dist_3d[0].sum()
+        risk_from_state_dist = self.model.risk(given_state_dist=state_dist_2d)
+        risk_direct = self.model.risk(midext=False)
+        self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
+
+        state_dist_2d = state_dist_3d[1] / state_dist_3d[1].sum()
+        risk_from_state_dist = self.model.risk(given_state_dist=state_dist_2d)
+        risk_direct = self.model.risk(midext=True)
+        self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
+
 
 
 class MidlineDrawPatientsTestCase(fixtures.IgnoreWarningsTestCase):
