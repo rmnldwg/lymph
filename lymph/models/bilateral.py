@@ -564,7 +564,7 @@ class Bilateral(
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
 
-    def posterior_joint_state_dist(
+    def posterior_state_dist(
         self,
         given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
@@ -645,7 +645,7 @@ class Bilateral(
                 only marginalizes over the states that match the involvement pattern.
         """
         # TODO: test this method
-        posterior_state_probs = self.posterior_joint_state_dist(
+        posterior_state_probs = self.posterior_state_dist(
             given_params=given_params,
             given_diagnoses=given_diagnoses,
             t_stage=t_stage,
