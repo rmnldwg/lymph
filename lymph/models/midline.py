@@ -141,7 +141,7 @@ class Midline(
                 uni_kwargs=uni_kwargs,
                 is_symmetric=self.is_symmetric,
             )
-            other_children["unknown"] = self._unknown
+            other_children["unknown"] = self.unknown
 
         if use_mixing:
             self.mixing_param = 0.
@@ -534,42 +534,50 @@ class Midline(
 
     def contra_state_dist_evo(self) -> tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension."""
-        noext_contra_dist_evo = np.zeros(
-            shape=(self.max_time + 1, len(self.noext.contra.graph.state_list))
-        )
-        noext_contra_dist_evo[0,0] = 1.
+        noext_contra_dist_evo = self.noext.contra.state_dist_evo()
+        ext_contra_dist_evo = self.ext.contra.state_dist_evo()
 
-        ext_contra_dist_evo = np.zeros(
-            shape=(self.max_time + 1, len(self.ext.contra.graph.state_list))
-        )
         if not self.use_midext_evo:
-            noext_contra_dist_evo[0,0] = 1. - self.midext_prob
-            ext_contra_dist_evo[0,0] = self.midext_prob
+            noext_contra_dist_evo *= (1. - self.midext_prob)
+            ext_contra_dist_evo *= self.midext_prob
 
-        for t in range(self.max_time):
-            # When evolving over the midline extension state, there's a chance at any
-            # time step that the tumor grows over the midline and starts spreading to
-            # the contralateral side more aggressively.
-            if self.use_midext_evo:
-                noext_contra_dist_evo[t+1] = (
-                    (1. - self.midext_prob) * noext_contra_dist_evo[t]
-                ) @ self.noext.contra.transition_matrix()
-                ext_contra_dist_evo[t+1] = (
-                    self.midext_prob * noext_contra_dist_evo[t]
-                    + ext_contra_dist_evo[t]
-                ) @ self.ext.contra.transition_matrix()
-
-            # When we do not evolve, the tumor is considered lateralized or extending
-            # over the midline from the start.
-            else:
-                noext_contra_dist_evo[t+1] = (
-                    noext_contra_dist_evo[t] @ self.noext.contra.transition_matrix()
-                )
-                ext_contra_dist_evo[t+1] = (
-                    ext_contra_dist_evo[t] @ self.ext.contra.transition_matrix()
-                )
+        else:
+            midext_evo = self.midext_evo()
+            noext_contra_dist_evo *= midext_evo[:,0].reshape((-1, 1))
+            ext_contra_dist_evo *= midext_evo[:,1].reshape((-1, 1))
 
         return noext_contra_dist_evo, ext_contra_dist_evo
+
+
+    def state_dist(
+        self,
+        t_stage: str = "early",
+        central: bool = False,
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Compute the joint over ipsi- & contralaleral hidden states and midline ext.
+
+        If ``central=False``, the result has shape (2, num_states, num_states), where
+        the first axis is for the midline extension status, the second for the
+        ipsilateral state, and the third for the contralateral state.
+
+        If ``central=True``, the result will be the state distribution of the central
+        model's :py:meth:`.Bilateral.state_dist` method.
+        """
+        if central:
+            return self.central.state_dist(t_stage, mode)
+
+        ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
+        noext_contra_dist_evo, ext_contra_dist_evo = self.contra_state_dist_evo()
+
+        if mode == "HMM":
+            result = np.empty(shape=(2, ipsi_dist_evo.shape[1], ipsi_dist_evo.shape[1]))
+            time_marg_matrix = np.diag(self.get_distribution(t_stage).pmf)
+            result[0] = ipsi_dist_evo.T @ time_marg_matrix @ noext_contra_dist_evo
+            result[1] = ipsi_dist_evo.T @ time_marg_matrix @ ext_contra_dist_evo
+            return result
+
+        raise NotImplementedError("Only HMM mode is supported as of now.")
 
 
     def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
@@ -661,9 +669,10 @@ class Midline(
         self,
         involvement: types.PatternType | None = None,
         given_params: types.ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
-        midline_extension: bool = False,
+        midext: bool | None = None,
         central: bool = False,
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
@@ -671,33 +680,51 @@ class Midline(
 
         In addition to the arguments of the :py:meth:`.Bilateral.risk` method, this
         also allows specifying if the patient's tumor extended over the mid-sagittal
-        line (``midline_extension=True``) or if it was even located right on that line
+        line (``midext=True``) or if it was even located right on that line
         (``central=True``).
 
-        For logical reasons, ``midline_extension=False`` makes no sense if
-        ``central=True`` and is thus ignored.
+        For logical reasons, ``midext=False`` makes no sense if ``central=True`` and
+        is thus ignored.
+
+        Warning:
+            As in the :py:meth:`.Bilateral.posterior_state_dist` method, you may
+            provide a precomputed (joint) state distribution in the ``given_state_dist``
+            argument. Here, this ``given_state_dist`` may be a 2D array, in which case
+            it is assumed you know how it was computed and the arguments ``t_stage``,
+            ``midext``, ``central``, and ``mode`` are ignored. If it is 3D, it should
+            have the shape ``(2, num_states, num_states)`` and be the output of the
+            :py:meth:`.Midline.state_dist` method. In this case, the ``midext``
+            argument is *not* ignored: It may be used to select the correct state
+            distribution (when ``True`` or ``False``), or marginalize over the midline
+            extension status (when ``midext=None``).
         """
-        utils.safe_set_params(self, given_params)
+        # NOTE: When given a 2D state distribution, it does not matter which of the
+        #       Bilateral models is used to compute the risk, since the state dist is
+        #       is the only thing that could differ between models.
+        if given_state_dist is None:
+            utils.safe_set_params(self, given_params)
+            given_state_dist = self.state_dist(t_stage, central, mode)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.risk(
+                involvement=involvement,
+                given_state_dist=given_state_dist,
+                given_diagnoses=given_diagnoses,
+            )
 
         if central:
-            return self.central.risk(
-                given_diagnoses=given_diagnoses,
-                t_stage=t_stage,
-                involvement=involvement,
-                mode=mode,
-            )
-        if midline_extension:
-            return self.ext.risk(
-                given_diagnoses=given_diagnoses,
-                t_stage=t_stage,
-                involvement=involvement,
-                mode=mode,
-            )
-        return self.noext.risk(
-            given_diagnoses=given_diagnoses,
-            t_stage=t_stage,
+            raise ValueError("The `given_state_dist` must be 2D for the central model.")
+
+        if midext is None:
+            given_state_dist = np.sum(given_state_dist, axis=0)
+        else:
+            given_state_dist = given_state_dist[int(midext)]
+            given_state_dist = given_state_dist / given_state_dist.sum()
+
+        return self.ext.risk(
             involvement=involvement,
-            mode=mode,
+            given_state_dist=given_state_dist,
+            given_diagnoses=given_diagnoses,
         )
 
 
