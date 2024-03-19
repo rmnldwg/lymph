@@ -7,16 +7,7 @@ from typing import Any, Iterable, Literal
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, matrix, modalities, models, types
-from lymph.types import DiagnoseType, PatternType
-from lymph.utils import (
-    add_or_mult,
-    draw_diagnoses,
-    early_late_mapping,
-    flatten,
-    popfirst,
-    unflatten_and_split,
-)
+from lymph import diagnose_times, matrix, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -277,7 +268,7 @@ class Midline(
             }
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
@@ -311,7 +302,7 @@ class Midline(
                 )
 
         if as_flat or not as_dict:
-            ext_lnl_params = flatten(ext_lnl_params)
+            ext_lnl_params = utils.flatten(ext_lnl_params)
 
         return ext_lnl_params if as_dict else ext_lnl_params.values()
 
@@ -338,7 +329,7 @@ class Midline(
             params["contra"].update(lnl_spread_params["contra"])
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
@@ -360,7 +351,7 @@ class Midline(
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
@@ -377,7 +368,7 @@ class Midline(
         :py:meth:`get_tumor_spread_params` method returns for an insight in what you
         can provide.
         """
-        kwargs, global_kwargs = unflatten_and_split(
+        kwargs, global_kwargs = utils.unflatten_and_split(
             kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
         )
 
@@ -394,7 +385,7 @@ class Midline(
             contra_kwargs = global_kwargs.copy()
             contra_kwargs.update(kwargs.get("contra", {}))
             args = self.noext.contra.set_tumor_spread_params(*args, **contra_kwargs)
-            mixing_param, args = popfirst(args)
+            mixing_param, args = utils.popfirst(args)
             mixing_param = global_kwargs.get("mixing", mixing_param) or self.mixing_param
             self.mixing_param = global_kwargs.get("mixing", mixing_param)
 
@@ -429,7 +420,7 @@ class Midline(
         three instances of :py:class:`~.Bilateral` depending on the value of the
         ``use_central`` attribute.
         """
-        kwargs, global_kwargs = unflatten_and_split(
+        kwargs, global_kwargs = utils.unflatten_and_split(
             kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
         )
         ipsi_kwargs = global_kwargs.copy()
@@ -474,7 +465,7 @@ class Midline(
         Combines the calls to :py:meth:`.set_spread_params` and
         :py:meth:`.set_distribution_params`.
         """
-        first, args = popfirst(args)
+        first, args = utils.popfirst(args)
         self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
@@ -483,7 +474,7 @@ class Midline(
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
-        mapping: callable = early_late_mapping,
+        mapping: callable = utils.early_late_mapping,
     ) -> None:
         """Load patient data into the model.
 
@@ -607,14 +598,14 @@ class Midline(
                     _model.ipsi.diagnose_matrix(stage),
                     joint_state_dist @ _model.contra.diagnose_matrix(stage).T
                 )
-                llh = add_or_mult(llh, patient_llhs, log=log)
+                llh = utils.add_or_mult(llh, patient_llhs, log=log)
 
             try:
                 marg_patient_llhs = matrix.fast_trace(
                     self.unknown.ipsi.diagnose_matrix(stage),
                     marg_joint_state_dist @ self.unknown.contra.diagnose_matrix(stage).T
                 )
-                llh = add_or_mult(llh, marg_patient_llhs, log=log)
+                llh = utils.add_or_mult(llh, marg_patient_llhs, log=log)
             except AttributeError:
                 # an AttributeError is raised both when the model has no `unknown`
                 # attribute and when no data is loaded in the `unknown` model.
@@ -673,9 +664,9 @@ class Midline(
 
     def risk(
         self,
-        involvement: PatternType | None = None,
+        involvement: types.PatternType | None = None,
         given_params: types.ParamsType | None = None,
-        given_diagnoses: dict[str, DiagnoseType] | None = None,
+        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
         midline_extension: bool = False,
         central: bool = False,
@@ -691,12 +682,7 @@ class Midline(
         For logical reasons, ``midline_extension=False`` makes no sense if
         ``central=True`` and is thus ignored.
         """
-        if given_params is None:
-            pass
-        elif isinstance(given_params, dict):
-            self.set_params(**given_params)
-        else:
-            self.set_params(*given_params)
+        utils.safe_set_params(self, given_params)
 
         if central:
             return self.central.risk(
@@ -768,7 +754,7 @@ class Midline(
         drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
-            drawn_ipsi_diags = draw_diagnoses(
+            drawn_ipsi_diags = utils.draw_diagnoses(
                 diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=ipsi_evo,
                 observation_matrix=case_model.ipsi.observation_matrix(),
@@ -776,7 +762,7 @@ class Midline(
                 rng=rng,
                 seed=seed,
             )
-            drawn_contra_diags = draw_diagnoses(
+            drawn_contra_diags = utils.draw_diagnoses(
                 diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=case_model.contra.state_dist_evo(),
                 observation_matrix=case_model.contra.observation_matrix(),
