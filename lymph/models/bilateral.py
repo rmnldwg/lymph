@@ -7,14 +7,7 @@ from typing import Any, Iterable, Literal
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, matrix, modalities, models, types
-from lymph.utils import (
-    add_or_mult,
-    early_late_mapping,
-    flatten,
-    synchronize_params,
-    unflatten_and_split,
-)
+from lymph import diagnose_times, matrix, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -189,7 +182,7 @@ class Bilateral(
             params = params["ipsi"]
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
@@ -221,7 +214,7 @@ class Bilateral(
             params = params["ipsi"]
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
@@ -276,7 +269,7 @@ class Bilateral(
             params.update(self.get_lnl_spread_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
@@ -300,14 +293,14 @@ class Bilateral(
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
-            params = flatten(params)
+            params = utils.flatten(params)
 
         return params if as_dict else params.values()
 
 
     def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread from tumor to LNLs."""
-        kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+        kwargs, global_kwargs = utils.unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
 
         ipsi_kwargs = global_kwargs.copy()
         ipsi_kwargs.update(kwargs.get("ipsi", {}))
@@ -316,7 +309,7 @@ class Bilateral(
 
         args = self.ipsi.set_tumor_spread_params(*args, **ipsi_kwargs)
         if self.is_symmetric["tumor_spread"]:
-            synchronize_params(
+            utils.synchronize_params(
                 get_from=self.ipsi.graph.tumor_edges,
                 set_to=self.contra.graph.tumor_edges,
             )
@@ -328,7 +321,9 @@ class Bilateral(
 
     def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread from LNLs to tumor."""
-        kwargs, global_kwargs = unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+        kwargs, global_kwargs = utils.unflatten_and_split(
+            kwargs, expected_keys=["ipsi", "contra"],
+        )
 
         ipsi_kwargs = global_kwargs.copy()
         ipsi_kwargs.update(kwargs.get("ipsi", {}))
@@ -337,7 +332,7 @@ class Bilateral(
 
         args = self.ipsi.set_lnl_spread_params(*args, **ipsi_kwargs)
         if self.is_symmetric["lnl_spread"]:
-            synchronize_params(
+            utils.synchronize_params(
                 get_from=self.ipsi.graph.lnl_edges,
                 set_to=self.contra.graph.lnl_edges,
             )
@@ -394,7 +389,7 @@ class Bilateral(
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
-        mapping: callable | dict[int, Any] = early_late_mapping,
+        mapping: callable | dict[int, Any] = utils.early_late_mapping,
     ) -> None:
         """Load patient data into the model.
 
@@ -515,7 +510,7 @@ class Bilateral(
                 self.ipsi.diagnose_matrix(stage),
                 joint_state_dist @ self.contra.diagnose_matrix(stage).T,
             )
-            llh = add_or_mult(llh, patient_llhs, log)
+            llh = utils.add_or_mult(llh, patient_llhs, log)
 
         return llh
 
@@ -586,7 +581,9 @@ class Bilateral(
         See Also:
             :py:meth:`.Unilateral.posterior_state_dist`
         """
-        if isinstance(given_params, dict):
+        if given_params is None:
+            pass
+        elif isinstance(given_params, dict):
             self.set_params(**given_params)
         else:
             self.set_params(*given_params)
