@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from cachetools import LRUCache
 
-from lymph import diagnose_times, graph, matrix, modalities, types
+from lymph import diagnose_times, graph, matrix, modalities, types, utils
 
 # pylint: disable=unused-import
 from lymph.utils import (  # nopycln: import
@@ -728,12 +728,7 @@ class Unilateral(
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if given_params is None:
-                pass
-            elif isinstance(given_params, dict):
-                self.set_params(**given_params)
-            else:
-                self.set_params(*given_params)
+            utils.safe_set_params(self, given_params)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -797,12 +792,9 @@ class Unilateral(
         # here if the parameters are invalid, since we want to know if the user
         # provided invalid parameters. In the likelihood, we rather return a zero
         # likelihood to tell the inference algorithm that the parameters are invalid.
-        if given_params is None:
-            pass
-        elif isinstance(given_params, dict):
-            self.set_params(**given_params)
-        else:
-            self.set_params(*given_params)
+        utils.safe_set_params(self, given_params)
+        # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
+        state_dist = self.state_dist(t_stage, mode=mode)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -810,9 +802,6 @@ class Unilateral(
         diagnose_encoding = self.compute_encoding(given_diagnoses)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
         diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
-
-        # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
-        state_dist = self.state_dist(t_stage, mode=mode)
 
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
         joint_diagnose_and_state = state_dist * diagnose_given_state

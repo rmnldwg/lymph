@@ -647,12 +647,7 @@ class Midline(
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if given_params is None:
-                pass
-            elif isinstance(given_params, dict):
-                self.set_params(**given_params)
-            else:
-                self.set_params(*given_params)
+            utils.safe_set_params(self, given_params)
         except ValueError:
             return -np.inf if log else 0.
 

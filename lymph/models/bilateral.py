@@ -542,12 +542,7 @@ class Bilateral(
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if given_params is None:
-                pass
-            elif isinstance(given_params, dict):
-                self.set_params(**given_params)
-            else:
-                self.set_params(*given_params)
+            utils.safe_set_params(self, given_params)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -581,12 +576,8 @@ class Bilateral(
         See Also:
             :py:meth:`.Unilateral.posterior_state_dist`
         """
-        if given_params is None:
-            pass
-        elif isinstance(given_params, dict):
-            self.set_params(**given_params)
-        else:
-            self.set_params(*given_params)
+        utils.safe_set_params(self, given_params)
+        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -603,7 +594,6 @@ class Bilateral(
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
             diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
 
-        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
         joint_diagnose_and_state = np.outer(
             diagnose_given_state["ipsi"],
