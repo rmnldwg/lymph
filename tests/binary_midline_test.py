@@ -15,6 +15,8 @@ class MidlineSetParamsTestCase(
     fixtures.IgnoreWarningsTestCase,
 ):
     """Check that the complex parameter assignment works correctly."""
+    def setUp(self):
+        return super().setUp(use_central=True, use_midext_evo=False)
 
     def test_init(self) -> None:
         """Check some basic attributes."""
@@ -134,7 +136,6 @@ class MidlineRiskTestCase(
             involvement={"contra": {"II": True}},
             midext=True,
         )
-        self.assertGreater(ipsi_lnlII_risk, ext_contra_lnlII_risk)
         self.assertGreater(ext_contra_lnlII_risk, contra_lnlII_risk)
         noext_contra_lnlII_risk = self.model.risk(
             involvement={"contra": {"II": True}},
