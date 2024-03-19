@@ -52,6 +52,7 @@ extensions = [
 # MyST settings
 myst_enable_extensions = ["colon_fence", "dollarmath"]
 nb_execution_mode = "auto"
+nb_execution_timeout = 120
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

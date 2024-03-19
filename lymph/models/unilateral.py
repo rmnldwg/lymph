@@ -106,13 +106,13 @@ class Unilateral(
 
 
     @classmethod
-    def binary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def binary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with binary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1], **kwargs)
 
 
     @classmethod
-    def trinary(cls, graph_dict: dict[tuple[str], set[str]], **kwargs) -> Unilateral:
+    def trinary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with trinary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
 
@@ -120,19 +120,6 @@ class Unilateral(
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
-
-
-    def print_info(self):
-        """Print detailed information about the instance."""
-        num_tumors = len(self.graph.tumors)
-        num_lnls   = len(self.graph.lnls)
-        string = (
-            f"Unilateral lymphatic system with {num_tumors} tumor(s) "
-            f"and {num_lnls} LNL(s).\n"
-            + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.tumor_edges]) + "\n" + " ".join([f"{e} {e.spread_prob}%" for e in self.graph.lnl_edges])
-            + f"\n the growth probability is: {self.graph.growth_edges[0].spread_prob}" + f" the micro mod is {self.graph.lnl_edges[0].micro_mod}"
-        )
-        print(string)
 
 
     @property
@@ -178,7 +165,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the tumor spread edges."""
         return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
 
@@ -187,7 +174,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the LNL spread edges.
 
         In the trinary case, this includes the growth parameters as well as the
@@ -200,7 +187,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the spread edges."""
         params = self.get_tumor_spread_params(as_flat=as_flat)
         params.update(self.get_lnl_spread_params(as_flat=as_flat))
@@ -215,7 +202,7 @@ class Unilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Get the parameters of the model.
 
         If ``as_dict`` is ``True``, the parameters are returned as a dictionary. If
@@ -651,7 +638,7 @@ class Unilateral(
         which is essentially a marginalization of the evolution over the possible
         states as computed by :py:meth:`.state_dist_evo` with the distribution
         over diagnose times for the given T-stage from the dictionary returned by
-        :py:meth:`.get_all_dsitributions`.
+        :py:meth:`.get_all_distributions`.
 
         Or, when ``mode`` is set to ``"BN"``, compute the distribution over states for
         the Bayesian network. In that case, the ``t_stage`` parameter is ignored.
@@ -682,12 +669,12 @@ class Unilateral(
 
         Returns an array of probabilities for each possible complete observation. This
         entails multiplying the distribution over states as returned by the
-        :py:meth:`.state_dist` method with the :py:attr:`.observation_matrix`.
+        :py:meth:`.state_dist` method with the :py:meth:`.observation_matrix`.
 
         Note that since the :py:attr:`.observation_matrix` can become very large, this
         method is not very efficient for inference. Instead, we compute the
-        :py:attr:`.diagnose_matrices` from the :py:attr:`.observation_matrix` and
-        the :py:attr:`.data_matrices` and use these to compute the likelihood.
+        :py:meth:`.diagnose_matrix` from the :py:meth:`.observation_matrix` and
+        the :py:meth:`.data_matrix` and use these to compute the likelihood.
         """
         state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return state_dist @ self.observation_matrix()
@@ -724,7 +711,7 @@ class Unilateral(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -780,7 +767,7 @@ class Unilateral(
 
     def posterior_state_dist(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -838,7 +825,7 @@ class Unilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",

@@ -347,11 +347,12 @@ class Midline(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return all the parameters of the model.
 
         This includes the spread parameters from the call to :py:meth:`get_spread_params`
-        and the distribution parameters from the call to :py:meth:`get_distribution_params`.
+        and the distribution parameters from the call to
+        :py:meth:`~.diagnose_times.Composite.get_distribution_params`.
         """
         params = {}
         params["midext_prob"] = self.midext_prob
@@ -366,7 +367,7 @@ class Midline(
 
     def set_tumor_spread_params(
         self, *args: float, **kwargs: float,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Set the spread parameters of the midline model.
 
         In analogy to the :py:meth:`get_tumor_spread_params` method, this method sets
@@ -467,7 +468,7 @@ class Midline(
 
     def set_params(
         self, *args: float, **kwargs: float,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Set all parameters of the model.
 
         Combines the calls to :py:meth:`.set_spread_params` and
@@ -630,7 +631,7 @@ class Midline(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -673,7 +674,7 @@ class Midline(
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, DiagnoseType] | None = None,
         t_stage: str = "early",
         midline_extension: bool = False,

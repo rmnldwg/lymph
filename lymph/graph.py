@@ -14,7 +14,6 @@ from __future__ import annotations
 import base64
 import warnings
 from itertools import product
-from typing import Iterable
 
 import numpy as np
 
@@ -403,7 +402,7 @@ class Edge:
         self,
         as_dict: bool = True,
         **_kwargs,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the value of the parameter ``param`` or all params in a dict.
 
         See Also:
@@ -791,7 +790,7 @@ class Representation:
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the edges in the graph.
 
         If ``as_dict`` is ``False``, return an iterable of all parameter values. If

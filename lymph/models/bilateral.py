@@ -166,7 +166,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model's spread from tumor to LNLs.
 
         If the attribute dictionary :py:attr:`.is_symmetric` stores the key-value pair
@@ -198,7 +198,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model's spread from LNLs to tumor.
 
         Similarily to the :py:meth:`.get_tumor_spread_params` method, this returns only
@@ -230,7 +230,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model's spread edges.
 
         Depending on the symmetries (i.e. the ``is_symmetric`` attribute), this returns
@@ -243,7 +243,7 @@ class Bilateral(
         symmetric, the leading ``ipsi_`` or ``contra_`` is omitted, since it's valid
         for both sides.
 
-        This is consistent with how the :py:meth:`~lymph.models.Bilteral.set_params`
+        This is consistent with how the :py:meth:`.set_params`
         method expects the keyword arguments in case of the symmetry configurations.
 
         >>> model = Bilateral(graph_dict={
@@ -285,7 +285,7 @@ class Bilateral(
         self,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of the model.
 
         It returns the combination of the call to the :py:meth:`.Unilateral.get_params`
@@ -522,7 +522,7 @@ class Bilateral(
 
     def likelihood(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         log: bool = True,
         mode: Literal["HMM", "BN"] = "HMM",
         for_t_stage: str | None = None,
@@ -564,16 +564,16 @@ class Bilateral(
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
 
-    def comp_posterior_joint_state_dist(
+    def posterior_joint_state_dist(
         self,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute joint post. dist. over ipsi & contra states, ``given_diagnoses``.
 
-        The ``given_diagnoses`` is a dictionary storing a :py:class:`types.DiagnoseType`
+        The ``given_diagnoses`` is a dictionary storing a :py:obj:`.types.DiagnoseType`
         for the ``"ipsi"`` and ``"contra"`` side of the neck.
 
         Essentially, this is the risk for any possible combination of ipsi- and
@@ -620,7 +620,7 @@ class Bilateral(
     def risk(
         self,
         involvement: types.PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: types.ParamsType | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -630,7 +630,7 @@ class Bilateral(
         The parameters can be set via the ``given_params`` and ``given_params``, both
         of which are passed to the :py:meth:`.set_params` method. The
         ``given_diagnoses`` must be a dictionary mapping the side of the neck to a
-        :py:class:`.types.DiagnoseType`.
+        :py:obj:`.types.DiagnoseType`.
 
         Note:
             The computation is much faster if no parameters are given, since then the
@@ -645,7 +645,7 @@ class Bilateral(
                 only marginalizes over the states that match the involvement pattern.
         """
         # TODO: test this method
-        posterior_state_probs = self.comp_posterior_joint_state_dist(
+        posterior_state_probs = self.posterior_joint_state_dist(
             given_params=given_params,
             given_diagnoses=given_diagnoses,
             t_stage=t_stage,

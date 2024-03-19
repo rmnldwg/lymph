@@ -22,6 +22,7 @@ from typing import Any, Iterable, TypeVar
 
 import numpy as np
 
+from lymph import types
 from lymph.utils import flatten, popfirst, unflatten_and_split
 
 logger = logging.getLogger(__name__)
@@ -209,7 +210,7 @@ class Distribution:
         self,
         as_dict: bool = True,
         **_kwargs,
-    ) -> float | Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """If updateable, return the dist's ``param`` value or all params in a dict.
 
         See Also:
@@ -473,7 +474,7 @@ class Composite(ABC):
         self: DC,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> types.ParamsType:
         """Return the parameters of all distributions."""
         params = {}
 

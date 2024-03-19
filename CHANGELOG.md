@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+
+<a name="1.0.0"></a>
+## [1.0.0] - 2024-03-18
+
+### Bug Fixes
+
+- (**uni**) Catch error when `apply` to empty data. Fixes [#79].\
+  For some reason, using `apply` on an empty `DataFrame` has an entirely
+  different return type than when it is not empty. This caused the issue
+  [#79] and has now been fixed.
+- (**bi**) Data reload loads wrong side.\
+  Now the data does not get reloaded anymore, which was actually
+  unnecessary in the first place.
+- (**uni**) Return correctly in `get_spread_params`.
+- (**mid**) Consume & return params in same order.
+- (**uni**) Allow `mapping=None` when loading data.
+
+### Testing
+
+- (**uni**) Check if loading empty data works. Related [#79].
+- (**uni**) Make sure likelihood is deterministic.
+
+### Change
+
+- ⚠ **BREAKING** (**uni**) Shorten two (unused) method names.
+- ⚠ **BREAKING** `helpers` are now `utils`.
+- (**type**) Add type definition for graph dict.
+- (**diag**) Use [partials] to save parametric dist.
+
+[partials]: https://docs.python.org/3.10/library/functools.html#functools.partial
+
+### Merge
+
+- Branch 'main' into 'dev'.
+- Branch '79-loading-an-empty-dataframe-raises-error' into 'dev'.
+
+
 <a name="1.0.0.rc2"></a>
 ## [1.0.0.rc2] - 2024-03-06
 
@@ -567,7 +604,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0...HEAD
+[1.0.0]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...1.0.0
 [1.0.0.rc2]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc1...1.0.0.rc2
 [1.0.0.rc1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a6...1.0.0.rc1
 [1.0.0.a6]: https://github.com/rmnldwg/lymph/compare/1.0.0.a5...1.0.0.a6
@@ -582,6 +620,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#79]: https://github.com/rmnldwg/lymph/issues/79
 [#77]: https://github.com/rmnldwg/lymph/issues/77
 [#74]: https://github.com/rmnldwg/lymph/issues/74
 [#72]: https://github.com/rmnldwg/lymph/issues/72

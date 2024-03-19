@@ -42,6 +42,11 @@ A dictionary of this form specifies the structure of the underlying graph. Examp
 ... }
 """
 
+ParamsType = Iterable[float] | dict[str, float]
+"""Type alias for how parameters are passed around.
+
+This is e.g. the type that the :py:meth:`Model.get_params` method returns.
+"""
 
 PatternType = dict[str, bool | str | NAType | None]
 """Type alias for an involvement pattern.
@@ -79,7 +84,7 @@ class Model(ABC):
         self: ModelT,
         as_dict: bool = True,
         as_flat: bool = True,
-    ) -> Iterable[float] | dict[str, float]:
+    ) -> ParamsType:
         """Return the parameters of the model.
 
         The parameters are returned as a dictionary if ``as_dict`` is True, and as
@@ -128,7 +133,7 @@ class Model(ABC):
     @abstractmethod
     def likelihood(
         self: ModelT,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: ParamsType | None = None,
         log: bool = True,
     ) -> float:
         """Return the likelihood of the model given the parameters.
@@ -143,7 +148,7 @@ class Model(ABC):
     def risk(
         self,
         involvement: PatternType | None = None,
-        given_params: Iterable[float] | dict[str, float] | None = None,
+        given_params: ParamsType | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
     ) -> float | np.ndarray:
         """Return the risk of ``involvement``, given the parameters and diagnoses."""
