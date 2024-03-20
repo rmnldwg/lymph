@@ -3,36 +3,19 @@
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
 # https://www.sphinx-doc.org/en/main/usage/configuration.html
-
-# -- Path setup --------------------------------------------------------------
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-import os
-import sys
-
-from pkg_resources import DistributionNotFound, get_distribution
-
-sys.path.insert(0, os.path.abspath('../..'))
-
-try:
-    __version__ = get_distribution("lymph").version
-except DistributionNotFound:
-    __version__ = "unknown version"
-
+import lymph
 
 # -- Project information -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'lymph'
 copyright = '2022, Roman Ludwig'
 author = 'Roman Ludwig'
 gh_username = 'rmnldwg'
 
-version = __version__
+version = lymph.__version__
 # The full version, including alpha/beta/rc tags
-release = __version__
+release = lymph.__version__
 
 
 # -- General configuration ---------------------------------------------------
