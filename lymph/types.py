@@ -149,7 +149,8 @@ class Model(ABC):
         self,
         involvement: PatternType | None = None,
         given_params: ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
     ) -> float | np.ndarray:
-        """Return the risk of ``involvement``, given the parameters and diagnoses."""
+        """Return the risk of ``involvement``, given params/state_dist and diagnoses."""
         raise NotImplementedError

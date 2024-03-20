@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from cachetools import LRUCache
 
-from lymph import diagnose_times, graph, matrix, modalities, types
+from lymph import diagnose_times, graph, matrix, modalities, types, utils
 
 # pylint: disable=unused-import
 from lymph.utils import (  # nopycln: import
@@ -728,12 +728,7 @@ class Unilateral(
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
-            if given_params is None:
-                pass
-            elif isinstance(given_params, dict):
-                self.set_params(**given_params)
-            else:
-                self.set_params(*given_params)
+            utils.safe_set_params(self, given_params)
         except ValueError:
             return -np.inf if log else 0.
 
@@ -768,6 +763,7 @@ class Unilateral(
     def posterior_state_dist(
         self,
         given_params: types.ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
         given_diagnoses: types.DiagnoseType | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -789,20 +785,19 @@ class Unilateral(
         for the hidden Markov model (``"HMM"``) or the Bayesian network (``"BN"``).
         In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
 
-        Note:
-            The computation is much faster if no parameters are given, since then the
-            transition matrix does not need to be recomputed.
+        Warning:
+            To speed up repetitive computations, one can provide precomputed state
+            distributions via the ``given_state_dist`` parameter. When provided, the
+            method will ignore the ``given_params``, ``t_stage``, and ``mode``
+            arguments, but compute the posterior much quicker.
         """
-        # in contrast to when computing the likelihood, we do want to raise an error
-        # here if the parameters are invalid, since we want to know if the user
-        # provided invalid parameters. In the likelihood, we rather return a zero
-        # likelihood to tell the inference algorithm that the parameters are invalid.
-        if given_params is None:
-            pass
-        elif isinstance(given_params, dict):
-            self.set_params(**given_params)
-        else:
-            self.set_params(*given_params)
+        if given_state_dist is None:
+            # in contrast to when computing the likelihood, we do want to raise an error
+            # here if the parameters are invalid, since we want to know if the user
+            # provided invalid parameters.
+            utils.safe_set_params(self, given_params)
+            # vector P(X=x) of probs of arriving in state x (marginalized over time)
+            given_state_dist = self.state_dist(t_stage, mode=mode)
 
         if given_diagnoses is None:
             given_diagnoses = {}
@@ -811,11 +806,8 @@ class Unilateral(
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
         diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
 
-        # vector P(X=x) of probabilities of arriving in state x (marginalized over time)
-        state_dist = self.state_dist(t_stage, mode=mode)
-
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
-        joint_diagnose_and_state = state_dist * diagnose_given_state
+        joint_diagnose_and_state = given_state_dist * diagnose_given_state
 
         # compute vector of probabilities for all possible involvements given the
         # specified diagnosis P(X|Z=z) = P(Z=z,X) / P(X), where P(X) = sum_z P(Z=z,X)
@@ -826,29 +818,28 @@ class Unilateral(
         self,
         involvement: types.PatternType | None = None,
         given_params: types.ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> float | np.ndarray:
-        """Compute risk of a certain involvement, given a patient's diagnosis.
+        """Compute risk of a certain ``involvement``, using the ``given_diagnoses``.
 
         If an ``involvement`` pattern of interest is provided, this method computes
         the risk of seeing just that pattern for the set of given parameters and a
         dictionary of diagnoses for each modality.
 
-        Using the ``mode`` parameter, the risk can be computed either for the hidden
-        Markov model (``"HMM"``) or the Bayesian network (``"BN"``). In case of the
-        Bayesian network mode, the ``t_stage`` parameter is ignored.
-
-        Note:
-            The computation is much faster if no parameters are given, since then the
-            transition matrix does not need to be recomputed.
-
-        See Also:
-            :py:meth:`posterior_state_dist`
+        If no ``involvement`` is provided, this will simply return the posterior
+        distribution over hidden states, given the diagnoses, as computed by the
+        :py:meth:`.posterior_state_dist` method. See its documentaiton for more
+        details about the arguments and the return value.
         """
         posterior_state_dist = self.posterior_state_dist(
-            given_params, given_diagnoses, t_stage, mode,
+            given_params=given_params,
+            given_state_dist=given_state_dist,
+            given_diagnoses=given_diagnoses,
+            t_stage=t_stage,
+            mode=mode,
         )
 
         if involvement is None:
