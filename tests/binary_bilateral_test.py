@@ -318,7 +318,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
         random_parameters = self.create_random_params()
         random_diagnoses = self.create_random_diagnoses()
 
-        posterior = self.model.posterior_joint_state_dist(
+        posterior = self.model.posterior_state_dist(
             given_params=random_parameters,
             given_diagnoses=random_diagnoses,
         )

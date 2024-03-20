@@ -347,6 +347,24 @@ def set_params_for(
     return args
 
 
+def safe_set_params(
+    model: types.ModelT,
+    params: types.ParamsType | None = None,
+) -> None:
+    """Set the ``params`` of the ``model``.
+
+    This infers whether ``params`` is a dict or a list and calls the ``model``'s method
+    ``set_params()`` accordingly.
+    """
+    if params is None:
+        return
+
+    if isinstance(params, dict):
+        model.set_params(**params)
+    else:
+        model.set_params(*params)
+
+
 def synchronize_params(
     get_from: dict[str, types.HasGetParams],
     set_to: dict[str, types.HasSetParams],
