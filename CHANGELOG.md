@@ -3,6 +3,28 @@
 All notable changes to this project will be documented in this file.
 
 
+<a name="1.1.0"></a>
+## [1.1.0] - 2024-03-20
+
+### Features
+
+- (**utils**) Add `safe_set_params()` function.\
+  This checks whether the params are a dict, list, or None and handles
+  them accordingly. Just a convencience method that helped refactor some methods.
+- Allow to pass state distributions to `posterior_state_dist()` and `risk()` methds. Fixes [#80].\
+  With this, one can use precomputed state distributions to speed up
+  computing the posterior or risk for multiple scenarios.
+
+### Refactor
+
+- Use `safe_set_params()` across models.
+
+### Testing
+
+- Add checks for midline risk. Related [#80].
+- (**mid**) Fix wrong assumption in risk test.
+
+
 <a name="1.0.0"></a>
 ## [1.0.0] - 2024-03-18
 
@@ -604,7 +626,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.0.0...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.1.0...HEAD
+[1.1.0]: https://github.com/rmnldwg/lymph/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...1.0.0
 [1.0.0.rc2]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc1...1.0.0.rc2
 [1.0.0.rc1]: https://github.com/rmnldwg/lymph/compare/1.0.0.a6...1.0.0.rc1
@@ -620,6 +643,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#80]: https://github.com/rmnldwg/lymph/issues/80
 [#79]: https://github.com/rmnldwg/lymph/issues/79
 [#77]: https://github.com/rmnldwg/lymph/issues/77
 [#74]: https://github.com/rmnldwg/lymph/issues/74
