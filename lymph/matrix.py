@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 
 from lymph import graph
-from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 from lymph.modalities import Modality
+from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
 
 @lru_cache(maxsize=128)
@@ -105,6 +105,7 @@ def compute_encoding(
 
     In the binary case (``base=2``), the value behind ``pattern[lnl]`` can be one of
     the following things:
+
     - ``False``: The LNL is healthy.
     - ``"healthy"``: The LNL is healthy.
     - ``True``: The LNL is involved.
@@ -113,6 +114,7 @@ def compute_encoding(
 
     In the trinary case (``base=3``), the value behind ``pattern[lnl]`` can be one of
     these things:
+
     - ``False``: The LNL is healthy.
     - ``"healthy"``: The LNL is healthy.
     - ``True``: The LNL is involved (micro- or macroscopic).
