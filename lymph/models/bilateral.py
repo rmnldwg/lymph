@@ -627,7 +627,7 @@ class Bilateral(
         its docstring for more details on the remaining arguments.
         """
         # TODO: test this method
-        posterior_state_probs = self.posterior_state_dist(
+        posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,
             given_state_dist=given_state_dist,
             given_diagnoses=given_diagnoses,
@@ -636,7 +636,7 @@ class Bilateral(
         )
 
         if involvement is None:
-            return posterior_state_probs
+            return posterior_state_dist
 
         marginalize_over_states = {}
         for side in ["ipsi", "contra"]:
@@ -648,7 +648,7 @@ class Bilateral(
             )
         return (
             marginalize_over_states["ipsi"]
-            @ posterior_state_probs
+            @ posterior_state_dist
             @ marginalize_over_states["contra"]
         )
 

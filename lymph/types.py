@@ -120,6 +120,19 @@ class Model(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def state_dist(
+        self: ModelT,
+        t_stage: str,
+        mode: Literal["HMM", "BN"] = "BN",
+    ) -> np.ndarray:
+        """Return the prior state distribution of the model.
+
+        The state distribution is the probability of the model being in any of the
+        possible hidden states.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def load_patient_data(
         self: ModelT,
         patient_data: pd.DataFrame,
@@ -141,6 +154,23 @@ class Model(ABC):
         The likelihood is returned in log space if ``log`` is True, and in linear space
         otherwise. The parameters may be passed as positional or keyword arguments.
         They are then passed to the :py:meth:`set_params` method first.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def posterior_state_dist(
+        self: ModelT,
+        given_params: ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        given_diagnoses: dict[str, PatternType] | None = None,
+    ) -> np.ndarray:
+        """Return the posterior state distribution using the ``given_diagnoses``.
+
+        The posterior state distribution is the probability of the model being in a
+        certain state given the diagnoses. The ``given_params`` are passed to the
+        :py:meth:`set_params` method. Alternatively to parameters, one may also pass
+        a ``given_state_dist``, which is effectively the precomputed prior from calling
+        :py:meth:`.state_dist`.
         """
         raise NotImplementedError
 
