@@ -665,6 +665,58 @@ class Midline(
         raise NotImplementedError("Only HMM mode is supported as of now.")
 
 
+    def posterior_state_dist(
+        self,
+        given_params: types.ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
+        t_stage: str = "early",
+        midext: bool | None = None,
+        central: bool = False,
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> float:
+        """Compute the posterior state distribution.
+
+        Using either the ``given_params`` or the ``given_state_dist`` argument, this
+        method computes the posterior state distribution of the model for the
+        ``given_diagnoses``, a specific ``t_stage``, whether the tumor extends over the
+        mid-sagittal line (``midext``), and whether it is central (``central``, only
+        used if :py:attr:`use_central` is ``True``).
+
+        See Also:
+            :py:meth:`.types.Model.posterior_state_dist`
+                The corresponding method in the base class.
+            :py:meth:`.Bilateral.posterior_state_dist`
+                The bilateral method that is ultimately called by this one.
+        """
+        # NOTE: When given a 2D state distribution, it does not matter which of the
+        #       Bilateral models is used to compute the risk, since the state dist is
+        #       is the only thing that could differ between models.
+        if given_state_dist is None:
+            utils.safe_set_params(self, given_params)
+            given_state_dist = self.state_dist(t_stage, central, mode)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.posterior_state_dist(
+                given_state_dist=given_state_dist,
+                given_diagnoses=given_diagnoses,
+            )
+
+        if central:
+            raise ValueError("The `given_state_dist` must be 2D for the central model.")
+
+        if midext is None:
+            given_state_dist = np.sum(given_state_dist, axis=0)
+        else:
+            given_state_dist = given_state_dist[int(midext)]
+            given_state_dist = given_state_dist / given_state_dist.sum()
+
+        return self.ext.posterior_state_dist(
+            given_state_dist=given_state_dist,
+            given_diagnoses=given_diagnoses,
+        )
+
+
     def risk(
         self,
         involvement: types.PatternType | None = None,
@@ -698,33 +750,31 @@ class Midline(
             distribution (when ``True`` or ``False``), or marginalize over the midline
             extension status (when ``midext=None``).
         """
-        # NOTE: When given a 2D state distribution, it does not matter which of the
-        #       Bilateral models is used to compute the risk, since the state dist is
-        #       is the only thing that could differ between models.
-        if given_state_dist is None:
-            utils.safe_set_params(self, given_params)
-            given_state_dist = self.state_dist(t_stage, central, mode)
-
-        if given_state_dist.ndim == 2:
-            return self.ext.risk(
-                involvement=involvement,
-                given_state_dist=given_state_dist,
-                given_diagnoses=given_diagnoses,
-            )
-
-        if central:
-            raise ValueError("The `given_state_dist` must be 2D for the central model.")
-
-        if midext is None:
-            given_state_dist = np.sum(given_state_dist, axis=0)
-        else:
-            given_state_dist = given_state_dist[int(midext)]
-            given_state_dist = given_state_dist / given_state_dist.sum()
-
-        return self.ext.risk(
-            involvement=involvement,
+        posterior_state_dist = self.posterior_state_dist(
+            given_params=given_params,
             given_state_dist=given_state_dist,
             given_diagnoses=given_diagnoses,
+            t_stage=t_stage,
+            midext=midext,
+            central=central,
+            mode=mode,
+        )
+
+        if involvement is None:
+            return posterior_state_dist
+
+        marginalize_over_states = {}
+        for side in ["ipsi", "contra"]:
+            side_graph = getattr(self.ext, side).graph
+            marginalize_over_states[side] = matrix.compute_encoding(
+                lnls=side_graph.lnls.keys(),
+                pattern=involvement.get(side, {}),
+                base=3 if self.is_trinary else 2,
+            )
+        return (
+            marginalize_over_states["ipsi"]
+            @ posterior_state_dist
+            @ marginalize_over_states["contra"]
         )
 
 
