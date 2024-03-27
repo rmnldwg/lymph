@@ -11,7 +11,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from lymph import graph
+from lymph import graph, types
 from lymph.modalities import Modality
 from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
@@ -94,7 +94,7 @@ def generate_observation(
 
 def compute_encoding(
     lnls: list[str],
-    pattern: pd.Series | dict[str, bool | int | str],
+    pattern: pd.Series | dict[str, types.InvolvementIndicator],
     base: int = 2,
 ) -> np.ndarray:
     """Compute the encoding of a particular ``pattern`` of involvement.

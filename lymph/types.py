@@ -6,7 +6,6 @@ from typing import Iterable, Literal, Protocol, TypeVar
 
 import numpy as np
 import pandas as pd
-from pandas._libs.missing import NAType
 
 
 class DataWarning(UserWarning):
@@ -45,10 +44,21 @@ A dictionary of this form specifies the structure of the underlying graph. Examp
 ParamsType = Iterable[float] | dict[str, float]
 """Type alias for how parameters are passed around.
 
-This is e.g. the type that the :py:meth:`Model.get_params` method returns.
+This is e.g. the type that the :py:meth:`.Model.get_params` method returns.
 """
 
-PatternType = dict[str, bool | str | NAType | None]
+InvolvementIndicator = Literal[
+    False, 0, "healthy",
+    True, 1, "involved",
+    "micro", "macro", "notmacro",
+]
+"""Type alias for how to encode lymphatic involvement for a single lymph node level.
+
+The choices ``"micro"``, ``"macro"``, and ``"notmacro"`` are only relevant for the
+trinary models.
+"""
+
+PatternType = dict[str, InvolvementIndicator | None]
 """Type alias for an involvement pattern.
 
 An involvement pattern is a dictionary with keys for the lymph node levels and values
