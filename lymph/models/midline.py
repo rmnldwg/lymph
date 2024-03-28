@@ -788,7 +788,9 @@ class Midline(
             given_state_dist = np.sum(given_state_dist, axis=0)
         else:
             given_state_dist = given_state_dist[int(midext)]
-            given_state_dist = given_state_dist / given_state_dist.sum()
+            # I think I don't need to normalize here, since I am not computing a
+            # probability of something *given* midext, but only sum up all states that
+            # match the involvement pattern (which includes the midext status).
 
         return self.ext.marginalize(
             involvement=involvement,
