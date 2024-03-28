@@ -585,16 +585,13 @@ class Midline(
         given_state_dist: np.ndarray | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
-        midext: bool | None = None,
         central: bool = False,
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral observations.
 
         If ``given_state_dist`` is provided, ``t_stage``, ``mode``, and ``central`` are
-        ignored. The provided state distribution may be 2D or 3D. If it is 3D, it will
-        be reduced to 2D using the value of ``midext``.
-
-        The result will have shape ``(num_obs_states, num_obs_states)``.
+        ignored. The provided state distribution may be 2D or 3D. The returned
+        distribution will have the same dimensionality.
 
         See Also:
             :py:meth:`.Unilateral.obs_dist`
@@ -608,13 +605,13 @@ class Midline(
         if given_state_dist.ndim == 2:
             return self.ext.obs_dist(given_state_dist=given_state_dist)
 
-        if midext is None:
-            given_state_dist = np.sum(given_state_dist, axis=0)
-        else:
-            given_state_dist = given_state_dist[int(midext)]
-            given_state_dist = given_state_dist / given_state_dist.sum()
-
-        return self.ext.obs_dist(given_state_dist=given_state_dist)
+        # Theoretically, we also have a sensitivity and specificity for observing
+        # midline extension, but realisitically, these values will just be 1.
+        obs_dist = [
+            self.ext.obs_dist(given_state_dist=given_state_dist[0]),
+            self.ext.obs_dist(given_state_dist=given_state_dist[1]),
+        ]
+        return np.stack(obs_dist)
 
 
     def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
