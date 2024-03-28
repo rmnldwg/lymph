@@ -133,12 +133,28 @@ class Model(ABC):
     def state_dist(
         self: ModelT,
         t_stage: str,
-        mode: Literal["HMM", "BN"] = "BN",
+        mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Return the prior state distribution of the model.
 
         The state distribution is the probability of the model being in any of the
         possible hidden states.
+        """
+        raise NotImplementedError
+
+    def obs_dist(
+        self: ModelT,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Return the distribution over observational states.
+
+        If ``given_state_dist`` is ``None``, it will first compute the
+        :py:meth:`.state_dist` using the arguments ``t_stage`` and ``mode`` (which are
+        otherwise ignored). Then it multiplies the distribution over (hidden) states
+        with the specificity and sensitivity values stored in the model (see
+        :py:meth:`.modalities.Composite`) and marginalizes over the hidden states.
         """
         raise NotImplementedError
 
@@ -184,6 +200,24 @@ class Model(ABC):
         """
         raise NotImplementedError
 
+    def marginalize(
+        self,
+        involvement: dict[str, PatternType] | None = None,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> float:
+        """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
+
+        Any state that matches the provided ``involvement`` pattern is marginalized
+        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
+
+        If ``given_state_dist`` is ``None``, it will be computed by calling
+        :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
+        are ignored if ``given_state_dist`` is provided.
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def risk(
         self,
@@ -191,6 +225,6 @@ class Model(ABC):
         given_params: ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
         given_diagnoses: dict[str, PatternType] | None = None,
-    ) -> float | np.ndarray:
+    ) -> float:
         """Return the risk of ``involvement``, given params/state_dist and diagnoses."""
         raise NotImplementedError

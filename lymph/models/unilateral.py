@@ -855,7 +855,7 @@ class Unilateral(
         given_diagnoses: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
-    ) -> float | np.ndarray:
+    ) -> float:
         """Compute risk of a certain ``involvement``, using the ``given_diagnoses``.
 
         If an ``involvement`` pattern of interest is provided, this method computes
