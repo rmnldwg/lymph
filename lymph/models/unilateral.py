@@ -662,6 +662,7 @@ class Unilateral(
 
     def obs_dist(
         self,
+        given_state_dist: np.ndarray | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
@@ -676,8 +677,10 @@ class Unilateral(
         :py:meth:`.diagnose_matrix` from the :py:meth:`.observation_matrix` and
         the :py:meth:`.data_matrix` and use these to compute the likelihood.
         """
-        state_dist = self.state_dist(t_stage=t_stage, mode=mode)
-        return state_dist @ self.observation_matrix()
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+
+        return given_state_dist @ self.observation_matrix()
 
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
@@ -713,8 +716,8 @@ class Unilateral(
         self,
         given_params: types.ParamsType | None = None,
         log: bool = True,
+        t_stage: str | None = None,
         mode: Literal["HMM", "BN"] = "HMM",
-        for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
@@ -733,9 +736,9 @@ class Unilateral(
             return -np.inf if log else 0.
 
         if mode == "HMM":
-            return self._hmm_likelihood(log, for_t_stage)
+            return self._hmm_likelihood(log, t_stage)
         if mode == "BN":
-            return self._bn_likelihood(log, for_t_stage)
+            return self._bn_likelihood(log, t_stage)
 
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
@@ -814,6 +817,36 @@ class Unilateral(
         return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
 
 
+    def marginalize(
+        self,
+        involvement: types.PatternType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> float:
+        """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
+
+        Any state that matches the provided ``involvement`` pattern is marginalized
+        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
+
+        If ``given_state_dist`` is ``None``, it will be computed by calling
+        :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
+        are ignored if ``given_state_dist`` is provided.
+        """
+        if involvement is None:
+            return 1.
+
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+
+        marginalize_over_states = matrix.compute_encoding(
+            lnls=self.graph.lnls.keys(),
+            pattern=involvement,
+            base=3 if self.is_trinary else 2,
+        )
+        return marginalize_over_states @ given_state_dist
+
+
     def risk(
         self,
         involvement: types.PatternType | None = None,
@@ -842,18 +875,10 @@ class Unilateral(
             mode=mode,
         )
 
-        if involvement is None:
-            return posterior_state_dist
-
         # if a specific involvement of interest is provided, marginalize the
         # resulting vector of hidden states to match that involvement of
         # interest
-        marginalize_over_states = matrix.compute_encoding(
-            lnls=self.graph.lnls.keys(),
-            pattern=involvement,
-            base=3 if self.is_trinary else 2,
-        )
-        return marginalize_over_states @ posterior_state_dist
+        return self.marginalize(involvement, posterior_state_dist)
 
 
     def draw_diagnoses(

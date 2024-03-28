@@ -552,8 +552,8 @@ class Midline(
     def state_dist(
         self,
         t_stage: str = "early",
-        central: bool = False,
         mode: Literal["HMM", "BN"] = "HMM",
+        central: bool = False,
     ) -> np.ndarray:
         """Compute the joint over ipsi- & contralaleral hidden states and midline ext.
 
@@ -578,6 +578,43 @@ class Midline(
             return result
 
         raise NotImplementedError("Only HMM mode is supported as of now.")
+
+
+    def obs_dist(
+        self,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+        midext: bool | None = None,
+        central: bool = False,
+    ) -> np.ndarray:
+        """Compute the joint distribution over the ipsi- & contralateral observations.
+
+        If ``given_state_dist`` is provided, ``t_stage``, ``mode``, and ``central`` are
+        ignored. The provided state distribution may be 2D or 3D. If it is 3D, it will
+        be reduced to 2D using the value of ``midext``.
+
+        The result will have shape ``(num_obs_states, num_obs_states)``.
+
+        See Also:
+            :py:meth:`.Unilateral.obs_dist`
+                The corresponding unilateral function. Note that this method returns
+                a 2D array, because it computes the probability of any possible
+                combination of ipsi- and contralateral observations.
+        """
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.obs_dist(given_state_dist=given_state_dist)
+
+        if midext is None:
+            given_state_dist = np.sum(given_state_dist, axis=0)
+        else:
+            given_state_dist = given_state_dist[int(midext)]
+            given_state_dist = given_state_dist / given_state_dist.sum()
+
+        return self.ext.obs_dist(given_state_dist=given_state_dist)
 
 
     def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
@@ -621,9 +658,9 @@ class Midline(
 
         if self.use_central:
             if log:
-                llh += self.central.likelihood(log=log, for_t_stage=for_t_stage)
+                llh += self.central.likelihood(log=log, t_stage=for_t_stage)
             else:
-                llh *= self.central.likelihood(log=log, for_t_stage=for_t_stage)
+                llh *= self.central.likelihood(log=log, t_stage=for_t_stage)
 
         return llh
 
@@ -632,8 +669,8 @@ class Midline(
         self,
         given_params: types.ParamsType | None = None,
         log: bool = True,
+        t_stage: str | None = None,
         mode: Literal["HMM", "BN"] = "HMM",
-        for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
@@ -660,7 +697,7 @@ class Midline(
             return -np.inf if log else 0.
 
         if mode == "HMM":
-            return self._hmm_likelihood(log, for_t_stage)
+            return self._hmm_likelihood(log, t_stage)
 
         raise NotImplementedError("Only HMM mode is supported as of now.")
 
@@ -671,9 +708,9 @@ class Midline(
         given_state_dist: np.ndarray | None = None,
         given_diagnoses: dict[str, types.DiagnoseType] | None = None,
         t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
         midext: bool | None = None,
         central: bool = False,
-        mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
         """Compute the posterior state distribution.
 
@@ -694,7 +731,7 @@ class Midline(
         #       is the only thing that could differ between models.
         if given_state_dist is None:
             utils.safe_set_params(self, given_params)
-            given_state_dist = self.state_dist(t_stage, central, mode)
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
 
         if given_state_dist.ndim == 2:
             return self.ext.posterior_state_dist(
@@ -714,6 +751,48 @@ class Midline(
         return self.ext.posterior_state_dist(
             given_state_dist=given_state_dist,
             given_diagnoses=given_diagnoses,
+        )
+
+
+    def marginalize(
+        self,
+        involvement: types.PatternType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+        midext: bool | None = None,
+        central: bool = False,
+    ) -> float:
+        """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
+
+        Any state that matches the provided ``involvement`` pattern is marginalized
+        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
+
+        The arguments ``t_stage``, ``mode``, and ``central`` are only used if
+        ``given_state_dist`` is ``None``. In this case they are passed to the
+        :py:meth:`.state_dist` method.
+        """
+        if involvement is None:
+            return 1.
+
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.marginalize(
+                involvement=involvement,
+                given_state_dist=given_state_dist,
+            )
+
+        if midext is None:
+            given_state_dist = np.sum(given_state_dist, axis=0)
+        else:
+            given_state_dist = given_state_dist[int(midext)]
+            given_state_dist = given_state_dist / given_state_dist.sum()
+
+        return self.ext.marginalize(
+            involvement=involvement,
+            given_state_dist=given_state_dist,
         )
 
 
@@ -760,21 +839,10 @@ class Midline(
             mode=mode,
         )
 
-        if involvement is None:
-            return posterior_state_dist
-
-        marginalize_over_states = {}
-        for side in ["ipsi", "contra"]:
-            side_graph = getattr(self.ext, side).graph
-            marginalize_over_states[side] = matrix.compute_encoding(
-                lnls=side_graph.lnls.keys(),
-                pattern=involvement.get(side, {}),
-                base=3 if self.is_trinary else 2,
-            )
-        return (
-            marginalize_over_states["ipsi"]
-            @ posterior_state_dist
-            @ marginalize_over_states["contra"]
+        return self.marginalize(
+            involvement=involvement,
+            given_state_dist=posterior_state_dist,
+            midext=midext,
         )
 
 

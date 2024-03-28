@@ -437,6 +437,7 @@ class Bilateral(
 
     def obs_dist(
         self,
+        given_state_dist: np.ndarray | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
@@ -448,10 +449,12 @@ class Bilateral(
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral observations.
         """
-        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+
         return (
             self.ipsi.observation_matrix().T
-            @ joint_state_dist
+            @ given_state_dist
             @ self.contra.observation_matrix()
         )
 
@@ -515,8 +518,8 @@ class Bilateral(
         self,
         given_params: types.ParamsType | None = None,
         log: bool = True,
+        t_stage: str | None = None,
         mode: Literal["HMM", "BN"] = "HMM",
-        for_t_stage: str | None = None,
     ):
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
@@ -543,9 +546,9 @@ class Bilateral(
             return -np.inf if log else 0.
 
         if mode == "HMM":
-            return self._hmm_likelihood(log, for_t_stage)
+            return self._hmm_likelihood(log, t_stage)
         if mode == "BN":
-            return self._bn_likelihood(log, for_t_stage)
+            return self._bn_likelihood(log, t_stage)
 
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
@@ -606,6 +609,43 @@ class Bilateral(
         return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
 
 
+    def marginalize(
+        self,
+        involvement: dict[str, types.PatternType] | None = None,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> float:
+        """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
+
+        Any state that matches the provided ``involvement`` pattern is marginalized
+        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
+
+        If ``given_state_dist`` is ``None``, it will be computed by calling
+        :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
+        are ignored if ``given_state_dist`` is provided.
+        """
+        if involvement is None:
+            return 1.
+
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+
+        marginalize_over_states = {}
+        for side in ["ipsi", "contra"]:
+            side_graph = getattr(self, side).graph
+            marginalize_over_states[side] = matrix.compute_encoding(
+                lnls=side_graph.lnls.keys(),
+                pattern=involvement.get(side, {}),
+                base=3 if self.is_trinary else 2,
+            )
+        return (
+            marginalize_over_states["ipsi"]
+            @ given_state_dist
+            @ marginalize_over_states["contra"]
+        )
+
+
     def risk(
         self,
         involvement: dict[str, types.PatternType] | None = None,
@@ -635,22 +675,7 @@ class Bilateral(
             mode=mode,
         )
 
-        if involvement is None:
-            return posterior_state_dist
-
-        marginalize_over_states = {}
-        for side in ["ipsi", "contra"]:
-            side_graph = getattr(self, side).graph
-            marginalize_over_states[side] = matrix.compute_encoding(
-                lnls=side_graph.lnls.keys(),
-                pattern=involvement.get(side, {}),
-                base=3 if self.is_trinary else 2,
-            )
-        return (
-            marginalize_over_states["ipsi"]
-            @ posterior_state_dist
-            @ marginalize_over_states["contra"]
-        )
+        return self.marginalize(involvement, posterior_state_dist)
 
 
     def draw_patients(
