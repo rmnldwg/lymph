@@ -7,7 +7,7 @@ from typing import Any, Iterable, Literal
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, matrix, modalities, models, types, utils
+from lymph import diagnosis_times, matrix, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ CENTRAL_COL = ("tumor", "1", "central")
 
 
 class Midline(
-    diagnose_times.Composite,
+    diagnosis_times.Composite,
     modalities.Composite,
     types.Model,
 ):
@@ -80,7 +80,7 @@ class Midline(
         data is stored in a :py:class:`~.Bilateral` instance accessible via the
         attribute ``"unknown"``. Note that this bilateral instance does not get updated
         parameters or any other kind of attention. It is solely used to store the data
-        and generate diagnose matrices for those data.
+        and generate diagnosis matrices for those data.
 
         The ``uni_kwargs`` are passed to all bilateral models.
 
@@ -148,7 +148,7 @@ class Midline(
 
         self.midext_prob = 0.
 
-        diagnose_times.Composite.__init__(
+        diagnosis_times.Composite.__init__(
             self,
             distribution_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_distribution_leaf=False,
@@ -343,7 +343,7 @@ class Midline(
 
         This includes the spread parameters from the call to :py:meth:`get_spread_params`
         and the distribution parameters from the call to
-        :py:meth:`~.diagnose_times.Composite.get_distribution_params`.
+        :py:meth:`~.diagnosis_times.Composite.get_distribution_params`.
         """
         params = {}
         params["midext_prob"] = self.midext_prob
@@ -637,15 +637,15 @@ class Midline(
                 marg_joint_state_dist += joint_state_dist
                 _model = getattr(self, case)
                 patient_llhs = matrix.fast_trace(
-                    _model.ipsi.diagnose_matrix(stage),
-                    joint_state_dist @ _model.contra.diagnose_matrix(stage).T
+                    _model.ipsi.diagnosis_matrix(stage),
+                    joint_state_dist @ _model.contra.diagnosis_matrix(stage).T
                 )
                 llh = utils.add_or_mult(llh, patient_llhs, log=log)
 
             try:
                 marg_patient_llhs = matrix.fast_trace(
-                    self.unknown.ipsi.diagnose_matrix(stage),
-                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrix(stage).T
+                    self.unknown.ipsi.diagnosis_matrix(stage),
+                    marg_joint_state_dist @ self.unknown.contra.diagnosis_matrix(stage).T
                 )
                 llh = utils.add_or_mult(llh, marg_patient_llhs, log=log)
             except AttributeError:
@@ -703,7 +703,7 @@ class Midline(
         self,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
+        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
         midext: bool | None = None,
@@ -713,7 +713,7 @@ class Midline(
 
         Using either the ``given_params`` or the ``given_state_dist`` argument, this
         method computes the posterior state distribution of the model for the
-        ``given_diagnoses``, a specific ``t_stage``, whether the tumor extends over the
+        ``given_diagnosis``, a specific ``t_stage``, whether the tumor extends over the
         mid-sagittal line (``midext``), and whether it is central (``central``, only
         used if :py:attr:`use_central` is ``True``).
 
@@ -733,7 +733,7 @@ class Midline(
         if given_state_dist.ndim == 2:
             return self.ext.posterior_state_dist(
                 given_state_dist=given_state_dist,
-                given_diagnoses=given_diagnoses,
+                given_diagnosis=given_diagnosis,
             )
 
         if central:
@@ -747,7 +747,7 @@ class Midline(
 
         return self.ext.posterior_state_dist(
             given_state_dist=given_state_dist,
-            given_diagnoses=given_diagnoses,
+            given_diagnosis=given_diagnosis,
         )
 
 
@@ -800,13 +800,13 @@ class Midline(
         involvement: types.PatternType | None = None,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
+        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
         t_stage: str = "early",
         midext: bool | None = None,
         central: bool = False,
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
-        """Compute the risk of nodal involvement ``given_diagnoses``.
+        """Compute the risk of nodal involvement ``given_diagnosis``.
 
         In addition to the arguments of the :py:meth:`.Bilateral.risk` method, this
         also allows specifying if the patient's tumor extended over the mid-sagittal
@@ -831,7 +831,7 @@ class Midline(
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,
             given_state_dist=given_state_dist,
-            given_diagnoses=given_diagnoses,
+            given_diagnosis=given_diagnosis,
             t_stage=t_stage,
             midext=midext,
             central=central,
@@ -893,19 +893,19 @@ class Midline(
         drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
-            drawn_ipsi_diags = utils.draw_diagnoses(
-                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+            drawn_ipsi_diags = utils.draw_diagnosis(
+                diagnosis_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=ipsi_evo,
                 observation_matrix=case_model.ipsi.observation_matrix(),
-                possible_diagnoses=case_model.ipsi.obs_list,
+                possible_diagnosis=case_model.ipsi.obs_list,
                 rng=rng,
                 seed=seed,
             )
-            drawn_contra_diags = utils.draw_diagnoses(
-                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+            drawn_contra_diags = utils.draw_diagnosis(
+                diagnosis_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=case_model.contra.state_dist_evo(),
                 observation_matrix=case_model.contra.observation_matrix(),
-                possible_diagnoses=case_model.contra.obs_list,
+                possible_diagnosis=case_model.contra.obs_list,
                 rng=rng,
                 seed=seed,
             )
@@ -913,7 +913,7 @@ class Midline(
             drawn_diags[drawn_midexts == (case == "ext")] = drawn_case_diags
 
         # construct MultiIndex with "ipsi" and "contra" at top level to allow
-        # concatenation of the two separate drawn diagnoses
+        # concatenation of the two separate drawn diagnosis
         sides = ["ipsi", "contra"]
         modality_names = list(self.get_all_modalities().keys())
         lnl_names = [lnl for lnl in self.ext.ipsi.graph.lnls.keys()]
@@ -926,6 +926,6 @@ class Midline(
         dataset = dataset.sort_index(axis="columns", level=0)
         dataset["tumor", "1", "t_stage"] = drawn_t_stages
         dataset["tumor", "1", "extension"] = drawn_midexts
-        dataset["patient", "#", "diagnose_time"] = drawn_diag_times
+        dataset["patient", "#", "diagnosis_time"] = drawn_diag_times
 
         return dataset

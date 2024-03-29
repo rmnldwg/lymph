@@ -7,14 +7,14 @@ from typing import Any, Iterable, Literal
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, matrix, modalities, models, types, utils
+from lymph import diagnosis_times, matrix, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
 class Bilateral(
-    diagnose_times.Composite,
+    diagnosis_times.Composite,
     modalities.Composite,
     types.Model,
 ):
@@ -23,7 +23,7 @@ class Bilateral(
     This is achieved by creating two instances of the
     :py:class:`~lymph.models.Unilateral` model, one for the ipsi- and one for the
     contralateral side of the neck. The two sides are assumed to be independent of each
-    other, given the diagnose time over which we marginalize.
+    other, given the diagnosis time over which we marginalize.
 
     See Also:
         :py:class:`~lymph.models.Unilateral`
@@ -78,7 +78,7 @@ class Bilateral(
 
         self.is_symmetric = is_symmetric
 
-        diagnose_times.Composite.__init__(
+        diagnosis_times.Composite.__init__(
             self,
             distribution_children={"ipsi": self.ipsi, "contra": self.contra},
             is_distribution_leaf=False,
@@ -377,7 +377,7 @@ class Bilateral(
               sides.
 
         3. The parameters of the parametric distributions for marginalizing over
-           diagnose times.
+           diagnosis times.
 
         When still some positional arguments remain after that, they are returned
         in a tuple.
@@ -409,7 +409,7 @@ class Bilateral(
 
         This computes the state distributions of both sides and returns their outer
         product. In case ``mode`` is ``"HMM"`` (default), the state distributions are
-        first marginalized over the diagnose time distribtions of the respective
+        first marginalized over the diagnosis time distribtions of the respective
         ``t_stage``.
 
         See Also:
@@ -467,8 +467,8 @@ class Bilateral(
         """Compute the likelihood of each patient individually."""
         joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
         return matrix.fast_trace(
-            self.ipsi.diagnose_matrix(t_stage),
-            joint_state_dist @ self.contra.diagnose_matrix(t_stage).T,
+            self.ipsi.diagnosis_matrix(t_stage),
+            joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
         )
 
 
@@ -476,8 +476,8 @@ class Bilateral(
         """Compute the BN likelihood of data, using the stored params."""
         joint_state_dist = self.state_dist(mode="BN")
         patient_llhs = matrix.fast_trace(
-            self.ipsi.diagnose_matrix(t_stage),
-            joint_state_dist @ self.contra.diagnose_matrix(t_stage).T,
+            self.ipsi.diagnosis_matrix(t_stage),
+            joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
         )
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
@@ -506,8 +506,8 @@ class Bilateral(
                 @ contra_dist_evo
             )
             patient_llhs = matrix.fast_trace(
-                self.ipsi.diagnose_matrix(stage),
-                joint_state_dist @ self.contra.diagnose_matrix(stage).T,
+                self.ipsi.diagnosis_matrix(stage),
+                joint_state_dist @ self.contra.diagnosis_matrix(stage).T,
             )
             llh = utils.add_or_mult(llh, patient_llhs, log)
 
@@ -557,17 +557,17 @@ class Bilateral(
         self,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
+        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
-        """Compute joint post. dist. over ipsi & contra states, ``given_diagnoses``.
+        """Compute joint post. dist. over ipsi & contra states, ``given_diagnosis``.
 
-        The ``given_diagnoses`` is a dictionary storing one :py:obj:`.types.DiagnoseType`
+        The ``given_diagnosis`` is a dictionary storing one :py:obj:`.types.DiagnosisType`
         each for the ``"ipsi"`` and ``"contra"`` side of the neck.
 
         Essentially, this is the risk for any possible combination of ipsi- and
-        contralateral involvement, given the provided diagnoses.
+        contralateral involvement, given the provided diagnosis.
 
         Warning:
             As in the :py:meth:`.Unilateral.posterior_state_dist` method, one may
@@ -584,29 +584,29 @@ class Bilateral(
             utils.safe_set_params(self, given_params)
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
 
-        if given_diagnoses is None:
-            given_diagnoses = {}
+        if given_diagnosis is None:
+            given_diagnosis = {}
 
-        diagnose_given_state = {}
+        diagnosis_given_state = {}
         for side in ["ipsi", "contra"]:
-            if side not in given_diagnoses:
-                warnings.warn(f"No diagnoses given for {side}lateral side.")
+            if side not in given_diagnosis:
+                warnings.warn(f"No diagnosis given for {side}lateral side.")
 
-            diagnose_encoding = getattr(self, side).compute_encoding(
-                given_diagnoses.get(side, {})
+            diagnosis_encoding = getattr(self, side).compute_encoding(
+                given_diagnosis.get(side, {})
             )
             observation_matrix = getattr(self, side).observation_matrix()
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
-            diagnose_given_state[side] = diagnose_encoding @ observation_matrix.T
+            diagnosis_given_state[side] = diagnosis_encoding @ observation_matrix.T
 
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
-        joint_diagnose_and_state = np.outer(
-            diagnose_given_state["ipsi"],
-            diagnose_given_state["contra"],
+        joint_diagnosis_and_state = np.outer(
+            diagnosis_given_state["ipsi"],
+            diagnosis_given_state["contra"],
         ) * given_state_dist
         # Following Bayes' theorem, this is P(Xi,Xc|Zi=zi,Zc=zc) which is given by
         # P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) / P(Zi=zi,Zc=zc)
-        return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
+        return joint_diagnosis_and_state / np.sum(joint_diagnosis_and_state)
 
 
     def marginalize(
@@ -651,11 +651,11 @@ class Bilateral(
         involvement: dict[str, types.PatternType] | None = None,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
+        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
-        """Compute risk of the ``involvement`` patterns, given parameters and diagnoses.
+        """Compute risk of the ``involvement`` patterns, given parameters and diagnosis.
 
         The ``involvement`` of interest is expected to be a :py:obj:`.PatternType` for
         each side of the neck (``"ipsi"`` and ``"contra"``). This method then
@@ -670,7 +670,7 @@ class Bilateral(
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,
             given_state_dist=given_state_dist,
-            given_diagnoses=given_diagnoses,
+            given_diagnosis=given_diagnosis,
             t_stage=t_stage,
             mode=mode,
         )
@@ -689,10 +689,10 @@ class Bilateral(
         """Draw ``num`` random patients from the parametrized model.
 
         See Also:
-            :py:meth:`.diagnose_times.Distribution.draw_diag_times`
-                Method to draw diagnose times from a distribution.
-            :py:meth:`.Unilateral.draw_diagnoses`
-                Method to draw individual diagnoses from a unilateral model.
+            :py:meth:`.diagnosis_times.Distribution.draw_diag_times`
+                Method to draw diagnosis times from a distribution.
+            :py:meth:`.Unilateral.draw_diagnosis`
+                Method to draw individual diagnosis from a unilateral model.
             :py:meth:`.Unilateral.draw_patients`
                 The unilateral method to draw a synthetic dataset.
         """
@@ -713,12 +713,12 @@ class Bilateral(
             for t_stage in drawn_t_stages
         ]
 
-        drawn_obs_ipsi = self.ipsi.draw_diagnoses(drawn_diag_times, rng=rng)
-        drawn_obs_contra = self.contra.draw_diagnoses(drawn_diag_times, rng=rng)
+        drawn_obs_ipsi = self.ipsi.draw_diagnosis(drawn_diag_times, rng=rng)
+        drawn_obs_contra = self.contra.draw_diagnosis(drawn_diag_times, rng=rng)
         drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_contra], axis=1)
 
         # construct MultiIndex with "ipsi" and "contra" at top level to allow
-        # concatenation of the two separate drawn diagnoses
+        # concatenation of the two separate drawn diagnosis
         sides = ["ipsi", "contra"]
         modality_names = list(self.get_all_modalities().keys())
         lnl_names = [lnl for lnl in self.ipsi.graph.lnls.keys()]

@@ -101,7 +101,7 @@ def compute_encoding(
 
     A ``pattern`` holds information about the involvement of each LNL and the function
     transforms this into a binary encoding which is ``True`` for all possible complete
-    states/diagnoses that are compatible with the given ``pattern``.
+    states/diagnosis that are compatible with the given ``pattern``.
 
     In the binary case (``base=2``), the value behind ``pattern[lnl]`` can be one of
     the following things:
@@ -213,12 +213,12 @@ def generate_data_encoding(
             if modality_name not in patient_row:
                 warnings.warn(f"Modality {modality_name} not in data. Skipping.")
                 continue
-            diagnose_encoding = compute_encoding(
+            diagnosis_encoding = compute_encoding(
                 lnls=lnls,
                 pattern=patient_row[modality_name],
                 base=2,   # observations are always binary!
             )
-            patient_encoding = np.kron(patient_encoding, diagnose_encoding)
+            patient_encoding = np.kron(patient_encoding, diagnosis_encoding)
 
         result[:,i] = patient_encoding
 

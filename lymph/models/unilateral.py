@@ -8,13 +8,13 @@ import numpy as np
 import pandas as pd
 from cachetools import LRUCache
 
-from lymph import diagnose_times, graph, matrix, modalities, types, utils
+from lymph import diagnosis_times, graph, matrix, modalities, types, utils
 
 # pylint: disable=unused-import
 from lymph.utils import (  # nopycln: import
     add_or_mult,
     dict_to_func,
-    draw_diagnoses,
+    draw_diagnosis,
     early_late_mapping,
     flatten,
     get_params_from,
@@ -29,7 +29,7 @@ RAW_T_COL = ("tumor", "1", "t_stage")
 
 
 class Unilateral(
-    diagnose_times.Composite,
+    diagnosis_times.Composite,
     modalities.Composite,
     types.Model,
 ):
@@ -97,12 +97,12 @@ class Unilateral(
             allowed_states=allowed_states,
         )
 
-        diagnose_times.Composite.__init__(self, max_time=max_time, is_distribution_leaf=True)
+        diagnosis_times.Composite.__init__(self, max_time=max_time, is_distribution_leaf=True)
         modalities.Composite.__init__(self, is_modality_leaf=True)
         self._patient_data: pd.DataFrame | None = None
         self._cache_version: int = 0
         self._data_matrix_cache: LRUCache = LRUCache(maxsize=64)
-        self._diagnose_matrix_cache: LRUCache = LRUCache(maxsize=64)
+        self._diagnosis_matrix_cache: LRUCache = LRUCache(maxsize=64)
 
 
     @classmethod
@@ -243,7 +243,7 @@ class Unilateral(
         :py:meth:`lymph.models.Unilateral.set_distribution_params` method.
 
         The keyword arguments can be of the format ``"<edge_name>_<param_name>"`` or
-        ``"<t_stage>_<param_name>"`` for the distributions over diagnose times. If only
+        ``"<t_stage>_<param_name>"`` for the distributions over diagnosis times. If only
         a ``"<param_name>"`` is provided, it is assumed to be a global parameter and is
         sent to all edges or distributions. But the more specific keyword arguments
         override the global ones, which in turn override the positional arguments.
@@ -303,34 +303,34 @@ class Unilateral(
         return trans_prob
 
 
-    def diagnose_prob(
+    def diagnosis_prob(
         self,
-        diagnoses: pd.Series | dict[str, dict[str, bool]]
+        diagnosis: pd.Series | dict[str, dict[str, bool]]
     ) -> float:
-        """Compute the probability to observe a diagnose given the current state.
+        """Compute the probability to observe a diagnosis given the current state.
 
-        The ``diagnoses`` is either a pandas ``Series`` object corresponding to one row
+        The ``diagnosis`` is either a pandas ``Series`` object corresponding to one row
         of a patient data table, or a dictionary with keys of diagnostic modalities and
         values of dictionaries holding the observation for each LNL under the
         respective key.
 
         It returns the probability of observing this particular combination of
-        diagnoses, given the current state of the system.
+        diagnosis, given the current state of the system.
         """
         prob = 1.
         for name, modality in self.get_all_modalities().items():
-            if name in diagnoses:
-                mod_diagnose = diagnoses[name]
+            if name in diagnosis:
+                mod_diagnosis = diagnosis[name]
                 for lnl in self.graph.lnls:
                     try:
-                        lnl_diagnose = mod_diagnose[lnl.name]
+                        lnl_diagnosis = mod_diagnosis[lnl.name]
                     except KeyError:
                         continue
                     except IndexError as idx_err:
                         raise ValueError(
-                            "diagnoses were not provided in the correct format"
+                            "diagnosis were not provided in the correct format"
                         ) from idx_err
-                    prob *= lnl.comp_obs_prob(lnl_diagnose, modality.confusion_matrix)
+                    prob *= lnl.comp_obs_prob(lnl_diagnosis, modality.confusion_matrix)
         return prob
 
 
@@ -409,7 +409,7 @@ class Unilateral(
         """The matrix encoding the probabilities to observe a certain diagnosis.
 
         Every element in this matrix holds a probability to observe a certain diagnosis
-        (or combination of diagnoses, when using multiple diagnostic modalities) given
+        (or combination of diagnosis, when using multiple diagnostic modalities) given
         the current state of the system. It has the shape
         :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes in
         the graph and :math:`M` is the number of diagnostic modalities.
@@ -432,10 +432,10 @@ class Unilateral(
         it encodes the information which observational state could have led to the
         observed diagnosis. If a diagnosis is complete, i.e., for every diagnostic
         modality and every LNL we have an observation, the data matrix is a one-hot
-        encoding of the observed diagnoses. Otherwise it may contain multiple 1s,
+        encoding of the observed diagnosis. Otherwise it may contain multiple 1s,
         indicating over which observational state one should marginalize.
 
-        The data matrix is used to compute the :py:attr:`~diagnose_matrix`, which in
+        The data matrix is used to compute the :py:attr:`~diagnosis_matrix`, which in
         turn is used to compute the likelihood of the model given the patient data.
 
         See Also:
@@ -466,23 +466,23 @@ class Unilateral(
         return self._data_matrix_cache[t_hash]
 
 
-    def diagnose_matrix(self, t_stage: str | None = None) -> np.ndarray:
-        """Extract the diagnose matrix for a given ``t_stage``.
+    def diagnosis_matrix(self, t_stage: str | None = None) -> np.ndarray:
+        """Extract the diagnosis matrix for a given ``t_stage``.
 
         For every patient this matrix stores the probability to observe this patient's
         diagnosis, given one of the possible hidden states of the model. It is computed
         by multiplying the :py:meth:`.data_matrix` with the
         :py:meth:`.observation_matrix`.
         """
-        # Compute the entire diagnose matrix if it is not in the cache. Note that this
+        # Compute the entire diagnosis matrix if it is not in the cache. Note that this
         # requires the data matrix to be computed as well.
         _hash = hash((t_stage, self.modalities_hash(), self._cache_version))
-        if _hash not in self._diagnose_matrix_cache:
-            self._diagnose_matrix_cache[_hash] = (
+        if _hash not in self._diagnosis_matrix_cache:
+            self._diagnosis_matrix_cache[_hash] = (
                 self.observation_matrix() @ self.data_matrix(t_stage).T
             )
 
-        return self._diagnose_matrix_cache[_hash].T
+        return self._diagnosis_matrix_cache[_hash].T
 
 
     def load_patient_data(
@@ -499,13 +499,13 @@ class Unilateral(
 
         With the ``mapping`` function or dictionary, the reported T-stages (usually 0,
         1, 2, 3, and 4) can be mapped to any keys also used to access the corresponding
-        distribution over diagnose times. The default mapping is to map 0, 1, and 2 to
+        distribution over diagnosis times. The default mapping is to map 0, 1, and 2 to
         "early" and 3 and 4 to "late".
 
         What this method essentially does is to copy the entire data frame, check all
         necessary information is present, and add a new top-level header ``"_model"`` to
         the data frame. Under this header, columns are assembled that contain all the
-        information necessary to compute the observation and diagnose matrices.
+        information necessary to compute the observation and diagnosis matrices.
 
         .. _LyProX: https://lyprox.org/
         """
@@ -581,14 +581,14 @@ class Unilateral(
 
         Additionally, it holds the data encodings and probability of diagnosis given the
         hidden states for each patient under the headers ``("_model", "_encoding",
-        <obs_state>)`` and ``("_model", "_diagnose_prob", <hidden_state>)``,
+        <obs_state>)`` and ``("_model", "_diagnosis_prob", <hidden_state>)``,
         respectively.
         """
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
 
-        # if not present, this will recompute the full data and diagnose matrices
-        _ = self.diagnose_matrix()
+        # if not present, this will recompute the full data and diagnosis matrices
+        _ = self.diagnosis_matrix()
 
         return self._patient_data
 
@@ -612,10 +612,10 @@ class Unilateral(
 
         This returns a matrix with the distribution over the possible states for
         each time step from :math:`t = 0` to :math:`t = T`, where :math:`T` is the
-        maximum diagnose time stored in the model's attribute ``max_time``.
+        maximum diagnosis time stored in the model's attribute ``max_time``.
 
         Note that at this point, the distributions are not weighted with the
-        distribution over diagnose times that are stored and managed for each T-stage
+        distribution over diagnosis times that are stored and managed for each T-stage
         in the dictionary returned by :py:meth:`.get_all_distributions`.
         """
         state_dists = np.zeros(shape=(self.max_time + 1, len(self.graph.state_list)))
@@ -637,7 +637,7 @@ class Unilateral(
         Do this either for a given ``t_stage``, when ``mode`` is set to ``"HMM"``,
         which is essentially a marginalization of the evolution over the possible
         states as computed by :py:meth:`.state_dist_evo` with the distribution
-        over diagnose times for the given T-stage from the dictionary returned by
+        over diagnosis times for the given T-stage from the dictionary returned by
         :py:meth:`.get_all_distributions`.
 
         Or, when ``mode`` is set to ``"BN"``, compute the distribution over states for
@@ -674,7 +674,7 @@ class Unilateral(
 
         Note that since the :py:attr:`.observation_matrix` can become very large, this
         method is not very efficient for inference. Instead, we compute the
-        :py:meth:`.diagnose_matrix` from the :py:meth:`.observation_matrix` and
+        :py:meth:`.diagnosis_matrix` from the :py:meth:`.observation_matrix` and
         the :py:meth:`.data_matrix` and use these to compute the likelihood.
         """
         if given_state_dist is None:
@@ -686,7 +686,7 @@ class Unilateral(
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
         state_dist = self.state_dist(mode="BN")
-        patient_llhs = state_dist @ self.diagnose_matrix(t_stage).T
+        patient_llhs = state_dist @ self.diagnosis_matrix(t_stage).T
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
@@ -705,7 +705,7 @@ class Unilateral(
             patient_llhs = (
                 self.get_distribution(t_stage).pmf
                 @ evolved_model
-                @ self.diagnose_matrix(t_stage).T
+                @ self.diagnosis_matrix(t_stage).T
             )
             llh = add_or_mult(llh, patient_llhs, log)
 
@@ -745,40 +745,40 @@ class Unilateral(
 
     def compute_encoding(
         self,
-        given_diagnoses: types.DiagnoseType | None = None,
+        given_diagnosis: types.DiagnosisType | None = None,
     ) -> np.ndarray:
         """Compute one-hot vector encoding of a given diagnosis."""
-        diagnose_encoding = np.array([True], dtype=bool)
+        diagnosis_encoding = np.array([True], dtype=bool)
 
         for modality in self.get_all_modalities().keys():
-            diagnose_encoding = np.kron(
-                diagnose_encoding,
+            diagnosis_encoding = np.kron(
+                diagnosis_encoding,
                 matrix.compute_encoding(
                     lnls=self.graph.lnls.keys(),
-                    pattern=given_diagnoses.get(modality, {}),
-                    base=2,   # diagnoses are always binary!
+                    pattern=given_diagnosis.get(modality, {}),
+                    base=2,   # diagnosis are always binary!
                 ),
             )
 
-        return diagnose_encoding
+        return diagnosis_encoding
 
 
     def posterior_state_dist(
         self,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: types.DiagnoseType | None = None,
+        given_diagnosis: types.DiagnosisType | None = None,
         t_stage: str | int = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the posterior distribution over hidden states given a diagnosis.
 
-        The ``given_diagnoses`` is a dictionary of diagnoses for each modality. E.g.,
+        The ``given_diagnosis`` is a dictionary of diagnosis for each modality. E.g.,
         this could look like this:
 
         .. code-block:: python
 
-            given_diagnoses = {
+            given_diagnosis = {
                 "MRI": {"II": True, "III": False, "IV": False},
                 "PET": {"II": True, "III": True, "IV": None},
             }
@@ -802,19 +802,19 @@ class Unilateral(
             # vector P(X=x) of probs of arriving in state x (marginalized over time)
             given_state_dist = self.state_dist(t_stage, mode=mode)
 
-        if given_diagnoses is None:
-            given_diagnoses = {}
+        if given_diagnosis is None:
+            given_diagnosis = {}
 
-        diagnose_encoding = self.compute_encoding(given_diagnoses)
+        diagnosis_encoding = self.compute_encoding(given_diagnosis)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
-        diagnose_given_state = diagnose_encoding @ self.observation_matrix().T
+        diagnosis_given_state = diagnosis_encoding @ self.observation_matrix().T
 
         # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
-        joint_diagnose_and_state = given_state_dist * diagnose_given_state
+        joint_diagnosis_and_state = given_state_dist * diagnosis_given_state
 
         # compute vector of probabilities for all possible involvements given the
         # specified diagnosis P(X|Z=z) = P(Z=z,X) / P(X), where P(X) = sum_z P(Z=z,X)
-        return joint_diagnose_and_state / np.sum(joint_diagnose_and_state)
+        return joint_diagnosis_and_state / np.sum(joint_diagnosis_and_state)
 
 
     def marginalize(
@@ -852,25 +852,25 @@ class Unilateral(
         involvement: types.PatternType | None = None,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, types.PatternType] | None = None,
+        given_diagnosis: dict[str, types.PatternType] | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
-        """Compute risk of a certain ``involvement``, using the ``given_diagnoses``.
+        """Compute risk of a certain ``involvement``, using the ``given_diagnosis``.
 
         If an ``involvement`` pattern of interest is provided, this method computes
         the risk of seeing just that pattern for the set of given parameters and a
-        dictionary of diagnoses for each modality.
+        dictionary of diagnosis for each modality.
 
         If no ``involvement`` is provided, this will simply return the posterior
-        distribution over hidden states, given the diagnoses, as computed by the
+        distribution over hidden states, given the diagnosis, as computed by the
         :py:meth:`.posterior_state_dist` method. See its documentaiton for more
         details about the arguments and the return value.
         """
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,
             given_state_dist=given_state_dist,
-            given_diagnoses=given_diagnoses,
+            given_diagnosis=given_diagnosis,
             t_stage=t_stage,
             mode=mode,
         )
@@ -881,13 +881,13 @@ class Unilateral(
         return self.marginalize(involvement, posterior_state_dist)
 
 
-    def draw_diagnoses(
+    def draw_diagnosis(
         self,
         diag_times: list[int],
         rng: np.random.Generator | None = None,
         seed: int = 42,
     ) -> np.ndarray:
-        """Given some ``diag_times``, draw diagnoses for each LNL.
+        """Given some ``diag_times``, draw diagnosis for each LNL.
 
         >>> model = Unilateral(graph_dict={
         ...     ("tumor", "T"): ["II" , "III"],
@@ -895,17 +895,17 @@ class Unilateral(
         ...     ("lnl", "III"): [],
         ... })
         >>> model.set_modality("CT", spec=0.8, sens=0.8)
-        >>> model.draw_diagnoses([0, 1, 2, 3, 4])       # doctest: +NORMALIZE_WHITESPACE
+        >>> model.draw_diagnosis([0, 1, 2, 3, 4])       # doctest: +NORMALIZE_WHITESPACE
         array([[False,  True],
                [False, False],
                [ True, False],
                [False,  True],
                [False, False]])
-        >>> draw_diagnoses(                   # this is the same as the previous example
-        ...     diagnose_times=[0, 1, 2, 3, 4],
+        >>> draw_diagnosis(                   # this is the same as the previous example
+        ...     diagnosis_times=[0, 1, 2, 3, 4],
         ...     state_evolution=model.state_dist_evo(),
         ...     observation_matrix=model.observation_matrix(),
-        ...     possible_diagnoses=model.obs_list,
+        ...     possible_diagnosis=model.obs_list,
         ... )
         array([[False,  True],
                [False, False],
@@ -947,10 +947,10 @@ class Unilateral(
         is initialized with the given ``seed`` (or ``42``, by default).
 
         See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.draw_diag_times`
-                Method to draw diagnose times from a distribution.
-            :py:meth:`lymph.models.Unilateral.draw_diagnoses`
-                Method to draw individual diagnoses.
+            :py:meth:`lymph.diagnosis_times.Distribution.draw_diag_times`
+                Method to draw diagnosis times from a distribution.
+            :py:meth:`lymph.models.Unilateral.draw_diagnosis`
+                Method to draw individual diagnosis.
             :py:meth:`lymph.models.Bilateral.draw_patients`
                 The corresponding bilateral method.
         """
@@ -972,7 +972,7 @@ class Unilateral(
             for t_stage in drawn_t_stages
         ]
 
-        drawn_obs = self.draw_diagnoses(drawn_diag_times, rng=rng)
+        drawn_obs = self.draw_diagnosis(drawn_diag_times, rng=rng)
 
         modality_names = list(self.get_all_modalities().keys())
         lnl_names = list(self.graph.lnls.keys())

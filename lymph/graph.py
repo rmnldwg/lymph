@@ -406,8 +406,8 @@ class Edge:
         """Return the value of the parameter ``param`` or all params in a dict.
 
         See Also:
-            :py:meth:`lymph.diagnose_times.Distribution.get_params`
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.diagnosis_times.Distribution.get_params`
+            :py:meth:`lymph.diagnosis_times.DistributionsUserDict.get_params`
             :py:meth:`lymph.models.Unilateral.get_params`
             :py:meth:`lymph.models.Bilateral.get_params`
         """

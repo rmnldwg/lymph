@@ -374,26 +374,26 @@ def synchronize_params(
         obj.set_params(**get_from[key].get_params(as_dict=True))
 
 
-def draw_diagnoses(
-    diagnose_times: list[int],
+def draw_diagnosis(
+    diagnosis_times: list[int],
     state_evolution: np.ndarray,
     observation_matrix: np.ndarray,
-    possible_diagnoses: np.ndarray,
+    possible_diagnosis: np.ndarray,
     rng: np.random.Generator | None = None,
     seed: int = 42,
 ) -> np.ndarray:
-    """Given the ``diagnose_times`` and a hidden ``state_evolution``, draw diagnoses."""
+    """Given the ``diagnosis_times`` and a hidden ``state_evolution``, draw diagnosis."""
     if rng is None:
         rng = np.random.default_rng(seed)
 
-    state_dists_given_time = state_evolution[diagnose_times]
+    state_dists_given_time = state_evolution[diagnosis_times]
     observation_dists_given_time = state_dists_given_time @ observation_matrix
 
     drawn_observation_idxs = [
-        rng.choice(a=np.arange(len(possible_diagnoses)), p=dist)
+        rng.choice(a=np.arange(len(possible_diagnosis)), p=dist)
         for dist in observation_dists_given_time
     ]
-    return possible_diagnoses[drawn_observation_idxs].astype(bool)
+    return possible_diagnosis[drawn_observation_idxs].astype(bool)
 
 
 def add_or_mult(llh: float, arr: np.ndarray, log: bool = True) -> float:

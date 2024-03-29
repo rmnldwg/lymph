@@ -71,10 +71,10 @@ See :py:func:`.matrix.compute_encoding`
 >>> pattern = {"I": True, "II": False, "III": None}
 """
 
-DiagnoseType = dict[str, PatternType]
-"""Type alias for a diagnose, which is an involvement pattern per diagnostic modality.
+DiagnosisType = dict[str, PatternType]
+"""Type alias for a diagnosis, which is an involvement pattern per diagnostic modality.
 
->>> diagnose = {
+>>> diagnosis = {
 ...     "CT": {"I": True, "II": False, "III": None},
 ...     "MRI": {"I": True, "II": True, "III": None},
 ... }
@@ -111,7 +111,7 @@ class Model(ABC):
         A hidden Markov model (``mode="HMM"``) typically has more parameters than a
         Bayesian network (``mode="BN"``), because it we need parameters for the
         distributions over diagnosis times. Your can read more about that in the
-        :py:mod:`lymph.diagnose_times` module.
+        :py:mod:`lymph.diagnosis_times` module.
         """
         # pylint: disable=no-member
         num = len(self.get_params())
@@ -188,12 +188,12 @@ class Model(ABC):
         self: ModelT,
         given_params: ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, PatternType] | None = None,
+        given_diagnosis: dict[str, PatternType] | None = None,
     ) -> np.ndarray:
-        """Return the posterior state distribution using the ``given_diagnoses``.
+        """Return the posterior state distribution using the ``given_diagnosis``.
 
         The posterior state distribution is the probability of the model being in a
-        certain state given the diagnoses. The ``given_params`` are passed to the
+        certain state given the diagnosis. The ``given_params`` are passed to the
         :py:meth:`set_params` method. Alternatively to parameters, one may also pass
         a ``given_state_dist``, which is effectively the precomputed prior from calling
         :py:meth:`.state_dist`.
@@ -224,7 +224,7 @@ class Model(ABC):
         involvement: PatternType | None = None,
         given_params: ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, PatternType] | None = None,
+        given_diagnosis: dict[str, PatternType] | None = None,
     ) -> float:
-        """Return the risk of ``involvement``, given params/state_dist and diagnoses."""
+        """Return the risk of ``involvement``, given params/state_dist and diagnosis."""
         raise NotImplementedError
