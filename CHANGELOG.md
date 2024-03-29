@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.2.0"></a>
+## [1.2.0] - 2024-03-29
+
+### Bug Fixes
+
+- (**mid**) `obs_dist` may return 3D array.
+
+
+### Documentation
+
+- Fix unknown version in title.
+- Add missing blank before list.
+- (**mid**) Add comment about midext marginalizing.
+
+
+### Features
+
+- (**mid**) Add `posterior_state_dist()` method.\
+  The `Midline` model now has a `posterior_state_dist()` method, too.
+- (**types**) Base `Model` has state dist methods.\
+  Both `state_dist()` and `posterior_state_dist()` have been added to the
+  `types.Model` base class.
+- Add `marginalize()` method.\
+  With this new method, one can marginalize a (prior or posterior) state
+  distribution over all states that match a provided involvement.\
+  It is used e.g. to refactor the code of the `risk()` methods.
+- (**types**) Add `obs_dist` and `marginalize`.\
+  The `types.Model` base abstract base class now also has the methods
+  `obs_dist` and `marginalize` for better autocomplete support in editors.
+
+
+### Testing
+
+- Remove plain test risk.
+
+
+### Change
+
+- (**types**) Improve type hints for inv. pattern.
+- Rename "diagnose" to "diagnosis" when noun.\
+  When used as a noun, "diagnosis" is correct, not "diagnose".
+
 
 <a name="1.1.0"></a>
 ## [1.1.0] - 2024-03-20
@@ -626,7 +668,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.1.0...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.2.0...HEAD
+[1.2.0]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/rmnldwg/lymph/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...1.0.0
 [1.0.0.rc2]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc1...1.0.0.rc2
