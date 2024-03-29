@@ -1,10 +1,10 @@
-"""Check functionality of the distribution over diagnose times."""
+"""Check functionality of the distribution over diagnosis times."""
 import warnings
 
 import numpy as np
 import scipy as sp
 
-from lymph.diagnose_times import Distribution
+from lymph.diagnosis_times import Distribution
 
 from . import fixtures
 

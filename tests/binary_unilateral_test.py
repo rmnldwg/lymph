@@ -258,42 +258,42 @@ class PatientDataTestCase(
                 has_t_stage.sum(),
             )
 
-    def test_diagnose_matrices(self):
-        """Make sure the diagnose matrices are generated correctly."""
+    def test_diagnosis_matrices(self):
+        """Make sure the diagnosis matrices are generated correctly."""
         for t_stage in ["early", "late"]:
             has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin({
                 "early": [0,1,2],
                 "late": [3,4],
             }[t_stage])
-            diagnose_matrix = self.model.diagnose_matrix(t_stage).T
+            diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
 
             self.assertEqual(
-                diagnose_matrix.shape[0],
+                diagnosis_matrix.shape[0],
                 self.model.transition_matrix().shape[1],
             )
             self.assertEqual(
-                diagnose_matrix.shape[1],
+                diagnosis_matrix.shape[1],
                 has_t_stage.sum(),
             )
-            # some times, entries in the diagnose matrix are almost one, but just
+            # some times, entries in the diagnosis matrix are almost one, but just
             # slightly larger. That's why we also have to have the `isclose` here.
             self.assertTrue(np.all(
-                np.isclose(diagnose_matrix, 1.)
-                | np.less_equal(diagnose_matrix, 1.)
+                np.isclose(diagnosis_matrix, 1.)
+                | np.less_equal(diagnosis_matrix, 1.)
             ))
 
     def test_modality_replacement(self) -> None:
-        """Check if the data & diagnose matrices get updated when modalities change."""
+        """Check if the data & diagnosis matrices get updated when modalities change."""
         data_matrix = self.model.data_matrix()
-        diagnose_matrix = self.model.diagnose_matrix()
+        diagnosis_matrix = self.model.diagnosis_matrix()
         self.model.replace_all_modalities({"PET": Clinical(spec=0.8, sens=0.8)})
         self.assertNotEqual(
             hash(data_matrix.tobytes()),
             hash(self.model.data_matrix().tobytes()),
         )
         self.assertNotEqual(
-            hash(diagnose_matrix.tobytes()),
-            hash(self.model.diagnose_matrix().tobytes()),
+            hash(diagnosis_matrix.tobytes()),
+            hash(self.model.diagnosis_matrix().tobytes()),
         )
 
 
@@ -348,32 +348,32 @@ class RiskTestCase(
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.set_params(**self.create_random_params())
 
-    def create_random_diagnoses(self):
+    def create_random_diagnosis(self):
         """Create a random diagnosis for each modality and LNL."""
         lnl_names = list(self.model.graph.lnls.keys())
-        diagnoses = {}
+        diagnosis = {}
 
         for modality in self.model.get_all_modalities():
-            diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
+            diagnosis[modality] = fixtures.create_random_pattern(lnl_names)
 
-        return diagnoses
+        return diagnosis
 
     def test_compute_encoding(self):
-        """Check computation of one-hot encoding of diagnoses."""
-        random_diagnoses = self.create_random_diagnoses()
+        """Check computation of one-hot encoding of diagnosis."""
+        random_diagnosis = self.create_random_diagnosis()
         num_lnls = len(self.model.graph.lnls)
         num_mods = len(self.model.get_all_modalities())
-        num_posible_diagnoses = 2**(num_lnls * num_mods)
+        num_posible_diagnosis = 2**(num_lnls * num_mods)
 
-        diagnose_encoding = self.model.compute_encoding(random_diagnoses)
-        self.assertEqual(diagnose_encoding.shape, (num_posible_diagnoses,))
-        self.assertEqual(diagnose_encoding.dtype, bool)
+        diagnosis_encoding = self.model.compute_encoding(random_diagnosis)
+        self.assertEqual(diagnosis_encoding.shape, (num_posible_diagnosis,))
+        self.assertEqual(diagnosis_encoding.dtype, bool)
 
     def test_posterior_state_dist(self):
         """Make sure the posterior state dist is correctly computed."""
         posterior_state_dist = self.model.posterior_state_dist(
             given_params=self.create_random_params(),
-            given_diagnoses=self.create_random_diagnoses(),
+            given_diagnosis=self.create_random_diagnosis(),
             t_stage=self.rng.choice(["early", "late"]),
         )
         self.assertEqual(posterior_state_dist.shape, (2**len(self.model.graph.lnls),))
@@ -383,14 +383,14 @@ class RiskTestCase(
     def test_risk(self):
         """Make sure the risk is correctly computed."""
         random_pattern = fixtures.create_random_pattern(self.model.graph.lnls.keys())
-        random_diagnoses = self.create_random_diagnoses()
+        random_diagnosis = self.create_random_diagnosis()
         random_t_stage = self.rng.choice(["early", "late"])
         random_params = self.create_random_params()
 
         risk = self.model.risk(
             involvement=random_pattern,
             given_params=random_params,
-            given_diagnoses=random_diagnoses,
+            given_diagnosis=random_diagnosis,
             t_stage=random_t_stage,
         )
         self.assertEqual(risk.dtype, float)
@@ -441,7 +441,7 @@ class DataGenerationTestCase(
         for lnl_edge in self.model.graph.lnl_edges.values():
             lnl_edge.set_spread_prob(0.)
 
-        # make all patients diagnosed after exactly one time-step
+        # make all patients diagnosisd after exactly one time-step
         self.model.set_distribution("early", [0,1,0,0,0,0,0,0,0,0,0])
 
         # assign only one pathology modality

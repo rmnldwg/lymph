@@ -89,11 +89,11 @@ class TrinaryObservationMatrixTestCase(
         self.assertTrue(np.allclose(row_sums, 1.0))
 
 
-class TrinaryDiagnoseMatricesTestCase(
+class TrinaryDiagnosisMatricesTestCase(
     fixtures.TrinaryFixtureMixin,
     fixtures.IgnoreWarningsTestCase,
 ):
-    """Test the diagnose matrix of a trinary model."""
+    """Test the diagnosis matrix of a trinary model."""
 
     def setUp(self):
         super().setUp()
@@ -104,13 +104,13 @@ class TrinaryDiagnoseMatricesTestCase(
         """Load an example dataset that has both clinical and pathology data."""
         return pd.read_csv("tests/data/2021-usz-oropharynx.csv", header=[0, 1, 2])
 
-    def test_diagnose_matrices_shape(self) -> None:
-        """Test the diagnose matrix of the model."""
+    def test_diagnosis_matrices_shape(self) -> None:
+        """Test the diagnosis matrix of the model."""
         for t_stage in ["early", "late"]:
             num_lnls = len(self.model.graph.lnls)
             num_patients = (self.model.patient_data["_model", "#", "t_stage"] == t_stage).sum()
-            diagnose_matrix = self.model.diagnose_matrix(t_stage).T
-            self.assertEqual(diagnose_matrix.shape, (3 ** num_lnls, num_patients))
+            diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
+            self.assertEqual(diagnosis_matrix.shape, (3 ** num_lnls, num_patients))
 
 
 class TrinaryParamAssignmentTestCase(
@@ -184,21 +184,21 @@ class TrinaryRiskTestCase(
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
-    def create_random_diagnoses(self):
+    def create_random_diagnosis(self):
         """Create a random diagnosis for each modality and LNL."""
         lnl_names = list(self.model.graph.lnls.keys())
-        diagnoses = {}
+        diagnosis = {}
 
         for modality in self.model.get_all_modalities():
-            diagnoses[modality] = fixtures.create_random_pattern(lnl_names)
+            diagnosis[modality] = fixtures.create_random_pattern(lnl_names)
 
-        return diagnoses
+        return diagnosis
 
     def test_risk_is_probability(self):
         """Make sure the risk is a probability."""
         risk = self.model.risk(
             involvement=fixtures.create_random_pattern(lnls=list(self.model.graph.lnls.keys())),
-            given_diagnoses=self.create_random_diagnoses(),
+            given_diagnosis=self.create_random_diagnosis(),
             given_params=self.create_random_params(),
             t_stage=self.rng.choice(["early", "late"]),
         )

@@ -18,10 +18,10 @@ Diagnostic Modalities
     :show-inheritance:
 
 
-Marginalization over Diagnose Times
+Marginalization over Diagnosis Times
 -----------------------------------
 
-.. automodule:: lymph.diagnose_times
+.. automodule:: lymph.diagnosis_times
     :members:
     :special-members: __init__, __hash__
     :show-inheritance:

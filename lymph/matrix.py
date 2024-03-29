@@ -11,9 +11,9 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from lymph import graph
-from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
+from lymph import graph, types
 from lymph.modalities import Modality
+from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 
 
 @lru_cache(maxsize=128)
@@ -94,17 +94,18 @@ def generate_observation(
 
 def compute_encoding(
     lnls: list[str],
-    pattern: pd.Series | dict[str, bool | int | str],
+    pattern: pd.Series | dict[str, types.InvolvementIndicator],
     base: int = 2,
 ) -> np.ndarray:
     """Compute the encoding of a particular ``pattern`` of involvement.
 
     A ``pattern`` holds information about the involvement of each LNL and the function
     transforms this into a binary encoding which is ``True`` for all possible complete
-    states/diagnoses that are compatible with the given ``pattern``.
+    states/diagnosis that are compatible with the given ``pattern``.
 
     In the binary case (``base=2``), the value behind ``pattern[lnl]`` can be one of
     the following things:
+
     - ``False``: The LNL is healthy.
     - ``"healthy"``: The LNL is healthy.
     - ``True``: The LNL is involved.
@@ -113,6 +114,7 @@ def compute_encoding(
 
     In the trinary case (``base=3``), the value behind ``pattern[lnl]`` can be one of
     these things:
+
     - ``False``: The LNL is healthy.
     - ``"healthy"``: The LNL is healthy.
     - ``True``: The LNL is involved (micro- or macroscopic).
@@ -211,12 +213,12 @@ def generate_data_encoding(
             if modality_name not in patient_row:
                 warnings.warn(f"Modality {modality_name} not in data. Skipping.")
                 continue
-            diagnose_encoding = compute_encoding(
+            diagnosis_encoding = compute_encoding(
                 lnls=lnls,
                 pattern=patient_row[modality_name],
                 base=2,   # observations are always binary!
             )
-            patient_encoding = np.kron(patient_encoding, diagnose_encoding)
+            patient_encoding = np.kron(patient_encoding, diagnosis_encoding)
 
         result[:,i] = patient_encoding
 

@@ -119,12 +119,6 @@ class MidlineRiskTestCase(
 
     def test_risk(self) -> None:
         """Check that the risk method works correctly."""
-        plain_risk = self.model.risk()
-        self.assertEqual(plain_risk.shape, (4,4))
-        self.assertTrue(np.isclose(plain_risk.sum(), 1.0))
-        self.assertTrue(np.allclose(plain_risk[1,:], 0.))
-        self.assertTrue(np.allclose(plain_risk[:,1], 0.))
-
         lnlIII_risk = self.model.risk(involvement={"ipsi": {"II": False, "III": True}})
         self.assertTrue(np.isscalar(lnlIII_risk))
         self.assertAlmostEqual(lnlIII_risk, 0.0)

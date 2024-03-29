@@ -7,7 +7,7 @@ from typing import Any, Iterable, Literal
 import numpy as np
 import pandas as pd
 
-from lymph import diagnose_times, matrix, modalities, models, types, utils
+from lymph import diagnosis_times, matrix, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ CENTRAL_COL = ("tumor", "1", "central")
 
 
 class Midline(
-    diagnose_times.Composite,
+    diagnosis_times.Composite,
     modalities.Composite,
     types.Model,
 ):
@@ -80,7 +80,7 @@ class Midline(
         data is stored in a :py:class:`~.Bilateral` instance accessible via the
         attribute ``"unknown"``. Note that this bilateral instance does not get updated
         parameters or any other kind of attention. It is solely used to store the data
-        and generate diagnose matrices for those data.
+        and generate diagnosis matrices for those data.
 
         The ``uni_kwargs`` are passed to all bilateral models.
 
@@ -148,7 +148,7 @@ class Midline(
 
         self.midext_prob = 0.
 
-        diagnose_times.Composite.__init__(
+        diagnosis_times.Composite.__init__(
             self,
             distribution_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_distribution_leaf=False,
@@ -343,7 +343,7 @@ class Midline(
 
         This includes the spread parameters from the call to :py:meth:`get_spread_params`
         and the distribution parameters from the call to
-        :py:meth:`~.diagnose_times.Composite.get_distribution_params`.
+        :py:meth:`~.diagnosis_times.Composite.get_distribution_params`.
         """
         params = {}
         params["midext_prob"] = self.midext_prob
@@ -552,8 +552,8 @@ class Midline(
     def state_dist(
         self,
         t_stage: str = "early",
-        central: bool = False,
         mode: Literal["HMM", "BN"] = "HMM",
+        central: bool = False,
     ) -> np.ndarray:
         """Compute the joint over ipsi- & contralaleral hidden states and midline ext.
 
@@ -580,6 +580,40 @@ class Midline(
         raise NotImplementedError("Only HMM mode is supported as of now.")
 
 
+    def obs_dist(
+        self,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+        central: bool = False,
+    ) -> np.ndarray:
+        """Compute the joint distribution over the ipsi- & contralateral observations.
+
+        If ``given_state_dist`` is provided, ``t_stage``, ``mode``, and ``central`` are
+        ignored. The provided state distribution may be 2D or 3D. The returned
+        distribution will have the same dimensionality.
+
+        See Also:
+            :py:meth:`.Unilateral.obs_dist`
+                The corresponding unilateral function. Note that this method returns
+                a 2D array, because it computes the probability of any possible
+                combination of ipsi- and contralateral observations.
+        """
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.obs_dist(given_state_dist=given_state_dist)
+
+        # Theoretically, we also have a sensitivity and specificity for observing
+        # midline extension, but realisitically, these values will just be 1.
+        obs_dist = [
+            self.ext.obs_dist(given_state_dist=given_state_dist[0]),
+            self.ext.obs_dist(given_state_dist=given_state_dist[1]),
+        ]
+        return np.stack(obs_dist)
+
+
     def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
         """Compute the likelihood of the stored data under the hidden Markov model."""
         llh = 0. if log else 1.
@@ -603,15 +637,15 @@ class Midline(
                 marg_joint_state_dist += joint_state_dist
                 _model = getattr(self, case)
                 patient_llhs = matrix.fast_trace(
-                    _model.ipsi.diagnose_matrix(stage),
-                    joint_state_dist @ _model.contra.diagnose_matrix(stage).T
+                    _model.ipsi.diagnosis_matrix(stage),
+                    joint_state_dist @ _model.contra.diagnosis_matrix(stage).T
                 )
                 llh = utils.add_or_mult(llh, patient_llhs, log=log)
 
             try:
                 marg_patient_llhs = matrix.fast_trace(
-                    self.unknown.ipsi.diagnose_matrix(stage),
-                    marg_joint_state_dist @ self.unknown.contra.diagnose_matrix(stage).T
+                    self.unknown.ipsi.diagnosis_matrix(stage),
+                    marg_joint_state_dist @ self.unknown.contra.diagnosis_matrix(stage).T
                 )
                 llh = utils.add_or_mult(llh, marg_patient_llhs, log=log)
             except AttributeError:
@@ -621,9 +655,9 @@ class Midline(
 
         if self.use_central:
             if log:
-                llh += self.central.likelihood(log=log, for_t_stage=for_t_stage)
+                llh += self.central.likelihood(log=log, t_stage=for_t_stage)
             else:
-                llh *= self.central.likelihood(log=log, for_t_stage=for_t_stage)
+                llh *= self.central.likelihood(log=log, t_stage=for_t_stage)
 
         return llh
 
@@ -632,8 +666,8 @@ class Midline(
         self,
         given_params: types.ParamsType | None = None,
         log: bool = True,
+        t_stage: str | None = None,
         mode: Literal["HMM", "BN"] = "HMM",
-        for_t_stage: str | None = None,
     ) -> float:
         """Compute the (log-)likelihood of the stored data given the model (and params).
 
@@ -660,9 +694,105 @@ class Midline(
             return -np.inf if log else 0.
 
         if mode == "HMM":
-            return self._hmm_likelihood(log, for_t_stage)
+            return self._hmm_likelihood(log, t_stage)
 
         raise NotImplementedError("Only HMM mode is supported as of now.")
+
+
+    def posterior_state_dist(
+        self,
+        given_params: types.ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+        midext: bool | None = None,
+        central: bool = False,
+    ) -> float:
+        """Compute the posterior state distribution.
+
+        Using either the ``given_params`` or the ``given_state_dist`` argument, this
+        method computes the posterior state distribution of the model for the
+        ``given_diagnosis``, a specific ``t_stage``, whether the tumor extends over the
+        mid-sagittal line (``midext``), and whether it is central (``central``, only
+        used if :py:attr:`use_central` is ``True``).
+
+        See Also:
+            :py:meth:`.types.Model.posterior_state_dist`
+                The corresponding method in the base class.
+            :py:meth:`.Bilateral.posterior_state_dist`
+                The bilateral method that is ultimately called by this one.
+        """
+        # NOTE: When given a 2D state distribution, it does not matter which of the
+        #       Bilateral models is used to compute the risk, since the state dist is
+        #       is the only thing that could differ between models.
+        if given_state_dist is None:
+            utils.safe_set_params(self, given_params)
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.posterior_state_dist(
+                given_state_dist=given_state_dist,
+                given_diagnosis=given_diagnosis,
+            )
+
+        if central:
+            raise ValueError("The `given_state_dist` must be 2D for the central model.")
+
+        if midext is None:
+            given_state_dist = np.sum(given_state_dist, axis=0)
+        else:
+            given_state_dist = given_state_dist[int(midext)]
+            given_state_dist = given_state_dist / given_state_dist.sum()
+
+        return self.ext.posterior_state_dist(
+            given_state_dist=given_state_dist,
+            given_diagnosis=given_diagnosis,
+        )
+
+
+    def marginalize(
+        self,
+        involvement: types.PatternType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+        midext: bool | None = None,
+        central: bool = False,
+    ) -> float:
+        """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
+
+        Any state that matches the provided ``involvement`` pattern is marginalized
+        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
+
+        The arguments ``t_stage``, ``mode``, and ``central`` are only used if
+        ``given_state_dist`` is ``None``. In this case they are passed to the
+        :py:meth:`.state_dist` method.
+        """
+        if involvement is None:
+            return 1.
+
+        if given_state_dist is None:
+            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+
+        if given_state_dist.ndim == 2:
+            return self.ext.marginalize(
+                involvement=involvement,
+                given_state_dist=given_state_dist,
+            )
+
+        if midext is None:
+            given_state_dist = np.sum(given_state_dist, axis=0)
+        else:
+            given_state_dist = given_state_dist[int(midext)]
+            # I think I don't need to normalize here, since I am not computing a
+            # probability of something *given* midext, but only sum up all states that
+            # match the involvement pattern (which includes the midext status).
+
+        return self.ext.marginalize(
+            involvement=involvement,
+            given_state_dist=given_state_dist,
+        )
 
 
     def risk(
@@ -670,13 +800,13 @@ class Midline(
         involvement: types.PatternType | None = None,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, types.DiagnoseType] | None = None,
+        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
         t_stage: str = "early",
         midext: bool | None = None,
         central: bool = False,
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> float:
-        """Compute the risk of nodal involvement ``given_diagnoses``.
+        """Compute the risk of nodal involvement ``given_diagnosis``.
 
         In addition to the arguments of the :py:meth:`.Bilateral.risk` method, this
         also allows specifying if the patient's tumor extended over the mid-sagittal
@@ -698,33 +828,20 @@ class Midline(
             distribution (when ``True`` or ``False``), or marginalize over the midline
             extension status (when ``midext=None``).
         """
-        # NOTE: When given a 2D state distribution, it does not matter which of the
-        #       Bilateral models is used to compute the risk, since the state dist is
-        #       is the only thing that could differ between models.
-        if given_state_dist is None:
-            utils.safe_set_params(self, given_params)
-            given_state_dist = self.state_dist(t_stage, central, mode)
-
-        if given_state_dist.ndim == 2:
-            return self.ext.risk(
-                involvement=involvement,
-                given_state_dist=given_state_dist,
-                given_diagnoses=given_diagnoses,
-            )
-
-        if central:
-            raise ValueError("The `given_state_dist` must be 2D for the central model.")
-
-        if midext is None:
-            given_state_dist = np.sum(given_state_dist, axis=0)
-        else:
-            given_state_dist = given_state_dist[int(midext)]
-            given_state_dist = given_state_dist / given_state_dist.sum()
-
-        return self.ext.risk(
-            involvement=involvement,
+        posterior_state_dist = self.posterior_state_dist(
+            given_params=given_params,
             given_state_dist=given_state_dist,
-            given_diagnoses=given_diagnoses,
+            given_diagnosis=given_diagnosis,
+            t_stage=t_stage,
+            midext=midext,
+            central=central,
+            mode=mode,
+        )
+
+        return self.marginalize(
+            involvement=involvement,
+            given_state_dist=posterior_state_dist,
+            midext=midext,
         )
 
 
@@ -776,19 +893,19 @@ class Midline(
         drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
-            drawn_ipsi_diags = utils.draw_diagnoses(
-                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+            drawn_ipsi_diags = utils.draw_diagnosis(
+                diagnosis_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=ipsi_evo,
                 observation_matrix=case_model.ipsi.observation_matrix(),
-                possible_diagnoses=case_model.ipsi.obs_list,
+                possible_diagnosis=case_model.ipsi.obs_list,
                 rng=rng,
                 seed=seed,
             )
-            drawn_contra_diags = utils.draw_diagnoses(
-                diagnose_times=drawn_diag_times[drawn_midexts == (case == "ext")],
+            drawn_contra_diags = utils.draw_diagnosis(
+                diagnosis_times=drawn_diag_times[drawn_midexts == (case == "ext")],
                 state_evolution=case_model.contra.state_dist_evo(),
                 observation_matrix=case_model.contra.observation_matrix(),
-                possible_diagnoses=case_model.contra.obs_list,
+                possible_diagnosis=case_model.contra.obs_list,
                 rng=rng,
                 seed=seed,
             )
@@ -796,7 +913,7 @@ class Midline(
             drawn_diags[drawn_midexts == (case == "ext")] = drawn_case_diags
 
         # construct MultiIndex with "ipsi" and "contra" at top level to allow
-        # concatenation of the two separate drawn diagnoses
+        # concatenation of the two separate drawn diagnosis
         sides = ["ipsi", "contra"]
         modality_names = list(self.get_all_modalities().keys())
         lnl_names = [lnl for lnl in self.ext.ipsi.graph.lnls.keys()]
@@ -809,6 +926,6 @@ class Midline(
         dataset = dataset.sort_index(axis="columns", level=0)
         dataset["tumor", "1", "t_stage"] = drawn_t_stages
         dataset["tumor", "1", "extension"] = drawn_midexts
-        dataset["patient", "#", "diagnose_time"] = drawn_diag_times
+        dataset["patient", "#", "diagnosis_time"] = drawn_diag_times
 
         return dataset

@@ -6,7 +6,6 @@ from typing import Iterable, Literal, Protocol, TypeVar
 
 import numpy as np
 import pandas as pd
-from pandas._libs.missing import NAType
 
 
 class DataWarning(UserWarning):
@@ -45,10 +44,21 @@ A dictionary of this form specifies the structure of the underlying graph. Examp
 ParamsType = Iterable[float] | dict[str, float]
 """Type alias for how parameters are passed around.
 
-This is e.g. the type that the :py:meth:`Model.get_params` method returns.
+This is e.g. the type that the :py:meth:`.Model.get_params` method returns.
 """
 
-PatternType = dict[str, bool | str | NAType | None]
+InvolvementIndicator = Literal[
+    False, 0, "healthy",
+    True, 1, "involved",
+    "micro", "macro", "notmacro",
+]
+"""Type alias for how to encode lymphatic involvement for a single lymph node level.
+
+The choices ``"micro"``, ``"macro"``, and ``"notmacro"`` are only relevant for the
+trinary models.
+"""
+
+PatternType = dict[str, InvolvementIndicator | None]
 """Type alias for an involvement pattern.
 
 An involvement pattern is a dictionary with keys for the lymph node levels and values
@@ -61,10 +71,10 @@ See :py:func:`.matrix.compute_encoding`
 >>> pattern = {"I": True, "II": False, "III": None}
 """
 
-DiagnoseType = dict[str, PatternType]
-"""Type alias for a diagnose, which is an involvement pattern per diagnostic modality.
+DiagnosisType = dict[str, PatternType]
+"""Type alias for a diagnosis, which is an involvement pattern per diagnostic modality.
 
->>> diagnose = {
+>>> diagnosis = {
 ...     "CT": {"I": True, "II": False, "III": None},
 ...     "MRI": {"I": True, "II": True, "III": None},
 ... }
@@ -101,7 +111,7 @@ class Model(ABC):
         A hidden Markov model (``mode="HMM"``) typically has more parameters than a
         Bayesian network (``mode="BN"``), because it we need parameters for the
         distributions over diagnosis times. Your can read more about that in the
-        :py:mod:`lymph.diagnose_times` module.
+        :py:mod:`lymph.diagnosis_times` module.
         """
         # pylint: disable=no-member
         num = len(self.get_params())
@@ -116,6 +126,35 @@ class Model(ABC):
         The parameters may be passed as positional or keyword arguments. The positional
         arguments are used up one by one by the ``set_params`` methods the model calls.
         Keyword arguments override the positional arguments.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def state_dist(
+        self: ModelT,
+        t_stage: str,
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Return the prior state distribution of the model.
+
+        The state distribution is the probability of the model being in any of the
+        possible hidden states.
+        """
+        raise NotImplementedError
+
+    def obs_dist(
+        self: ModelT,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Return the distribution over observational states.
+
+        If ``given_state_dist`` is ``None``, it will first compute the
+        :py:meth:`.state_dist` using the arguments ``t_stage`` and ``mode`` (which are
+        otherwise ignored). Then it multiplies the distribution over (hidden) states
+        with the specificity and sensitivity values stored in the model (see
+        :py:meth:`.modalities.Composite`) and marginalizes over the hidden states.
         """
         raise NotImplementedError
 
@@ -145,12 +184,47 @@ class Model(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def posterior_state_dist(
+        self: ModelT,
+        given_params: ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        given_diagnosis: dict[str, PatternType] | None = None,
+    ) -> np.ndarray:
+        """Return the posterior state distribution using the ``given_diagnosis``.
+
+        The posterior state distribution is the probability of the model being in a
+        certain state given the diagnosis. The ``given_params`` are passed to the
+        :py:meth:`set_params` method. Alternatively to parameters, one may also pass
+        a ``given_state_dist``, which is effectively the precomputed prior from calling
+        :py:meth:`.state_dist`.
+        """
+        raise NotImplementedError
+
+    def marginalize(
+        self,
+        involvement: dict[str, PatternType] | None = None,
+        given_state_dist: np.ndarray | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> float:
+        """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
+
+        Any state that matches the provided ``involvement`` pattern is marginalized
+        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
+
+        If ``given_state_dist`` is ``None``, it will be computed by calling
+        :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
+        are ignored if ``given_state_dist`` is provided.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def risk(
         self,
         involvement: PatternType | None = None,
         given_params: ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
-        given_diagnoses: dict[str, PatternType] | None = None,
-    ) -> float | np.ndarray:
-        """Return the risk of ``involvement``, given params/state_dist and diagnoses."""
+        given_diagnosis: dict[str, PatternType] | None = None,
+    ) -> float:
+        """Return the risk of ``involvement``, given params/state_dist and diagnosis."""
         raise NotImplementedError

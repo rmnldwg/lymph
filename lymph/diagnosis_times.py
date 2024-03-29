@@ -1,5 +1,5 @@
 """
-Module for marginalizing over diagnose times.
+Module for marginalizing over diagnosis times.
 
 The hidden Markov model we implement assumes that every patient started off with a
 healthy neck, meaning no lymph node levels harboured any metastases. This is a valid
@@ -33,22 +33,22 @@ class SupportError(Exception):
 
 
 class Distribution:
-    """Class that provides a way of storing distributions over diagnose times."""
+    """Class that provides a way of storing distributions over diagnosis times."""
     def __init__(
         self,
         distribution: Iterable[float] | callable,
         max_time: int | None = None,
         **kwargs,
     ) -> None:
-        """Initialize a distribution over diagnose times.
+        """Initialize a distribution over diagnosis times.
 
         This object can either be created by passing a parametrized function (e.g.,
         ``scipy.stats`` distribution) or by passing a list of probabilities for each
-        diagnose time.
+        diagnosis time.
 
         The signature of the function must be ``func(support, **kwargs)``, where
         ``support`` is the support of the distribution from 0 to ``max_time``. The
-        function must return a list of probabilities for each diagnose time.
+        function must return a list of probabilities for each diagnosis time.
 
         Note:
             All arguments except ``support`` must have default values and if some
@@ -214,7 +214,7 @@ class Distribution:
         """If updateable, return the dist's ``param`` value or all params in a dict.
 
         See Also:
-            :py:meth:`lymph.diagnose_times.DistributionsUserDict.get_params`
+            :py:meth:`lymph.diagnosis_times.DistributionsUserDict.get_params`
             :py:meth:`lymph.graph.Edge.get_params`
             :py:meth:`lymph.models.Unilateral.get_params`
             :py:meth:`lymph.models.Bilateral.get_params`
@@ -264,7 +264,7 @@ class Distribution:
         rng: np.random.Generator | None = None,
         seed: int = 42,
     ) -> np.ndarray:
-        """Draw ``num`` samples of diagnose times from the stored PMF.
+        """Draw ``num`` samples of diagnosis times from the stored PMF.
 
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).

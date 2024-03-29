@@ -137,7 +137,7 @@ class ModalityDelegationTestCase(
         )
 
     def test_diag_time_dists_delegation(self):
-        """Test that the diagnose time distributions are delegated."""
+        """Test that the diagnosis time distributions are delegated."""
         self.assertEqual(
             list(self.model.get_distribution("early").pmf),
             list(self.model.ipsi.get_distribution("early").pmf),
@@ -299,28 +299,28 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
         super().setUp()
         self.model.replace_all_modalities(fixtures.MODALITIES)
 
-    def create_random_diagnoses(self):
+    def create_random_diagnosis(self):
         """Create a random diagnosis for each modality and LNL."""
-        diagnoses = {}
+        diagnosis = {}
 
         for side in ["ipsi", "contra"]:
-            diagnoses[side] = {}
+            diagnosis[side] = {}
             side_model = getattr(self.model, side)
             lnl_names = side_model.graph.lnls.keys()
             for modality in side_model.get_all_modalities():
-                diagnoses[side][modality] = fixtures.create_random_pattern(lnl_names)
+                diagnosis[side][modality] = fixtures.create_random_pattern(lnl_names)
 
-        return diagnoses
+        return diagnosis
 
     def test_posterior_state_dist(self):
         """Test that the posterior state distribution is computed correctly."""
         num_states = len(self.model.ipsi.graph.state_list)
         random_parameters = self.create_random_params()
-        random_diagnoses = self.create_random_diagnoses()
+        random_diagnosis = self.create_random_diagnosis()
 
         posterior = self.model.posterior_state_dist(
             given_params=random_parameters,
-            given_diagnoses=random_diagnoses,
+            given_diagnosis=random_diagnosis,
         )
         self.assertEqual(posterior.shape, (num_states, num_states))
         self.assertEqual(posterior.dtype, float)
@@ -329,7 +329,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
     def test_risk(self):
         """Test that the risk is computed correctly."""
         random_parameters = self.create_random_params()
-        random_diagnoses = self.create_random_diagnoses()
+        random_diagnosis = self.create_random_diagnosis()
         random_pattern = {
             "ipsi": fixtures.create_random_pattern(self.model.ipsi.graph.lnls.keys()),
             "contra": fixtures.create_random_pattern(self.model.contra.graph.lnls.keys()),
@@ -339,7 +339,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
         risk = self.model.risk(
             involvement=random_pattern,
             given_params=random_parameters,
-            given_diagnoses=random_diagnoses,
+            given_diagnosis=random_diagnosis,
             t_stage=random_t_stage,
         )
         self.assertLessEqual(risk, 1.)
