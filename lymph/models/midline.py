@@ -753,7 +753,7 @@ class Midline(
 
     def marginalize(
         self,
-        involvement: types.PatternType | None = None,
+        involvement: dict[str, types.PatternType] | None = None,
         given_state_dist: np.ndarray | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
