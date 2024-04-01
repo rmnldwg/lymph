@@ -489,7 +489,7 @@ class Unilateral(
         self,
         patient_data: pd.DataFrame,
         side: str = "ipsi",
-        mapping: Callable[[int], Any] | dict[int, Any] = early_late_mapping,
+        mapping: Callable[[int], Any] | dict[int, Any] | None = None,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -509,6 +509,9 @@ class Unilateral(
 
         .. _LyProX: https://lyprox.org/
         """
+        if mapping is None:
+            mapping = early_late_mapping
+
         patient_data = (
             patient_data
             .copy()
