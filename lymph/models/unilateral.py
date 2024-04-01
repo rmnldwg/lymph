@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from itertools import product
-from typing import Any, Iterable, Literal
+from typing import Any, Callable, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -489,7 +489,7 @@ class Unilateral(
         self,
         patient_data: pd.DataFrame,
         side: str = "ipsi",
-        mapping: callable | dict[int, Any] | None = None,
+        mapping: Callable[[int], Any] | dict[int, Any] = early_late_mapping,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -509,10 +509,6 @@ class Unilateral(
 
         .. _LyProX: https://lyprox.org/
         """
-        if mapping is None:
-            mapping = early_late_mapping
-
-        # pylint: disable=unnecessary-lambda-assignment
         patient_data = (
             patient_data
             .copy()
@@ -545,15 +541,7 @@ class Unilateral(
 
                 patient_data["_model", modality, lnl] = column
 
-        if len(patient_data) == 0:
-            patient_data[MAP_T_COL] = None
-        else:
-            mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
-            patient_data[MAP_T_COL] = patient_data.apply(
-                lambda row: mapping(row[RAW_T_COL]),
-                axis=1,
-            )
-
+        patient_data[MAP_T_COL] = patient_data[RAW_T_COL].map(mapping)
         self._patient_data = patient_data
         self._cache_version += 1
 
