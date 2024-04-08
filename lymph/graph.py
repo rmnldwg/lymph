@@ -14,9 +14,11 @@ from __future__ import annotations
 import base64
 import warnings
 from itertools import product
+from typing import Literal
 
 import numpy as np
 
+from lymph import types
 from lymph.utils import (
     check_unique_names,
     comp_transition_tensor,
@@ -233,7 +235,7 @@ class Edge:
         spread to the next LNL. The ``micro_mod`` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
-        self.trigger_callbacks = []
+        self.parent: Tumor | LymphNodeLevel = parent
         self.child: LymphNodeLevel = child
 
         if (
@@ -667,7 +669,11 @@ class Representation:
         return res
 
 
-    def get_mermaid(self) -> str:
+    def get_mermaid(
+        self,
+        with_params: bool = True,
+        direction: Literal["TD", "LR"] = "TD",
+    ) -> str:
         """Prints the graph in mermaid format.
 
         >>> graph_dict = {
@@ -685,19 +691,29 @@ class Representation:
             T-->|20%| III
             II-->|30%| III
         <BLANKLINE>
+        >>> print(graph.get_mermaid(with_params=False)) # doctest: +NORMALIZE_WHITESPACE
+        flowchart TD
+            T--> II
+            T--> III
+            II--> III
+        <BLANKLINE>
         """
-        mermaid_graph = "flowchart TD\n"
+        mermaid_graph = f"flowchart {direction}\n"
 
         for node in self.nodes.values():
             for edge in node.out:
-                mermaid_graph += f"\t{node.name}-->|{edge.spread_prob:.0%}| {edge.child.name}\n"
+                param_str = f"|{edge.spread_prob:.0%}|" if with_params else ""
+                mermaid_graph += f"\t{node.name}-->{param_str} {edge.child.name}\n"
 
         return mermaid_graph
 
 
-    def get_mermaid_url(self) -> str:
-        """Returns the URL to the rendered graph."""
-        mermaid_graph = self.get_mermaid()
+    def get_mermaid_url(self, **mermaid_kwargs) -> str:
+        """Returns the URL to the rendered graph.
+
+        Keyword arguments are passed to :py:meth:`~Representation.get_mermaid`.
+        """
+        mermaid_graph = self.get_mermaid(**mermaid_kwargs)
         graphbytes = mermaid_graph.encode("ascii")
         base64_bytes = base64.b64encode(graphbytes)
         base64_string = base64_bytes.decode("ascii")
