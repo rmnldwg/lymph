@@ -659,7 +659,11 @@ class Representation:
         res = {}
         for node in self.nodes.values():
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
-            res[(node_type, node.name)] = [o.child.name for o in node.out]
+            res[(node_type, node.name)] = [
+                o.child.name
+                for o in node.out
+                if not o.is_growth
+            ]
         return res
 
 
