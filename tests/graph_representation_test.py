@@ -34,14 +34,9 @@ class ConstructBinaryGraphRepresentationTestCase(fixtures.IgnoreWarningsTestCase
         self.graph_repr = graph.Representation(
             graph_dict=self.graph_dict,
             allowed_states=[0, 1],
-            on_edge_change=[self.callback],
         )
         self.was_called = False
         self.rng = np.random.default_rng(42)
-
-    def callback(self) -> None:
-        """Callback function for the graph."""
-        self.was_called = True
 
     def test_nodes(self) -> None:
         """Test the number of nodes."""
