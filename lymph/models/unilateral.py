@@ -117,6 +117,17 @@ class Unilateral(
         return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
 
 
+    def __repr__(self) -> str:
+        """Return a string representation of the instance."""
+        return (
+            f"{type(self).__name__}("
+            f"graph_dict={self.graph.to_dict()}, "
+            f"tumor_state={list(self.graph.tumors.values())[0].state}, "
+            f"allowed_states={self.graph.allowed_states}, "
+            f"max_time={self.max_time})"
+        )
+
+
     def __str__(self) -> str:
         """Print info about the instance."""
         return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
