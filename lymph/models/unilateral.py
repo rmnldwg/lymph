@@ -835,7 +835,11 @@ class Unilateral(
         :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
         are ignored if ``given_state_dist`` is provided.
         """
-        if involvement is None:
+        if (
+            involvement is None
+            or not involvement     # empty dict is falsey
+            or all(value is None for value in involvement.values())
+        ):
             return 1.
 
         if given_state_dist is None:

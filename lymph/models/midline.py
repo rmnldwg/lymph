@@ -770,7 +770,7 @@ class Midline(
         :py:meth:`.state_dist` method.
         """
         if involvement is None:
-            return 1.
+            involvement = {}
 
         if given_state_dist is None:
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
@@ -787,7 +787,7 @@ class Midline(
             given_state_dist = given_state_dist[int(midext)]
             # I think I don't need to normalize here, since I am not computing a
             # probability of something *given* midext, but only sum up all states that
-            # match the involvement pattern (which includes the midext status).
+            # match the disease state of interest (which includes the midext status).
 
         return self.ext.marginalize(
             involvement=involvement,
