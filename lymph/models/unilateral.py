@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from itertools import product
-from typing import Any, Iterable, Literal
+from typing import Any, Callable, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -115,6 +115,17 @@ class Unilateral(
     def trinary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with trinary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
+
+
+    def __repr__(self) -> str:
+        """Return a string representation of the instance."""
+        return (
+            f"{type(self).__name__}("
+            f"graph_dict={self.graph.to_dict()}, "
+            f"tumor_state={list(self.graph.tumors.values())[0].state}, "
+            f"allowed_states={self.graph.allowed_states}, "
+            f"max_time={self.max_time})"
+        )
 
 
     def __str__(self) -> str:
@@ -489,7 +500,7 @@ class Unilateral(
         self,
         patient_data: pd.DataFrame,
         side: str = "ipsi",
-        mapping: callable | dict[int, Any] | None = None,
+        mapping: Callable[[int], Any] | dict[int, Any] | None = None,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -512,7 +523,6 @@ class Unilateral(
         if mapping is None:
             mapping = early_late_mapping
 
-        # pylint: disable=unnecessary-lambda-assignment
         patient_data = (
             patient_data
             .copy()
@@ -545,15 +555,7 @@ class Unilateral(
 
                 patient_data["_model", modality, lnl] = column
 
-        if len(patient_data) == 0:
-            patient_data[MAP_T_COL] = None
-        else:
-            mapping = dict_to_func(mapping) if isinstance(mapping, dict) else mapping
-            patient_data[MAP_T_COL] = patient_data.apply(
-                lambda row: mapping(row[RAW_T_COL]),
-                axis=1,
-            )
-
+        patient_data[MAP_T_COL] = patient_data[RAW_T_COL].map(mapping)
         self._patient_data = patient_data
         self._cache_version += 1
 
@@ -833,7 +835,11 @@ class Unilateral(
         :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
         are ignored if ``given_state_dist`` is provided.
         """
-        if involvement is None:
+        if (
+            involvement is None
+            or not involvement     # empty dict is falsey
+            or all(value is None for value in involvement.values())
+        ):
             return 1.
 
         if given_state_dist is None:

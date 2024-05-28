@@ -626,7 +626,7 @@ class Bilateral(
         are ignored if ``given_state_dist`` is provided.
         """
         if involvement is None:
-            return 1.
+            involvement = {}
 
         if given_state_dist is None:
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)

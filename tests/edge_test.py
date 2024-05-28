@@ -13,12 +13,7 @@ class BinaryEdgeTestCase(fixtures.IgnoreWarningsTestCase):
         super().setUp()
         parent = graph.LymphNodeLevel("parent")
         child = graph.LymphNodeLevel("child")
-        self.was_called = False
-        self.edge = graph.Edge(parent, child, callbacks=[self.callback])
-
-    def callback(self) -> None:
-        """Callback function for the edge."""
-        self.was_called = True
+        self.edge = graph.Edge(parent, child)
 
     def test_str(self) -> None:
         """Test the string representation of the edge."""
@@ -41,17 +36,11 @@ class BinaryEdgeTestCase(fixtures.IgnoreWarningsTestCase):
         self.assertEqual(self.edge.spread_prob, recreated_edge.spread_prob)
         self.assertEqual(self.edge.micro_mod, recreated_edge.micro_mod)
 
-    def test_callback_on_param_change(self) -> None:
-        """Test if the callback function is called."""
-        self.edge.spread_prob = 0.5
-        self.assertTrue(self.was_called)
-
     def test_graph_change(self) -> None:
         """Check if the callback also works when parent/child nodes are changed."""
         old_child = self.edge.child
         new_child = graph.LymphNodeLevel("new_child")
         self.edge.child = new_child
-        self.assertTrue(self.was_called)
         self.assertNotIn(self.edge, old_child.inc)
 
     def test_transition_tensor_row_sums(self) -> None:

@@ -14,16 +14,17 @@ from __future__ import annotations
 import base64
 import warnings
 from itertools import product
+from typing import Literal
 
 import numpy as np
 
+from lymph import types
 from lymph.utils import (
     check_unique_names,
     comp_transition_tensor,
     flatten,
     popfirst,
     set_params_for,
-    trigger,
 )
 
 
@@ -224,7 +225,6 @@ class Edge:
         child: LymphNodeLevel,
         spread_prob: float = 0.,
         micro_mod: float = 1.,
-        callbacks: list[callable] | None = None,
     ) -> None:
         """Create a new edge between two nodes.
 
@@ -235,10 +235,6 @@ class Edge:
         spread to the next LNL. The ``micro_mod`` parameter is a modifier for the spread
         probability in case of only a microscopic node involvement.
         """
-        self.trigger_callbacks = []
-        if callbacks is not None:
-            self.trigger_callbacks += callbacks
-
         self.parent: Tumor | LymphNodeLevel = parent
         self.child: LymphNodeLevel = child
 
@@ -353,7 +349,6 @@ class Edge:
             self._micro_mod = 1.
         return self._micro_mod
 
-    @trigger
     def set_micro_mod(self, new_micro_mod: float | None) -> None:
         """Set the spread modifier for LNLs with microscopic involvement."""
         if new_micro_mod is None:
@@ -380,7 +375,6 @@ class Edge:
             self._spread_prob = 0.
         return self._spread_prob
 
-    @trigger
     def set_spread_prob(self, new_spread_prob: float | None) -> None:
         """Set the spread probability of the edge."""
         if new_spread_prob is None:
@@ -493,7 +487,6 @@ class Representation:
         graph_dict: dict[tuple[str], list[str]],
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
-        on_edge_change: list[callable] | None = None,
     ) -> None:
         """Create a new graph representation of nodes and edges.
 
@@ -512,7 +505,7 @@ class Representation:
 
         check_unique_names(graph_dict)
         self._init_nodes(graph_dict, tumor_state, allowed_states)
-        self._init_edges(graph_dict, on_edge_change)
+        self._init_edges(graph_dict)
 
 
     def _init_nodes(self, graph, tumor_state, allowed_lnl_states):
@@ -585,7 +578,6 @@ class Representation:
     def _init_edges(
         self,
         graph: dict[tuple[str, str], list[str]],
-        on_edge_change: list[callable]
     ) -> None:
         """Initialize the edges of the ``graph``.
 
@@ -602,12 +594,12 @@ class Representation:
         for (_, start_name), end_names in graph.items():
             start = self.nodes[start_name]
             if isinstance(start, LymphNodeLevel) and start.is_trinary:
-                growth_edge = Edge(parent=start, child=start, callbacks=on_edge_change)
+                growth_edge = Edge(parent=start, child=start)
                 self._edges[growth_edge.get_name()] = growth_edge
 
             for end_name in end_names:
                 end = self.nodes[end_name]
-                new_edge = Edge(parent=start, child=end, callbacks=on_edge_change)
+                new_edge = Edge(parent=start, child=end)
                 self._edges[new_edge.get_name()] = new_edge
 
 
@@ -669,11 +661,19 @@ class Representation:
         res = {}
         for node in self.nodes.values():
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
-            res[(node_type, node.name)] = [o.child.name for o in node.out]
+            res[(node_type, node.name)] = [
+                o.child.name
+                for o in node.out
+                if not o.is_growth
+            ]
         return res
 
 
-    def get_mermaid(self) -> str:
+    def get_mermaid(
+        self,
+        with_params: bool = True,
+        direction: Literal["TD", "LR"] = "TD",
+    ) -> str:
         """Prints the graph in mermaid format.
 
         >>> graph_dict = {
@@ -691,19 +691,29 @@ class Representation:
             T-->|20%| III
             II-->|30%| III
         <BLANKLINE>
+        >>> print(graph.get_mermaid(with_params=False)) # doctest: +NORMALIZE_WHITESPACE
+        flowchart TD
+            T--> II
+            T--> III
+            II--> III
+        <BLANKLINE>
         """
-        mermaid_graph = "flowchart TD\n"
+        mermaid_graph = f"flowchart {direction}\n"
 
         for node in self.nodes.values():
             for edge in node.out:
-                mermaid_graph += f"\t{node.name}-->|{edge.spread_prob:.0%}| {edge.child.name}\n"
+                param_str = f"|{edge.spread_prob:.0%}|" if with_params else ""
+                mermaid_graph += f"\t{node.name}-->{param_str} {edge.child.name}\n"
 
         return mermaid_graph
 
 
-    def get_mermaid_url(self) -> str:
-        """Returns the URL to the rendered graph."""
-        mermaid_graph = self.get_mermaid()
+    def get_mermaid_url(self, **mermaid_kwargs) -> str:
+        """Returns the URL to the rendered graph.
+
+        Keyword arguments are passed to :py:meth:`~Representation.get_mermaid`.
+        """
+        mermaid_graph = self.get_mermaid(**mermaid_kwargs)
         graphbytes = mermaid_graph.encode("ascii")
         base64_bytes = base64.b64encode(graphbytes)
         base64_string = base64_bytes.decode("ascii")
