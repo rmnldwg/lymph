@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+
+<a name="1.2.1"></a>
+## [1.2.1] - 2024-05-28
+
+### Bug Fixes
+
+- (**uni**) `load_patient_data` should accept `None`.
+- (**mid**) Correct type hint of `marginalize`.
+- (**graph**) Wrong dict when trinary.\
+  The `to_dict()` method returned a wrong graph dictionary when trinary
+  due to growth edges. This is fixed now.
+- Skip `marginalize` only when safe.\
+  The marginalization should only be skipped (and 1 returned), when the
+  entire disease state of interest is `None`. In the midline case, this
+  disease state includes the midline extension.\
+  Previously, only the involvement pattern was checked. Now, the model is
+  more careful about when to take shortcuts.
+
+
+### Features
+
+- (**graph**) Modify mermaid graph.\
+  The `get_mermaid()` and `get_mermaid_url()` methods now accept arguments
+  that allow some modifications of the output.
+- (**uni**) Add `__repr__()`.
+
+### Refactor
+
+- (**uni**) Use pandas `map` instead of `apply`.\
+  This saves us a couple of lines in the `load_patient_data` method and is
+  more readable.
+
+
+### Merge
+
+- Branch 'main' into 'dev'.
+
+### Remove
+
+- Remains of callbacks.\
+  Some callback functionality that was tested in a pre-release has been
+  forgotten in the code base and is now deleted.
+
+
 <a name="1.2.0"></a>
 ## [1.2.0] - 2024-03-29
 
@@ -668,7 +712,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - add pre-commit hook to check commit msg
 
 
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.2.0...HEAD
+[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.2.1...HEAD
+[1.2.1]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.1
 [1.2.0]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/rmnldwg/lymph/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...1.0.0
