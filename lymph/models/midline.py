@@ -518,33 +518,63 @@ class Midline(
 
     def midext_evo(self) -> np.ndarray:
         """Evolve only the state of the midline extension."""
+        time_steps = np.arange(self.max_time + 1)
         midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
-        midext_states[0,0] = 1.
-
-        midextransition_matrix = np.array([
-            [1 - self.midext_prob, self.midext_prob],
-            [0.                  , 1.              ],
-        ])
-
-        # compute involvement for all time steps
-        for i in range(len(midext_states)-1):
-            midext_states[i+1,:] = midext_states[i,:] @ midextransition_matrix
+        midext_states[:,0] = (1. - self.midext_prob) ** time_steps
+        midext_states[:,1] = 1. - midext_states[:,0]
         return midext_states
 
 
     def contra_state_dist_evo(self) -> tuple[np.ndarray, np.ndarray]:
-        """Evolve contra side as mixture of with & without midline extension."""
+        """Evolve contra side as mixture of with & without midline extension.
+
+        This computes the evolution of the contralateral state distribution for both
+        absent and present midline extension and returns them as a tuple.
+
+        The first element of the tuple is the evolution of the contralateral state
+        distribution while having no midline extension. This means that e.g. the value
+        at index ``[t,i]`` is the probability of being in state ``i`` at time ``t``,
+        **AND** not having midline extension after these ``t`` time steps.
+
+        The second element of the tuple is the evolution of the contralateral state
+        distribution where midline extension occurs at some time point. For example,
+        the value at index ``[t,i]`` is the probability of being in state ``i`` at time
+        ``t``, **AND** having developed midline extension at some time point before.
+
+        To compute this second evolution, we need to mix the model without and with
+        midline extension at each time step, following a recusion formula.
+        """
         noext_contra_dist_evo = self.noext.contra.state_dist_evo()
-        ext_contra_dist_evo = self.ext.contra.state_dist_evo()
 
         if not self.use_midext_evo:
+            ext_contra_dist_evo = self.ext.contra.state_dist_evo()
             noext_contra_dist_evo *= (1. - self.midext_prob)
             ext_contra_dist_evo *= self.midext_prob
 
         else:
+            ext_contra_dist_evo = np.zeros_like(noext_contra_dist_evo)
             midext_evo = self.midext_evo()
-            noext_contra_dist_evo *= midext_evo[:,0].reshape((-1, 1))
-            ext_contra_dist_evo *= midext_evo[:,1].reshape((-1, 1))
+
+            # Evolution of contralateral state dists, given no midline extension,
+            # multiplied with the probabilities of having no midline extension at all
+            # time steps, resulting in a vector of length `max_time + 1`:
+            #     P(X_c[t] | noext) * P(noext | t)
+            noext_contra_dist_evo *= midext_evo[:,0].reshape(-1, 1)
+
+            for t in range(self.max_time):
+                # For the case of midline extension, we need to consider all possible
+                # paths that lead to a midline extension at time t+1. We can define
+                # this recursively:
+                ext_contra_dist_evo[t + 1] = (
+                    # it's the probability of developing it just now, in which case we
+                    # use the noext state and multiply it with the probability to
+                    # develop midline extension at this time step, ...
+                    self.midext_prob * noext_contra_dist_evo[t]
+                    # ... plus the probability of having it already, in which case we
+                    # use the ext state. The probability of "keeping" the midline
+                    # extension is 1, so we don't need to multiply it with anything.
+                    + ext_contra_dist_evo[t]
+                ) @ self.ext.contra.transition_matrix()   # then evolve using ext model
 
         return noext_contra_dist_evo, ext_contra_dist_evo
 
