@@ -1,5 +1,5 @@
-"""Test the midline model for the binary case.
-"""
+"""Test the midline model for the binary case."""
+
 from typing import Literal
 
 import numpy as np
@@ -34,13 +34,11 @@ class MidlineSetParamsTestCase(fixtures.IgnoreWarningsTestCase):
             use_midext_evo=False,
         )
 
-
     def test_init(self) -> None:
         """Check some basic attributes."""
         self.assertTrue(self.model.use_central)
         self.assertTrue(self.model.use_mixing)
         self.assertTrue(self.model.is_trinary)
-
 
     def test_set_spread_params(self) -> None:
         """Check that the complex parameter assignment works correctly."""

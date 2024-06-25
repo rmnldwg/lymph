@@ -1,5 +1,4 @@
-"""
-Module for marginalizing over diagnosis times.
+"""Module for marginalizing over diagnosis times.
 
 The hidden Markov model we implement assumes that every patient started off with a
 healthy neck, meaning no lymph node levels harboured any metastases. This is a valid
@@ -11,14 +10,16 @@ That allows us to treat T1 and T4 patients fundamentally in the same way, even w
 same parameters, except for the parametrization of their respective distribution over
 the time of diagnosis.
 """
+
 from __future__ import annotations
 
 import inspect
 import logging
 import warnings
 from abc import ABC
+from collections.abc import Iterable
 from functools import partial
-from typing import Any, Iterable, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -34,6 +35,7 @@ class SupportError(Exception):
 
 class Distribution:
     """Class that provides a way of storing distributions over diagnosis times."""
+
     def __init__(
         self,
         distribution: Iterable[float] | callable,
@@ -51,6 +53,7 @@ class Distribution:
         function must return a list of probabilities for each diagnosis time.
 
         Note:
+        ----
             All arguments except ``support`` must have default values and if some
             parameters have bounds (like the binomial distribution's ``p``), the
             function must raise a ``ValueError`` if the parameter is invalid.
@@ -60,6 +63,7 @@ class Distribution:
         list of probabilities is passed, ``max_time`` is inferred from the length of the
         list and can be omitted. But an error is raised if the length of the list and
         ``max_time`` + 1 don't match, in case it is accidentally provided.
+
         """
         if callable(distribution):
             self._init_from_callable(distribution, max_time, **kwargs)
@@ -67,7 +71,6 @@ class Distribution:
             self._init_from_instance(distribution)
         else:
             self._init_from_frozen(distribution, max_time)
-
 
     def _init_from_callable(
         self,
@@ -87,7 +90,6 @@ class Distribution:
         self._func = partial(distribution, **func_kwargs)
         self._frozen = self.pmf
 
-
     def _init_from_instance(self, instance: Distribution):
         """Initialize the distribution from another instance."""
         if not instance.is_updateable:
@@ -97,8 +99,9 @@ class Distribution:
             self._func = partial(instance._func, **instance._func.keywords)
             self._frozen = self.pmf
 
-
-    def _init_from_frozen(self, distribution: Iterable[float], max_time: int | None = None):
+    def _init_from_frozen(
+        self, distribution: Iterable[float], max_time: int | None = None
+    ):
         """Initialize the distribution from a frozen distribution."""
         if max_time is None:
             max_time = len(distribution) - 1
@@ -112,7 +115,6 @@ class Distribution:
         self.max_time = max_time
         self._func = None
         self._frozen = self.normalize(distribution)
-
 
     @staticmethod
     def extract_kwargs(distribution: callable) -> dict[str, Any]:
@@ -139,11 +141,12 @@ class Distribution:
 
         return kwargs
 
-
     def __repr__(self) -> str:
+        """Return a string representation of the distribution."""
         return f"Distribution({repr(self.pmf.tolist())})"
 
     def __eq__(self, other) -> bool:
+        """Check if two distributions are equal."""
         if not isinstance(other, Distribution):
             return False
 
@@ -157,6 +160,7 @@ class Distribution:
         )
 
     def __len__(self) -> int:
+        """Return the length of the support of the distribution."""
         return len(self.support)
 
     def __hash__(self) -> int:
@@ -168,7 +172,6 @@ class Distribution:
         """
         args_and_kwargs_tpl = self._func.args + tuple(self._func.keywords.items())
         return hash((self.is_updateable, args_and_kwargs_tpl, self.pmf.tobytes()))
-
 
     @property
     def max_time(self) -> int:
@@ -184,13 +187,11 @@ class Distribution:
         self.support = np.arange(value + 1)
         self._frozen = None
 
-
     @staticmethod
     def normalize(distribution: np.ndarray) -> np.ndarray:
         """Normalize a distribution."""
         distribution = np.array(distribution)
         return distribution / np.sum(distribution)
-
 
     @property
     def pmf(self) -> np.ndarray:
@@ -199,12 +200,10 @@ class Distribution:
             self._frozen = self.normalize(self._func(self.support))
         return self._frozen
 
-
     @property
     def is_updateable(self) -> bool:
         """``True`` if instance can be updated via :py:meth:`~set_param`."""
         return self._func is not None
-
 
     def get_params(
         self,
@@ -213,18 +212,19 @@ class Distribution:
     ) -> types.ParamsType:
         """If updateable, return the dist's ``param`` value or all params in a dict.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`lymph.diagnosis_times.DistributionsUserDict.get_params`
             :py:meth:`lymph.graph.Edge.get_params`
             :py:meth:`lymph.models.Unilateral.get_params`
             :py:meth:`lymph.models.Bilateral.get_params`
+
         """
         if not self.is_updateable:
             warnings.warn("Distribution is not updateable, returning empty dict")
             return {} if as_dict else None
 
         return self._func.keywords if as_dict else self._func.keywords.values()
-
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Update distribution by setting its parameters and storing the frozen PMF.
@@ -257,7 +257,6 @@ class Distribution:
 
         return args
 
-
     def draw_diag_times(
         self,
         num: int | None = None,
@@ -275,8 +274,8 @@ class Distribution:
         return rng.choice(a=self.support, p=self.pmf, size=num)
 
 
-
 DC = TypeVar("DC", bound="Composite")
+
 
 class Composite(ABC):
     """Abstract base class implementing the composite pattern for distributions.
@@ -298,8 +297,9 @@ class Composite(ABC):
     >>> leaf1.get_distribution("T1")
     Distribution([0.1, 0.9])
     """
+
     _max_time: int
-    _distributions: dict[str, Distribution]    # only for leaf nodes
+    _distributions: dict[str, Distribution]  # only for leaf nodes
     _distribution_children: dict[str, Composite]
 
     def __init__(
@@ -314,11 +314,10 @@ class Composite(ABC):
 
         if is_distribution_leaf:
             self._distributions = {}
-            self._distribution_children = {}    # ignore any provided children
-            self.max_time = max_time            # only set max_time in leaf
+            self._distribution_children = {}  # ignore any provided children
+            self.max_time = max_time  # only set max_time in leaf
 
         self._distribution_children = distribution_children
-
 
     @property
     def _is_distribution_leaf(self: DC) -> bool:
@@ -330,7 +329,6 @@ class Composite(ABC):
             raise AttributeError(f"{self} has no children and no distributions.")
 
         return True
-
 
     @property
     def max_time(self: DC) -> int:
@@ -344,7 +342,9 @@ class Composite(ABC):
                 are_all_equal &= are_equal
 
             if not are_all_equal:
-                warnings.warn(f"Not all max_times were equal. Set all to {self._max_time}")
+                warnings.warn(
+                    f"Not all max_times were equal. Set all to {self._max_time}"
+                )
 
             return self._max_time
 
@@ -372,17 +372,14 @@ class Composite(ABC):
             for child in self._distribution_children.values():
                 child.max_time = value
 
-
     @property
     def t_stages(self: DC) -> list[str]:
         """Return the T-stages for which distributions are defined."""
         return list(self.get_all_distributions().keys())
 
-
     def get_distribution(self: DC, t_stage: str) -> Distribution:
         """Return the distribution for the given ``t_stage``."""
         return self.get_all_distributions()[t_stage]
-
 
     def get_all_distributions(self: DC) -> dict[str, Distribution]:
         """Return all distributions.
@@ -409,7 +406,6 @@ class Composite(ABC):
 
         return first_distributions
 
-
     def set_distribution(
         self: DC,
         t_stage: str,
@@ -423,7 +419,6 @@ class Composite(ABC):
             for child in self._distribution_children.values():
                 child.set_distribution(t_stage, distribution)
 
-
     def del_distribution(self: DC, t_stage: str) -> None:
         """Delete the distribution for the given ``t_stage``."""
         if self._is_distribution_leaf:
@@ -433,8 +428,9 @@ class Composite(ABC):
             for child in self._distribution_children.values():
                 child.del_distribution(t_stage)
 
-
-    def replace_all_distributions(self: DC, distributions: dict[str, Distribution]) -> None:
+    def replace_all_distributions(
+        self: DC, distributions: dict[str, Distribution]
+    ) -> None:
         """Replace all distributions with the given ones."""
         if self._is_distribution_leaf:
             self._distributions = {}
@@ -445,7 +441,6 @@ class Composite(ABC):
             for child in self._distribution_children.values():
                 child.replace_all_distributions(distributions)
 
-
     def clear_distributions(self: DC) -> None:
         """Remove all distributions."""
         if self._is_distribution_leaf:
@@ -454,7 +449,6 @@ class Composite(ABC):
         else:
             for child in self._distribution_children.values():
                 child.clear_distributions()
-
 
     def distributions_hash(self: DC) -> int:
         """Return a hash of all distributions."""
@@ -468,7 +462,6 @@ class Composite(ABC):
                 hash_res = hash((hash_res, child.distributions_hash()))
 
         return hash_res
-
 
     def get_distribution_params(
         self: DC,
@@ -498,8 +491,9 @@ class Composite(ABC):
 
         return params if as_dict else params.values()
 
-
-    def set_distribution_params(self: DC, *args: float, **kwargs: float) -> tuple[float]:
+    def set_distribution_params(
+        self: DC, *args: float, **kwargs: float
+    ) -> tuple[float]:
         """Set the parameters of all distributions."""
         if self._is_distribution_leaf:
             kwargs, global_kwargs = unflatten_and_split(

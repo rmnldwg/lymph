@@ -1,3 +1,5 @@
+"""Module for bilateral lymphatic tumor progression models."""
+
 from __future__ import annotations
 
 import logging
@@ -95,7 +97,6 @@ class Bilateral(
             is_modality_leaf=False,
         )
 
-
     def _init_models(
         self,
         graph_dict: dict[tuple[str], list[str]],
@@ -115,9 +116,8 @@ class Bilateral(
         _contra_kwargs["graph_dict"] = graph_dict
         _contra_kwargs.update(contra_kwargs or {})
 
-        self.ipsi   = models.Unilateral(**_ipsi_kwargs)
+        self.ipsi = models.Unilateral(**_ipsi_kwargs)
         self.contra = models.Unilateral(**_contra_kwargs)
-
 
     @classmethod
     def binary(cls, *args, **kwargs) -> Bilateral:
@@ -143,7 +143,6 @@ class Bilateral(
         uni_kwargs["allowed_states"] = [0, 1, 2]
         return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
-
     @property
     def is_trinary(self) -> bool:
         """Return whether the model is trinary."""
@@ -159,7 +158,6 @@ class Bilateral(
             raise ValueError("Both sides must be of the same 'naryity'.")
 
         return self.ipsi.is_binary
-
 
     def get_tumor_spread_params(
         self,
@@ -192,7 +190,6 @@ class Bilateral(
 
         return params if as_dict else params.values()
 
-
     def get_lnl_spread_params(
         self,
         as_dict: bool = True,
@@ -224,7 +221,6 @@ class Bilateral(
 
         return params if as_dict else params.values()
 
-
     def get_spread_params(
         self,
         as_dict: bool = True,
@@ -253,7 +249,9 @@ class Bilateral(
         >>> num_dims = model.get_num_dims()
         >>> num_dims
         5
-        >>> model.set_spread_params(*np.round(np.linspace(0., 1., num_dims+1), 2)) # doctest: +SKIP
+        >>> model.set_spread_params(
+        ...     *np.round(np.linspace(0., 1., num_dims+1), 2),
+        ... ) # doctest: +SKIP
         (1.0,)
         >>> model.get_spread_params(as_flat=False)   # doctest: +SKIP
         {'ipsi':    {'TtoII': {'spread': 0.0},
@@ -270,7 +268,10 @@ class Bilateral(
         """
         params = self.get_tumor_spread_params(as_flat=False)
 
-        if not self.is_symmetric["tumor_spread"] and not self.is_symmetric["lnl_spread"]:
+        if (
+            not self.is_symmetric["tumor_spread"]
+            and not self.is_symmetric["lnl_spread"]
+        ):
             params["ipsi"].update(self.get_lnl_spread_params(as_flat=False)["ipsi"])
             params["contra"].update(self.get_lnl_spread_params(as_flat=False)["contra"])
         else:
@@ -280,7 +281,6 @@ class Bilateral(
             params = utils.flatten(params)
 
         return params if as_dict else params.values()
-
 
     def get_params(
         self,
@@ -305,10 +305,11 @@ class Bilateral(
 
         return params if as_dict else params.values()
 
-
     def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread from tumor to LNLs."""
-        kwargs, global_kwargs = utils.unflatten_and_split(kwargs, expected_keys=["ipsi", "contra"])
+        kwargs, global_kwargs = utils.unflatten_and_split(
+            kwargs, expected_keys=["ipsi", "contra"]
+        )
 
         ipsi_kwargs = global_kwargs.copy()
         ipsi_kwargs.update(kwargs.get("ipsi", {}))
@@ -326,11 +327,11 @@ class Bilateral(
 
         return args
 
-
     def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread from LNLs to tumor."""
         kwargs, global_kwargs = utils.unflatten_and_split(
-            kwargs, expected_keys=["ipsi", "contra"],
+            kwargs,
+            expected_keys=["ipsi", "contra"],
         )
 
         ipsi_kwargs = global_kwargs.copy()
@@ -349,12 +350,10 @@ class Bilateral(
 
         return args
 
-
     def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread edges."""
         args = self.set_tumor_spread_params(*args, **kwargs)
         return self.set_lnl_spread_params(*args, **kwargs)
-
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set new parameters to the model.
@@ -393,7 +392,6 @@ class Bilateral(
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
-
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
@@ -401,12 +399,11 @@ class Bilateral(
     ) -> None:
         """Load patient data into the model.
 
-        This amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
+        Amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
         method of both sides of the neck.
         """
         self.ipsi.load_patient_data(patient_data, "ipsi", mapping)
         self.contra.load_patient_data(patient_data, "contra", mapping)
-
 
     def state_dist(
         self,
@@ -444,7 +441,6 @@ class Bilateral(
 
         return result
 
-
     def obs_dist(
         self,
         given_state_dist: np.ndarray | None = None,
@@ -470,7 +466,6 @@ class Bilateral(
             @ self.contra.observation_matrix()
         )
 
-
     def patient_likelihoods(
         self,
         t_stage: str,
@@ -483,7 +478,6 @@ class Bilateral(
             joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
         )
 
-
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
         joint_state_dist = self.state_dist(mode="BN")
@@ -494,10 +488,9 @@ class Bilateral(
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
-
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood of data, using the stored params."""
-        llh = 0. if log else 1.
+        llh = 0.0 if log else 1.0
 
         ipsi_dist_evo = self.ipsi.state_dist_evo()
         contra_dist_evo = self.contra.state_dist_evo()
@@ -512,11 +505,7 @@ class Bilateral(
 
             # Note that I am not using the `comp_joint_state_dist` method here, since
             # that would recompute the state dist evolution for each T-stage.
-            joint_state_dist = (
-                ipsi_dist_evo.T
-                @ diag_time_matrix
-                @ contra_dist_evo
-            )
+            joint_state_dist = ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo
             patient_llhs = matrix.fast_trace(
                 self.ipsi.diagnosis_matrix(stage),
                 joint_state_dist @ self.contra.diagnosis_matrix(stage).T,
@@ -524,7 +513,6 @@ class Bilateral(
             llh = utils.add_or_mult(llh, patient_llhs, log)
 
         return llh
-
 
     def likelihood(
         self,
@@ -558,7 +546,7 @@ class Bilateral(
             # given parameters are invalid...
             utils.safe_set_params(self, given_params)
         except ValueError:
-            return -np.inf if log else 0.
+            return -np.inf if log else 0.0
 
         if mode == "HMM":
             return self._hmm_likelihood(log, t_stage)
@@ -566,7 +554,6 @@ class Bilateral(
             return self._bn_likelihood(log, t_stage)
 
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
-
 
     def posterior_state_dist(
         self,
@@ -578,7 +565,7 @@ class Bilateral(
     ) -> np.ndarray:
         """Compute joint post. dist. over ipsi & contra states, ``given_diagnosis``.
 
-        The ``given_diagnosis`` is a dictionary storing one :py:obj:`.types.DiagnosisType`
+        ``given_diagnosis`` is a dictionary storing one :py:obj:`.types.DiagnosisType`
         each for the ``"ipsi"`` and ``"contra"`` side of the neck.
 
         Essentially, this is the risk for any possible combination of ipsi- and
@@ -587,7 +574,7 @@ class Bilateral(
         Warning:
         -------
             As in the :py:meth:`.Unilateral.posterior_state_dist` method, one may
-            provide a precomputed (joint) state distribution via the ``given_state_dist``
+            provide a precomputed (joint) state dist via the ``given_state_dist``
             argument (should be a square matrix). In this case, the ``given_params``
             are ignored and the model does not need to recompute e.g. the
             :py:meth:`.transition_matrix` or :py:meth:`.state_dist`, making the
@@ -617,14 +604,16 @@ class Bilateral(
             diagnosis_given_state[side] = diagnosis_encoding @ observation_matrix.T
 
         # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
-        joint_diagnosis_and_state = np.outer(
-            diagnosis_given_state["ipsi"],
-            diagnosis_given_state["contra"],
-        ) * given_state_dist
+        joint_diagnosis_and_state = (
+            np.outer(
+                diagnosis_given_state["ipsi"],
+                diagnosis_given_state["contra"],
+            )
+            * given_state_dist
+        )
         # Following Bayes' theorem, this is P(Xi,Xc|Zi=zi,Zc=zc) which is given by
         # P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) / P(Zi=zi,Zc=zc)
         return joint_diagnosis_and_state / np.sum(joint_diagnosis_and_state)
-
 
     def marginalize(
         self,
@@ -659,7 +648,6 @@ class Bilateral(
             @ marginalize_over_states["contra"]
         )
 
-
     def risk(
         self,
         involvement: dict[str, types.PatternType],
@@ -691,7 +679,6 @@ class Bilateral(
 
         return self.marginalize(involvement, posterior_state_dist)
 
-
     def draw_patients(
         self,
         num: int,
@@ -715,7 +702,7 @@ class Bilateral(
         if rng is None:
             rng = np.random.default_rng(seed)
 
-        if sum(stage_dist) != 1.:
+        if sum(stage_dist) != 1.0:
             warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
             stage_dist = np.array(stage_dist) / sum(stage_dist)
 
@@ -737,7 +724,7 @@ class Bilateral(
         # concatenation of the two separate drawn diagnosis
         sides = ["ipsi", "contra"]
         modality_names = list(self.get_all_modalities().keys())
-        lnl_names = [lnl for lnl in self.ipsi.graph.lnls.keys()]
+        lnl_names = list(self.ipsi.graph.lnls.keys())
         multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
 
         # reorder the column levels and thus also the individual columns to match the
@@ -745,6 +732,6 @@ class Bilateral(
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset[('tumor', '1', 't_stage')] = drawn_t_stages
+        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
 
         return dataset

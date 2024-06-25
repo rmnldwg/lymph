@@ -1,5 +1,4 @@
-"""Test the bilateral model.
-"""
+"""Test the bilateral model."""
 
 import numpy as np
 
@@ -13,10 +12,12 @@ class BilateralInitTest(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTes
     """Test the delegation of attrs from the unilateral class to the bilateral one."""
 
     def setUp(self):
-        self.model_kwargs = {"is_symmetric": {
-            "tumor_spread": True,
-            "lnl_spread": True,
-        }}
+        self.model_kwargs = {
+            "is_symmetric": {
+                "tumor_spread": True,
+                "lnl_spread": True,
+            }
+        }
         super().setUp()
         self.load_patient_data()
 
@@ -31,16 +32,14 @@ class BilateralInitTest(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTes
         """Make sure contra transition matrix gets recomputed when ipsi param is set."""
         ipsi_trans_mat = self.model.ipsi.transition_matrix()
         contra_trans_mat = self.model.contra.transition_matrix()
-        rand_ipsi_param = self.rng.choice(list(
-            self.model.ipsi.get_params(as_dict=True).keys()
-        ))
+        rand_ipsi_param = self.rng.choice(
+            list(self.model.ipsi.get_params(as_dict=True).keys())
+        )
         self.model.set_params(**{f"ipsi_{rand_ipsi_param}": self.rng.random()})
-        self.assertFalse(np.all(
-            ipsi_trans_mat == self.model.ipsi.transition_matrix()
-        ))
-        self.assertFalse(np.all(
-            contra_trans_mat == self.model.contra.transition_matrix()
-        ))
+        self.assertFalse(np.all(ipsi_trans_mat == self.model.ipsi.transition_matrix()))
+        self.assertFalse(
+            np.all(contra_trans_mat == self.model.contra.transition_matrix())
+        )
 
     def test_modality_sync(self):
         """Make sure the modalities are synced between the two sides."""
@@ -199,10 +198,18 @@ class NoSymmetryParamsTestCase(
 
     def test_set_params_as_args(self):
         """Test that the parameters can be set."""
-        ipsi_tumor_spread_args = self.rng.uniform(size=len(self.model.ipsi.graph.tumor_edges))
-        ipsi_lnl_spread_args = self.rng.uniform(size=len(self.model.ipsi.graph.lnl_edges))
-        contra_tumor_spread_args = self.rng.uniform(size=len(self.model.contra.graph.tumor_edges))
-        contra_lnl_spread_args = self.rng.uniform(size=len(self.model.contra.graph.lnl_edges))
+        ipsi_tumor_spread_args = self.rng.uniform(
+            size=len(self.model.ipsi.graph.tumor_edges)
+        )
+        ipsi_lnl_spread_args = self.rng.uniform(
+            size=len(self.model.ipsi.graph.lnl_edges)
+        )
+        contra_tumor_spread_args = self.rng.uniform(
+            size=len(self.model.contra.graph.tumor_edges)
+        )
+        contra_lnl_spread_args = self.rng.uniform(
+            size=len(self.model.contra.graph.lnl_edges)
+        )
         dist_params = self.rng.uniform(size=len(self.model.get_distribution_params()))
 
         self.model.set_params(
@@ -265,7 +272,9 @@ class SymmetryParamsTestCase(
 
     def test_set_params_as_args(self):
         """Test that the parameters can be set."""
-        args_to_set = [self.rng.uniform() for _ in self.model.ipsi.get_params(as_dict=False)]
+        args_to_set = [
+            self.rng.uniform() for _ in self.model.ipsi.get_params(as_dict=False)
+        ]
         self.model.set_params(*args_to_set)
         self.assertEqual(args_to_set, list(self.model.contra.get_params().values()))
 
@@ -323,7 +332,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
         )
         self.assertEqual(posterior.shape, (num_states, num_states))
         self.assertEqual(posterior.dtype, float)
-        self.assertTrue(np.isclose(posterior.sum(), 1.))
+        self.assertTrue(np.isclose(posterior.sum(), 1.0))
 
     def test_risk(self):
         """Test that the risk is computed correctly."""
@@ -331,7 +340,9 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
         random_diagnosis = self.create_random_diagnosis()
         random_pattern = {
             "ipsi": fixtures.create_random_pattern(self.model.ipsi.graph.lnls.keys()),
-            "contra": fixtures.create_random_pattern(self.model.contra.graph.lnls.keys()),
+            "contra": fixtures.create_random_pattern(
+                self.model.contra.graph.lnls.keys()
+            ),
         }
         random_t_stage = self.rng.choice(["early", "late"])
 
@@ -341,8 +352,8 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
             given_diagnosis=random_diagnosis,
             t_stage=random_t_stage,
         )
-        self.assertLessEqual(risk, 1.)
-        self.assertGreaterEqual(risk, 0.)
+        self.assertLessEqual(risk, 1.0)
+        self.assertGreaterEqual(risk, 0.0)
 
 
 class DataGenerationTestCase(
@@ -373,6 +384,5 @@ class DataGenerationTestCase(
                     self.assertIn(lnl, dataset[mod][side])
 
         self.assertAlmostEqual(
-            (dataset["tumor", "1", "t_stage"] == "early").mean(), 0.5,
-            delta=0.02
+            (dataset["tumor", "1", "t_stage"] == "early").mean(), 0.5, delta=0.02
         )

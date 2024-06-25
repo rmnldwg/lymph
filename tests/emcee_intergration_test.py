@@ -1,5 +1,4 @@
-"""Make sure the models work with the emcee package.
-"""
+"""Make sure the models work with the emcee package."""
 
 import emcee
 import numpy as np
@@ -18,7 +17,6 @@ class UnilateralEmceeTestCase(
         self.model.set_modality("PET", spec=0.86, sens=0.79)
         self.load_patient_data(filename="2021-usz-oropharynx.csv")
 
-
     def test_emcee(self):
         """Test the emcee package with the Unilateral model."""
         nwalkers, ndim = 50, len(self.model.get_params())
@@ -33,7 +31,7 @@ class UnilateralEmceeTestCase(
             parameter_names=list(self.model.get_params().keys()),
         )
         sampler.run_mcmc(initial, nsteps, progress=True)
-        samples = sampler.get_chain(discard=int(0.9*nsteps), flat=True)
+        samples = sampler.get_chain(discard=int(0.9 * nsteps), flat=True)
         self.assertGreater(sampler.acceptance_fraction.mean(), 0.2)
         self.assertLess(sampler.acceptance_fraction.mean(), 0.5)
         self.assertTrue(np.all(samples.mean(axis=0) >= 0.0))

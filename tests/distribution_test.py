@@ -1,4 +1,5 @@
 """Check functionality of the distribution over diagnosis times."""
+
 import warnings
 
 import numpy as np
@@ -23,15 +24,14 @@ class FixtureMixin:
             raise ValueError("max_time must be a positive integer.")
         if len(support) != max_time + 1:
             raise ValueError("support must have length max_time + 1.")
-        if not 0. <= p <= 1.:
+        if not 0.0 <= p <= 1.0:
             raise ValueError("p must be between 0 and 1.")
 
         return sp.stats.binom.pmf(support, max_time, p)
 
-
     def setUp(self):
         self.max_time = 10
-        self.array_arg = np.random.uniform(size=self.max_time + 1, low=0., high=10.)
+        self.array_arg = np.random.uniform(size=self.max_time + 1, low=0.0, high=10.0)
         self.func_arg = lambda support, p=0.5: self.binom_pmf(support, self.max_time, p)
 
 
@@ -47,7 +47,7 @@ class DistributionTestCase(FixtureMixin, fixtures.IgnoreWarningsTestCase):
             self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.pmf) == self.max_time + 1)
-        self.assertTrue(np.allclose(sum(dist.pmf), 1.))
+        self.assertTrue(np.allclose(sum(dist.pmf), 1.0))
 
     def test_frozen_distribution_with_max_time(self):
         """Test the creation of a frozen distribution where we provide the max_time."""
@@ -58,7 +58,7 @@ class DistributionTestCase(FixtureMixin, fixtures.IgnoreWarningsTestCase):
             self.assertEqual({}, dist.get_params(as_dict=True))
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.pmf) == self.max_time + 1)
-        self.assertTrue(np.allclose(sum(dist.pmf), 1.))
+        self.assertTrue(np.allclose(sum(dist.pmf), 1.0))
 
         self.assertRaises(ValueError, Distribution, self.array_arg, max_time=5)
 
@@ -74,7 +74,7 @@ class DistributionTestCase(FixtureMixin, fixtures.IgnoreWarningsTestCase):
         dist.set_params(p=0.5)
         self.assertTrue(len(dist.support) == self.max_time + 1)
         self.assertTrue(len(dist.pmf) == self.max_time + 1)
-        self.assertTrue(np.allclose(sum(dist.pmf), 1.))
+        self.assertTrue(np.allclose(sum(dist.pmf), 1.0))
 
     def test_updateable_distribution_raises_value_error(self):
         """Check that an invalid parameter raises a ValueError."""

@@ -1,4 +1,5 @@
 """Test the graph representation class of the package."""
+
 import numpy as np
 
 from lymph import graph

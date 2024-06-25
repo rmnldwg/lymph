@@ -1,5 +1,5 @@
-"""Type aliases and protocols used in the lymph package.
-"""
+"""Type aliases and protocols used in the lymph package."""
+
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Literal, Protocol, TypeVar
@@ -16,6 +16,7 @@ class HasSetParams(Protocol):
     """Protocol for classes that have a ``set_params`` method."""
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
+        """Set the parameters of the class."""
         ...
 
 
@@ -27,6 +28,7 @@ class HasGetParams(Protocol):
         as_dict: bool = True,
         as_flat: bool = True,
     ) -> tuple[float] | dict[str, float]:
+        """Return the parameters of the class."""
         ...
 
 
@@ -50,9 +52,15 @@ This is e.g. the type that the :py:meth:`.Model.get_params` method returns.
 """
 
 InvolvementIndicator = Literal[
-    False, 0, "healthy",
-    True, 1, "involved",
-    "micro", "macro", "notmacro",
+    False,
+    0,
+    "healthy",
+    True,
+    1,
+    "involved",
+    "micro",
+    "macro",
+    "notmacro",
 ]
 """Type alias for how to encode lymphatic involvement for a single lymph node level.
 
@@ -84,6 +92,7 @@ DiagnosisType = dict[str, PatternType]
 
 
 ModelT = TypeVar("ModelT", bound="Model")
+
 
 class Model(ABC):
     """Abstract base class for models.

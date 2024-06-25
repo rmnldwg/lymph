@@ -1,3 +1,5 @@
+"""Base module for the lymphatic system models."""
+
 from __future__ import annotations
 
 import warnings
@@ -12,10 +14,10 @@ from cachetools import LRUCache
 from lymph import diagnosis_times, graph, matrix, modalities, types, utils
 
 # pylint: disable=unused-import
-from lymph.utils import dict_to_func  # noqa: F401
-from lymph.utils import draw_diagnosis  # noqa: F401
 from lymph.utils import (  # nopycln: import
     add_or_mult,
+    dict_to_func,  # noqa: F401
+    draw_diagnosis,  # noqa: F401
     early_late_mapping,
     flatten,
     get_params_from,
@@ -101,25 +103,24 @@ class Unilateral(
             allowed_states=allowed_states,
         )
 
-        diagnosis_times.Composite.__init__(self, max_time=max_time, is_distribution_leaf=True)
+        diagnosis_times.Composite.__init__(
+            self, max_time=max_time, is_distribution_leaf=True
+        )
         modalities.Composite.__init__(self, is_modality_leaf=True)
         self._patient_data: pd.DataFrame | None = None
         self._cache_version: int = 0
         self._data_matrix_cache: LRUCache = LRUCache(maxsize=64)
         self._diagnosis_matrix_cache: LRUCache = LRUCache(maxsize=64)
 
-
     @classmethod
     def binary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with binary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1], **kwargs)
 
-
     @classmethod
     def trinary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
         """Create an instance of the :py:class:`~Unilateral` class with trinary LNLs."""
         return cls(graph_dict, allowed_states=[0, 1, 2], **kwargs)
-
 
     def __repr__(self) -> str:
         """Return a string representation of the instance."""
@@ -131,11 +132,12 @@ class Unilateral(
             f"max_time={self.max_time})"
         )
 
-
     def __str__(self) -> str:
         """Print info about the instance."""
-        return f"Unilateral with {len(self.graph.tumors)} tumors and {len(self.graph.lnls)} LNLs"
-
+        return (
+            f"Unilateral with {len(self.graph.tumors)} tumors "
+            f"and {len(self.graph.lnls)} LNLs"
+        )
 
     @property
     def is_trinary(self) -> bool:
@@ -146,7 +148,6 @@ class Unilateral(
     def is_binary(self) -> bool:
         """Return whether the model is binary."""
         return self.graph.is_binary
-
 
     def get_t_stages(
         self,
@@ -175,7 +176,6 @@ class Unilateral(
             "'distributions', or 'data'."
         )
 
-
     def get_tumor_spread_params(
         self,
         as_dict: bool = True,
@@ -183,7 +183,6 @@ class Unilateral(
     ) -> types.ParamsType:
         """Get the parameters of the tumor spread edges."""
         return get_params_from(self.graph.tumor_edges, as_dict, as_flat)
-
 
     def get_lnl_spread_params(
         self,
@@ -196,7 +195,6 @@ class Unilateral(
         microscopic modification parameters.
         """
         return get_params_from(self.graph.lnl_edges, as_dict, as_flat)
-
 
     def get_spread_params(
         self,
@@ -211,7 +209,6 @@ class Unilateral(
             params = flatten(params)
 
         return params if as_dict else params.values()
-
 
     def get_params(
         self,
@@ -232,22 +229,18 @@ class Unilateral(
 
         return params if as_dict else params.values()
 
-
     def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Assign new parameters to the tumor spread edges."""
         return set_params_for(self.graph.tumor_edges, *args, **kwargs)
-
 
     def set_lnl_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Assign new parameters to the LNL spread edges."""
         return set_params_for(self.graph.lnl_edges, *args, **kwargs)
 
-
     def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Assign new parameters to the spread edges."""
         args = self.set_tumor_spread_params(*args, **kwargs)
         return self.set_lnl_spread_params(*args, **kwargs)
-
 
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Assign new parameters to the model.
@@ -294,12 +287,7 @@ class Unilateral(
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
-
-    def transition_prob(
-        self,
-        newstate: list[int],
-        assign: bool = False
-    ) -> float:
+    def transition_prob(self, newstate: list[int], assign: bool = False) -> float:
         """Compute probability to transition to ``newstate``, given its current state.
 
         The probability is computed as the product of the transition probabilities of
@@ -308,7 +296,7 @@ class Unilateral(
         """
         trans_prob = 1
         for i, lnl in enumerate(self.graph.lnls):
-            trans_prob *= lnl.comp_trans_prob(new_state = newstate[i])
+            trans_prob *= lnl.comp_trans_prob(new_state=newstate[i])
             if trans_prob == 0:
                 break
 
@@ -317,10 +305,8 @@ class Unilateral(
 
         return trans_prob
 
-
     def diagnosis_prob(
-        self,
-        diagnosis: pd.Series | dict[str, dict[str, bool]]
+        self, diagnosis: pd.Series | dict[str, dict[str, bool]]
     ) -> float:
         """Compute the probability to observe a diagnosis given the current state.
 
@@ -332,7 +318,7 @@ class Unilateral(
         It returns the probability of observing this particular combination of
         diagnosis, given the current state of the system.
         """
-        prob = 1.
+        prob = 1.0
         for name, modality in self.get_all_modalities().items():
             if name in diagnosis:
                 mod_diagnosis = diagnosis[name]
@@ -348,13 +334,12 @@ class Unilateral(
                     prob *= lnl.comp_obs_prob(lnl_diagnosis, modality.confusion_matrix)
         return prob
 
-
     @property
     def obs_list(self):
         """Return the list of all possible observations.
 
-        They are ordered the same way as the :py:attr:`.graph.Representation.state_list`,
-        but additionally by modality. E.g., for two LNLs II, III and two modalities CT,
+        They are ordered like the :py:attr:`.graph.Representation.state_list`, but
+        additionally by modality. E.g., for two LNLs II, III and two modalities CT,
         pathology, the list would look like this:
 
         >>> model = Unilateral(graph_dict={
@@ -385,7 +370,6 @@ class Unilateral(
                 possible_obs_list.append(possible_obs.copy())
 
         return np.array(list(product(*possible_obs_list)))
-
 
     def transition_matrix(self) -> np.ndarray:
         r"""Matrix encoding the probabilities to transition from one state to another.
@@ -421,15 +405,14 @@ class Unilateral(
             num_states=3 if self.is_trinary else 2,
         )
 
-
     def observation_matrix(self) -> np.ndarray:
         r"""Get the matrix encoding the probabilities to observe a certain diagnosis.
 
         Every element in this matrix holds a probability to observe a certain diagnosis
         (or combination of diagnosis, when using multiple diagnostic modalities) given
         the current state of the system. It has the shape
-        :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes in
-        the graph and :math:`M` is the number of diagnostic modalities.
+        :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes
+        in the graph and :math:`M` is the number of diagnostic modalities.
 
         See Also
         --------
@@ -442,7 +425,6 @@ class Unilateral(
             num_lnls=len(self.graph.lnls),
             base=3 if self.is_trinary else 2,
         )
-
 
     def data_matrix(self, t_stage: str | None = None) -> np.ndarray:
         """Extract the data matrix for a given ``t_stage``.
@@ -486,7 +468,6 @@ class Unilateral(
 
         return self._data_matrix_cache[t_hash]
 
-
     def diagnosis_matrix(self, t_stage: str | None = None) -> np.ndarray:
         """Extract the diagnosis matrix for a given ``t_stage``.
 
@@ -504,7 +485,6 @@ class Unilateral(
             )
 
         return self._diagnosis_matrix_cache[_hash].T
-
 
     def load_patient_data(
         self,
@@ -534,8 +514,7 @@ class Unilateral(
             mapping = early_late_mapping
 
         patient_data = (
-            patient_data
-            .copy()
+            patient_data.copy()
             .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
         )
@@ -576,17 +555,15 @@ class Unilateral(
                     category=types.DataWarning,
                 )
 
-
-
     @property
     def patient_data(self) -> pd.DataFrame:
         """Return the patient data loaded into the model.
 
-        After succesfully loading the data with the method :py:meth:`.load_patient_data`,
-        the copied patient data now contains the additional top-level header
-        ``"_model"``. Under it, the observed per LNL involvement is listed for every
-        diagnostic modality in the dictionary returned by :py:meth:`.get_all_modalities`
-        and for each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
+        After successfully loading the data with :py:meth:`.load_patient_data`, the
+        copied patient data now contains the additional top-level header ``"_model"``.
+        Under it, the observed per LNL involvement is listed for every diagnostic
+        modality in the dictionary returned by :py:meth:`.get_all_modalities` and for
+        each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
 
         It also contains information on the patient's T-stage under the header
         ``("_model", "#", "t_stage")``.
@@ -604,7 +581,6 @@ class Unilateral(
 
         return self._patient_data
 
-
     def evolve(self, state_dist: np.ndarray, num_steps: int) -> np.ndarray:
         """Evolve the ``state_dist`` of possible states over ``num_steps``.
 
@@ -618,7 +594,6 @@ class Unilateral(
 
         return state_dist
 
-
     def state_dist_evo(self) -> np.ndarray:
         """Compute an evolution of the model's state distribution over time steps.
 
@@ -631,13 +606,12 @@ class Unilateral(
         in the dictionary returned by :py:meth:`.get_all_distributions`.
         """
         state_dists = np.zeros(shape=(self.max_time + 1, len(self.graph.state_list)))
-        state_dists[0, 0] = 1.
+        state_dists[0, 0] = 1.0
 
         for t in range(1, self.max_time + 1):
-            state_dists[t] = self.evolve(state_dists[t-1], num_steps=1)
+            state_dists[t] = self.evolve(state_dists[t - 1], num_steps=1)
 
         return state_dists
-
 
     def state_dist(
         self,
@@ -671,6 +645,7 @@ class Unilateral(
 
             return state_dist
 
+        raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
     def obs_dist(
         self,
@@ -694,7 +669,6 @@ class Unilateral(
 
         return given_state_dist @ self.observation_matrix()
 
-
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
         state_dist = self.state_dist(mode="BN")
@@ -702,11 +676,10 @@ class Unilateral(
 
         return np.sum(np.log(patient_llhs)) if log else np.prod(patient_llhs)
 
-
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood, using the stored params."""
         evolved_model = self.state_dist_evo()
-        llh = 0. if log else 1.
+        llh = 0.0 if log else 1.0
 
         if t_stage is None:
             t_stages = self.get_t_stages("valid")
@@ -722,7 +695,6 @@ class Unilateral(
             llh = add_or_mult(llh, patient_llhs, log)
 
         return llh
-
 
     def likelihood(
         self,
@@ -745,7 +717,7 @@ class Unilateral(
             # given parameters are invalid...
             utils.safe_set_params(self, given_params)
         except ValueError:
-            return -np.inf if log else 0.
+            return -np.inf if log else 0.0
 
         if mode == "HMM":
             return self._hmm_likelihood(log, t_stage)
@@ -753,7 +725,6 @@ class Unilateral(
             return self._bn_likelihood(log, t_stage)
 
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
-
 
     def compute_encoding(
         self,
@@ -768,12 +739,11 @@ class Unilateral(
                 matrix.compute_encoding(
                     lnls=self.graph.lnls.keys(),
                     pattern=given_diagnosis.get(modality, {}),
-                    base=2,   # diagnosis are always binary!
+                    base=2,  # diagnosis are always binary!
                 ),
             )
 
         return diagnosis_encoding
-
 
     def posterior_state_dist(
         self,
@@ -830,7 +800,6 @@ class Unilateral(
         # specified diagnosis P(X|Z=z) = P(Z=z,X) / P(X), where P(X) = sum_z P(Z=z,X)
         return joint_diagnosis_and_state / np.sum(joint_diagnosis_and_state)
 
-
     def marginalize(
         self,
         involvement: types.PatternType,
@@ -856,7 +825,6 @@ class Unilateral(
             base=3 if self.is_trinary else 2,
         )
         return marginalize_over_states @ given_state_dist
-
 
     def risk(
         self,
@@ -891,8 +859,7 @@ class Unilateral(
         # interest
         return self.marginalize(involvement, posterior_state_dist)
 
-
-    def draw_diagnosis(
+    def draw_diagnosis(  # noqa: F811
         self,
         diag_times: list[int],
         rng: np.random.Generator | None = None,
@@ -932,12 +899,10 @@ class Unilateral(
 
         obs_indices = np.arange(len(self.obs_list))
         drawn_obs_idx = [
-            rng.choice(obs_indices, p=obs_prob)
-            for obs_prob in obs_probs_given_time
+            rng.choice(obs_indices, p=obs_prob) for obs_prob in obs_probs_given_time
         ]
 
         return self.obs_list[drawn_obs_idx].astype(bool)
-
 
     def draw_patients(
         self,
@@ -970,7 +935,7 @@ class Unilateral(
         if rng is None:
             rng = np.random.default_rng(seed)
 
-        if sum(stage_dist) != 1.:
+        if sum(stage_dist) != 1.0:
             warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
             stage_dist = np.array(stage_dist) / sum(stage_dist)
 

@@ -1,5 +1,5 @@
-"""Fxitures for tests.
-"""
+"""Fxitures for tests."""
+
 import logging
 import unittest
 import warnings
@@ -84,11 +84,13 @@ def _create_random_frozen_dist(
     unnormalized = rng.random(size=max_time + 1)
     return unnormalized / np.sum(unnormalized)
 
+
 def _create_random_parametric_dist(
     max_time: int,
     rng: np.random.Generator = RNG,
 ) -> diagnosis_times.Distribution:
     """Create a binomial diagnosis time distribution with random params."""
+
     def _pmf(support: np.ndarray, p: float = rng.random()) -> np.ndarray:
         return sp.stats.binom.pmf(support, p=p, n=max_time + 1)
 
@@ -96,6 +98,7 @@ def _create_random_parametric_dist(
         distribution=_pmf,
         max_time=max_time,
     )
+
 
 def create_random_dist(
     type_: str,
@@ -114,10 +117,7 @@ def create_random_dist(
 
 def create_random_pattern(lnls: list[str]) -> PatternType:
     """Create a random involvement pattern."""
-    return {
-        lnl: RNG.choice([True, False, None])
-        for lnl in lnls
-    }
+    return {lnl: RNG.choice([True, False, None]) for lnl in lnls}
 
 
 class BinaryUnilateralModelMixin:
@@ -131,7 +131,6 @@ class BinaryUnilateralModelMixin:
         self.model = Unilateral.binary(graph_dict=self.graph_dict)
         self.logger = get_logger(level=logging.INFO)
 
-
     def create_random_params(self) -> dict[str, float]:
         """Create random parameters for the model."""
         params = {
@@ -141,13 +140,14 @@ class BinaryUnilateralModelMixin:
         }
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
-            params.update({
-                f"{t_stage}_{type_}": self.rng.random()
-                for t_stage, dist in self.model.get_all_distributions().items()
-                for type_ in dist.get_params(as_dict=True).keys()
-            })
+            params.update(
+                {
+                    f"{t_stage}_{type_}": self.rng.random()
+                    for t_stage, dist in self.model.get_all_distributions().items()
+                    for type_ in dist.get_params(as_dict=True).keys()
+                }
+            )
         return params
-
 
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnosis time distributions."""
@@ -157,14 +157,13 @@ class BinaryUnilateralModelMixin:
                 create_random_dist(type_, self.model.max_time, self.rng),
             )
 
-
     def load_patient_data(
         self,
         filename: str = "2021-clb-oropharynx.csv",
     ) -> None:
         """Load patient data from a CSV file."""
         filepath = Path(__file__).parent / "data" / filename
-        self.raw_data = pd.read_csv(filepath, header=[0,1,2])
+        self.raw_data = pd.read_csv(filepath, header=[0, 1, 2])
         self.model.load_patient_data(self.raw_data, side="ipsi")
 
 
@@ -185,7 +184,6 @@ class BilateralModelMixin:
         self.model.set_params(**self.create_random_params())
         self.logger = get_logger(level=logging.INFO)
 
-
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnosis time distributions."""
         for t_stage, type_ in dists.items():
@@ -193,7 +191,6 @@ class BilateralModelMixin:
                 t_stage,
                 create_random_dist(type_, self.model.max_time, self.rng),
             )
-
 
     def create_random_params(self) -> dict[str, float]:
         """Create a random set of parameters."""
@@ -204,16 +201,14 @@ class BilateralModelMixin:
 
         return params
 
-
     def load_patient_data(
         self,
         filename: str = "2021-usz-oropharynx.csv",
     ) -> None:
         """Load patient data from a CSV file."""
         filepath = Path(__file__).parent / "data" / filename
-        self.raw_data = pd.read_csv(filepath, header=[0,1,2])
+        self.raw_data = pd.read_csv(filepath, header=[0, 1, 2])
         self.model.load_patient_data(self.raw_data)
-
 
 
 class TrinaryFixtureMixin:
@@ -226,7 +221,6 @@ class TrinaryFixtureMixin:
         self.model = Unilateral.trinary(graph_dict=self.graph_dict)
         self.logger = get_logger(level=logging.INFO)
 
-
     def create_random_params(self) -> dict[str, float]:
         """Create random parameters for the model."""
         params = {
@@ -236,14 +230,15 @@ class TrinaryFixtureMixin:
         }
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
-            params.update({
-                f"{t_stage}_{type_}": self.rng.random()
-                for t_stage, dist in self.model.get_all_distributions().items()
-                for type_ in dist.get_params(as_dict=True).keys()
-            })
+            params.update(
+                {
+                    f"{t_stage}_{type_}": self.rng.random()
+                    for t_stage, dist in self.model.get_all_distributions().items()
+                    for type_ in dist.get_params(as_dict=True).keys()
+                }
+            )
 
         return params
-
 
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnosis time distributions."""
@@ -252,7 +247,6 @@ class TrinaryFixtureMixin:
                 t_stage,
                 create_random_dist(type_, self.model.max_time, self.rng),
             )
-
 
     def get_modalities_subset(self, names: list[str]) -> dict[str, Modality]:
         """Create a dictionary of modalities."""
@@ -267,14 +261,13 @@ class TrinaryFixtureMixin:
         }
         return {name: modalities_in_data[name] for name in names}
 
-
     def load_patient_data(
         self,
         filename: str = "2021-clb-oropharynx.csv",
     ) -> None:
         """Load patient data from a CSV file."""
         filepath = Path(__file__).parent / "data" / filename
-        self.raw_data = pd.read_csv(filepath, header=[0,1,2])
+        self.raw_data = pd.read_csv(filepath, header=[0, 1, 2])
         self.model.load_patient_data(self.raw_data, side="ipsi")
 
 
@@ -299,7 +292,6 @@ class MidlineFixtureMixin:
             use_central=use_central,
             use_midext_evo=use_midext_evo,
         )
-
 
     def init_diag_time_dists(self, **dists) -> None:
         """Init the diagnosis time distributions."""
