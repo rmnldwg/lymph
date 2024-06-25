@@ -1,8 +1,11 @@
+"""Module for modeling metastatic progression bilaterally with tumor lateralization."""
+
 from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -17,13 +20,12 @@ EXT_COL = ("tumor", "1", "extension")
 CENTRAL_COL = ("tumor", "1", "central")
 
 
-
 class Midline(
     diagnosis_times.Composite,
     modalities.Composite,
     types.Model,
 ):
-    """Models metastatic progression bilaterally with tumor lateralization.
+    r"""Models metastatic progression bilaterally with tumor lateralization.
 
     Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
@@ -45,6 +47,7 @@ class Midline(
     :math:`b_c^{\\not\\in}` for patients without. :math:`\\alpha` is the linear
     mixing parameter.
     """
+
     def __init__(
         self,
         graph_dict: types.GraphDictType,
@@ -54,7 +57,7 @@ class Midline(
         use_midext_evo: bool = True,
         marginalize_unknown: bool = True,
         uni_kwargs: dict[str, Any] | None = None,
-        **_kwargs
+        **_kwargs,
     ):
         """Initialize the model.
 
@@ -84,12 +87,14 @@ class Midline(
 
         The ``uni_kwargs`` are passed to all bilateral models.
 
-        See Also:
+        See Also
+        --------
             :py:class:`Bilateral`: Two to four of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
             tumor, one for the case of no such extension, (possibly) one for the case of
             a central/symmetric tumor, and (possibly) one for the case of unknown
             midline extension status.
+
         """
         if is_symmetric is None:
             is_symmetric = {}
@@ -144,13 +149,17 @@ class Midline(
             other_children["unknown"] = self.unknown
 
         if use_mixing:
-            self.mixing_param = 0.
+            self.mixing_param = 0.0
 
-        self.midext_prob = 0.
+        self.midext_prob = 0.0
 
         diagnosis_times.Composite.__init__(
             self,
-            distribution_children={"ext": self.ext, "noext": self.noext, **other_children},
+            distribution_children={
+                "ext": self.ext,
+                "noext": self.noext,
+                **other_children,
+            },
             is_distribution_leaf=False,
         )
         modalities.Composite.__init__(
@@ -159,14 +168,12 @@ class Midline(
             is_modality_leaf=False,
         )
 
-
     @classmethod
     def trinary(cls, *args, **kwargs) -> Midline:
         """Create a trinary model."""
         uni_kwargs = kwargs.pop("uni_kwargs", {})
         uni_kwargs["allowed_states"] = [0, 1, 2]
         return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
-
 
     @property
     def is_trinary(self) -> bool:
@@ -179,21 +186,19 @@ class Midline(
 
         return self.ext.is_trinary
 
-
     @property
     def midext_prob(self) -> float:
         """Return the probability of midline extension."""
         if hasattr(self, "_midext_prob"):
             return self._midext_prob
-        return 0.
+        return 0.0
 
     @midext_prob.setter
     def midext_prob(self, value: float) -> None:
         """Set the probability of midline extension."""
-        if value is not None and not 0. <= value <= 1.:
+        if value is not None and not 0.0 <= value <= 1.0:
             raise ValueError("The midline extension prob must be in the range [0, 1].")
         self._midext_prob = value
-
 
     @property
     def mixing_param(self) -> float | None:
@@ -205,7 +210,7 @@ class Midline(
     @mixing_param.setter
     def mixing_param(self, value: float) -> None:
         """Set the mixing parameter."""
-        if value is not None and not 0. <= value <= 1.:
+        if value is not None and not 0.0 <= value <= 1.0:
             raise ValueError("The mixing parameter must be in the range [0, 1].")
         self._mixing_param = value
 
@@ -240,7 +245,6 @@ class Midline(
             "This instance does not marginalize over unknown midline extension."
         )
 
-
     def get_tumor_spread_params(
         self,
         as_dict: bool = True,
@@ -257,7 +261,9 @@ class Midline(
         params["ipsi"] = self.ext.ipsi.get_tumor_spread_params(as_flat=as_flat)
 
         if self.use_mixing:
-            params["contra"] = self.noext.contra.get_tumor_spread_params(as_flat=as_flat)
+            params["contra"] = self.noext.contra.get_tumor_spread_params(
+                as_flat=as_flat
+            )
             params["mixing"] = self.mixing_param
         else:
             params["noext"] = {
@@ -271,7 +277,6 @@ class Midline(
             params = utils.flatten(params)
 
         return params if as_dict else params.values()
-
 
     def get_lnl_spread_params(
         self,
@@ -306,7 +311,6 @@ class Midline(
 
         return ext_lnl_params if as_dict else ext_lnl_params.values()
 
-
     def get_spread_params(
         self,
         as_dict: bool = True,
@@ -333,7 +337,6 @@ class Midline(
 
         return params if as_dict else params.values()
 
-
     def get_params(
         self,
         as_dict: bool = True,
@@ -341,7 +344,7 @@ class Midline(
     ) -> types.ParamsType:
         """Return all the parameters of the model.
 
-        This includes the spread parameters from the call to :py:meth:`get_spread_params`
+        Includes the spread parameters from the call to :py:meth:`get_spread_params`
         and the distribution parameters from the call to
         :py:meth:`~.diagnosis_times.Composite.get_distribution_params`.
         """
@@ -355,9 +358,10 @@ class Midline(
 
         return params if as_dict else params.values()
 
-
     def set_tumor_spread_params(
-        self, *args: float, **kwargs: float,
+        self,
+        *args: float,
+        **kwargs: float,
     ) -> types.ParamsType:
         """Set the spread parameters of the midline model.
 
@@ -369,7 +373,8 @@ class Midline(
         can provide.
         """
         kwargs, global_kwargs = utils.unflatten_and_split(
-            kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
+            kwargs,
+            expected_keys=["ipsi", "noext", "ext", "contra"],
         )
 
         # first, take care of ipsilateral tumor spread (same for all models)
@@ -386,31 +391,35 @@ class Midline(
             contra_kwargs.update(kwargs.get("contra", {}))
             args = self.noext.contra.set_tumor_spread_params(*args, **contra_kwargs)
             mixing_param, args = utils.popfirst(args)
-            mixing_param = global_kwargs.get("mixing", mixing_param) or self.mixing_param
+            mixing_param = (
+                global_kwargs.get("mixing", mixing_param) or self.mixing_param
+            )
             self.mixing_param = global_kwargs.get("mixing", mixing_param)
 
             ext_contra_kwargs = {}
             for (key, ipsi_param), noext_contra_param in zip(
                 self.ext.ipsi.get_tumor_spread_params().items(),
                 self.noext.contra.get_tumor_spread_params().values(),
+                strict=False,
             ):
                 ext_contra_kwargs[key] = (
                     self.mixing_param * ipsi_param
-                    + (1. - self.mixing_param) * noext_contra_param
+                    + (1.0 - self.mixing_param) * noext_contra_param
                 )
             self.ext.contra.set_tumor_spread_params(**ext_contra_kwargs)
 
         else:
             noext_contra_kwargs = global_kwargs.copy()
             noext_contra_kwargs.update(kwargs.get("noext", {}).get("contra", {}))
-            args = self.noext.contra.set_tumor_spread_params(*args, **noext_contra_kwargs)
+            args = self.noext.contra.set_tumor_spread_params(
+                *args, **noext_contra_kwargs
+            )
 
             ext_contra_kwargs = global_kwargs.copy()
             ext_contra_kwargs.update(kwargs.get("ext", {}).get("contra", {}))
             args = self.ext.contra.set_tumor_spread_params(*args, **ext_contra_kwargs)
 
         return args
-
 
     def set_lnl_spread_params(self, *args: float, **kwargs: float) -> Iterable[float]:
         """Set the LNL spread parameters of the midline model.
@@ -421,7 +430,8 @@ class Midline(
         ``use_central`` attribute.
         """
         kwargs, global_kwargs = utils.unflatten_and_split(
-            kwargs, expected_keys=["ipsi", "noext", "ext", "contra"],
+            kwargs,
+            expected_keys=["ipsi", "noext", "ext", "contra"],
         )
         ipsi_kwargs = global_kwargs.copy()
         ipsi_kwargs.update(kwargs.get("ipsi", {}))
@@ -450,15 +460,15 @@ class Midline(
 
         return args
 
-
     def set_spread_params(self, *args: float, **kwargs: float) -> Iterable[float]:
         """Set the spread parameters of the midline model."""
         args = self.set_tumor_spread_params(*args, **kwargs)
         return self.set_lnl_spread_params(*args, **kwargs)
 
-
     def set_params(
-        self, *args: float, **kwargs: float,
+        self,
+        *args: float,
+        **kwargs: float,
     ) -> types.ParamsType:
         """Set all parameters of the model.
 
@@ -470,7 +480,6 @@ class Midline(
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
-
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
@@ -480,7 +489,7 @@ class Midline(
 
         This amounts to sorting the patients into three bins:
 
-        1. Patients whose tumor is clearly laterlaized, meaning the column
+        1. Patients whose tumor is clearly lateralized, meaning the column
            ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
            the :py:attr:`.noext` attribute.
         2. Those with a central tumor, indicated by ``True`` in the column
@@ -495,13 +504,13 @@ class Midline(
         the respective models.
         """
         # pylint: disable=singleton-comparison
-        is_lateralized = patient_data[EXT_COL] == False
-        has_extension = patient_data[EXT_COL] == True
+        is_lateralized = patient_data[EXT_COL] == False  # noqa: E712
+        has_extension = patient_data[EXT_COL] == True  # noqa: E712
         is_unknown = patient_data[EXT_COL].isna()
         self.noext.load_patient_data(patient_data[is_lateralized], mapping)
 
         if self.use_central:
-            is_central = patient_data[CENTRAL_COL] == True
+            is_central = patient_data[CENTRAL_COL] == True  # noqa: E712
             has_extension = has_extension & ~is_central
             self.central.load_patient_data(patient_data[is_central], mapping)
 
@@ -515,39 +524,66 @@ class Midline(
                 "is unknown."
             )
 
-
     def midext_evo(self) -> np.ndarray:
         """Evolve only the state of the midline extension."""
+        time_steps = np.arange(self.max_time + 1)
         midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
-        midext_states[0,0] = 1.
-
-        midextransition_matrix = np.array([
-            [1 - self.midext_prob, self.midext_prob],
-            [0.                  , 1.              ],
-        ])
-
-        # compute involvement for all time steps
-        for i in range(len(midext_states)-1):
-            midext_states[i+1,:] = midext_states[i,:] @ midextransition_matrix
+        midext_states[:, 0] = (1.0 - self.midext_prob) ** time_steps
+        midext_states[:, 1] = 1.0 - midext_states[:, 0]
         return midext_states
 
-
     def contra_state_dist_evo(self) -> tuple[np.ndarray, np.ndarray]:
-        """Evolve contra side as mixture of with & without midline extension."""
+        """Evolve contra side as mixture of with & without midline extension.
+
+        This computes the evolution of the contralateral state distribution for both
+        absent and present midline extension and returns them as a tuple.
+
+        The first element of the tuple is the evolution of the contralateral state
+        distribution while having no midline extension. This means that e.g. the value
+        at index ``[t,i]`` is the probability of being in state ``i`` at time ``t``,
+        **AND** not having midline extension after these ``t`` time steps.
+
+        The second element of the tuple is the evolution of the contralateral state
+        distribution where midline extension occurs at some time point. For example,
+        the value at index ``[t,i]`` is the probability of being in state ``i`` at time
+        ``t``, **AND** having developed midline extension at some time point before.
+
+        To compute this second evolution, we need to mix the model without and with
+        midline extension at each time step, following a recusion formula.
+        """
         noext_contra_dist_evo = self.noext.contra.state_dist_evo()
-        ext_contra_dist_evo = self.ext.contra.state_dist_evo()
 
         if not self.use_midext_evo:
-            noext_contra_dist_evo *= (1. - self.midext_prob)
+            ext_contra_dist_evo = self.ext.contra.state_dist_evo()
+            noext_contra_dist_evo *= 1.0 - self.midext_prob
             ext_contra_dist_evo *= self.midext_prob
 
         else:
+            ext_contra_dist_evo = np.zeros_like(noext_contra_dist_evo)
             midext_evo = self.midext_evo()
-            noext_contra_dist_evo *= midext_evo[:,0].reshape((-1, 1))
-            ext_contra_dist_evo *= midext_evo[:,1].reshape((-1, 1))
+
+            # Evolution of contralateral state dists, given no midline extension,
+            # multiplied with the probabilities of having no midline extension at all
+            # time steps, resulting in a vector of length `max_time + 1`:
+            #     P(X_c[t] | noext) * P(noext | t)
+            noext_contra_dist_evo *= midext_evo[:, 0].reshape(-1, 1)
+
+            for t in range(self.max_time):
+                # For the case of midline extension, we need to consider all possible
+                # paths that lead to a midline extension at time t+1. We can define
+                # this recursively:
+                ext_contra_dist_evo[t + 1] = (
+                    # it's the probability of developing it just now, in which case we
+                    # use the noext state and multiply it with the probability to
+                    # develop midline extension at this time step, ...
+                    self.midext_prob * noext_contra_dist_evo[t]
+                    # ... plus the probability of having it already, in which case we
+                    # use the ext state. The probability of "keeping" the midline
+                    # extension is 1, so we don't need to multiply it with anything.
+                    + ext_contra_dist_evo[t]
+                ) @ self.ext.contra.transition_matrix()  # then evolve using ext model
 
         return noext_contra_dist_evo, ext_contra_dist_evo
-
 
     def state_dist(
         self,
@@ -579,7 +615,6 @@ class Midline(
 
         raise NotImplementedError("Only HMM mode is supported as of now.")
 
-
     def obs_dist(
         self,
         given_state_dist: np.ndarray | None = None,
@@ -593,14 +628,18 @@ class Midline(
         ignored. The provided state distribution may be 2D or 3D. The returned
         distribution will have the same dimensionality.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral observations.
+
         """
         if given_state_dist is None:
-            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+            given_state_dist = self.state_dist(
+                t_stage=t_stage, mode=mode, central=central
+            )
 
         if given_state_dist.ndim == 2:
             return self.ext.obs_dist(given_state_dist=given_state_dist)
@@ -613,10 +652,11 @@ class Midline(
         ]
         return np.stack(obs_dist)
 
-
-    def _hmm_likelihood(self, log: bool = True, for_t_stage: str | None = None) -> float:
+    def _hmm_likelihood(
+        self, log: bool = True, for_t_stage: str | None = None
+    ) -> float:
         """Compute the likelihood of the stored data under the hidden Markov model."""
-        llh = 0. if log else 1.
+        llh = 0.0 if log else 1.0
 
         ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
@@ -630,22 +670,21 @@ class Midline(
             # see the `Bilateral` model for why this is done in this way.
             for case in ["ext", "noext"]:
                 joint_state_dist = (
-                    ipsi_dist_evo.T
-                    @ diag_time_matrix
-                    @ contra_dist_evo[case]
+                    ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
                 )
                 marg_joint_state_dist += joint_state_dist
                 _model = getattr(self, case)
                 patient_llhs = matrix.fast_trace(
                     _model.ipsi.diagnosis_matrix(stage),
-                    joint_state_dist @ _model.contra.diagnosis_matrix(stage).T
+                    joint_state_dist @ _model.contra.diagnosis_matrix(stage).T,
                 )
                 llh = utils.add_or_mult(llh, patient_llhs, log=log)
 
             try:
                 marg_patient_llhs = matrix.fast_trace(
                     self.unknown.ipsi.diagnosis_matrix(stage),
-                    marg_joint_state_dist @ self.unknown.contra.diagnosis_matrix(stage).T
+                    marg_joint_state_dist
+                    @ self.unknown.contra.diagnosis_matrix(stage).T,
                 )
                 llh = utils.add_or_mult(llh, marg_patient_llhs, log=log)
             except AttributeError:
@@ -660,7 +699,6 @@ class Midline(
                 llh *= self.central.likelihood(log=log, t_stage=for_t_stage)
 
         return llh
-
 
     def likelihood(
         self,
@@ -679,25 +717,27 @@ class Midline(
         Bayesian network mode.
 
         Note:
+        ----
             The computation is faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
         See Also:
+        --------
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
+
         """
         try:
             # all functions and methods called here should raise a ValueError if the
             # given parameters are invalid...
             utils.safe_set_params(self, given_params)
         except ValueError:
-            return -np.inf if log else 0.
+            return -np.inf if log else 0.0
 
         if mode == "HMM":
             return self._hmm_likelihood(log, t_stage)
 
         raise NotImplementedError("Only HMM mode is supported as of now.")
-
 
     def posterior_state_dist(
         self,
@@ -717,18 +757,22 @@ class Midline(
         mid-sagittal line (``midext``), and whether it is central (``central``, only
         used if :py:attr:`use_central` is ``True``).
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.types.Model.posterior_state_dist`
                 The corresponding method in the base class.
             :py:meth:`.Bilateral.posterior_state_dist`
                 The bilateral method that is ultimately called by this one.
+
         """
         # NOTE: When given a 2D state distribution, it does not matter which of the
         #       Bilateral models is used to compute the risk, since the state dist is
         #       is the only thing that could differ between models.
         if given_state_dist is None:
             utils.safe_set_params(self, given_params)
-            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+            given_state_dist = self.state_dist(
+                t_stage=t_stage, mode=mode, central=central
+            )
 
         if given_state_dist.ndim == 2:
             return self.ext.posterior_state_dist(
@@ -749,7 +793,6 @@ class Midline(
             given_state_dist=given_state_dist,
             given_diagnosis=given_diagnosis,
         )
-
 
     def marginalize(
         self,
@@ -773,7 +816,9 @@ class Midline(
             involvement = {}
 
         if given_state_dist is None:
-            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
+            given_state_dist = self.state_dist(
+                t_stage=t_stage, mode=mode, central=central
+            )
 
         if given_state_dist.ndim == 2:
             return self.ext.marginalize(
@@ -793,7 +838,6 @@ class Midline(
             involvement=involvement,
             given_state_dist=given_state_dist,
         )
-
 
     def risk(
         self,
@@ -817,6 +861,7 @@ class Midline(
         is thus ignored.
 
         Warning:
+        -------
             As in the :py:meth:`.Bilateral.posterior_state_dist` method, you may
             provide a precomputed (joint) state distribution in the ``given_state_dist``
             argument. Here, this ``given_state_dist`` may be a 2D array, in which case
@@ -827,6 +872,7 @@ class Midline(
             argument is *not* ignored: It may be used to select the correct state
             distribution (when ``True`` or ``False``), or marginalize over the midline
             extension status (when ``midext=None``).
+
         """
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,
@@ -844,7 +890,6 @@ class Midline(
             midext=midext,
         )
 
-
     def draw_patients(
         self,
         num: int,
@@ -856,7 +901,7 @@ class Midline(
         if rng is None:
             rng = np.random.default_rng(seed)
 
-        if sum(stage_dist) != 1.:
+        if sum(stage_dist) != 1.0:
             warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
             stage_dist = np.array(stage_dist) / sum(stage_dist)
 
@@ -871,21 +916,22 @@ class Midline(
             size=num,
         )
         distributions = self.get_all_distributions()
-        drawn_diag_times = np.array([
-            distributions[t_stage].draw_diag_times(rng=rng)
-            for t_stage in drawn_t_stages
-        ])
+        drawn_diag_times = np.array(
+            [
+                distributions[t_stage].draw_diag_times(rng=rng)
+                for t_stage in drawn_t_stages
+            ]
+        )
 
         if self.use_midext_evo:
             midext_evo = self.midext_evo()
-            drawn_midexts = np.array([
-                rng.choice(a=[False, True], p=midext_evo[t])
-                for t in drawn_diag_times
-            ])
+            drawn_midexts = np.array(
+                [rng.choice(a=[False, True], p=midext_evo[t]) for t in drawn_diag_times]
+            )
         else:
             drawn_midexts = rng.choice(
                 a=[False, True],
-                p=[1. - self.midext_prob, self.midext_prob],
+                p=[1.0 - self.midext_prob, self.midext_prob],
                 size=num,
             )
 
@@ -909,14 +955,16 @@ class Midline(
                 rng=rng,
                 seed=seed,
             )
-            drawn_case_diags = np.concatenate([drawn_ipsi_diags, drawn_contra_diags], axis=1)
+            drawn_case_diags = np.concatenate(
+                [drawn_ipsi_diags, drawn_contra_diags], axis=1
+            )
             drawn_diags[drawn_midexts == (case == "ext")] = drawn_case_diags
 
         # construct MultiIndex with "ipsi" and "contra" at top level to allow
         # concatenation of the two separate drawn diagnosis
         sides = ["ipsi", "contra"]
         modality_names = list(self.get_all_modalities().keys())
-        lnl_names = [lnl for lnl in self.ext.ipsi.graph.lnls.keys()]
+        lnl_names = list(self.ext.ipsi.graph.lnls.keys())
         multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
 
         # reorder the column levels and thus also the individual columns to match the

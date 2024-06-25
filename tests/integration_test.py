@@ -1,6 +1,7 @@
-"""
-Full integration test directly taken from the quickstart guide. Aimed at checking the
-computed value of the likelihood function.
+"""Full integration test.
+
+This is directly taken from the quickstart guide. Aimed at checking the computed value
+of the likelihood function.
 """
 
 import numpy as np

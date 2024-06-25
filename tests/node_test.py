@@ -1,4 +1,5 @@
 """Unit tests for the Node classes."""
+
 from lymph import graph
 
 from . import fixtures

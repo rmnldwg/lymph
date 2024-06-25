@@ -1,16 +1,15 @@
-"""
-Module containing supporting classes and functions used accross the project.
-"""
+"""Module containing supporting classes and functions used accross the project."""
+
 import logging
+from collections.abc import Sequence
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
 from lymph import types
 
 logger = logging.getLogger(__name__)
-
 
 
 def check_unique_names(graph: dict):
@@ -34,7 +33,7 @@ def check_spsn(spsn: list[float]):
     """Check whether specificity and sensitivity are valid."""
     has_len_2 = len(spsn) == 2
     is_above_lb = np.all(np.greater_equal(spsn, 0.5))
-    is_below_ub = np.all(np.less_equal(spsn, 1.))
+    is_below_ub = np.all(np.less_equal(spsn, 1.0))
     if not has_len_2 or not is_above_lb or not is_below_ub:
         raise ValueError(
             "For each modality provide a list of two decimals between 0.5 and 1.0 as "
@@ -66,31 +65,31 @@ def comp_transition_tensor(
     tensor = np.stack([np.eye(num_child)] * num_parent)
 
     # this should allow edges from trinary nodes to binary nodes
-    pad = [0.] * (num_child - 2)
+    pad = [0.0] * (num_child - 2)
 
     if is_tumor_spread:
         # NOTE: Here we define how tumors spread to LNLs
-        tensor[0, 0, :] = np.array([1. - spread_prob, spread_prob, *pad])
+        tensor[0, 0, :] = np.array([1.0 - spread_prob, spread_prob, *pad])
         return tensor
 
     if is_growth:
         # In the growth case, we can assume that two things:
         # 1. parent and child state are the same
         # 2. the child node is trinary
-        tensor[1, 1, :] = np.array([0., (1 - spread_prob), spread_prob])
+        tensor[1, 1, :] = np.array([0.0, (1 - spread_prob), spread_prob])
         return tensor
 
     if num_parent == 3:
         # NOTE: here we define how the micro_mod affects the spread probability
         micro_spread = spread_prob * micro_mod
-        tensor[1,0,:] = np.array([1. - micro_spread, micro_spread, *pad])
+        tensor[1, 0, :] = np.array([1.0 - micro_spread, micro_spread, *pad])
 
         macro_spread = spread_prob
-        tensor[2,0,:] = np.array([1. - macro_spread, macro_spread, *pad])
+        tensor[2, 0, :] = np.array([1.0 - macro_spread, macro_spread, *pad])
 
         return tensor
 
-    tensor[1,0,:] = np.array([1. - spread_prob, spread_prob, *pad])
+    tensor[1, 0, :] = np.array([1.0 - spread_prob, spread_prob, *pad])
     return tensor
 
 
@@ -101,28 +100,30 @@ def clinical(spsn: list) -> np.ndarray:
     """
     check_spsn(spsn)
     sp, sn = spsn
-    confusion_matrix = np.array([
-        [sp     , 1. - sp],
-        [sp     , 1. - sp],
-        [1. - sn, sn     ],
-    ])
-    return confusion_matrix
+    return np.array(
+        [
+            [sp, 1.0 - sp],
+            [sp, 1.0 - sp],
+            [1.0 - sn, sn],
+        ]
+    )
 
 
 def pathological(spsn: list) -> np.ndarray:
     """Produce the confusion matrix of a pathological modality.
 
     A pathological modality can detect microscopic disease, but is unable to
-    differentiante between micro- and macroscopic involvement.
+    differentiate between micro- and macroscopic involvement.
     """
     check_spsn(spsn)
     sp, sn = spsn
-    confusion_matrix = np.array([
-        [sp     , 1. - sp],
-        [1. - sn, sn     ],
-        [1. - sn, sn     ],
-    ])
-    return confusion_matrix
+    return np.array(
+        [
+            [sp, 1.0 - sp],
+            [1.0 - sn, sn],
+            [1.0 - sn, sn],
+        ]
+    )
 
 
 def tile_and_repeat(
@@ -160,7 +161,7 @@ def tile_and_repeat(
 
 @lru_cache
 def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.ndarray:
-    """Return the indices for the transition tensor correpsonding to ``lnl_idx``.
+    """Return the indices for the transition tensor corresponding to ``lnl_idx``.
 
     >>> get_state_idx_matrix(1, 3, 2)
     array([[0, 0, 0, 0, 0, 0, 0, 0],
@@ -183,7 +184,7 @@ def get_state_idx_matrix(lnl_idx: int, num_lnls: int, num_states: int) -> np.nda
            [2, 2, 2, 2, 2, 2, 2, 2, 2]])
     """
     indices = np.arange(num_states).reshape(num_states, -1)
-    block = np.tile(indices, (num_states ** lnl_idx, num_states ** num_lnls))
+    block = np.tile(indices, (num_states**lnl_idx, num_states**num_lnls))
     return np.repeat(block, num_states ** (num_lnls - lnl_idx - 1), axis=0)
 
 
@@ -219,24 +220,29 @@ def early_late_mapping(t_stage: int | str) -> str:
 
 
 def trigger(func: callable) -> callable:
-    """Decorator that runs instance's ``trigger_callbacks`` when called."""
+    """Decorator that runs instance's ``trigger_callbacks`` when called."""  # noqa: D401
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         result = func(self, *args, **kwargs)
         for callback in self.trigger_callbacks:
             callback()
         return result
+
     return wrapper
 
 
-class smart_updating_dict_cached_property(cached_property):
+class smart_updating_dict_cached_property(cached_property):  # noqa: N801
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
+
     def __set__(self, instance: object, value: Any) -> None:
+        """Update the dict-like attribute with the given value."""
         dict_like = self.__get__(instance)
         dict_like.clear()
         dict_like.update(value)
 
     def __delete__(self, instance: object) -> None:
+        """Clear the dict-like attribute."""
         dict_like = self.__get__(instance)
         dict_like.clear()
 
@@ -249,6 +255,7 @@ def dict_to_func(mapping: dict[Any, Any]) -> callable:
     >>> char_map('a')
     1
     """
+
     def callable_mapping(key):
         return mapping[key]
 
@@ -272,7 +279,7 @@ def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
         return None, seq
 
 
-def flatten(mapping, parent_key='', sep='_') -> dict:
+def flatten(mapping, parent_key="", sep="_") -> dict:
     """Flatten a nested dictionary.
 
     >>> flatten({"a": {"b": 1, "c": 2}, "d": 3})
@@ -382,7 +389,7 @@ def draw_diagnosis(
     rng: np.random.Generator | None = None,
     seed: int = 42,
 ) -> np.ndarray:
-    """Given the ``diagnosis_times`` and a hidden ``state_evolution``, draw diagnosis."""
+    """Draw diagnosis given ``diagnosis_times`` and hidden ``state_evolution``."""
     if rng is None:
         rng = np.random.default_rng(seed)
 

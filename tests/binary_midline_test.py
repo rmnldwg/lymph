@@ -1,6 +1,4 @@
-"""
-Test the midline model for the binary case.
-"""
+"""Test the midline model for the binary case."""
 
 import numpy as np
 import pandas as pd
@@ -15,6 +13,7 @@ class MidlineSetParamsTestCase(
     fixtures.IgnoreWarningsTestCase,
 ):
     """Check that the complex parameter assignment works correctly."""
+
     def setUp(self):
         return super().setUp(use_central=True, use_midext_evo=False)
 
@@ -23,7 +22,6 @@ class MidlineSetParamsTestCase(
         self.assertTrue(self.model.use_central)
         self.assertTrue(self.model.use_mixing)
         self.assertFalse(self.model.is_trinary)
-
 
     def test_set_spread_params(self) -> None:
         """Check that the complex parameter assignment works correctly."""
@@ -51,11 +49,10 @@ class MidlineSetParamsTestCase(
             self.model.noext.ipsi.get_tumor_spread_params(),
         )
 
-
     def test_get_set_params_order(self) -> None:
         """Check if the order of getter and setter is the same."""
         num_dims = self.model.get_num_dims()
-        params_to_set = np.linspace(0., 1., num_dims + 1)
+        params_to_set = np.linspace(0.0, 1.0, num_dims + 1)
         unused_param = self.model.set_params(*params_to_set)
         returned_params = list(self.model.get_params(as_dict=False))
 
@@ -73,11 +70,10 @@ class MidlineLikelihoodTestCase(
         """Set up the test case."""
         super().setUp()
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
+        self.model.set_modality("pathology", spec=1.0, sens=1.0, kind="pathological")
         self.model.load_patient_data(
-            pd.read_csv("./tests/data/2021-clb-oropharynx.csv", header=[0,1,2]),
+            pd.read_csv("./tests/data/2021-clb-oropharynx.csv", header=[0, 1, 2]),
         )
-
 
     def test_likelihood(self) -> None:
         """Check that the likelihood function works correctly."""
@@ -104,7 +100,7 @@ class MidlineRiskTestCase(
         """Set up the test case."""
         super().setUp()
         self.init_diag_time_dists(early="frozen", late="parametric")
-        self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
+        self.model.set_modality("pathology", spec=1.0, sens=1.0, kind="pathological")
         self.model.set_params(
             midext_prob=0.1,
             ipsi_TtoII_spread=0.35,
@@ -115,7 +111,6 @@ class MidlineRiskTestCase(
             IItoIII_spread=0.1,
             late_p=0.5,
         )
-
 
     def test_risk(self) -> None:
         """Check that the risk method works correctly."""
@@ -138,13 +133,14 @@ class MidlineRiskTestCase(
         self.assertGreater(contra_lnlII_risk, noext_contra_lnlII_risk)
         self.assertGreater(ext_contra_lnlII_risk, noext_contra_lnlII_risk)
 
-
     def test_risk_given_state_dist(self) -> None:
         """Check how providing a state distribution works correctly."""
         state_dist_3d = self.model.state_dist(t_stage="early")
         self.assertEqual(state_dist_3d.shape, (2, 4, 4))
 
-        risk_from_state_dist = self.model.risk(given_state_dist=state_dist_3d, midext=True)
+        risk_from_state_dist = self.model.risk(
+            given_state_dist=state_dist_3d, midext=True
+        )
         risk_direct = self.model.risk(midext=True)
         self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
 
@@ -157,7 +153,6 @@ class MidlineRiskTestCase(
         risk_from_state_dist = self.model.risk(given_state_dist=state_dist_2d)
         risk_direct = self.model.risk(midext=True)
         self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
-
 
 
 class MidlineDrawPatientsTestCase(fixtures.IgnoreWarningsTestCase):
@@ -179,10 +174,9 @@ class MidlineDrawPatientsTestCase(fixtures.IgnoreWarningsTestCase):
             marginalize_unknown=False,
             uni_kwargs={"max_time": 2},
         )
-        self.model.set_distribution("early", [0., 1., 0.])
-        self.model.set_distribution("late", [0., 0., 1.])
-        self.model.set_modality("pathology", spec=1., sens=1., kind="pathological")
-
+        self.model.set_distribution("early", [0.0, 1.0, 0.0])
+        self.model.set_distribution("late", [0.0, 0.0, 1.0])
+        self.model.set_modality("pathology", spec=1.0, sens=1.0, kind="pathological")
 
     def test_draw_patients(self) -> None:
         """Check that the data generation works correctly."""

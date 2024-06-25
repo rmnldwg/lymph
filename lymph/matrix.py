@@ -1,12 +1,11 @@
-"""
-Methods & classes to manage matrices of the :py:class:`~lymph.models.Unilateral` class.
-"""
+"""Module to manage matrices of the :py:class:`~lymph.models.Unilateral` class."""
+
 # pylint: disable=too-few-public-methods
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -22,7 +21,7 @@ def generate_transition(
     num_states: int,
 ) -> np.ndarray:
     """Compute the transition matrix of the lymph model."""
-    lnls = list(lnls)   # necessary for `index()` call
+    lnls = list(lnls)  # necessary for `index()` call
     num_lnls = len(lnls)
     transition_matrix = np.ones(shape=(num_states**num_lnls, num_states**num_lnls))
 
@@ -79,11 +78,11 @@ def generate_observation(
     base: int = 2,
 ) -> np.ndarray:
     """Generate the observation matrix of the lymph model."""
-    shape = (base ** num_lnls, 1)
+    shape = (base**num_lnls, 1)
     observation_matrix = np.ones(shape=shape)
 
     for modality in modalities:
-        mod_obs_matrix = np.ones(shape=(1,1))
+        mod_obs_matrix = np.ones(shape=(1, 1))
         for _ in range(num_lnls):
             mod_obs_matrix = np.kron(mod_obs_matrix, modality.confusion_matrix)
 
@@ -143,7 +142,7 @@ def compute_encoding(
     array([False, False, False,  True,  True, False, False, False, False])
     """
     num_lnls = len(lnls)
-    encoding = np.ones(shape=base ** num_lnls, dtype=bool)
+    encoding = np.ones(shape=base**num_lnls, dtype=bool)
 
     if base == 2:
         element_map = {
@@ -180,7 +179,7 @@ def compute_encoding(
             encoding,
             tile_and_repeat(
                 mat=element,
-                tile=(1, base ** j),
+                tile=(1, base**j),
                 repeat=(1, base ** (num_lnls - j - 1)),
             )[0],
         )
@@ -192,7 +191,7 @@ def generate_data_encoding(
     modalities: dict[str, Modality],
     lnls: list[str],
 ) -> np.ndarray:
-    """Generate the data matrix for a specific T-stage from patient data.
+    r"""Generate the data matrix for a specific T-stage from patient data.
 
     The :py:attr:`.models.Unilateral.patient_data` needs to contain the column
     ``"_model"``, which is constructed when loading the data into the model. From this,
@@ -216,11 +215,11 @@ def generate_data_encoding(
             diagnosis_encoding = compute_encoding(
                 lnls=lnls,
                 pattern=patient_row[modality_name],
-                base=2,   # observations are always binary!
+                base=2,  # observations are always binary!
             )
             patient_encoding = np.kron(patient_encoding, diagnosis_encoding)
 
-        result[:,i] = patient_encoding
+        result[:, i] = patient_encoding
 
     return result.T
 
@@ -229,16 +228,18 @@ def generate_data_encoding(
 def evolve_midext(max_time: int, midext_prob: int) -> np.ndarray:
     """Compute the evolution over the state of a tumor's midline extension."""
     midext_states = np.zeros(shape=(max_time + 1, 2), dtype=float)
-    midext_states[0,0] = 1.
+    midext_states[0, 0] = 1.0
 
-    midext_transition_matrix = np.array([
-        [1 - midext_prob, midext_prob],
-        [0.             , 1.         ],
-    ])
+    midext_transition_matrix = np.array(
+        [
+            [1 - midext_prob, midext_prob],
+            [0.0, 1.0],
+        ]
+    )
 
     # compute midext prob for all time steps
     for i in range(len(midext_states) - 1):
-        midext_states[i+1,:] = midext_states[i,:] @ midext_transition_matrix
+        midext_states[i + 1, :] = midext_states[i, :] @ midext_transition_matrix
 
     return midext_states
 

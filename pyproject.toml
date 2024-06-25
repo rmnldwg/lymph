@@ -83,6 +83,14 @@ ensure_newline_before_comments = true
 all = true
 
 
+[tool.ruff]
+exclude = ["tests", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "C", "R", "U", "D", "I", "S", "T", "A", "N", "NPY201"]
+ignore = ["B028"]
+
+
 # git-cliff ~ default configuration file
 # https://git-cliff.org/docs/configuration
 #

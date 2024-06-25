@@ -7,17 +7,12 @@ repos:
   - id: check-merge-conflict
   - id: check-toml
   - id: check-yaml
-- repo: https://github.com/hadialqattan/pycln
-  rev: v2.4.0
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.4.10
   hooks:
-  - id: pycln
-    args: [--config=pyproject.toml]
-- repo: https://github.com/PyCQA/isort
-  rev: 5.13.2
-  hooks:
-  - id: isort
-    files: "\\.(py)$"
-    args: [--settings-path=pyproject.toml]
+    - id: ruff
+      args: [ --fix ]
+    - id: ruff-format
 - repo: https://github.com/asottile/pyupgrade
   rev: v3.15.2
   hooks:

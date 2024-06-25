@@ -1,4 +1,5 @@
 """Unit tests for the Edge class."""
+
 import numpy as np
 
 from lymph import graph
@@ -54,8 +55,8 @@ class TrinaryEdgeTestCase(fixtures.IgnoreWarningsTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        parent = graph.LymphNodeLevel("parent", allowed_states=[0,1,2])
-        child = graph.LymphNodeLevel("child", allowed_states=[0,1,2])
+        parent = graph.LymphNodeLevel("parent", allowed_states=[0, 1, 2])
+        child = graph.LymphNodeLevel("child", allowed_states=[0, 1, 2])
         self.edge = graph.Edge(parent, child)
         self.edge.spread_prob = 0.3
         self.edge.micro_mod = 0.7
