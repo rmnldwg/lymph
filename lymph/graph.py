@@ -1,5 +1,4 @@
-"""
-Module defining the nodes and edges of the graph representing the lymphatic system.
+"""Module defining the nodes and edges of the graph representing the lymphatic system.
 
 Anything related to the network of nodes and edges is defined here. This includes the
 nodes themselves (either :py:class:`~Tumor` or :py:class:`~LymphNodeLevel`), the edges
@@ -9,6 +8,7 @@ The nodes and edges are used to define the structure of the graph, which may the
 accessed via the :py:class:`~Representation` class. This in turn is then used to
 compute e.g. the transition matrix of the model.
 """
+
 from __future__ import annotations
 
 import base64
@@ -30,6 +30,7 @@ from lymph.utils import (
 
 class AbstractNode:
     """Abstract base class for nodes in the graph reprsenting the lymphatic system."""
+
     def __init__(
         self,
         name: str,
@@ -39,9 +40,9 @@ class AbstractNode:
         """Make a new node.
 
         Upon initialization, the ``name`` and ``state`` of the node must be provided.
-        The ``state`` must be one of the ``allowed_states``. The constructor makes sure that
-        the ``allowed_states`` are a list of ints, even when, e.g., a tuple of floats
-        is provided.
+        The ``state`` must be one of the ``allowed_states``. The constructor makes sure
+        that the ``allowed_states`` are a list of ints, even when, e.g., a tuple of
+        floats is provided.
         """
         self.name = name
 
@@ -61,7 +62,6 @@ class AbstractNode:
         # nodes can have outgoing edge connections
         self.out: list[Edge] = []
 
-
     def __str__(self) -> str:
         """Return a string representation of the node."""
         return self.name
@@ -80,7 +80,6 @@ class AbstractNode:
         """Return a hash of the node's name and state."""
         return hash((self.name, self.state, tuple(self.allowed_states)))
 
-
     @property
     def name(self) -> str:
         """Return the name of the node."""
@@ -90,7 +89,6 @@ class AbstractNode:
     def name(self, new_name: str) -> None:
         """Set the name of the node."""
         self._name = str(new_name)
-
 
     @property
     def state(self) -> int:
@@ -107,7 +105,6 @@ class AbstractNode:
 
         self._state = new_state
 
-
     def comp_obs_prob(
         self,
         obs: int,
@@ -121,13 +118,14 @@ class AbstractNode:
         diagnosis the corresponding probability.
         """
         if obs is None or np.isnan(obs):
-            return 0 if log else 1.
+            return 0 if log else 1.0
         obs_prob = obs_table[self.state, int(obs)]
         return np.log(obs_prob) if log else obs_prob
 
 
 class Tumor(AbstractNode):
     """A tumor in the graph representation of the lymphatic system."""
+
     def __init__(self, name: str, state: int = 1) -> None:
         """Create a new tumor node.
 
@@ -137,14 +135,14 @@ class Tumor(AbstractNode):
         allowed_states = [state]
         super().__init__(name, state, allowed_states)
 
-
     def __str__(self):
-        """Print basic info"""
+        """Print basic info."""
         return f"Tumor '{super().__str__()}'"
 
 
 class LymphNodeLevel(AbstractNode):
     """A lymph node level (LNL) in the graph representation of the lymphatic system."""
+
     def __init__(
         self,
         name: str,
@@ -152,12 +150,10 @@ class LymphNodeLevel(AbstractNode):
         allowed_states: list[int] | None = None,
     ) -> None:
         """Create a new lymph node level."""
-
         super().__init__(name, state, allowed_states)
 
         # LNLs can also have incoming edge connections
         self.inc: list[Edge] = []
-
 
     @classmethod
     def binary(cls, name: str, state: int = 0) -> LymphNodeLevel:
@@ -169,24 +165,20 @@ class LymphNodeLevel(AbstractNode):
         """Create a new trinary LNL."""
         return cls(name, state, [0, 1, 2])
 
-
     def __str__(self):
-        """Print basic info"""
+        """Print basic info."""
         narity = "binary" if self.is_binary else "trinary"
         return f"{narity} LNL '{super().__str__()}'"
-
 
     @property
     def is_binary(self) -> bool:
         """Return whether the node is binary."""
         return len(self.allowed_states) == 2
 
-
     @property
     def is_trinary(self) -> bool:
         """Return whether the node is trinary."""
         return len(self.allowed_states) == 3
-
 
     def comp_bayes_net_prob(self, log: bool = False) -> float:
         """Compute the Bayesian network's probability for the current state."""
@@ -201,30 +193,34 @@ class LymphNodeLevel(AbstractNode):
         res += self.state
         return np.log(res) if log else res
 
-
     def comp_trans_prob(self, new_state: int) -> float:
-        """Compute the hidden Markov model's transition probability to a ``new_state``."""
+        """Compute the hidden Markov model's transition prob to a ``new_state``."""
         if new_state == self.state:
-            stay_prob = 1.
+            stay_prob = 1.0
             for edge in self.inc:
-                edge_prob = edge.transition_tensor[edge.parent.state, self.state, new_state]
+                edge_prob = edge.transition_tensor[
+                    edge.parent.state, self.state, new_state
+                ]
                 stay_prob *= edge_prob
             return stay_prob
 
-        transition_prob = 0.
+        transition_prob = 0.0
         for edge in self.inc:
             edge_prob = edge.transition_tensor[edge.parent.state, self.state, new_state]
-            transition_prob = 1. - (1. - transition_prob) * (1. - edge_prob)
+            transition_prob = 1.0 - (1.0 - transition_prob) * (1.0 - edge_prob)
+
+        return transition_prob
 
 
 class Edge:
-    """This class represents an arc in the graph representation of the lymph system."""
+    """Representation of an arc in the graph representation of the lymph system."""
+
     def __init__(
         self,
         parent: Tumor | LymphNodeLevel,
         child: LymphNodeLevel,
-        spread_prob: float = 0.,
-        micro_mod: float = 1.,
+        spread_prob: float = 0.0,
+        micro_mod: float = 1.0,
     ) -> None:
         """Create a new edge between two nodes.
 
@@ -247,7 +243,6 @@ class Edge:
 
         self.spread_prob = spread_prob
 
-
     def __str__(self) -> str:
         """Print basic info."""
         return f"Edge {self.get_name(middle=' to ')}"
@@ -267,7 +262,6 @@ class Edge:
         """Return a hash of the edge's transition tensor."""
         return hash((self.get_name(), self.transition_tensor.tobytes()))
 
-
     @property
     def parent(self) -> Tumor | LymphNodeLevel:
         """Return the parent node that drains lymphatically via the edge."""
@@ -276,7 +270,7 @@ class Edge:
     @parent.setter
     def parent(self, new_parent: Tumor | LymphNodeLevel) -> None:
         """Set the parent node of the edge."""
-        if hasattr(self, '_parent'):
+        if hasattr(self, "_parent"):
             self.parent.out.remove(self)
 
         if not issubclass(new_parent.__class__, AbstractNode):
@@ -284,7 +278,6 @@ class Edge:
 
         self._parent = new_parent
         self.parent.out.append(self)
-
 
     @property
     def child(self) -> LymphNodeLevel:
@@ -294,7 +287,7 @@ class Edge:
     @child.setter
     def child(self, new_child: LymphNodeLevel) -> None:
         """Set the end (child) node of the edge."""
-        if hasattr(self, '_child'):
+        if hasattr(self, "_child"):
             self.child.inc.remove(self)
 
         if not isinstance(new_child, LymphNodeLevel):
@@ -303,8 +296,7 @@ class Edge:
         self._child = new_child
         self.child.inc.append(self)
 
-
-    def get_name(self, middle='to') -> str:
+    def get_name(self, middle="to") -> str:
         """Return the name of the edge.
 
         An edge's name is simply the name of the parent node and the child node,
@@ -326,18 +318,15 @@ class Edge:
 
         return f"{self.parent.name}{middle}{self.child.name}"
 
-
     @property
     def is_growth(self) -> bool:
         """Check if this edge represents a node's growth."""
         return self.parent == self.child
 
-
     @property
     def is_tumor_spread(self) -> bool:
         """Check if this edge represents spread from a tumor to an LNL."""
         return isinstance(self.parent, Tumor)
-
 
     def get_micro_mod(self) -> float:
         """Return the spread probability."""
@@ -346,7 +335,7 @@ class Edge:
             or isinstance(self.parent, Tumor)
             or self.parent.is_binary
         ):
-            self._micro_mod = 1.
+            self._micro_mod = 1.0
         return self._micro_mod
 
     def set_micro_mod(self, new_micro_mod: float | None) -> None:
@@ -357,7 +346,7 @@ class Edge:
         if isinstance(self.parent, Tumor) or self.parent.is_binary:
             warnings.warn("Microscopic spread modifier is not used for binary nodes!")
 
-        if not 0. <= new_micro_mod <= 1.:
+        if not 0.0 <= new_micro_mod <= 1.0:
             raise ValueError("Microscopic spread modifier must be between 0 and 1!")
 
         self._micro_mod = new_micro_mod
@@ -368,11 +357,10 @@ class Edge:
         doc="Parameter modifying spread probability in case of macroscopic involvement",
     )
 
-
     def get_spread_prob(self) -> float:
         """Return the spread probability."""
         if not hasattr(self, "_spread_prob"):
-            self._spread_prob = 0.
+            self._spread_prob = 0.0
         return self._spread_prob
 
     def set_spread_prob(self, new_spread_prob: float | None) -> None:
@@ -380,7 +368,7 @@ class Edge:
         if new_spread_prob is None:
             return
 
-        if not 0. <= new_spread_prob <= 1.:
+        if not 0.0 <= new_spread_prob <= 1.0:
             raise ValueError("Spread probability must be between 0 and 1!")
 
         self._spread_prob = new_spread_prob
@@ -391,7 +379,6 @@ class Edge:
         doc="Spread probability of the edge",
     )
 
-
     def get_params(
         self,
         as_dict: bool = True,
@@ -399,11 +386,13 @@ class Edge:
     ) -> types.ParamsType:
         """Return the value of the parameter ``param`` or all params in a dict.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`lymph.diagnosis_times.Distribution.get_params`
             :py:meth:`lymph.diagnosis_times.DistributionsUserDict.get_params`
             :py:meth:`lymph.models.Unilateral.get_params`
             :py:meth:`lymph.models.Bilateral.get_params`
+
         """
         if self.is_growth:
             params = {"growth": self.get_spread_prob()}
@@ -414,7 +403,6 @@ class Edge:
             params["micro"] = self.get_micro_mod()
 
         return params if as_dict else params.values()
-
 
     def set_params(self, *args, **kwargs) -> tuple[float]:
         """Set the values of the edge's parameters.
@@ -427,7 +415,10 @@ class Edge:
         Keyword arguments (i.e., ``"growth"``, ``"spread"``, and ``"micro"``) override
         positional arguments. Unused args are returned.
 
-        >>> edge = Edge(LymphNodeLevel("II", allowed_states=[0, 1, 2]), LymphNodeLevel("III"))
+        >>> edge = Edge(
+        ...     LymphNodeLevel("II", allowed_states=[0, 1, 2]),
+        ...     LymphNodeLevel("III"),
+        ... )
         >>> _ = edge.set_params(0.1, 0.2)
         >>> edge.spread_prob
         0.1
@@ -458,13 +449,14 @@ class Edge:
 
         return args
 
-
     @property
     def transition_tensor(self) -> np.ndarray:
         """Return the transition tensor of the edge.
 
-        See Also:
+        See Also
+        --------
             :py:func:`lymph.helper.comp_transition_tensor`
+
         """
         return comp_transition_tensor(
             num_parent=len(self.parent.allowed_states),
@@ -482,6 +474,7 @@ class Representation:
     This class allows accessing the connected nodes (:py:class:`Tumor` and
     :py:class:`LymphNodeLevel`) and edges (:py:class:`Edge`) of the :py:mod:`models`.
     """
+
     def __init__(
         self,
         graph_dict: dict[tuple[str], list[str]],
@@ -507,7 +500,6 @@ class Representation:
         self._init_nodes(graph_dict, tumor_state, allowed_states)
         self._init_edges(graph_dict)
 
-
     def _init_nodes(self, graph, tumor_state, allowed_lnl_states):
         """Initialize the nodes of the graph."""
         self._nodes: dict[str, Tumor | LymphNodeLevel] = {}
@@ -526,7 +518,6 @@ class Representation:
         if len(self.lnls) < 1:
             raise ValueError("At least one LNL node must be present in the graph")
 
-
     @property
     def nodes(self) -> dict[str, Tumor | LymphNodeLevel]:
         """List of both :py:class:`~Tumor` and :py:class:`~LymphNodeLevel` instances."""
@@ -540,8 +531,9 @@ class Representation:
     @property
     def lnls(self) -> dict[str, LymphNodeLevel]:
         """List of all :py:class:`~LymphNodeLevel` nodes in the graph."""
-        return {n: l for n, l in self.nodes.items() if isinstance(l, LymphNodeLevel)}
-
+        return {
+            n: lnl for n, lnl in self.nodes.items() if isinstance(lnl, LymphNodeLevel)
+        }
 
     @property
     def allowed_states(self) -> list[int]:
@@ -566,14 +558,14 @@ class Representation:
     def is_trinary(self) -> bool:
         """Returns ``True`` if the graph is trinary, ``False`` otherwise.
 
-        Similar to :py:meth:`~Unilateral.is_binary`."""
+        Similar to :py:meth:`~Unilateral.is_binary`.
+        """
         res = {node.is_trinary for node in self.lnls.values()}
 
         if len(res) != 1:
             raise RuntimeError("Not all lnls have the same number of states")
 
         return res.pop()
-
 
     def _init_edges(
         self,
@@ -601,7 +593,6 @@ class Representation:
                 end = self.nodes[end_name]
                 new_edge = Edge(parent=start, child=end)
                 self._edges[new_edge.get_name()] = new_edge
-
 
     @property
     def edges(self) -> dict[str, Edge]:
@@ -636,7 +627,6 @@ class Representation:
         """
         return {n: e for n, e in self.edges.items() if e.is_growth}
 
-
     def __hash__(self) -> int:
         """Return a hash of the graph."""
         hash_res = 0
@@ -645,9 +635,8 @@ class Representation:
 
         return hash_res
 
-
     def to_dict(self) -> dict[tuple[str, str], set[str]]:
-        """Returns graph representing this instance's nodes and egdes as dictionary.
+        """Return graph representing this instance's nodes and egdes as dictionary.
 
         >>> graph_dict = {
         ...    ('tumor', 'T'): ['II', 'III'],
@@ -662,19 +651,16 @@ class Representation:
         for node in self.nodes.values():
             node_type = "tumor" if isinstance(node, Tumor) else "lnl"
             res[(node_type, node.name)] = [
-                o.child.name
-                for o in node.out
-                if not o.is_growth
+                o.child.name for o in node.out if not o.is_growth
             ]
         return res
-
 
     def get_mermaid(
         self,
         with_params: bool = True,
         direction: Literal["TD", "LR"] = "TD",
     ) -> str:
-        """Prints the graph in mermaid format.
+        """Print the graph in mermaid format.
 
         >>> graph_dict = {
         ...    ('tumor', 'T'): ['II', 'III'],
@@ -707,9 +693,8 @@ class Representation:
 
         return mermaid_graph
 
-
     def get_mermaid_url(self, **mermaid_kwargs) -> str:
-        """Returns the URL to the rendered graph.
+        """Return the URL to the rendered graph.
 
         Keyword arguments are passed to :py:meth:`~Representation.get_mermaid`.
         """
@@ -717,9 +702,7 @@ class Representation:
         graphbytes = mermaid_graph.encode("ascii")
         base64_bytes = base64.b64encode(graphbytes)
         base64_string = base64_bytes.decode("ascii")
-        url="https://mermaid.ink/img/" + base64_string
-        return url
-
+        return "https://mermaid.ink/img/" + base64_string
 
     def get_state(self, as_dict: bool = False) -> dict[str, int] | list[int]:
         """Return the states of the system's LNLs.
@@ -735,7 +718,6 @@ class Representation:
 
         return result if as_dict else list(result.values())
 
-
     def set_state(self, *new_states_args, **new_states_kwargs) -> None:
         """Assign a new state to the system's LNLs.
 
@@ -746,7 +728,9 @@ class Representation:
 
         The keyword arguments override the positional arguments.
         """
-        for new_lnl_state, lnl in zip(new_states_args, self.lnls.values()):
+        for new_lnl_state, lnl in zip(
+            new_states_args, self.lnls.values(), strict=False
+        ):
             lnl.state = new_lnl_state
 
         for key, value in new_states_kwargs.items():
@@ -754,9 +738,8 @@ class Representation:
             if lnl is not None and isinstance(lnl, LymphNodeLevel):
                 lnl.state = value
 
-
     def _gen_state_list(self):
-        """Generates the list of (hidden) states."""
+        """Generate the list of (hidden) states."""
         allowed_states_list = []
         for lnl in self.lnls.values():
             allowed_states_list.append(lnl.allowed_states)
@@ -795,7 +778,6 @@ class Representation:
             self._gen_state_list()
             return self._state_list
 
-
     def get_params(
         self,
         as_dict: bool = True,
@@ -819,7 +801,6 @@ class Representation:
             params = flatten(params)
 
         return params if as_dict else params.values()
-
 
     def set_params(self, *args, **kwargs) -> tuple[float]:
         """Set the parameters of the edges in the graph.

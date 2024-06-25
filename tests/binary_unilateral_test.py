@@ -43,13 +43,17 @@ class InitTestCase(
 
     def test_num_edges(self):
         """Check number of edges initialized."""
-        num_edges = sum(len(receiving_nodes) for receiving_nodes in self.graph_dict.values())
+        num_edges = sum(
+            len(receiving_nodes) for receiving_nodes in self.graph_dict.values()
+        )
         num_tumor_edges = sum(
-            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph_dict.items()
+            len(receiving_nodes)
+            for (kind, _), receiving_nodes in self.graph_dict.items()
             if kind == "tumor"
         )
         num_lnl_edges = sum(
-            len(receiving_nodes) for (kind, _), receiving_nodes in self.graph_dict.items()
+            len(receiving_nodes)
+            for (kind, _), receiving_nodes in self.graph_dict.items()
             if kind == "lnl"
         )
 
@@ -128,9 +132,7 @@ class ParameterAssignmentTestCase(
         first_lnl_name = list(self.model.graph.lnls.values())[0].name
         trans_mat = self.model.transition_matrix()
         self.model.graph.edges[f"Tto{first_lnl_name}"].set_spread_prob(0.5)
-        self.assertFalse(np.all(
-            trans_mat == self.model.transition_matrix()
-        ))
+        self.assertFalse(np.all(trans_mat == self.model.transition_matrix()))
 
 
 class TransitionMatrixTestCase(
@@ -147,12 +149,14 @@ class TransitionMatrixTestCase(
     def test_shape(self):
         """Make sure the transition matrix has the correct shape."""
         num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
-        self.assertEqual(self.model.transition_matrix().shape, (2**num_lnls, 2**num_lnls))
+        self.assertEqual(
+            self.model.transition_matrix().shape, (2**num_lnls, 2**num_lnls)
+        )
 
     def test_is_probabilistic(self):
         """Make sure the rows of the transition matrix sum to one."""
         row_sums = np.sum(self.model.transition_matrix(), axis=1)
-        self.assertTrue(np.allclose(row_sums, 1.))
+        self.assertTrue(np.allclose(row_sums, 1.0))
 
     @staticmethod
     def is_recusively_upper_triangular(mat: np.ndarray) -> bool:
@@ -167,12 +171,14 @@ class TransitionMatrixTestCase(
         for i in [0, 1]:
             for j in [0, 1]:
                 return TransitionMatrixTestCase.is_recusively_upper_triangular(
-                    mat[i * half:(i + 1) * half, j * half:(j + 1) * half]
+                    mat[i * half : (i + 1) * half, j * half : (j + 1) * half]
                 )
 
     def test_is_recusively_upper_triangular(self) -> None:
         """Make sure the transition matrix is recursively upper triangular."""
-        self.assertTrue(self.is_recusively_upper_triangular(self.model.transition_matrix()))
+        self.assertTrue(
+            self.is_recusively_upper_triangular(self.model.transition_matrix())
+        )
 
 
 class ObservationMatrixTestCase(
@@ -190,13 +196,13 @@ class ObservationMatrixTestCase(
         """Make sure the observation matrix has the correct shape."""
         num_lnls = len(self.model.graph.lnls)
         num_modalities = len(self.model.get_all_modalities())
-        expected_shape = (2**num_lnls, 2**(num_lnls * num_modalities))
+        expected_shape = (2**num_lnls, 2 ** (num_lnls * num_modalities))
         self.assertEqual(self.model.observation_matrix().shape, expected_shape)
 
     def test_is_probabilistic(self):
         """Make sure the rows of the observation matrix sum to one."""
         row_sums = np.sum(self.model.observation_matrix(), axis=1)
-        self.assertTrue(np.allclose(row_sums, 1.))
+        self.assertTrue(np.allclose(row_sums, 1.0))
 
 
 class PatientDataTestCase(
@@ -218,7 +224,7 @@ class PatientDataTestCase(
         """Make sure the patient data is loaded correctly."""
         self.model.load_patient_data(self.raw_data.iloc[:0])
         self.assertEqual(len(self.model.patient_data), 0)
-        self.assertEqual(self.model.likelihood(), 0.)
+        self.assertEqual(self.model.likelihood(), 0.0)
 
     def test_load_patient_data(self):
         """Make sure the patient data is loaded correctly."""
@@ -229,7 +235,9 @@ class PatientDataTestCase(
         t_stages_in_data = self.model.get_t_stages("data")
         t_stages_in_diag_time_dists = self.model.get_t_stages("distributions")
         t_stages_in_model = self.model.get_t_stages("valid")
-        t_stages_intersection = set(t_stages_in_data).intersection(t_stages_in_diag_time_dists)
+        t_stages_intersection = set(t_stages_in_data).intersection(
+            t_stages_in_diag_time_dists
+        )
 
         self.assertNotIn("foo", t_stages_in_model)
         self.assertEqual(len(t_stages_in_diag_time_dists), 3)
@@ -243,10 +251,12 @@ class PatientDataTestCase(
     def test_data_matrices(self):
         """Make sure the data matrices are generated correctly."""
         for t_stage in ["early", "late"]:
-            has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin({
-                "early": [0,1,2],
-                "late": [3,4],
-            }[t_stage])
+            has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin(
+                {
+                    "early": [0, 1, 2],
+                    "late": [3, 4],
+                }[t_stage]
+            )
             data_matrix = self.model.data_matrix(t_stage).T
 
             self.assertEqual(
@@ -261,10 +271,12 @@ class PatientDataTestCase(
     def test_diagnosis_matrices(self):
         """Make sure the diagnosis matrices are generated correctly."""
         for t_stage in ["early", "late"]:
-            has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin({
-                "early": [0,1,2],
-                "late": [3,4],
-            }[t_stage])
+            has_t_stage = self.raw_data["tumor", "1", "t_stage"].isin(
+                {
+                    "early": [0, 1, 2],
+                    "late": [3, 4],
+                }[t_stage]
+            )
             diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
 
             self.assertEqual(
@@ -277,10 +289,12 @@ class PatientDataTestCase(
             )
             # some times, entries in the diagnosis matrix are almost one, but just
             # slightly larger. That's why we also have to have the `isclose` here.
-            self.assertTrue(np.all(
-                np.isclose(diagnosis_matrix, 1.)
-                | np.less_equal(diagnosis_matrix, 1.)
-            ))
+            self.assertTrue(
+                np.all(
+                    np.isclose(diagnosis_matrix, 1.0)
+                    | np.less_equal(diagnosis_matrix, 1.0)
+                )
+            )
 
     def test_modality_replacement(self) -> None:
         """Check if the data & diagnosis matrices get updated when modalities change."""
@@ -314,13 +328,13 @@ class LikelihoodTestCase(
     def test_log_likelihood_smaller_zero(self):
         """Make sure the log-likelihood is smaller than zero."""
         likelihood = self.model.likelihood(log=True, mode="HMM")
-        self.assertLess(likelihood, 0.)
+        self.assertLess(likelihood, 0.0)
 
     def test_likelihood_invalid_params_isinf(self):
         """Make sure the likelihood is `-np.inf` for invalid parameters."""
         random_params = self.create_random_params()
         for name in random_params:
-            random_params[name] += 1.
+            random_params[name] += 1.0
         likelihood = self.model.likelihood(
             given_params=random_params,
             log=True,
@@ -363,7 +377,7 @@ class RiskTestCase(
         random_diagnosis = self.create_random_diagnosis()
         num_lnls = len(self.model.graph.lnls)
         num_mods = len(self.model.get_all_modalities())
-        num_posible_diagnosis = 2**(num_lnls * num_mods)
+        num_posible_diagnosis = 2 ** (num_lnls * num_mods)
 
         diagnosis_encoding = self.model.compute_encoding(random_diagnosis)
         self.assertEqual(diagnosis_encoding.shape, (num_posible_diagnosis,))
@@ -376,9 +390,9 @@ class RiskTestCase(
             given_diagnosis=self.create_random_diagnosis(),
             t_stage=self.rng.choice(["early", "late"]),
         )
-        self.assertEqual(posterior_state_dist.shape, (2**len(self.model.graph.lnls),))
+        self.assertEqual(posterior_state_dist.shape, (2 ** len(self.model.graph.lnls),))
         self.assertEqual(posterior_state_dist.dtype, float)
-        self.assertTrue(np.isclose(np.sum(posterior_state_dist), 1.))
+        self.assertTrue(np.isclose(np.sum(posterior_state_dist), 1.0))
 
     def test_risk(self):
         """Make sure the risk is correctly computed."""
@@ -394,8 +408,8 @@ class RiskTestCase(
             t_stage=random_t_stage,
         )
         self.assertEqual(risk.dtype, float)
-        self.assertGreaterEqual(risk, 0.)
-        self.assertLessEqual(risk, 1.)
+        self.assertGreaterEqual(risk, 0.0)
+        self.assertLessEqual(risk, 1.0)
 
 
 class DataGenerationTestCase(
@@ -415,7 +429,7 @@ class DataGenerationTestCase(
         """Check that generating only early T-stage patients works."""
         early_patients = self.model.draw_patients(
             num=100,
-            stage_dist=[1., 0.],
+            stage_dist=[1.0, 0.0],
             rng=self.rng,
         )
         self.assertEqual(len(early_patients), 100)
@@ -427,7 +441,7 @@ class DataGenerationTestCase(
         """Check that generating only late T-stage patients works."""
         late_patients = self.model.draw_patients(
             num=100,
-            stage_dist=[0., 1.],
+            stage_dist=[0.0, 1.0],
             rng=self.rng,
         )
         self.assertEqual(len(late_patients), 100)
@@ -439,14 +453,14 @@ class DataGenerationTestCase(
         """Check that the distribution of LNL involvement is correct."""
         # set spread params all to 0
         for lnl_edge in self.model.graph.lnl_edges.values():
-            lnl_edge.set_spread_prob(0.)
+            lnl_edge.set_spread_prob(0.0)
 
         # make all patients diagnosisd after exactly one time-step
-        self.model.set_distribution("early", [0,1,0,0,0,0,0,0,0,0,0])
+        self.model.set_distribution("early", [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
         # assign only one pathology modality
         self.model.clear_modalities()
-        self.model.set_modality("tmp", spec=1., sens=1.)
+        self.model.set_modality("tmp", spec=1.0, sens=1.0)
 
         # extract the tumor spread parameters
         params = self.model.get_params(as_dict=True)
@@ -459,7 +473,7 @@ class DataGenerationTestCase(
         # draw large enough amount of patients
         patients = self.model.draw_patients(
             num=10000,
-            stage_dist=[1., 0.],
+            stage_dist=[1.0, 0.0],
             rng=self.rng,
         )
 

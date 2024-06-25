@@ -47,7 +47,9 @@ class TrinaryTransitionMatrixTestCase(
         NOTE: I am using this only in debug mode to look a the tensors. I am not sure
         how to test them yet.
         """
-        base_edge_tensor = list(self.model.graph.tumor_edges.values())[0].transition_tensor
+        base_edge_tensor = list(self.model.graph.tumor_edges.values())[
+            0
+        ].transition_tensor
         row_sums = base_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
@@ -55,7 +57,9 @@ class TrinaryTransitionMatrixTestCase(
         row_sums = lnl_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
-        growth_edge_tensor = list(self.model.graph.growth_edges.values())[0].transition_tensor
+        growth_edge_tensor = list(self.model.graph.growth_edges.values())[
+            0
+        ].transition_tensor
         row_sums = growth_edge_tensor.sum(axis=2)
         self.assertTrue(np.allclose(row_sums, 1.0))
 
@@ -83,7 +87,7 @@ class TrinaryObservationMatrixTestCase(
         num_lnls = len(self.model.graph.lnls)
         num = num_lnls * len(self.model.get_all_modalities())
         observation_matrix = self.model.observation_matrix()
-        self.assertEqual(observation_matrix.shape, (3 ** num_lnls, 2 ** num))
+        self.assertEqual(observation_matrix.shape, (3**num_lnls, 2**num))
 
         row_sums = observation_matrix.sum(axis=1)
         self.assertTrue(np.allclose(row_sums, 1.0))
@@ -108,9 +112,11 @@ class TrinaryDiagnosisMatricesTestCase(
         """Test the diagnosis matrix of the model."""
         for t_stage in ["early", "late"]:
             num_lnls = len(self.model.graph.lnls)
-            num_patients = (self.model.patient_data["_model", "#", "t_stage"] == t_stage).sum()
+            num_patients = (
+                self.model.patient_data["_model", "#", "t_stage"] == t_stage
+            ).sum()
             diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
-            self.assertEqual(diagnosis_matrix.shape, (3 ** num_lnls, num_patients))
+            self.assertEqual(diagnosis_matrix.shape, (3**num_lnls, num_patients))
 
 
 class TrinaryParamAssignmentTestCase(
@@ -156,13 +162,13 @@ class TrinaryLikelihoodTestCase(
     def test_log_likelihood_smaller_zero(self):
         """Make sure the log-likelihood is smaller than zero."""
         likelihood = self.model.likelihood(log=True, mode="HMM")
-        self.assertLess(likelihood, 0.)
+        self.assertLess(likelihood, 0.0)
 
     def test_likelihood_invalid_params_isinf(self):
         """Make sure the likelihood is `-np.inf` for invalid parameters."""
         random_params = self.create_random_params()
         for name in random_params:
-            random_params[name] += 1.
+            random_params[name] += 1.0
         likelihood = self.model.likelihood(
             given_params=random_params,
             log=True,
@@ -197,10 +203,12 @@ class TrinaryRiskTestCase(
     def test_risk_is_probability(self):
         """Make sure the risk is a probability."""
         risk = self.model.risk(
-            involvement=fixtures.create_random_pattern(lnls=list(self.model.graph.lnls.keys())),
+            involvement=fixtures.create_random_pattern(
+                lnls=list(self.model.graph.lnls.keys())
+            ),
             given_diagnosis=self.create_random_diagnosis(),
             given_params=self.create_random_params(),
             t_stage=self.rng.choice(["early", "late"]),
         )
-        self.assertGreaterEqual(risk, 0.)
-        self.assertLessEqual(risk, 1.)
+        self.assertGreaterEqual(risk, 0.0)
+        self.assertLessEqual(risk, 1.0)

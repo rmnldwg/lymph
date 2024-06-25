@@ -2,8 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.2.2"></a>
+
+## [1.2.2] - 2024-06-25
+
+### Bug Fixes
+
+- (**mid**) Correct contra state dist evo. Fixes [#85].\
+  Previously, the model did not correctly marginalize over the possible
+  time when a tumor can grow over the midline. It simply assumed that it
+  did from the onset.
+
+### Documentation
+
+- (**uni**) Remove outdated docstring paragraph. Fixes [#88].
+
+### Miscellaneous Tasks
+
+- Bump pre-commit versions.
+
+### Styling
+
+- Use ruff to fix lint and format code.
+
+### Build
+
+- Remove upper cap in deps.
+
+### Change
+
+- `risk()` meth requires `involvement`. Fixes [#87].\
+  We figured it does not make sense to allow passing `involvement=None`
+  into the `risk()` method just to have it return 1. This is except for
+  the midline class, where `involvement` may reasonably be `None` while
+  `midext` isn't.\
+  Also, I ran ruff over some files, fixing some code style issues.
 
 <a name="1.2.1"></a>
+
 ## [1.2.1] - 2024-05-28
 
 ### Bug Fixes
@@ -20,7 +56,6 @@ All notable changes to this project will be documented in this file.
   Previously, only the involvement pattern was checked. Now, the model is
   more careful about when to take shortcuts.
 
-
 ### Features
 
 - (**graph**) Modify mermaid graph.\
@@ -34,7 +69,6 @@ All notable changes to this project will be documented in this file.
   This saves us a couple of lines in the `load_patient_data` method and is
   more readable.
 
-
 ### Merge
 
 - Branch 'main' into 'dev'.
@@ -45,21 +79,19 @@ All notable changes to this project will be documented in this file.
   Some callback functionality that was tested in a pre-release has been
   forgotten in the code base and is now deleted.
 
-
 <a name="1.2.0"></a>
+
 ## [1.2.0] - 2024-03-29
 
 ### Bug Fixes
 
 - (**mid**) `obs_dist` may return 3D array.
 
-
 ### Documentation
 
 - Fix unknown version in title.
 - Add missing blank before list.
 - (**mid**) Add comment about midext marginalizing.
-
 
 ### Features
 
@@ -76,11 +108,9 @@ All notable changes to this project will be documented in this file.
   The `types.Model` base abstract base class now also has the methods
   `obs_dist` and `marginalize` for better autocomplete support in editors.
 
-
 ### Testing
 
 - Remove plain test risk.
-
 
 ### Change
 
@@ -88,8 +118,8 @@ All notable changes to this project will be documented in this file.
 - Rename "diagnose" to "diagnosis" when noun.\
   When used as a noun, "diagnosis" is correct, not "diagnose".
 
-
 <a name="1.1.0"></a>
+
 ## [1.1.0] - 2024-03-20
 
 ### Features
@@ -110,8 +140,8 @@ All notable changes to this project will be documented in this file.
 - Add checks for midline risk. Related [#80].
 - (**mid**) Fix wrong assumption in risk test.
 
-
 <a name="1.0.0"></a>
+
 ## [1.0.0] - 2024-03-18
 
 ### Bug Fixes
@@ -146,14 +176,13 @@ All notable changes to this project will be documented in this file.
 - Branch 'main' into 'dev'.
 - Branch '79-loading-an-empty-dataframe-raises-error' into 'dev'.
 
-
 <a name="1.0.0.rc2"></a>
+
 ## [1.0.0.rc2] - 2024-03-06
 
 Implementing the [lymixture] brought to light a shortcoming in the way the data and diagnose matrices are computed and stored. As mentioned in issue [#77], their rows are now aligned with the patient data, which may have some advantages for different use cases.
 
 Also, since this is probably the last pre-release, I took the liberty to go over some method names once more and make them clearer.
-
 
 ### Bug Fixes
 
@@ -164,7 +193,6 @@ Also, since this is probably the last pre-release, I took the liberty to go over
   Because we only store those diagnoses that are relevant to the model
   under the "_model" header in the `patient_data` table, we need to reload
   the patient data whenever we modify the modalities.
-
 
 ### Documentation
 
@@ -185,7 +213,6 @@ Also, since this is probably the last pre-release, I took the liberty to go over
   Also, apparently `del dataframe[column]` is much slower than
   `dataframe.drop(columns)`. I replaced the former with the latter and now
   the tests are fast again.
-
 
 ### Refactor
 
@@ -213,7 +240,6 @@ Also, since this is probably the last pre-release, I took the liberty to go over
   The `(uni|ipsi|contra)lateral_kwargs` in the `Bilateral` constructor
   were shortened by removing the "lateral".
 
-
 ### Merge
 
 - Branch 'main' into 'dev'.
@@ -223,8 +249,8 @@ Also, since this is probably the last pre-release, I took the liberty to go over
 
 - Unused helpers.
 
-
 <a name="1.0.0.rc1"></a>
+
 ## [1.0.0.rc1] - 2024-03-04
 
 This release hopefully represents the last major change before releasing version 1.0.0. It was necessary because during the implementation of the midline model, managing the symmetries in a transparent and user-friendly way became impossible in the old implementation.
@@ -232,7 +258,6 @@ This release hopefully represents the last major change before releasing version
 Now, a [composite pattern] is used for both the modalities and the distributions over diagnose times. This furhter separates the logic and will allow more hierarchical models based on the ones provided here to work seamlessly almost out of the box. This may become relevant with the mixture model.
 
 [composite pattern]: https://refactoring.guru/design-patterns/composite
-
 
 ### Add
 
@@ -255,7 +280,6 @@ Now, a [composite pattern] is used for both the modalities and the distributions
 - (**mid**) Finish `draw_patients` method.\
   Some bugs in the method for drawing synthetic patients from the
   `Midline` were fixed. This seems to be working now.
-
 
 ### Documentation
 
@@ -301,7 +325,6 @@ Now, a [composite pattern] is used for both the modalities and the distributions
   midline extension is added, it gets loaded into an attribute named
   `unknown`, which is a `Bilateral` model only used to store that data and
   generate diagnose matrices.
-
 
 ### Miscellaneous Tasks
 
@@ -387,8 +410,8 @@ Now, a [composite pattern] is used for both the modalities and the distributions
 
 - Unused helper functions.
 
-
 <a name="1.0.0.a6"></a>
+
 ## [1.0.0.a6] - 2024-02-15
 
 With this (still alpha) release, we most notably fixed a long unnoticed bug in the computation of the Bayesian network likelihood.
@@ -415,8 +438,8 @@ With this (still alpha) release, we most notably fixed a long unnoticed bug in t
 - (**uni**) Prohibit setting `max_time`
 - ⚠ **BREAKING** Change `likelihood()` API: We don't allow setting the data via the `likelihood()` anymore. It convoluted the method and setting it beforehand is more explicit anyways.
 
-
 <a name="1.0.0.a5"></a>
+
 ## [1.0.0.a5] - 2024-02-06
 
 In this alpha release we fixed more bugs and issues that emerged during more rigorous testing.
@@ -481,8 +504,8 @@ Instead, the function computing the transition matrix is now globally cached usi
 
 - Unused files and directories
 
-
 <a name="1.0.0.a4"></a>
+
 ## [1.0.0.a4] - 2023-12-12
 
 ### Bug Fixes
@@ -530,8 +553,8 @@ Instead, the function computing the transition matrix is now globally cached usi
 - Don't use custom subclass of `cached_property` that forbids setting and use the default `cached_property` instead
 - Encode symmetries of `Bilateral` model in a special dict called `is_summetric` with keys `"tumor_spread"`, `"lnl_spread"`, and `"modalities"`
 
-
 <a name="1.0.0.a3"></a>
+
 ## [1.0.0.a3] - 2023-12-06
 
 Fourth alpha release. [@YoelPH](https://github.com/YoelPH) noticed some more bugs that have been fixed now. Most notably, the risk prediction raised exceptions, because of a missing transponed matrix `.T`.
@@ -554,8 +577,8 @@ Fourth alpha release. [@YoelPH](https://github.com/YoelPH) noticed some more bug
 - Test unilateral posterior state distribution for shape and sum
 - Test bilateral posterior joint state distribution for shape and sum
 
-
 <a name="1.0.0.a2"></a>
+
 ## [1.0.0.a2] - 2023-09-15
 
 Third alpha release. I am pretty confident that the `lymph.models.Unilateral` class works as intended since it _does_  yield the same results as the `0.4.3` version.
@@ -630,16 +653,18 @@ Also, I am now quite satisfied with the look and usability of the new API. Hopef
 - Branch 'remove-descriptors' into 'reimplement-bilateral'
 - Branch 'reimplement-bilateral' into 'dev'
 
-
 <a name="1.0.0.a1"></a>
+
 ## [1.0.0.a1] - 2023-08-30
 
 Second alpha release, aimed at testing the all new implementation. See these [issues](https://github.com/rmnldwg/lymph/milestone/1) for an idea of what this tries to address.
 
 ### Bug Fixes
+
 - (**matrix**) Wrong shape of observation matrix for trinary model
 
 ### Documentation
+
 - Fix wrong python version in rtd config file
 - Remove outdated sampling tutorial
 - Remove deprecated read-the-docs config
@@ -647,42 +672,51 @@ Second alpha release, aimed at testing the all new implementation. See these [is
 - Execute quickstart notebook
 
 ### Testing
+
 - Check correct shapes for trinary model matrices
 
-
 <a name="1.0.0.a0"></a>
+
 ## [1.0.0.a0] - 2023-08-15
 
 This alpha release is a reimplementation most of the package's API. It aims to solve some [issues](https://github.com/rmnldwg/lymph/milestone/1) that accumulated for a while.
 
 ### Features
+
 - parameters can now be assigned centrally via a `assign_params()` method, either using args or keyword arguments. This resolves [#46]
 - expensive operations generally look expensive now, and do not just appear as if they were attribute assignments. Fixes [#40]
 - computations around the the likelihood and risk predictions are now more modular. I.e., several conditional and joint probability vectors/matrices can now be computed conveniently and are not burried in large methods. Resolves isse [#41]
 - support for the trinary model was added. This means lymph node levels (LNLs) can be in one of three states (healthy, microscopic involvement, macroscopic metatsasis), instead of only two (healthy, involved). Resolves [#45]
 
 ### Documentation
+
 - module, class, method, and attribute docstrings should now be more detailed and helpful. We switched from strictly adhering to Numpy-style docstrings to something more akin to Python's core library docstrings. I.e., parameters and behaviour are explained in natural language.
 - quickstart guide has been adapted to the new API
 
 ### Code Refactoring
+
 - all matrices related to the underlying hidden Markov model (HMM) have been decoupled from the `Unilateral` model class
 - the representation of the directed acyclic graph (DAG) that determined the directions of spread from tumor to and among the LNLs has been implemented in a separate class of which an instance provides access to it as an attribute of `Unilateral`
 - access to all parameters of the graph (i.e., the edges) is bundled in a descriptor holding a `UserDict`
 
 ### BREAKING CHANGES
+
 Almost the entire API has changed. I'd therefore recommend to have a look at the [quickstart guide](https://lymph-model.readthedocs.io/en/1.0.0.a0/quickstart.html) to see how the new model is used. Although most of the core concepts are still the same.
 
 <a name="0.4.3"></a>
+
 ## [0.4.3] - 2022-09-02
 
 ### Bug Fixes
+
 - incomplete involvement for unilateral risk method does not raise KeyError anymore. Fixes issue [#38]
 
 <a name="0.4.2"></a>
+
 ## [0.4.2] - 2022-08-24
 
 ### Documentation
+
 - fix the issue of docs failing to build
 - remove outdated line in install instructions
 - move conf.py back into source dir
@@ -691,28 +725,33 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - more stable sphinx-build & update old index
 
 ### Maintenance
+
 - fine-tune git-chglog settings to my needs
 - start with a CHANGELOG
 - add description to types of allowed commits
 
-
 <a name="0.4.1"></a>
+
 ## [0.4.1] - 2022-08-23
+
 ### Bug Fixes
+
 - pyproject.toml referenced wrong README & LICENSE
 
-
 <a name="0.4.0"></a>
+
 ## [0.4.0] - 2022-08-23
+
 ### Code Refactoring
+
 - delete unnecessary utils
 
 ### Maintenance
+
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
-
-[Unreleased]: https://github.com/rmnldwg/lymph/compare/1.2.1...HEAD
+[1.2.2]: https://github.com/rmnldwg/lymph/compare/1.2.1...1.2.2
 [1.2.1]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.1
 [1.2.0]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/rmnldwg/lymph/compare/1.0.0...1.1.0
@@ -731,6 +770,9 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#88]: https://github.com/rmnldwg/lymph/issues/88
+[#87]: https://github.com/rmnldwg/lymph/issues/87
+[#85]: https://github.com/rmnldwg/lymph/issues/85
 [#80]: https://github.com/rmnldwg/lymph/issues/80
 [#79]: https://github.com/rmnldwg/lymph/issues/79
 [#77]: https://github.com/rmnldwg/lymph/issues/77

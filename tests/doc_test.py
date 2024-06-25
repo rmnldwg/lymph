@@ -1,6 +1,5 @@
-"""
-Make doctests in the lymph package discoverable by unittest.
-"""
+"""Make doctests in the lymph package discoverable by unittest."""
+
 import doctest
 import unittest
 
