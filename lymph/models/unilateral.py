@@ -87,14 +87,9 @@ class Unilateral(
         :py:meth:`~Unilateral.trinary`.
 
         The ``max_time`` parameter defines the latest possible time step for a
-        diagnosis. In the HMM case, the probability disitrubtion over all hidden states
+        diagnosis. In the HMM case, the probability distribution over all hidden states
         is evolved from :math:`t=0` to ``max_time``. In the BN case, this parameter has
         no effect.
-
-        The ``is_micro_mod_shared`` and ``is_growth_shared`` parameters determine
-        whether the microscopic involvement and growth parameters are shared among all
-        LNLs. If they are set to ``True``, the parameters are set globally for all LNLs.
-        If they are set to ``False``, the parameters are set individually for each LNL.
 
         """
         self.graph = graph.Representation(
@@ -287,8 +282,8 @@ class Unilateral(
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
-    def transition_prob(self, newstate: list[int], assign: bool = False) -> float:
-        """Compute probability to transition to ``newstate``, given its current state.
+    def transition_prob(self, new_state: list[int], assign: bool = False) -> float:
+        """Compute probability to transition to ``new_state``, given its current state.
 
         The probability is computed as the product of the transition probabilities of
         the individual LNLs. If ``assign`` is ``True``, the new state is assigned to
@@ -296,12 +291,12 @@ class Unilateral(
         """
         trans_prob = 1
         for i, lnl in enumerate(self.graph.lnls):
-            trans_prob *= lnl.comp_trans_prob(new_state=newstate[i])
+            trans_prob *= lnl.comp_trans_prob(new_state=new_state[i])
             if trans_prob == 0:
                 break
 
         if assign:
-            self.graph.set_state(newstate)
+            self.graph.set_state(new_state)
 
         return trans_prob
 
@@ -793,7 +788,7 @@ class Unilateral(
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
         diagnosis_given_state = diagnosis_encoding @ self.observation_matrix().T
 
-        # multiply P(Z=z|X) * P(X) elementwise to get vector of joint probs P(Z=z,X)
+        # multiply P(Z=z|X) * P(X) element-wise to get vector of joint probs P(Z=z,X)
         joint_diagnosis_and_state = given_state_dist * diagnosis_given_state
 
         # compute vector of probabilities for all possible involvements given the
@@ -843,7 +838,7 @@ class Unilateral(
 
         If no ``involvement`` is provided, this will simply return the posterior
         distribution over hidden states, given the diagnosis, as computed by the
-        :py:meth:`.posterior_state_dist` method. See its documentaiton for more
+        :py:meth:`.posterior_state_dist` method. See its documentation for more
         details about the arguments and the return value.
         """
         posterior_state_dist = self.posterior_state_dist(
