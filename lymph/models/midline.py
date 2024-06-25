@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -23,7 +24,7 @@ class Midline(
     modalities.Composite,
     types.Model,
 ):
-    """Models metastatic progression bilaterally with tumor lateralization.
+    r"""Models metastatic progression bilaterally with tumor lateralization.
 
     Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
@@ -45,6 +46,7 @@ class Midline(
     :math:`b_c^{\\not\\in}` for patients without. :math:`\\alpha` is the linear
     mixing parameter.
     """
+
     def __init__(
         self,
         graph_dict: types.GraphDictType,
@@ -84,12 +86,14 @@ class Midline(
 
         The ``uni_kwargs`` are passed to all bilateral models.
 
-        See Also:
+        See Also
+        --------
             :py:class:`Bilateral`: Two to four of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
             tumor, one for the case of no such extension, (possibly) one for the case of
             a central/symmetric tumor, and (possibly) one for the case of unknown
             midline extension status.
+
         """
         if is_symmetric is None:
             is_symmetric = {}
@@ -393,6 +397,7 @@ class Midline(
             for (key, ipsi_param), noext_contra_param in zip(
                 self.ext.ipsi.get_tumor_spread_params().items(),
                 self.noext.contra.get_tumor_spread_params().values(),
+                strict=False,
             ):
                 ext_contra_kwargs[key] = (
                     self.mixing_param * ipsi_param
@@ -623,11 +628,13 @@ class Midline(
         ignored. The provided state distribution may be 2D or 3D. The returned
         distribution will have the same dimensionality.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral observations.
+
         """
         if given_state_dist is None:
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode, central=central)
@@ -709,12 +716,15 @@ class Midline(
         Bayesian network mode.
 
         Note:
+        ----
             The computation is faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
         See Also:
+        --------
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
+
         """
         try:
             # all functions and methods called here should raise a ValueError if the
@@ -747,11 +757,13 @@ class Midline(
         mid-sagittal line (``midext``), and whether it is central (``central``, only
         used if :py:attr:`use_central` is ``True``).
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.types.Model.posterior_state_dist`
                 The corresponding method in the base class.
             :py:meth:`.Bilateral.posterior_state_dist`
                 The bilateral method that is ultimately called by this one.
+
         """
         # NOTE: When given a 2D state distribution, it does not matter which of the
         #       Bilateral models is used to compute the risk, since the state dist is
@@ -847,6 +859,7 @@ class Midline(
         is thus ignored.
 
         Warning:
+        -------
             As in the :py:meth:`.Bilateral.posterior_state_dist` method, you may
             provide a precomputed (joint) state distribution in the ``given_state_dist``
             argument. Here, this ``given_state_dist`` may be a 2D array, in which case
@@ -857,6 +870,7 @@ class Midline(
             argument is *not* ignored: It may be used to select the correct state
             distribution (when ``True`` or ``False``), or marginalize over the midline
             extension status (when ``midext=None``).
+
         """
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,

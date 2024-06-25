@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable, Iterable
 from itertools import product
-from typing import Any, Callable, Iterable, Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -11,10 +12,10 @@ from cachetools import LRUCache
 from lymph import diagnosis_times, graph, matrix, modalities, types, utils
 
 # pylint: disable=unused-import
+from lymph.utils import dict_to_func  # noqa: F401
+from lymph.utils import draw_diagnosis  # noqa: F401
 from lymph.utils import (  # nopycln: import
     add_or_mult,
-    dict_to_func,
-    draw_diagnosis,
     early_late_mapping,
     flatten,
     get_params_from,
@@ -41,6 +42,7 @@ class Unilateral(
     of this class allow to calculate the probability of a certain hidden pattern of
     involvement, given an individual diagnosis of a patient.
     """
+
     def __init__(
         self,
         graph_dict: types.GraphDictType,
@@ -57,6 +59,7 @@ class Unilateral(
         names of the nodes that are connected to the node given by the key.
 
         Note:
+        ----
             Do make sure the values in the dictionary are of type ``list`` and *not*
             ``set``. Sets do not preserve the order of the elements and thus the order
             of the edges in the graph. This may lead to inconsistencies in the model.
@@ -90,6 +93,7 @@ class Unilateral(
         whether the microscopic involvement and growth parameters are shared among all
         LNLs. If they are set to ``True``, the parameters are set globally for all LNLs.
         If they are set to ``False``, the parameters are set individually for each LNL.
+
         """
         self.graph = graph.Representation(
             graph_dict=graph_dict,
@@ -296,7 +300,7 @@ class Unilateral(
         newstate: list[int],
         assign: bool = False
     ) -> float:
-        """Computes probability to transition to ``newstate``, given its current state.
+        """Compute probability to transition to ``newstate``, given its current state.
 
         The probability is computed as the product of the transition probabilities of
         the individual LNLs. If ``assign`` is ``True``, the new state is assigned to
@@ -384,7 +388,7 @@ class Unilateral(
 
 
     def transition_matrix(self) -> np.ndarray:
-        """Matrix encoding the probabilities to transition from one state to another.
+        r"""Matrix encoding the probabilities to transition from one state to another.
 
         This is the crucial object for modelling the evolution of the probabilistic
         system in the context of the hidden Markov model. It has the shape
@@ -393,7 +397,8 @@ class Unilateral(
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
         are ordered as in the :py:attr:`.graph.Representation.state_list`.
 
-        See Also:
+        See Also
+        --------
             :py:func:`~lymph.descriptors.matrix.generate_transition`
                 The function actually computing the transition matrix.
 
@@ -409,6 +414,7 @@ class Unilateral(
                [0.  , 0.3 , 0.  , 0.7 ],
                [0.  , 0.  , 0.56, 0.44],
                [0.  , 0.  , 0.  , 1.  ]])
+
         """
         return matrix.generate_transition(
             lnls=self.graph.lnls.values(),
@@ -417,7 +423,7 @@ class Unilateral(
 
 
     def observation_matrix(self) -> np.ndarray:
-        """The matrix encoding the probabilities to observe a certain diagnosis.
+        r"""Get the matrix encoding the probabilities to observe a certain diagnosis.
 
         Every element in this matrix holds a probability to observe a certain diagnosis
         (or combination of diagnosis, when using multiple diagnostic modalities) given
@@ -425,9 +431,11 @@ class Unilateral(
         :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes in
         the graph and :math:`M` is the number of diagnostic modalities.
 
-        See Also:
+        See Also
+        --------
             :py:func:`~lymph.descriptors.matrix.generate_observation`
                 The function actually computing the observation matrix.
+
         """
         return matrix.generate_observation(
             modalities=self.get_all_modalities().values(),
@@ -449,9 +457,11 @@ class Unilateral(
         The data matrix is used to compute the :py:attr:`~diagnosis_matrix`, which in
         turn is used to compute the likelihood of the model given the patient data.
 
-        See Also:
+        See Also
+        --------
             :py:func:`.matrix.generate_data_encoding`
                 This function actually computes the data encoding.
+
         """
         if self._patient_data is None:
             raise AttributeError("No patient data loaded yet.")
@@ -791,10 +801,12 @@ class Unilateral(
         In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
 
         Warning:
+        -------
             To speed up repetitive computations, one can provide precomputed state
             distributions via the ``given_state_dist`` parameter. When provided, the
             method will ignore the ``given_params``, ``t_stage``, and ``mode``
             arguments, but compute the posterior much quicker.
+
         """
         if given_state_dist is None:
             # in contrast to when computing the likelihood, we do want to raise an error
@@ -805,7 +817,7 @@ class Unilateral(
             given_state_dist = self.state_dist(t_stage, mode=mode)
 
         if given_diagnosis is None:
-            given_diagnosis = {}
+            return given_state_dist
 
         diagnosis_encoding = self.compute_encoding(given_diagnosis)
         # vector containing P(Z=z|X). Essentially a data matrix for one patient
@@ -821,7 +833,7 @@ class Unilateral(
 
     def marginalize(
         self,
-        involvement: types.PatternType | None = None,
+        involvement: types.PatternType,
         given_state_dist: np.ndarray | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -835,13 +847,6 @@ class Unilateral(
         :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
         are ignored if ``given_state_dist`` is provided.
         """
-        if (
-            involvement is None
-            or not involvement     # empty dict is falsey
-            or all(value is None for value in involvement.values())
-        ):
-            return 1.
-
         if given_state_dist is None:
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
 
@@ -855,7 +860,7 @@ class Unilateral(
 
     def risk(
         self,
-        involvement: types.PatternType | None = None,
+        involvement: types.PatternType,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
         given_diagnosis: dict[str, types.PatternType] | None = None,
@@ -952,13 +957,15 @@ class Unilateral(
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).
 
-        See Also:
+        See Also
+        --------
             :py:meth:`lymph.diagnosis_times.Distribution.draw_diag_times`
                 Method to draw diagnosis times from a distribution.
             :py:meth:`lymph.models.Unilateral.draw_diagnosis`
                 Method to draw individual diagnosis.
             :py:meth:`lymph.models.Bilateral.draw_patients`
                 The corresponding bilateral method.
+
         """
         if rng is None:
             rng = np.random.default_rng(seed)

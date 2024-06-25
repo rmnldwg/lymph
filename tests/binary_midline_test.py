@@ -1,5 +1,4 @@
-"""
-Test the midline model for the binary case.
+"""Test the midline model for the binary case.
 """
 
 import numpy as np
@@ -15,6 +14,7 @@ class MidlineSetParamsTestCase(
     fixtures.IgnoreWarningsTestCase,
 ):
     """Check that the complex parameter assignment works correctly."""
+
     def setUp(self):
         return super().setUp(use_central=True, use_midext_evo=False)
 

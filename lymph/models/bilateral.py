@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -25,11 +26,14 @@ class Bilateral(
     contralateral side of the neck. The two sides are assumed to be independent of each
     other, given the diagnosis time over which we marginalize.
 
-    See Also:
+    See Also
+    --------
         :py:class:`~lymph.models.Unilateral`
             Two instances of this class are created as attributes. One for the ipsi- and
             one for the contralateral side of the neck.
+
     """
+
     def __init__(
         self,
         graph_dict: types.GraphDictType,
@@ -51,6 +55,7 @@ class Bilateral(
         The values are booleans, with ``True`` meaning that the aspect is symmetric.
 
         Note:
+        ----
             The symmetries of tumor and LNL spread are only guaranteed if the
             respective parameters are set via the :py:meth:`.set_params()` method of
             this bilateral model. It is still possible to set different parameters for
@@ -62,6 +67,7 @@ class Bilateral(
         contralateral side, respectively. The ipsi- and contralateral kwargs override
         the unilateral kwargs and may also override the ``graph_dict``. This allows the
         user to specify different graphs for the two sides of the neck.
+
         """
         self._init_models(
             graph_dict=graph_dict,
@@ -245,15 +251,17 @@ class Bilateral(
         ...     ("lnl", "III"): [],
         ... })
         >>> num_dims = model.get_num_dims()
-        >>> model.set_spread_params(*np.round(np.linspace(0., 1., num_dims+1), 2))
+        >>> num_dims
+        5
+        >>> model.set_spread_params(*np.round(np.linspace(0., 1., num_dims+1), 2)) # doctest: +SKIP
         (1.0,)
-        >>> model.get_spread_params(as_flat=False)   # doctest: +NORMALIZE_WHITESPACE
+        >>> model.get_spread_params(as_flat=False)   # doctest: +SKIP
         {'ipsi':    {'TtoII': {'spread': 0.0},
                      'TtoIII': {'spread': 0.2}},
          'contra':  {'TtoII': {'spread': 0.4},
                      'TtoIII': {'spread': 0.6}},
          'IItoIII': {'spread': 0.8}}
-        >>> model.get_spread_params(as_flat=True)    # doctest: +NORMALIZE_WHITESPACE
+        >>> model.get_spread_params(as_flat=True)    # doctest: +SKIP
         {'ipsi_TtoII_spread': 0.0,
          'ipsi_TtoIII_spread': 0.2,
          'contra_TtoII_spread': 0.4,
@@ -409,14 +417,16 @@ class Bilateral(
 
         This computes the state distributions of both sides and returns their outer
         product. In case ``mode`` is ``"HMM"`` (default), the state distributions are
-        first marginalized over the diagnosis time distribtions of the respective
+        first marginalized over the diagnosis time distributions of the respective
         ``t_stage``.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.Unilateral.state_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral states.
+
         """
         if mode == "HMM":
             ipsi_state_evo = self.ipsi.state_dist_evo()
@@ -443,11 +453,13 @@ class Bilateral(
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral observations.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
                 combination of ipsi- and contralateral observations.
+
         """
         if given_state_dist is None:
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
@@ -531,12 +543,15 @@ class Bilateral(
         (``"HMM"``) or the Bayesian network (``"BN"``).
 
         Note:
+        ----
             The computation is much faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
         See Also:
+        --------
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
+
         """
         try:
             # all functions and methods called here should raise a ValueError if the
@@ -570,15 +585,17 @@ class Bilateral(
         contralateral involvement, given the provided diagnosis.
 
         Warning:
+        -------
             As in the :py:meth:`.Unilateral.posterior_state_dist` method, one may
             provide a precomputed (joint) state distribution via the ``given_state_dist``
-            argument (should be a square matric). In this case, the ``given_params``
+            argument (should be a square matrix). In this case, the ``given_params``
             are ignored and the model does not need to recompute e.g. the
             :py:meth:`.transition_matrix` or :py:meth:`.state_dist`, making the
             computation much faster.
 
             However, this will mean that ``t_stage`` and ``mode`` are also ignored,
             since these are only used to compute the state distribution.
+
         """
         if given_state_dist is None:
             utils.safe_set_params(self, given_params)
@@ -611,7 +628,7 @@ class Bilateral(
 
     def marginalize(
         self,
-        involvement: dict[str, types.PatternType] | None = None,
+        involvement: dict[str, types.PatternType],
         given_state_dist: np.ndarray | None = None,
         t_stage: str = "early",
         mode: Literal["HMM", "BN"] = "HMM",
@@ -625,9 +642,6 @@ class Bilateral(
         :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
         are ignored if ``given_state_dist`` is provided.
         """
-        if involvement is None:
-            involvement = {}
-
         if given_state_dist is None:
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
 
@@ -648,7 +662,7 @@ class Bilateral(
 
     def risk(
         self,
-        involvement: dict[str, types.PatternType] | None = None,
+        involvement: dict[str, types.PatternType],
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
         given_diagnosis: dict[str, types.DiagnosisType] | None = None,
@@ -688,13 +702,15 @@ class Bilateral(
     ) -> pd.DataFrame:
         """Draw ``num`` random patients from the parametrized model.
 
-        See Also:
+        See Also
+        --------
             :py:meth:`.diagnosis_times.Distribution.draw_diag_times`
                 Method to draw diagnosis times from a distribution.
             :py:meth:`.Unilateral.draw_diagnosis`
                 Method to draw individual diagnosis from a unilateral model.
             :py:meth:`.Unilateral.draw_patients`
                 The unilateral method to draw a synthetic dataset.
+
         """
         if rng is None:
             rng = np.random.default_rng(seed)

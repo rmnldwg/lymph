@@ -1,5 +1,4 @@
-"""
-Make sure the models work with the emcee package.
+"""Make sure the models work with the emcee package.
 """
 
 import emcee

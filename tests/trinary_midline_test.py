@@ -1,5 +1,4 @@
-"""
-Test the midline model for the binary case.
+"""Test the midline model for the binary case.
 """
 from typing import Literal
 

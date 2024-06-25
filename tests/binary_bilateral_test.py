@@ -1,5 +1,4 @@
-"""
-Test the bilateral model.
+"""Test the bilateral model.
 """
 
 import numpy as np

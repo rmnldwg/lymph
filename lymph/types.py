@@ -1,8 +1,8 @@
-"""
-Type aliases and protocols used in the lymph package.
+"""Type aliases and protocols used in the lymph package.
 """
 from abc import ABC, abstractmethod
-from typing import Iterable, Literal, Protocol, TypeVar
+from collections.abc import Iterable
+from typing import Literal, Protocol, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -14,12 +14,14 @@ class DataWarning(UserWarning):
 
 class HasSetParams(Protocol):
     """Protocol for classes that have a ``set_params`` method."""
+
     def set_params(self, *args: float, **kwargs: float) -> tuple[float]:
         ...
 
 
 class HasGetParams(Protocol):
     """Protocol for classes that have a ``get_params`` method."""
+
     def get_params(
         self,
         as_dict: bool = True,
@@ -89,6 +91,7 @@ class Model(ABC):
     This class provides a scaffold for the methods that any model for lymphatic
     tumor progression should implement.
     """
+
     @abstractmethod
     def get_params(
         self: ModelT,

@@ -1,9 +1,9 @@
-"""
-Module containing supporting classes and functions used accross the project.
+"""Module containing supporting classes and functions used accross the project.
 """
 import logging
+from collections.abc import Sequence
 from functools import cached_property, lru_cache, wraps
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -231,6 +231,7 @@ def trigger(func: callable) -> callable:
 
 class smart_updating_dict_cached_property(cached_property):
     """Allows setting/deleting dict-like attrs by updating/clearing them."""
+
     def __set__(self, instance: object, value: Any) -> None:
         dict_like = self.__get__(instance)
         dict_like.clear()

@@ -1,11 +1,11 @@
-"""
-Fxitures for tests.
+"""Fxitures for tests.
 """
 import logging
 import unittest
 import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -170,6 +170,7 @@ class BinaryUnilateralModelMixin:
 
 class BilateralModelMixin:
     """Mixin for testing the bilateral model."""
+
     model_kwargs: dict[str, Any] | None = None
 
     def setUp(self):

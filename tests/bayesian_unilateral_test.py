@@ -1,5 +1,4 @@
-"""
-Test the Bayesian Unilateral Model.
+"""Test the Bayesian Unilateral Model.
 """
 import numpy as np
 
