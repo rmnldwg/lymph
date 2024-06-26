@@ -1,4 +1,5 @@
 """Test the trinary unilateral system."""
+import unittest
 
 import numpy as np
 import pandas as pd
@@ -11,7 +12,7 @@ from . import fixtures
 
 class TrinaryInitTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Testing the basic initialization of a trinary model."""
 
@@ -32,7 +33,7 @@ class TrinaryInitTestCase(
 
 class TrinaryTransitionMatrixTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the transition matrix of a trinary model."""
 
@@ -72,7 +73,7 @@ class TrinaryTransitionMatrixTestCase(
 
 class TrinaryObservationMatrixTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the observation matrix of a trinary model."""
 
@@ -95,7 +96,7 @@ class TrinaryObservationMatrixTestCase(
 
 class TrinaryDiagnosisMatricesTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the diagnosis matrix of a trinary model."""
 
@@ -121,7 +122,7 @@ class TrinaryDiagnosisMatricesTestCase(
 
 class TrinaryParamAssignmentTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the assignment of parameters in a trinary model."""
 
@@ -147,7 +148,7 @@ class TrinaryParamAssignmentTestCase(
 
 class TrinaryLikelihoodTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the likelihood of a trinary model."""
 
@@ -179,7 +180,7 @@ class TrinaryLikelihoodTestCase(
 
 class TrinaryRiskTestCase(
     fixtures.TrinaryFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the risk of a trinary model."""
 

@@ -1,13 +1,12 @@
 """Test the graph representation class of the package."""
+import unittest
 
 import numpy as np
 
 from lymph import graph
 
-from . import fixtures
 
-
-class ConstructBinaryGraphRepresentationTestCase(fixtures.IgnoreWarningsTestCase):
+class ConstructBinaryGraphRepresentationTestCase(unittest.TestCase):
     """Test suite for the graph representation class."""
 
     def setUp(self) -> None:

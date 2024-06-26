@@ -3,6 +3,7 @@
 This is directly taken from the quickstart guide. Aimed at checking the computed value
 of the likelihood function.
 """
+import unittest
 
 import numpy as np
 import scipy as sp
@@ -19,7 +20,7 @@ def late_binomial(support: np.ndarray, p: float = 0.5) -> np.ndarray:
 
 class IntegrationTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Run a stripped down version of the quickstart guide."""
 

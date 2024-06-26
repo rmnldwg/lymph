@@ -1,7 +1,6 @@
 """Fxitures for tests."""
 
 import logging
-import unittest
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -14,23 +13,13 @@ import scipy as sp
 from lymph import diagnosis_times
 from lymph.modalities import Clinical, Modality, Pathological
 from lymph.models import Bilateral, Midline, Unilateral
-from lymph.types import DataWarning, PatternType
+from lymph.types import PatternType
 
 MODALITIES = {
     "CT": Clinical(spec=0.81, sens=0.86),
     "FNA": Pathological(spec=0.95, sens=0.81),
 }
 RNG = np.random.default_rng(42)
-
-
-class IgnoreWarningsTestCase(unittest.TestCase):
-    """Test case that ignores warnings."""
-
-    def setUp(self) -> None:
-        """Ignore warnings."""
-        warnings.simplefilter("ignore", category=pd.errors.PerformanceWarning)
-        warnings.simplefilter("ignore", category=DataWarning)
-        super().setUp()
 
 
 def get_graph(size: str = "large") -> dict[tuple[str, str], list[str]]:

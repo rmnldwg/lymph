@@ -1,13 +1,12 @@
 """Unit tests for the Edge class."""
+import unittest
 
 import numpy as np
 
 from lymph import graph
 
-from . import fixtures
 
-
-class BinaryEdgeTestCase(fixtures.IgnoreWarningsTestCase):
+class BinaryEdgeTestCase(unittest.TestCase):
     """Tests for the Edge class."""
 
     def setUp(self) -> None:
@@ -50,7 +49,7 @@ class BinaryEdgeTestCase(fixtures.IgnoreWarningsTestCase):
         self.assertTrue(np.allclose(row_sum, 1.0))
 
 
-class TrinaryEdgeTestCase(fixtures.IgnoreWarningsTestCase):
+class TrinaryEdgeTestCase(unittest.TestCase):
     """Tests for the Edge class in case the parent and child node are trinary."""
 
     def setUp(self) -> None:

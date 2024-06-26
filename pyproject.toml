@@ -71,6 +71,15 @@ include-package-data = true
 version = {attr = "lymph._version.version"}
 
 
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+filterwarnings = [
+    "ignore::pandas.errors.PerformanceWarning",
+]
+
+
 [tool.isort]
 line_length = 79
 multi_line_output = 3
