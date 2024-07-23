@@ -105,7 +105,7 @@ class Midline(
         if is_symmetric["tumor_spread"]:
             raise ValueError(
                 "If you want the tumor spread to be symmetric, consider using the "
-                "Bilateral class."
+                "Bilateral class.",
             )
         self.is_symmetric = is_symmetric
 
@@ -124,7 +124,7 @@ class Midline(
         if self.use_midext_evo and use_central:
             raise ValueError(
                 "Evolution to central tumor not yet implemented. Choose to use either "
-                "the central model or the midline extension evolution."
+                "the central model or the midline extension evolution.",
                 # Actually, this shouldn't be too hard, but we still need to think
                 # about it for a bit.
             )
@@ -167,6 +167,13 @@ class Midline(
             modality_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_modality_leaf=False,
         )
+
+    @classmethod
+    def binary(cls, *args, **kwargs) -> Midline:
+        """Create a binary model."""
+        uni_kwargs = kwargs.pop("uni_kwargs", {})
+        uni_kwargs["allowed_states"] = [0, 1]
+        return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
     @classmethod
     def trinary(cls, *args, **kwargs) -> Midline:
@@ -242,7 +249,7 @@ class Midline(
         if self.marginalize_unknown:
             return self._unknown
         raise AttributeError(
-            "This instance does not marginalize over unknown midline extension."
+            "This instance does not marginalize over unknown midline extension.",
         )
 
     def get_tumor_spread_params(
@@ -262,15 +269,15 @@ class Midline(
 
         if self.use_mixing:
             params["contra"] = self.noext.contra.get_tumor_spread_params(
-                as_flat=as_flat
+                as_flat=as_flat,
             )
             params["mixing"] = self.mixing_param
         else:
             params["noext"] = {
-                "contra": self.noext.contra.get_tumor_spread_params(as_flat=as_flat)
+                "contra": self.noext.contra.get_tumor_spread_params(as_flat=as_flat),
             }
             params["ext"] = {
-                "contra": self.ext.contra.get_tumor_spread_params(as_flat=as_flat)
+                "contra": self.ext.contra.get_tumor_spread_params(as_flat=as_flat),
             }
 
         if as_flat or not as_dict:
@@ -295,7 +302,7 @@ class Midline(
         if ext_lnl_params != noext_lnl_params:
             raise ValueError(
                 "LNL spread params not synched between ext and noext models. "
-                "Returning the ext params."
+                "Returning the ext params.",
             )
 
         if self.use_central:
@@ -303,7 +310,7 @@ class Midline(
             if central_lnl_params != ext_lnl_params:
                 warnings.warn(
                     "LNL spread params not synched between central and ext models. "
-                    "Returning the ext params."
+                    "Returning the ext params.",
                 )
 
         if as_flat or not as_dict:
@@ -412,7 +419,8 @@ class Midline(
             noext_contra_kwargs = global_kwargs.copy()
             noext_contra_kwargs.update(kwargs.get("noext", {}).get("contra", {}))
             args = self.noext.contra.set_tumor_spread_params(
-                *args, **noext_contra_kwargs
+                *args,
+                **noext_contra_kwargs,
             )
 
             ext_contra_kwargs = global_kwargs.copy()
@@ -521,7 +529,7 @@ class Midline(
         elif is_unknown.sum() > 0:
             warnings.warn(
                 f"Discarding {is_unknown.sum()} patients where midline extension "
-                "is unknown."
+                "is unknown.",
             )
 
     def midext_evo(self) -> np.ndarray:
@@ -638,7 +646,9 @@ class Midline(
         """
         if given_state_dist is None:
             given_state_dist = self.state_dist(
-                t_stage=t_stage, mode=mode, central=central
+                t_stage=t_stage,
+                mode=mode,
+                central=central,
             )
 
         if given_state_dist.ndim == 2:
@@ -653,7 +663,9 @@ class Midline(
         return np.stack(obs_dist)
 
     def _hmm_likelihood(
-        self, log: bool = True, for_t_stage: str | None = None
+        self,
+        log: bool = True,
+        for_t_stage: str | None = None,
     ) -> float:
         """Compute the likelihood of the stored data under the hidden Markov model."""
         llh = 0.0 if log else 1.0
@@ -771,7 +783,9 @@ class Midline(
         if given_state_dist is None:
             utils.safe_set_params(self, given_params)
             given_state_dist = self.state_dist(
-                t_stage=t_stage, mode=mode, central=central
+                t_stage=t_stage,
+                mode=mode,
+                central=central,
             )
 
         if given_state_dist.ndim == 2:
@@ -817,7 +831,9 @@ class Midline(
 
         if given_state_dist is None:
             given_state_dist = self.state_dist(
-                t_stage=t_stage, mode=mode, central=central
+                t_stage=t_stage,
+                mode=mode,
+                central=central,
             )
 
         if given_state_dist.ndim == 2:
@@ -907,7 +923,7 @@ class Midline(
 
         if self.use_central:
             raise NotImplementedError(
-                "Drawing patients from the central model not yet supported."
+                "Drawing patients from the central model not yet supported.",
             )
 
         drawn_t_stages = rng.choice(
@@ -920,13 +936,16 @@ class Midline(
             [
                 distributions[t_stage].draw_diag_times(rng=rng)
                 for t_stage in drawn_t_stages
-            ]
+            ],
         )
 
         if self.use_midext_evo:
             midext_evo = self.midext_evo()
             drawn_midexts = np.array(
-                [rng.choice(a=[False, True], p=midext_evo[t]) for t in drawn_diag_times]
+                [
+                    rng.choice(a=[False, True], p=midext_evo[t])
+                    for t in drawn_diag_times
+                ],
             )
         else:
             drawn_midexts = rng.choice(
@@ -956,7 +975,8 @@ class Midline(
                 seed=seed,
             )
             drawn_case_diags = np.concatenate(
-                [drawn_ipsi_diags, drawn_contra_diags], axis=1
+                [drawn_ipsi_diags, drawn_contra_diags],
+                axis=1,
             )
             drawn_diags[drawn_midexts == (case == "ext")] = drawn_case_diags
 
