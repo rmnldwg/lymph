@@ -25,7 +25,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 test = ["pytest", "scipy", "coverage", "emcee"]
-dev = ["pre-commit", "pylint", "git-cliff"]
+dev = ["pre-commit"]
 docs = [
     "sphinx",
     "sphinx-book-theme",

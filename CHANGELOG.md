@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+<a name="1.2.3"></a>
+
+## [1.2.3] - 2024-07-26
+
+### Features
+
+- (**mid**) Add missing `binary` constructor to `Midline` model. Now all models have a `binary` and `trinary` constructor.
+
+### Styling
+
+- Add rules to [ruff].
+
+### Testing
+
+- Make suite testable with [pytest].
+
+### Ci
+
+- Switch to [pytest] for testing.
+
 <a name="1.2.2"></a>
 
 ## [1.2.2] - 2024-06-25
@@ -23,11 +43,11 @@ All notable changes to this project will be documented in this file.
 
 ### Styling
 
-- Use ruff to fix lint and format code.
+- Use [ruff] to fix lint and format code.
 
 ### Build
 
-- Remove upper cap in deps.
+- Remove upper cap in dependencies because of [this](https://iscinumpy.dev/post/bound-version-constraints/).
 
 ### Change
 
@@ -793,3 +813,6 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [#41]: https://github.com/rmnldwg/lymph/issues/41
 [#40]: https://github.com/rmnldwg/lymph/issues/40
 [#38]: https://github.com/rmnldwg/lymph/issues/38
+
+[ruff]: https://astral.sh/ruff
+[pytest]: https://docs.pytest.org/en/stable/
