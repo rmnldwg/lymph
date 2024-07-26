@@ -1,4 +1,5 @@
 """Test the midline model for the binary case."""
+import unittest
 
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ from . import fixtures
 
 class MidlineSetParamsTestCase(
     fixtures.MidlineFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Check that the complex parameter assignment works correctly."""
 
@@ -62,7 +63,7 @@ class MidlineSetParamsTestCase(
 
 class MidlineLikelihoodTestCase(
     fixtures.MidlineFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Check that the likelihood function works correctly."""
 
@@ -92,7 +93,7 @@ class MidlineLikelihoodTestCase(
 
 class MidlineRiskTestCase(
     fixtures.MidlineFixtureMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Check that the risk method works correctly."""
 
@@ -155,7 +156,7 @@ class MidlineRiskTestCase(
         self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
 
 
-class MidlineDrawPatientsTestCase(fixtures.IgnoreWarningsTestCase):
+class MidlineDrawPatientsTestCase(unittest.TestCase):
     """Check the data generation."""
 
     def setUp(self) -> None:

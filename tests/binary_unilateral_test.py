@@ -1,4 +1,5 @@
 """Test the binary unilateral system."""
+import unittest
 
 import warnings
 
@@ -13,7 +14,7 @@ from . import fixtures
 
 class InitTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the initialization of a binary model."""
 
@@ -94,7 +95,7 @@ class InitTestCase(
 
 class ParameterAssignmentTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the assignment of parameters in a binary model."""
 
@@ -137,7 +138,7 @@ class ParameterAssignmentTestCase(
 
 class TransitionMatrixTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the generation of the transition matrix in a binary model."""
 
@@ -183,7 +184,7 @@ class TransitionMatrixTestCase(
 
 class ObservationMatrixTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the generation of the observation matrix in a binary model."""
 
@@ -207,7 +208,7 @@ class ObservationMatrixTestCase(
 
 class PatientDataTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test loading the patient data."""
 
@@ -313,7 +314,7 @@ class PatientDataTestCase(
 
 class LikelihoodTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the likelihood of a model."""
 
@@ -351,7 +352,7 @@ class LikelihoodTestCase(
 
 class RiskTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test anything related to the risk computation."""
 
@@ -414,7 +415,7 @@ class RiskTestCase(
 
 class DataGenerationTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Check the data generation utilities."""
 

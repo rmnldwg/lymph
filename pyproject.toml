@@ -1,21 +1,15 @@
 [build-system]
-requires = [
-    "setuptools >= 61.0.0",
-    "setuptools_scm >= 7.0.0",
-    "wheel",
-]
+requires = ["setuptools >= 61.0.0", "setuptools_scm >= 7.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lymph-model"
 description = "Package for statistical modelling of lymphatic metastatic spread."
-authors = [
-    {name = "Roman Ludwig", email = "roman.ludwig@usz.ch"}
-]
+authors = [{ name = "Roman Ludwig", email = "roman.ludwig@usz.ch" }]
 readme = "README.rst"
 requires-python = ">=3.10"
 keywords = ["cancer", "metastasis", "lymphatic progression", "model"]
-license = {text = "MIT"}
+license = { text = "MIT" }
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: MIT License",
@@ -26,24 +20,12 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = [
-    "numpy",
-    "pandas",
-    "cachetools",
-]
+dependencies = ["numpy", "pandas", "cachetools"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-test = [
-    "scipy",
-    "coverage",
-    "emcee",
-]
-dev = [
-    "pre-commit",
-    "pylint",
-    "git-cliff",
-]
+test = ["pytest", "scipy", "coverage", "emcee"]
+dev = ["pre-commit"]
 docs = [
     "sphinx",
     "sphinx-book-theme",
@@ -68,7 +50,12 @@ packages = ["lymph"]
 include-package-data = true
 
 [tool.setuptools.dynamic]
-version = {attr = "lymph._version.version"}
+version = { attr = "lymph._version.version" }
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::pandas.errors.PerformanceWarning"]
 
 
 [tool.isort]
@@ -87,7 +74,24 @@ all = true
 exclude = ["tests", "docs"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "C", "R", "U", "D", "I", "S", "T", "A", "N", "NPY201"]
+select = [
+    "E",
+    "F",
+    "W",
+    "B",
+    "C",
+    "R",
+    "U",
+    "D",
+    "I",
+    "S",
+    "T",
+    "A",
+    "N",
+    "COM",
+    "FURB",
+    "NPY201",
+]
 ignore = ["B028"]
 
 
@@ -141,20 +145,20 @@ filter_unconventional = true
 split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
-  # { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/orhun/git-cliff/issues/${2}))"}, # replace issue numbers
+    # { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/orhun/git-cliff/issues/${2}))"}, # replace issue numbers
 ]
 # regex for parsing and grouping commits
 commit_parsers = [
-  { message = "^feat", group = "Features" },
-  { message = "^fix", group = "Bug Fixes" },
-  { message = "^docs", group = "Documentation" },
-  { message = "^perf", group = "Performance" },
-  { message = "^refactor", group = "Refactor" },
-  { message = "^style", group = "Styling" },
-  { message = "^test", group = "Testing" },
-  { message = "^chore\\(release\\): prepare for", skip = true },
-  { message = "^chore", group = "Miscellaneous Tasks" },
-  { body = ".*security", group = "Security" },
+    { message = "^feat", group = "Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^docs", group = "Documentation" },
+    { message = "^perf", group = "Performance" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^style", group = "Styling" },
+    { message = "^test", group = "Testing" },
+    { message = "^chore\\(release\\): prepare for", skip = true },
+    { message = "^chore", group = "Miscellaneous Tasks" },
+    { body = ".*security", group = "Security" },
 ]
 # protect breaking changes from being skipped due to matching a skipping commit_parser
 protect_breaking_commits = false

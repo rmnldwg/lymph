@@ -1,4 +1,5 @@
 """Make sure the models work with the emcee package."""
+import unittest
 
 import emcee
 import numpy as np
@@ -8,7 +9,7 @@ from . import fixtures
 
 class UnilateralEmceeTestCase(
     fixtures.BinaryUnilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the emcee package with the Unilateral model."""
 

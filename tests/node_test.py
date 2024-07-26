@@ -1,11 +1,10 @@
 """Unit tests for the Node classes."""
+import unittest
 
 from lymph import graph
 
-from . import fixtures
 
-
-class BinaryLymphNodeLevelTestCase(fixtures.IgnoreWarningsTestCase):
+class BinaryLymphNodeLevelTestCase(unittest.TestCase):
     """Test case for a binary lymph node level."""
 
     def setUp(self) -> None:

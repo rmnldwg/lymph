@@ -1,4 +1,5 @@
 """Test the bilateral model."""
+import unittest
 
 import numpy as np
 
@@ -8,7 +9,7 @@ from lymph.utils import flatten
 from . import fixtures
 
 
-class BilateralInitTest(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase):
+class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
     """Test the delegation of attrs from the unilateral class to the bilateral one."""
 
     def setUp(self):
@@ -83,7 +84,7 @@ class BilateralInitTest(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTes
 
 class ModalityDelegationTestCase(
     fixtures.BilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Make sure the modality is delegated from the ipsi side correctly."""
 
@@ -156,7 +157,7 @@ class ModalityDelegationTestCase(
 
 class NoSymmetryParamsTestCase(
     fixtures.BilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the parameter assignment when the model is not symmetric"""
 
@@ -241,7 +242,7 @@ class NoSymmetryParamsTestCase(
 
 class SymmetryParamsTestCase(
     fixtures.BilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Test the parameter assignment when the model is symmetric."""
 
@@ -285,7 +286,7 @@ class SymmetryParamsTestCase(
         self.assertEqual(params_to_set, self.model.ipsi.get_params())
 
 
-class LikelihoodTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase):
+class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
     """Check that the (log-)likelihood is computed correctly."""
 
     def setUp(self):
@@ -300,7 +301,7 @@ class LikelihoodTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTe
         self.assertEqual(first_llh, second_llh)
 
 
-class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase):
+class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
     """Check that the risk is computed correctly."""
 
     def setUp(self):
@@ -358,7 +359,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, fixtures.IgnoreWarningsTestCase
 
 class DataGenerationTestCase(
     fixtures.BilateralModelMixin,
-    fixtures.IgnoreWarningsTestCase,
+    unittest.TestCase,
 ):
     """Check the binary model's data generation method."""
 

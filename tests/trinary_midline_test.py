@@ -1,5 +1,5 @@
 """Test the midline model for the binary case."""
-
+import unittest
 from typing import Literal
 
 import numpy as np
@@ -9,7 +9,7 @@ from lymph import models
 from . import fixtures
 
 
-class MidlineSetParamsTestCase(fixtures.IgnoreWarningsTestCase):
+class MidlineSetParamsTestCase(unittest.TestCase):
     """Check that the complex parameter assignment works correctly."""
 
     def setUp(
