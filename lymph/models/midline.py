@@ -29,7 +29,7 @@ class Midline(
 
     Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
-    mid-sagittal line, or is located on the mid-saggital line.
+    mid-sagittal line, or is located on the mid-sagittal line.
 
     It is reasonable to assume (and supported by data) that an extension of the primary
     tumor significantly increases the risk for metastatic spread to the contralateral
@@ -53,7 +53,7 @@ class Midline(
         graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
-        use_central: bool = True,
+        use_central: bool = False,
         use_midext_evo: bool = True,
         marginalize_unknown: bool = True,
         uni_kwargs: dict[str, Any] | None = None,
