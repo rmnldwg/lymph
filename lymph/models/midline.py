@@ -599,7 +599,7 @@ class Midline(
         mode: Literal["HMM", "BN"] = "HMM",
         central: bool = False,
     ) -> np.ndarray:
-        """Compute the joint over ipsi- & contralaleral hidden states and midline ext.
+        """Compute the joint over ipsi- & contralateral hidden states and midline ext.
 
         If ``central=False``, the result has shape (2, num_states, num_states), where
         the first axis is for the midline extension status, the second for the
