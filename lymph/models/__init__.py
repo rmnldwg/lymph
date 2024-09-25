@@ -5,4 +5,4 @@ from lymph.models.HPV import HPV_wrapper
 from lymph.models.midline import Midline
 from lymph.models.unilateral import Unilateral
 
-__all__ = ["Unilateral", "HpvWrapper" "Bilateral", "Midline"]
+__all__ = ["Unilateral", "HpvUnilateral" "Bilateral", "Midline"]
