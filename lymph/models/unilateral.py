@@ -489,7 +489,7 @@ class Unilateral(
         patient_data: pd.DataFrame,
         side: str = "ipsi",
         mapping: Callable[[int], Any] | dict[int, Any] | None = None,
-        HPV: bool = None,
+        hpv_status: bool = None,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -497,10 +497,10 @@ class Unilateral(
         ipsi- and contralateral) of the neck, the ``side`` parameter is used to select
         the for which of the two to store the involvement data.
 
-        HPV is used to filter for patients with HPV status. If ``HPV`` is set to
-        ``True``, only patients with HPV status are kept. If ``HPV`` is set to ``False``,
-        only patients without HPV status are kept. If ``HPV`` is set to ``None``, all
-        patients are kept.
+        ``hpv_status`` is used to filter for patients with HPV status. If ``hpv_status``
+        is set to ``True``, only patients with HPV status are kept. If ``hpv_status``
+        is set to ``False``, only patients without HPV status are kept. If
+        ``hpv_status`` is set to ``None``, all patients are kept.
 
         With the ``mapping`` function or dictionary, the reported T-stages (usually 0,
         1, 2, 3, and 4) can be mapped to any keys also used to access the corresponding
@@ -522,9 +522,9 @@ class Unilateral(
             .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
         )
-        if HPV != None:
+        if hpv_status is not None:
             patient_data = patient_data[
-                patient_data["patient", "#", "hpv_status"] == HPV
+                patient_data["patient", "#", "hpv_status"] == hpv_status
             ]
 
         data_modalities = set(patient_data.columns.levels[0]) - {"patient", "tumor"}

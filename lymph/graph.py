@@ -199,7 +199,9 @@ class LymphNodeLevel(AbstractNode):
             stay_prob = 1.0
             for edge in self.inc:
                 edge_prob = edge.transition_tensor[
-                    edge.parent.state, self.state, new_state
+                    edge.parent.state,
+                    self.state,
+                    new_state,
                 ]
                 stay_prob *= edge_prob
             return stay_prob
@@ -729,7 +731,9 @@ class Representation:
         The keyword arguments override the positional arguments.
         """
         for new_lnl_state, lnl in zip(
-            new_states_args, self.lnls.values(), strict=False
+            new_states_args,
+            self.lnls.values(),
+            strict=False,
         ):
             lnl.state = new_lnl_state
 

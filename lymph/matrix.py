@@ -41,7 +41,9 @@ def generate_transition(
         for edge in lnl.inc:
             if edge.is_tumor_spread:
                 edge_transition_grid = edge.transition_tensor[
-                    0, current_state_idx, new_state_idx
+                    0,
+                    current_state_idx,
+                    new_state_idx,
                 ]
             else:
                 parent_node_i = lnls.index(edge.parent)
@@ -51,7 +53,9 @@ def generate_transition(
                     num_states=num_states,
                 )
                 edge_transition_grid = edge.transition_tensor[
-                    parent_state_idx, current_state_idx, new_state_idx
+                    parent_state_idx,
+                    current_state_idx,
+                    new_state_idx,
                 ]
 
             lnl_transition_matrix = np.where(
@@ -234,7 +238,7 @@ def evolve_midext(max_time: int, midext_prob: int) -> np.ndarray:
         [
             [1 - midext_prob, midext_prob],
             [0.0, 1.0],
-        ]
+        ],
     )
 
     # compute midext prob for all time steps

@@ -147,7 +147,7 @@ class Bilateral(
     def is_trinary(self) -> bool:
         """Return whether the model is trinary."""
         if self.ipsi.is_trinary != self.contra.is_trinary:
-            raise ValueError("Both sides must be of the same 'naryity'.")
+            raise ValueError("Both sides must be of the same 'narity'.")
 
         return self.ipsi.is_trinary
 
@@ -155,7 +155,7 @@ class Bilateral(
     def is_binary(self) -> bool:
         """Return whether the model is binary."""
         if self.ipsi.is_binary != self.contra.is_binary:
-            raise ValueError("Both sides must be of the same 'naryity'.")
+            raise ValueError("Both sides must be of the same 'narity'.")
 
         return self.ipsi.is_binary
 
@@ -180,7 +180,7 @@ class Bilateral(
             if params["ipsi"] != params["contra"]:
                 warnings.warn(
                     "The tumor spread parameters are not symmetric. "
-                    "Returning the ipsilateral parameters."
+                    "Returning the ipsilateral parameters.",
                 )
 
             params = params["ipsi"]
@@ -211,7 +211,7 @@ class Bilateral(
             if params["ipsi"] != params["contra"]:
                 warnings.warn(
                     "The LNL spread parameters are not symmetric. "
-                    "Returning the ipsilateral parameters."
+                    "Returning the ipsilateral parameters.",
                 )
 
             params = params["ipsi"]
@@ -308,7 +308,8 @@ class Bilateral(
     def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread from tumor to LNLs."""
         kwargs, global_kwargs = utils.unflatten_and_split(
-            kwargs, expected_keys=["ipsi", "contra"]
+            kwargs,
+            expected_keys=["ipsi", "contra"],
         )
 
         ipsi_kwargs = global_kwargs.copy()
@@ -597,7 +598,7 @@ class Bilateral(
                 warnings.warn(f"No diagnosis given for {side}lateral side.")
 
             diagnosis_encoding = getattr(self, side).compute_encoding(
-                given_diagnosis.get(side, {})
+                given_diagnosis.get(side, {}),
             )
             observation_matrix = getattr(self, side).observation_matrix()
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"

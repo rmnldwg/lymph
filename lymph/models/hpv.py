@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections.abc import Iterable
 from typing import Any, Literal
 
 import numpy as np
@@ -16,7 +15,7 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
-class HpvWrapper(
+class HPVUnilateral(
     diagnosis_times.Composite,
     modalities.Composite,
     types.Model,
@@ -60,12 +59,12 @@ class HpvWrapper(
 
         diagnosis_times.Composite.__init__(
             self,
-            distribution_children={"HPV": self.HPV, "noHPV": self.noHPV},
+            distribution_children={"HPV": self.hpv, "noHPV": self.nohpv},
             is_distribution_leaf=False,
         )
         modalities.Composite.__init__(
             self,
-            modality_children={"HPV": self.HPV, "noHPV": self.noHPV},
+            modality_children={"HPV": self.hpv, "noHPV": self.nohpv},
             is_modality_leaf=False,
         )
 
@@ -88,14 +87,14 @@ class HpvWrapper(
         _nohpv_kwargs["graph_dict"] = graph_dict
         _nohpv_kwargs.update(nohpv_kwargs or {})
 
-        self.HPV = models.Unilateral(**_hpv_kwargs)
-        self.noHPV = models.Unilateral(**_nohpv_kwargs)
+        self.hpv = models.Unilateral(**_hpv_kwargs)
+        self.nohpv = models.Unilateral(**_nohpv_kwargs)
 
         # set b_2 key name
-        self.base_2_key = list(self.HPV.graph.tumors.keys())[0] + "toII"
+        self.base_2_key = list(self.hpv.graph.tumors.keys())[0] + "toII"
 
     @classmethod
-    def binary(cls, *args, **kwargs) -> HpvWrapper:
+    def binary(cls, *args, **kwargs) -> HPVUnilateral:
         """Initialize a binary bilateral model.
 
         This is a convenience method that sets the ``allowed_states`` of the
@@ -107,7 +106,7 @@ class HpvWrapper(
         return cls(*args, uni_kwargs=uni_kwargs, **kwargs)
 
     @classmethod
-    def trinary(cls, *args, **kwargs) -> HpvWrapper:
+    def trinary(cls, *args, **kwargs) -> HPVUnilateral:
         """Initialize a trinary bilateral model.
 
         This is a convenience method that sets the ``allowed_states`` of the
@@ -121,18 +120,18 @@ class HpvWrapper(
     @property
     def is_trinary(self) -> bool:
         """Return whether the model is trinary."""
-        if self.HPV.is_trinary != self.noHPV.is_trinary:
-            raise ValueError("Both models must be of the same 'naryity'.")
+        if self.hpv.is_trinary != self.nohpv.is_trinary:
+            raise ValueError("Both models must be of the same 'narity'.")
 
-        return self.HPV.is_trinary
+        return self.hpv.is_trinary
 
     @property
     def is_binary(self) -> bool:
         """Return whether the model is binary."""
-        if self.HPV.is_binary != self.noHPV.is_binary:
-            raise ValueError("Both sides must be of the same 'naryity'.")
+        if self.hpv.is_binary != self.nohpv.is_binary:
+            raise ValueError("Both sides must be of the same 'narity'.")
 
-        return self.noHPV.is_binary
+        return self.nohpv.is_binary
 
     def get_tumor_spread_params(
         self,
@@ -141,17 +140,17 @@ class HpvWrapper(
     ) -> types.ParamsType:
         """Return the parameters of the model's spread from tumor to LNLs."""
         params = {
-            "HPV": self.HPV.get_tumor_spread_params(as_flat=as_flat),
+            "HPV": self.hpv.get_tumor_spread_params(as_flat=as_flat),
             "noHPV": utils.flatten(
                 {
-                    self.base_2_key: self.noHPV.get_tumor_spread_params(as_flat=False)[
+                    self.base_2_key: self.nohpv.get_tumor_spread_params(as_flat=False)[
                         self.base_2_key
                     ],
                 },
             )
-            if as_flat == True
+            if as_flat is True
             else {
-                self.base_2_key: self.noHPV.get_tumor_spread_params(as_flat=False)[
+                self.base_2_key: self.nohpv.get_tumor_spread_params(as_flat=False)[
                     self.base_2_key
                 ],
             },
@@ -172,7 +171,7 @@ class HpvWrapper(
         However, since the spread from LNLs is symmetric in HPV and noHPV,
         the spread parameters are the same and only one set is returend.
         """
-        params = self.HPV.get_lnl_spread_params(as_flat=as_flat)
+        params = self.hpv.get_lnl_spread_params(as_flat=as_flat)
 
         if as_flat or not as_dict:
             params = utils.flatten(params)
@@ -232,11 +231,11 @@ class HpvWrapper(
         nohpv_kwargs = global_kwargs.copy()
         nohpv_kwargs.update(kwargs.get("noHPV", {}))
 
-        args = self.HPV.set_tumor_spread_params(*args, **hpv_kwargs)
-        args = self.noHPV.set_tumor_spread_params(*args, **nohpv_kwargs)
+        args = self.hpv.set_tumor_spread_params(*args, **hpv_kwargs)
+        args = self.nohpv.set_tumor_spread_params(*args, **nohpv_kwargs)
         utils.synchronize_params(  # might be redundant check later
-            get_from=self.HPV.graph.lnl_edges,
-            set_to=self.noHPV.graph.lnl_edges,
+            get_from=self.hpv.graph.lnl_edges,
+            set_to=self.nohpv.graph.lnl_edges,
         )
 
         return args
@@ -253,10 +252,8 @@ class HpvWrapper(
         nohpv_kwargs = global_kwargs.copy()
         nohpv_kwargs.update(kwargs.get("noHPV", {}))
 
-        args = self.HPV.set_lnl_spread_params(*args, **hpv_kwargs)
-        args = self.noHPV.set_lnl_spread_params(*args, **nohpv_kwargs)
-
-        return args
+        args = self.hpv.set_lnl_spread_params(*args, **hpv_kwargs)
+        return self.nohpv.set_lnl_spread_params(*args, **nohpv_kwargs)
 
     def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread edges."""
@@ -279,33 +276,33 @@ class HpvWrapper(
         Amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
         method of both sides of the neck.
         """
-        self.HPV.load_patient_data(patient_data, side, mapping, True)
-        self.noHPV.load_patient_data(patient_data, side, mapping, False)
+        self.hpv.load_patient_data(patient_data, side, mapping, True)
+        self.nohpv.load_patient_data(patient_data, side, mapping, False)
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood of data, using the stored params."""
         llh = 0.0 if log else 1.0
 
-        HPV_likelihood = self.HPV._hmm_likelihood(log=log, t_stage=t_stage)
-        noHPV_likelihood = self.noHPV._hmm_likelihood(log=log, t_stage=t_stage)
+        hpv_likelihood = self.hpv._hmm_likelihood(log=log, t_stage=t_stage)
+        nohpv_likelihood = self.nohpv._hmm_likelihood(log=log, t_stage=t_stage)
 
         if log:
-            llh += HPV_likelihood + noHPV_likelihood
+            llh += hpv_likelihood + nohpv_likelihood
         else:
-            llh *= HPV_likelihood * noHPV_likelihood
+            llh *= hpv_likelihood * nohpv_likelihood
         return llh
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
         llh = 0.0 if log else 1.0
 
-        HPV_likelihood = self.HPV._bn_likelihood(log=log, t_stage=t_stage)
-        noHPV_likelihood = self.noHPV._bn_likelihood(log=log, t_stage=t_stage)
+        hpv_likelihood = self.hpv._bn_likelihood(log=log, t_stage=t_stage)
+        nohpv_likelihood = self.nohpv._bn_likelihood(log=log, t_stage=t_stage)
 
         if log:
-            llh += HPV_likelihood + noHPV_likelihood
+            llh += hpv_likelihood + nohpv_likelihood
         else:
-            llh *= HPV_likelihood * noHPV_likelihood
+            llh *= hpv_likelihood * nohpv_likelihood
         return llh
 
     def likelihood(
@@ -350,8 +347,8 @@ class HpvWrapper(
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
     def state_dist():
-        """Does nothing, but needs to be here for the time being"""
-        pass
+        """Do nothing, but needs to be here for the time being."""
+        raise NotImplementedError("This method is not implemented.")
 
     # everything from here is not used
 
@@ -478,60 +475,3 @@ class HpvWrapper(
         )
 
         return self.marginalize(involvement, posterior_state_dist)
-
-    def draw_patients(
-        self,
-        num: int,
-        stage_dist: Iterable[float],
-        rng: np.random.Generator | None = None,
-        seed: int = 42,
-        **_kwargs,
-    ) -> pd.DataFrame:
-        """Draw ``num`` random patients from the parametrized model.
-
-        See Also
-        --------
-            :py:meth:`.diagnosis_times.Distribution.draw_diag_times`
-                Method to draw diagnosis times from a distribution.
-            :py:meth:`.Unilateral.draw_diagnosis`
-                Method to draw individual diagnosis from a unilateral model.
-            :py:meth:`.Unilateral.draw_patients`
-                The unilateral method to draw a synthetic dataset.
-
-        """
-        if rng is None:
-            rng = np.random.default_rng(seed)
-
-        if sum(stage_dist) != 1.0:
-            warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
-            stage_dist = np.array(stage_dist) / sum(stage_dist)
-
-        drawn_t_stages = rng.choice(
-            a=self.t_stages,
-            p=stage_dist,
-            size=num,
-        )
-        drawn_diag_times = [
-            self.get_distribution(t_stage).draw_diag_times(rng=rng)
-            for t_stage in drawn_t_stages
-        ]
-
-        drawn_obs_ipsi = self.ipsi.draw_diagnosis(drawn_diag_times, rng=rng)
-        drawn_obs_noHPV = self.contra.draw_diagnosis(drawn_diag_times, rng=rng)
-        drawn_obs = np.concatenate([drawn_obs_ipsi, drawn_obs_noHPV], axis=1)
-
-        # construct MultiIndex with "ipsi" and "contra" at top level to allow
-        # concatenation of the two separate drawn diagnosis
-        sides = ["ipsi", "contra"]
-        modality_names = list(self.get_all_modalities().keys())
-        lnl_names = list(self.ipsi.graph.lnls.keys())
-        multi_cols = pd.MultiIndex.from_product([sides, modality_names, lnl_names])
-
-        # reorder the column levels and thus also the individual columns to match the
-        # LyProX format without mixing up the data
-        dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-        dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
-        dataset = dataset.sort_index(axis="columns", level=0)
-        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
-
-        return dataset
