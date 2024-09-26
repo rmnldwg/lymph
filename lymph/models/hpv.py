@@ -52,7 +52,7 @@ class HPVUnilateral(
     def __init__(
         self,
         graph_dict: types.GraphDictType,
-        universal_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
         hpv_kwargs: dict[str, Any] | None = None,
         nohpv_kwargs: dict[str, Any] | None = None,
         **_kwargs,
@@ -63,11 +63,10 @@ class HPVUnilateral(
         values. It is passed to both :py:class:`.models.Unilateral` instances,
         which in turn pass it to the :py:class:`.graph.Representation` class that
         stores the graph.
-
         """
         self._init_models(
             graph_dict=graph_dict,
-            universal_kwargs=universal_kwargs,
+            uni_kwargs=uni_kwargs,
             hpv_kwargs=hpv_kwargs,
             nohpv_kwargs=nohpv_kwargs,
         )
@@ -86,19 +85,18 @@ class HPVUnilateral(
     def _init_models(
         self,
         graph_dict: dict[tuple[str], list[str]],
-        universal_kwargs: dict[str, Any] | None = None,
+        uni_kwargs: dict[str, Any] | None = None,
         hpv_kwargs: dict[str, Any] | None = None,
         nohpv_kwargs: dict[str, Any] | None = None,
     ):
         """Initialize the two unilateral models."""
-        if universal_kwargs is None:
-            universal_kwargs = {}
+        uni_kwargs = uni_kwargs or {}
 
-        _hpv_kwargs = universal_kwargs.copy()
+        _hpv_kwargs = uni_kwargs.copy()
         _hpv_kwargs["graph_dict"] = graph_dict
         _hpv_kwargs.update(hpv_kwargs or {})
 
-        _nohpv_kwargs = universal_kwargs.copy()
+        _nohpv_kwargs = uni_kwargs.copy()
         _nohpv_kwargs["graph_dict"] = graph_dict
         _nohpv_kwargs.update(nohpv_kwargs or {})
 
