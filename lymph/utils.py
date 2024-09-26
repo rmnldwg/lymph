@@ -37,7 +37,7 @@ def check_spsn(spsn: list[float]):
     if not has_len_2 or not is_above_lb or not is_below_ub:
         raise ValueError(
             "For each modality provide a list of two decimals between 0.5 and 1.0 as "
-            "specificity & sensitivity respectively."
+            "specificity & sensitivity respectively.",
         )
 
 
@@ -105,7 +105,7 @@ def clinical(spsn: list) -> np.ndarray:
             [sp, 1.0 - sp],
             [sp, 1.0 - sp],
             [1.0 - sn, sn],
-        ]
+        ],
     )
 
 
@@ -122,7 +122,7 @@ def pathological(spsn: list) -> np.ndarray:
             [sp, 1.0 - sp],
             [1.0 - sn, sn],
             [1.0 - sn, sn],
-        ]
+        ],
     )
 
 
