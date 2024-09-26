@@ -4,15 +4,30 @@ from __future__ import annotations
 
 import logging
 import warnings
+from functools import wraps
 from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
-from lymph import diagnosis_times, matrix, modalities, models, types, utils
+from lymph import diagnosis_times, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
+
+
+def select_hpv_model(method):
+    """Decorate methods that simply delegate to the `hpv` or `nohpv` model."""
+
+    @wraps(method)
+    def wrapper(self, *args, hpv_status: bool | None = None, **kwargs):
+        if hpv_status is None:
+            raise ValueError("Must provide hpv_status.")
+
+        _model = self.hpv if hpv_status else self.nohpv
+        return method(_model, *args, **kwargs)
+
+    return wrapper
 
 
 class HPVUnilateral(
@@ -359,132 +374,44 @@ class HPVUnilateral(
 
         raise ValueError("Invalid mode. Must be either 'HMM' or 'BN'.")
 
-    def state_dist():
-        """Do nothing, but needs to be here for the time being."""
-        raise NotImplementedError("This method is not implemented.")
+    # The methods below must be implemented to satisfy the Model interface.
+    # However, realistically one would only use either the `hpv` or the `nohpv` model
+    # and not a combination of them. Therefore, they will just call the corresponding
+    # method of the HPV model.
 
-    # everything from here is not used
+    @select_hpv_model
+    def state_dist(self, model: models.Unilateral, *args, **kwargs) -> np.ndarray:
+        """Compute the distribution over possible states.
 
+        See :py:meth:`.models.Unilateral.state_dist` for more information.
+        """
+        return model.state_dist(*args, **kwargs)
+
+    @select_hpv_model
     def posterior_state_dist(
         self,
-        given_params: types.ParamsType | None = None,
-        given_state_dist: np.ndarray | None = None,
-        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
-        t_stage: str | int = "early",
-        mode: Literal["HMM", "BN"] = "HMM",
+        model: models.Unilateral,
+        *args,
+        **kwargs,
     ) -> np.ndarray:
-        """Compute joint post. dist. over ipsi & contra states, ``given_diagnosis``.
+        """Compute the posterior distribution over hidden states given a diagnosis.
 
-        ``given_diagnosis`` is a dictionary storing one :py:obj:`.types.DiagnosisType`
-        each for the ``"ipsi"`` and ``"contra"`` side of the neck.
-
-        Essentially, this is the risk for any possible combination of ipsi- and
-        contralateral involvement, given the provided diagnosis.
-
-        Warning:
-        -------
-            As in the :py:meth:`.Unilateral.posterior_state_dist` method, one may
-            provide a precomputed (joint) state dist via the ``given_state_dist``
-            argument (should be a square matrix). In this case, the ``given_params``
-            are ignored and the model does not need to recompute e.g. the
-            :py:meth:`.transition_matrix` or :py:meth:`.state_dist`, making the
-            computation much faster.
-
-            However, this will mean that ``t_stage`` and ``mode`` are also ignored,
-            since these are only used to compute the state distribution.
-
+        See :py:meth:`.models.Unilateral.posterior_state_dist` for more information.
         """
-        if given_state_dist is None:
-            utils.safe_set_params(self, given_params)
-            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+        return model.posterior_state_dist(*args, **kwargs)
 
-        if given_diagnosis is None:
-            given_diagnosis = {}
-
-        diagnosis_given_state = {}
-        for side in ["ipsi", "contra"]:
-            if side not in given_diagnosis:
-                warnings.warn(f"No diagnosis given for {side}lateral side.")
-
-            diagnosis_encoding = getattr(self, side).compute_encoding(
-                given_diagnosis.get(side, {}),
-            )
-            observation_matrix = getattr(self, side).observation_matrix()
-            # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
-            diagnosis_given_state[side] = diagnosis_encoding @ observation_matrix.T
-
-        # matrix with P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) for all states Xi,Xc.
-        joint_diagnosis_and_state = (
-            np.outer(
-                diagnosis_given_state["ipsi"],
-                diagnosis_given_state["contra"],
-            )
-            * given_state_dist
-        )
-        # Following Bayes' theorem, this is P(Xi,Xc|Zi=zi,Zc=zc) which is given by
-        # P(Zi=zi,Zc=zc|Xi,Xc) * P(Xi,Xc) / P(Zi=zi,Zc=zc)
-        return joint_diagnosis_and_state / np.sum(joint_diagnosis_and_state)
-
-    def marginalize(
-        self,
-        involvement: dict[str, types.PatternType],
-        given_state_dist: np.ndarray | None = None,
-        t_stage: str = "early",
-        mode: Literal["HMM", "BN"] = "HMM",
-    ) -> float:
+    @select_hpv_model
+    def marginalize(self, model: models.Unilateral, *args, **kwargs) -> np.ndarray:
         """Marginalize ``given_state_dist`` over matching ``involvement`` patterns.
 
-        Any state that matches the provided ``involvement`` pattern is marginalized
-        over. For this, the :py:func:`.matrix.compute_encoding` function is used.
-
-        If ``given_state_dist`` is ``None``, it will be computed by calling
-        :py:meth:`.state_dist` with the given ``t_stage`` and ``mode``. These arguments
-        are ignored if ``given_state_dist`` is provided.
+        See :py:meth:`.models.Unilateral.marginalize` for more information.
         """
-        if given_state_dist is None:
-            given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+        return model.marginalize(*args, **kwargs)
 
-        marginalize_over_states = {}
-        for side in ["ipsi", "contra"]:
-            side_graph = getattr(self, side).graph
-            marginalize_over_states[side] = matrix.compute_encoding(
-                lnls=side_graph.lnls.keys(),
-                pattern=involvement.get(side, {}),
-                base=3 if self.is_trinary else 2,
-            )
-        return (
-            marginalize_over_states["ipsi"]
-            @ given_state_dist
-            @ marginalize_over_states["contra"]
-        )
+    @select_hpv_model
+    def risk(self, model: models.Unilateral, *args, **kwargs) -> np.ndarray:
+        """Compute risk of a certain ``involvement``, using the ``given_diagnosis``.
 
-    def risk(
-        self,
-        involvement: dict[str, types.PatternType],
-        given_params: types.ParamsType | None = None,
-        given_state_dist: np.ndarray | None = None,
-        given_diagnosis: dict[str, types.DiagnosisType] | None = None,
-        t_stage: str = "early",
-        mode: Literal["HMM", "BN"] = "HMM",
-    ) -> float:
-        """Compute risk of the ``involvement`` patterns, given parameters and diagnosis.
-
-        The ``involvement`` of interest is expected to be a :py:obj:`.PatternType` for
-        each side of the neck (``"ipsi"`` and ``"contra"``). This method then
-        marginalizes over those posterior state probabilities that match the
-        ``involvement`` patterns.
-
-        If ``involvement`` is not provided, the method returns the posterior state
-        distribution as computed by the :py:meth:`.posterior_state_dist` method. See
-        its docstring for more details on the remaining arguments.
+        See :py:meth:`.models.Unilateral.risk` for more information.
         """
-        # TODO: test this method
-        posterior_state_dist = self.posterior_state_dist(
-            given_params=given_params,
-            given_state_dist=given_state_dist,
-            given_diagnosis=given_diagnosis,
-            t_stage=t_stage,
-            mode=mode,
-        )
-
-        return self.marginalize(involvement, posterior_state_dist)
+        return model.risk(*args, **kwargs)
