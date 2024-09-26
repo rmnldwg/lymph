@@ -489,7 +489,6 @@ class Unilateral(
         patient_data: pd.DataFrame,
         side: str = "ipsi",
         mapping: Callable[[int], Any] | dict[int, Any] | None = None,
-        hpv_status: bool = None,
     ) -> None:
         """Load patient data in `LyProX`_ format into the model.
 
@@ -522,10 +521,6 @@ class Unilateral(
             .drop(columns="_model", errors="ignore")
             .reset_index(drop=True)
         )
-        if hpv_status is not None:
-            patient_data = patient_data[
-                patient_data["patient", "#", "hpv_status"] == hpv_status
-            ]
 
         data_modalities = set(patient_data.columns.levels[0]) - {"patient", "tumor"}
         for modality in data_modalities:

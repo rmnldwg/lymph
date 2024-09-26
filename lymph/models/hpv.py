@@ -140,8 +140,8 @@ class HPVUnilateral(
     ) -> types.ParamsType:
         """Return the parameters of the model's spread from tumor to LNLs."""
         params = {
-            "HPV": self.hpv.get_tumor_spread_params(as_flat=as_flat),
-            "noHPV": utils.flatten(
+            "hpv": self.hpv.get_tumor_spread_params(as_flat=as_flat),
+            "nohpv": utils.flatten(
                 {
                     self.base_2_key: self.nohpv.get_tumor_spread_params(as_flat=False)[
                         self.base_2_key
@@ -167,9 +167,9 @@ class HPVUnilateral(
     ) -> types.ParamsType:
         """Return the parameters of the model's spread from LNLs to tumor.
 
-        Similarily to the :py:meth:`.get_tumor_spread_params` method.
+        Similarly to the :py:meth:`.get_tumor_spread_params` method.
         However, since the spread from LNLs is symmetric in HPV and noHPV,
-        the spread parameters are the same and only one set is returend.
+        the spread parameters are the same and only one set is returned.
         """
         params = self.hpv.get_lnl_spread_params(as_flat=as_flat)
 
@@ -188,7 +188,6 @@ class HPVUnilateral(
         This is consistent with how the :py:meth:`.set_params`
         """
         params = self.get_tumor_spread_params(as_flat=False)
-
         params.update(self.get_lnl_spread_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
@@ -268,7 +267,7 @@ class HPVUnilateral(
     def load_patient_data(
         self,
         patient_data: pd.DataFrame,
-        side="ipsi",
+        side: str = "ipsi",
         mapping: callable | dict[int, Any] = utils.early_late_mapping,
     ) -> None:
         """Load patient data into the model.
@@ -276,8 +275,22 @@ class HPVUnilateral(
         Amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
         method of both sides of the neck.
         """
-        self.hpv.load_patient_data(patient_data, side, mapping, True)
-        self.nohpv.load_patient_data(patient_data, side, mapping, False)
+        is_hpv_pos = patient_data["patient", "#", "hpv_status"] == True  # noqa: E712
+        is_hpv_neg = patient_data["patient", "#", "hpv_status"] == False  # noqa: E712
+
+        hpv_patient_data = patient_data.loc[is_hpv_pos]
+        nohpv_patient_data = patient_data.loc[is_hpv_neg]
+
+        self.hpv.load_patient_data(
+            patient_data=hpv_patient_data,
+            side=side,
+            mapping=mapping,
+        )
+        self.nohpv.load_patient_data(
+            patient_data=nohpv_patient_data,
+            side=side,
+            mapping=mapping,
+        )
 
     def _hmm_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the HMM likelihood of data, using the stored params."""
