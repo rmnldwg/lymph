@@ -40,11 +40,11 @@ class Midline(
     side. Formally:
 
     .. math::
-        b_c^{\\in} = \\alpha \\cdot b_i + (1 - \\alpha) \\cdot b_c^{\\not\\in}
+        b_c^{\in} = \alpha \cdot b_i + (1 - \alpha) \cdot b_c^{\not\in}
 
-    where :math:`b_c^{\\in}` is the probability of spread from the primary tumor
+    where :math:`b_c^{\in}` is the probability of spread from the primary tumor
     to the contralateral side for patients with midline extension, and
-    :math:`b_c^{\\not\\in}` for patients without. :math:`\\alpha` is the linear
+    :math:`b_c^{\not\in}` for patients without. :math:`\alpha` is the linear
     mixing parameter.
     """
 
@@ -73,7 +73,7 @@ class Midline(
         the LNLs. And ``use_central``, which controls whether to use a third
         :py:class:`~.Bilateral` model for the case of a central tumor location.
 
-        The parameter ``use_midext_evo`` decides whether the tumor's midline extions
+        The parameter ``use_midext_evo`` decides whether the tumor's midline extensions
         should be considered a random variable, in which case it is evolved like the
         state of the LNLs, or not.
 
