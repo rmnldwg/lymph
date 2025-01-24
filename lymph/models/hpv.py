@@ -44,8 +44,8 @@ class HPVUnilateral(
     See Also
     --------
         :py:class:`~lymph.models.Unilateral`
-            Two instances of this class are created as attributes. One for the HPV- and
-            one for the noHPV model.
+            Two instances of this class are created as attributes. One for the HPV+ and
+            one for the HPV- model.
 
     """
 
@@ -73,12 +73,12 @@ class HPVUnilateral(
 
         diagnosis_times.Composite.__init__(
             self,
-            distribution_children={"HPV": self.hpv, "noHPV": self.nohpv},
+            distribution_children={"hpv": self.hpv, "nohpv": self.nohpv},
             is_distribution_leaf=False,
         )
         modalities.Composite.__init__(
             self,
-            modality_children={"HPV": self.hpv, "noHPV": self.nohpv},
+            modality_children={"hpv": self.hpv, "nohpv": self.nohpv},
             is_modality_leaf=False,
         )
 
@@ -286,8 +286,9 @@ class HPVUnilateral(
         """Load patient data into the model.
 
         Amounts to calling the :py:meth:`~lymph.models.Unilateral.load_patient_data`
-        method of both sides of the neck.
+        method of both the HPV+ and the HPV- model.
         """
+        # TODO: What about patients with unknown HPV status?
         is_hpv_pos = patient_data["patient", "#", "hpv_status"] == True  # noqa: E712
         is_hpv_neg = patient_data["patient", "#", "hpv_status"] == False  # noqa: E712
 
