@@ -41,7 +41,7 @@ class HPVUnilateral(
 
     This is achieved by creating two instances of the
     :py:class:`~lymph.models.Unilateral` model, one for the HPV+ and one for the
-    HPV-.
+    HPV- patients.
 
     .. seealso::
 
@@ -49,6 +49,11 @@ class HPVUnilateral(
             Two instances of this class are created as attributes. One for the HPV+ and
             one for the HPV- model.
 
+    .. warning::
+
+        This class is still a bit experimental and not super thoroughly tested. It may
+        especially cause issues if one wanted to use e.g. a bilateral model composed of
+        two :py:class:`~lymph.models.HPVUnilateral` models.
     """
 
     def __init__(
