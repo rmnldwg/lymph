@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import Sequence
 from functools import wraps
 from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
-from lymph import diagnosis_times, modalities, models, types, utils
+from lymph import diagnosis_times, mixins, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def select_hpv_model(method):
 class HPVUnilateral(
     diagnosis_times.Composite,
     modalities.Composite,
+    mixins.NamedParamsMixin,
     types.Model,
 ):
     """Class that models metastatic progression in HPV and non HPV lymphatic systems.
@@ -41,8 +43,8 @@ class HPVUnilateral(
     :py:class:`~lymph.models.Unilateral` model, one for the HPV+ and one for the
     HPV-.
 
-    See Also
-    --------
+    .. seealso::
+
         :py:class:`~lymph.models.Unilateral`
             Two instances of this class are created as attributes. One for the HPV+ and
             one for the HPV- model.
@@ -52,6 +54,7 @@ class HPVUnilateral(
     def __init__(
         self,
         graph_dict: types.GraphDictType,
+        named_params: Sequence[str] | None = None,
         uni_kwargs: dict[str, Any] | None = None,
         hpv_kwargs: dict[str, Any] | None = None,
         nohpv_kwargs: dict[str, Any] | None = None,
@@ -70,6 +73,9 @@ class HPVUnilateral(
             hpv_kwargs=hpv_kwargs,
             nohpv_kwargs=nohpv_kwargs,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,
@@ -348,13 +354,13 @@ class HPVUnilateral(
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
 
-        Note:
-        ----
+        .. note::
+
             The computation is much faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
-        See Also:
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
 

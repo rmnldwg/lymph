@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from itertools import product
 from typing import Any, Literal
 
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from cachetools import LRUCache
 
-from lymph import diagnosis_times, graph, matrix, modalities, types, utils
+from lymph import diagnosis_times, graph, matrix, mixins, modalities, types, utils
 
 # pylint: disable=unused-import
 from lymph.utils import (  # nopycln: import
@@ -34,6 +34,7 @@ RAW_T_COL = ("tumor", "1", "t_stage")
 class Unilateral(
     diagnosis_times.Composite,
     modalities.Composite,
+    mixins.NamedParamsMixin,
     types.Model,
 ):
     """Class that models metastatic progression in a unilateral lymphatic system.
@@ -48,6 +49,7 @@ class Unilateral(
     def __init__(
         self,
         graph_dict: types.GraphDictType,
+        named_params: Sequence[str] | None = None,
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
@@ -60,8 +62,8 @@ class Unilateral(
         ``("lnl", "<lnl_name>")``. The values are lists of strings that represent the
         names of the nodes that are connected to the node given by the key.
 
-        Note:
-        ----
+        .. note::
+
             Do make sure the values in the dictionary are of type ``list`` and *not*
             ``set``. Sets do not preserve the order of the elements and thus the order
             of the edges in the graph. This may lead to inconsistencies in the model.
@@ -97,6 +99,9 @@ class Unilateral(
             tumor_state=tumor_state,
             allowed_states=allowed_states,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,
@@ -379,8 +384,8 @@ class Unilateral(
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
         are ordered as in the :py:attr:`.graph.Representation.state_list`.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:func:`~lymph.descriptors.matrix.generate_transition`
                 The function actually computing the transition matrix.
 
@@ -412,8 +417,8 @@ class Unilateral(
         :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes
         in the graph and :math:`M` is the number of diagnostic modalities.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:func:`~lymph.descriptors.matrix.generate_observation`
                 The function actually computing the observation matrix.
 
@@ -437,8 +442,8 @@ class Unilateral(
         The data matrix is used to compute the :py:attr:`~diagnosis_matrix`, which in
         turn is used to compute the likelihood of the model given the patient data.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:func:`.matrix.generate_data_encoding`
                 This function actually computes the data encoding.
 
@@ -773,8 +778,8 @@ class Unilateral(
         for the hidden Markov model (``"HMM"``) or the Bayesian network (``"BN"``).
         In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
 
-        Warning:
-        -------
+        .. warning::
+
             To speed up repetitive computations, one can provide precomputed state
             distributions via the ``given_state_dist`` parameter. When provided, the
             method will ignore the ``given_params``, ``t_stage``, and ``mode``
@@ -925,8 +930,8 @@ class Unilateral(
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`lymph.diagnosis_times.Distribution.draw_diag_times`
                 Method to draw diagnosis times from a distribution.
             :py:meth:`lymph.models.Unilateral.draw_diagnosis`
