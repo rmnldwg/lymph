@@ -87,8 +87,8 @@ class Midline(
 
         The ``uni_kwargs`` are passed to all bilateral models.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:class:`Bilateral`: Two to four of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
             tumor, one for the case of no such extension, (possibly) one for the case of
@@ -636,8 +636,8 @@ class Midline(
         ignored. The provided state distribution may be 2D or 3D. The returned
         distribution will have the same dimensionality.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
@@ -728,16 +728,15 @@ class Midline(
         to the :py:class:`.Bilateral` model, the midline model does not support the
         Bayesian network mode.
 
-        Note:
-        ----
+        .. note::
+
             The computation is faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
-        See Also:
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
-
         """
         try:
             # all functions and methods called here should raise a ValueError if the
@@ -769,13 +768,12 @@ class Midline(
         mid-sagittal line (``midext``), and whether it is central (``central``, only
         used if :py:attr:`use_central` is ``True``).
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.types.Model.posterior_state_dist`
                 The corresponding method in the base class.
             :py:meth:`.Bilateral.posterior_state_dist`
                 The bilateral method that is ultimately called by this one.
-
         """
         # NOTE: When given a 2D state distribution, it does not matter which of the
         #       Bilateral models is used to compute the risk, since the state dist is
@@ -876,8 +874,8 @@ class Midline(
         For logical reasons, ``midext=False`` makes no sense if ``central=True`` and
         is thus ignored.
 
-        Warning:
-        -------
+        .. warning::
+
             As in the :py:meth:`.Bilateral.posterior_state_dist` method, you may
             provide a precomputed (joint) state distribution in the ``given_state_dist``
             argument. Here, this ``given_state_dist`` may be a 2D array, in which case
@@ -888,7 +886,6 @@ class Midline(
             argument is *not* ignored: It may be used to select the correct state
             distribution (when ``True`` or ``False``), or marginalize over the midline
             extension status (when ``midext=None``).
-
         """
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,

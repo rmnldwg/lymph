@@ -1,16 +1,15 @@
 """Test if setting params via the named subset works correctly."""
 
 import pytest
-import numpy as np
-
-from .fixtures import (
-    get_graph,
-    _create_random_frozen_dist,
-    _create_random_parametric_dist,
-    RNG
-)
 
 from lymph import models
+
+from .fixtures import (
+    RNG,
+    _create_random_frozen_dist,
+    _create_random_parametric_dist,
+    get_graph,
+)
 
 
 @pytest.fixture()
@@ -28,7 +27,7 @@ def binary_unilateral_model() -> models.Unilateral:
     return model
 
 
-def test_set_named_params_default_behaviour(
+def test_set_named_params_default_behavior(
     binary_unilateral_model: models.Unilateral,
 ) -> None:
     """Ensure `set_named_params` works as `set_params` when no `named_params` set."""
@@ -55,7 +54,11 @@ def test_named_params_setter(
     params_subset = [param for param in params if RNG.uniform() > 0.5]
     binary_unilateral_model.named_params = params_subset
 
-    for stored, subset in zip(binary_unilateral_model.named_params, params_subset):
+    for stored, subset in zip(
+        binary_unilateral_model.named_params,
+        params_subset,
+        strict=True,
+    ):
         assert stored == subset
 
 
@@ -78,6 +81,7 @@ def test_set_named_params_named_easy_subset(
         params.keys(),
         new_params.values(),
         params_subset.values(),
+        strict=True,
     ):
         stored_params = binary_unilateral_model.get_params(as_dict=True)
         if param in params_subset:
@@ -114,6 +118,7 @@ def test_set_named_params_named_hard_subset(
         params.keys(),
         new_params.values(),
         stored_params.values(),
+        strict=True,
     ):
         if param == first_lnl_param:
             assert params_subset[first_lnl_param] == stored_param

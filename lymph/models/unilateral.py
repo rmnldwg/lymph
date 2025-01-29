@@ -61,8 +61,8 @@ class Unilateral(
         ``("lnl", "<lnl_name>")``. The values are lists of strings that represent the
         names of the nodes that are connected to the node given by the key.
 
-        Note:
-        ----
+        .. note::
+
             Do make sure the values in the dictionary are of type ``list`` and *not*
             ``set``. Sets do not preserve the order of the elements and thus the order
             of the edges in the graph. This may lead to inconsistencies in the model.
@@ -380,8 +380,8 @@ class Unilateral(
         transition from the :math:`i`-th state to the :math:`j`-th state. The states
         are ordered as in the :py:attr:`.graph.Representation.state_list`.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:func:`~lymph.descriptors.matrix.generate_transition`
                 The function actually computing the transition matrix.
 
@@ -413,8 +413,8 @@ class Unilateral(
         :math:`2^N \\times 2^\\{N \\times M\\}` where :math:`N` is the number of nodes
         in the graph and :math:`M` is the number of diagnostic modalities.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:func:`~lymph.descriptors.matrix.generate_observation`
                 The function actually computing the observation matrix.
 
@@ -438,8 +438,8 @@ class Unilateral(
         The data matrix is used to compute the :py:attr:`~diagnosis_matrix`, which in
         turn is used to compute the likelihood of the model given the patient data.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:func:`.matrix.generate_data_encoding`
                 This function actually computes the data encoding.
 
@@ -774,8 +774,8 @@ class Unilateral(
         for the hidden Markov model (``"HMM"``) or the Bayesian network (``"BN"``).
         In case of the Bayesian network mode, the ``t_stage`` parameter is ignored.
 
-        Warning:
-        -------
+        .. warning::
+
             To speed up repetitive computations, one can provide precomputed state
             distributions via the ``given_state_dist`` parameter. When provided, the
             method will ignore the ``given_params``, ``t_stage``, and ``mode``
@@ -926,8 +926,8 @@ class Unilateral(
         A random number generator can be provided as ``rng``. If ``None``, a new one
         is initialized with the given ``seed`` (or ``42``, by default).
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`lymph.diagnosis_times.Distribution.draw_diag_times`
                 Method to draw diagnosis times from a distribution.
             :py:meth:`lymph.models.Unilateral.draw_diagnosis`

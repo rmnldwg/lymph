@@ -41,8 +41,8 @@ class HPVUnilateral(
     :py:class:`~lymph.models.Unilateral` model, one for the HPV+ and one for the
     HPV-.
 
-    See Also
-    --------
+    .. seealso::
+
         :py:class:`~lymph.models.Unilateral`
             Two instances of this class are created as attributes. One for the HPV+ and
             one for the HPV- model.
@@ -348,13 +348,13 @@ class HPVUnilateral(
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
 
-        Note:
-        ----
+        .. note::
+
             The computation is much faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
-        See Also:
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
 
