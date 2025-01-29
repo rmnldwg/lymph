@@ -819,6 +819,8 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
+[1.3.0]: https://github.com/rmnldwg/lymph/compare/1.2.3...1.3.0
+[1.2.3]: https://github.com/rmnldwg/lymph/compare/1.2.2...1.2.3
 [1.2.2]: https://github.com/rmnldwg/lymph/compare/1.2.1...1.2.2
 [1.2.1]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.1
 [1.2.0]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.0
