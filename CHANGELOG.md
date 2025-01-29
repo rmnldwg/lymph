@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2025-01-29
+
+### Bug Fixes
+
+- (**hpv**) Some renaming and import correct symbols.
+- (**hpv**) Send kwargs to constructor correctly.
+- Partial globals work in `set_named_params()`.\
+  Setting `ipsi_spread` via `named_params` works now. This was tricky to
+  implement, as the `spread` params of the `ipsi` model are all called
+  `ipsi_<something>_spread`.
+
+### Documentation
+
+- Fix typos in readme.
+- Fix typo in midline model docstring.
+- Fix equation in midline model docstring.
+- Change ref to "bilateral" in HPV model.
+- Add new mixins to autodoc.
+- Add warning about untested HPV model.
+
+### Features
+
+- (**hpv**) Create HPV wrapper.\
+  The `HPV` module can be used to build a unilateral lymph model
+  where the b_2 parameter is different for HPV positive patients.\
+  This fixes [#42]
+- (**uni**) Add basic working named params mixing. Related to [#95]
+- Add `named_params` to all models. Fixes [#95]
+- Add `named_params` to model constructors. Related to [#95]
+
+### Testing
+
+- Add basic tests for `NamedParamsMixin`. Related to [#95]
+- Check partial globals work.\
+  E.g. `ipsi_spread` should set the `spread` of all LNLs in the `ipsi`
+  model. Related to [#95]
+
+### Change
+
+- (**mid**) Set default `use_central=False`.\
+  This is a more sane default and does not result in a `ValueError` when
+  creating the model with the default arguments.
+- (**hpv**) Put data split into HPV class.
+- (**hpv**) Delegate methods via `hpv_status` arg.\
+  Instead of re-implementing or copy-pasting methods from the `Unilateral`
+  class, they simply compute those model's corresponding method that was
+  selected via the `hpv_status` (keyword) argument.
+
 <a name="1.2.3"></a>
 
 ## [1.2.3] - 2024-07-26
@@ -790,6 +838,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [0.4.1]: https://github.com/rmnldwg/lymph/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/rmnldwg/lymph/compare/0.3.10...0.4.0
 
+[#95]: https://github.com/rmnldwg/lymph/issues/95
 [#88]: https://github.com/rmnldwg/lymph/issues/88
 [#87]: https://github.com/rmnldwg/lymph/issues/87
 [#85]: https://github.com/rmnldwg/lymph/issues/85
@@ -810,6 +859,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 [#53]: https://github.com/rmnldwg/lymph/issues/53
 [#46]: https://github.com/rmnldwg/lymph/issues/46
 [#45]: https://github.com/rmnldwg/lymph/issues/45
+[#42]: https://github.com/rmnldwg/lymph/issues/42
 [#41]: https://github.com/rmnldwg/lymph/issues/41
 [#40]: https://github.com/rmnldwg/lymph/issues/40
 [#38]: https://github.com/rmnldwg/lymph/issues/38
