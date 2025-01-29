@@ -27,6 +27,21 @@ def binary_unilateral_model() -> models.Unilateral:
     return model
 
 
+@pytest.fixture()
+def binary_bilateral_model() -> models.Bilateral:
+    """Return a binary bilateral model."""
+    model = models.Bilateral(graph_dict=get_graph(size="small"))
+    model.set_distribution(
+        t_stage="early",
+        distribution=_create_random_frozen_dist(max_time=model.max_time),
+    )
+    model.set_distribution(
+        t_stage="late",
+        distribution=_create_random_parametric_dist(max_time=model.max_time),
+    )
+    return model
+
+
 def test_set_named_params_default_behavior(
     binary_unilateral_model: models.Unilateral,
 ) -> None:
@@ -39,6 +54,7 @@ def test_set_named_params_default_behavior(
 
 def test_named_params_setter(
     binary_unilateral_model: models.Unilateral,
+    binary_bilateral_model: models.Midline,
 ) -> None:
     """Check that setting `named_params` works correctly."""
     with pytest.raises(ValueError):
@@ -50,6 +66,9 @@ def test_named_params_setter(
     with pytest.raises(ValueError):
         binary_unilateral_model.named_params = 123
 
+    with pytest.raises(ValueError):
+        binary_bilateral_model.named_params = ["spread_ipsi"]
+
     params = binary_unilateral_model.get_params(as_dict=True).keys()
     params_subset = [param for param in params if RNG.uniform() > 0.5]
     binary_unilateral_model.named_params = params_subset
@@ -60,6 +79,9 @@ def test_named_params_setter(
         strict=True,
     ):
         assert stored == subset
+
+    binary_bilateral_model.named_params = ["ipsi_spread"]
+    assert binary_bilateral_model.named_params == ["ipsi_spread"]
 
 
 def test_set_named_params_named_easy_subset(
@@ -90,6 +112,15 @@ def test_set_named_params_named_easy_subset(
             assert new_val == stored_params[param]
 
     assert set(params_subset.keys()) == set(binary_unilateral_model.named_params)
+
+
+def test_set_named_params_raises(
+    binary_unilateral_model: models.Unilateral,
+) -> None:
+    """Ensure `set_named_params` raises when provided with invalid keys."""
+    binary_unilateral_model.named_params = ["spread"]
+    with pytest.raises(ValueError):
+        binary_unilateral_model.set_named_params(invalid=RNG.uniform())
 
 
 def test_set_named_params_named_hard_subset(
@@ -126,3 +157,24 @@ def test_set_named_params_named_hard_subset(
             assert params_subset["spread"] == stored_param
         else:
             assert new_val == stored_param
+
+
+def test_set_global_params_for_side(
+    binary_bilateral_model: models.Bilateral,
+) -> None:
+    """Check that setting e.g. `"ipsi_spread"` works as global param to ipsi side."""
+    params = binary_bilateral_model.get_params(as_dict=True)
+    new_params = {param: RNG.uniform() for param in params.keys()}
+
+    binary_bilateral_model.named_params = ["ipsi_spread"]
+    binary_bilateral_model.set_params(**new_params)
+    ipsi_spread_val = RNG.uniform()
+    binary_bilateral_model.set_named_params(ipsi_spread=ipsi_spread_val)
+
+    ipsi_stored_params = binary_bilateral_model.ipsi.get_params(as_dict=True)
+
+    for param, stored_param in ipsi_stored_params.items():
+        if "spread" in param:
+            assert stored_param == ipsi_spread_val
+        else:
+            assert stored_param in new_params.values()
