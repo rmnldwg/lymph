@@ -10,7 +10,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from lymph import diagnosis_times, modalities, models, types, utils
+from lymph import diagnosis_times, mixins, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ def select_hpv_model(method):
 class HPVUnilateral(
     diagnosis_times.Composite,
     modalities.Composite,
+    mixins.NamedParamsMixin,
     types.Model,
 ):
     """Class that models metastatic progression in HPV and non HPV lymphatic systems.
