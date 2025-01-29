@@ -37,7 +37,7 @@ def check_spsn(spsn: list[float]):
     if not has_len_2 or not is_above_lb or not is_below_ub:
         raise ValueError(
             "For each modality provide a list of two decimals between 0.5 and 1.0 as "
-            "specificity & sensitivity respectively."
+            "specificity & sensitivity respectively.",
         )
 
 
@@ -105,7 +105,7 @@ def clinical(spsn: list) -> np.ndarray:
             [sp, 1.0 - sp],
             [sp, 1.0 - sp],
             [1.0 - sn, sn],
-        ]
+        ],
     )
 
 
@@ -122,7 +122,7 @@ def pathological(spsn: list) -> np.ndarray:
             [sp, 1.0 - sp],
             [1.0 - sn, sn],
             [1.0 - sn, sn],
-        ]
+        ],
     )
 
 
@@ -408,3 +408,23 @@ def add_or_mult(llh: float, arr: np.ndarray, log: bool = True) -> float:
     if log:
         return llh + np.sum(np.log(arr))
     return llh * np.prod(arr)
+
+
+def does_contain_in_order(sequence: Sequence, items: Sequence) -> bool:
+    """Check if ``sequence`` contains ``items`` in the same order.
+
+    >>> does_contain_in_order(["ipsi", "TtoII", "spread"], ["ipsi", "spread"])
+    True
+    >>> does_contain_in_order(["ipsi", "TtoII", "spread"], ["spread", "ipsi"])
+    False
+    """
+    if not items:
+        return True
+
+    if not sequence:
+        return False
+
+    if sequence[0] == items[0]:
+        return does_contain_in_order(sequence[1:], items[1:])
+
+    return does_contain_in_order(sequence[1:], items)

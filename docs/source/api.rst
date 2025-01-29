@@ -7,6 +7,7 @@ Detailed API
 
     graph
     models
+    mixins
     components
     types
     utils

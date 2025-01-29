@@ -93,7 +93,7 @@ class Modality:
             [
                 [self.spec, 1.0 - self.spec],
                 [1.0 - self.sens, self.sens],
-            ]
+            ],
         )
 
     @property

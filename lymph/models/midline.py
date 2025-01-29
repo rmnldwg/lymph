@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
-from lymph import diagnosis_times, matrix, modalities, models, types, utils
+from lymph import diagnosis_times, matrix, mixins, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -23,13 +23,14 @@ CENTRAL_COL = ("tumor", "1", "central")
 class Midline(
     diagnosis_times.Composite,
     modalities.Composite,
+    mixins.NamedParamsMixin,
     types.Model,
 ):
     r"""Models metastatic progression bilaterally with tumor lateralization.
 
     Model a bilateral lymphatic system where an additional risk factor can
     be provided in the data: Whether or not the primary tumor extended over the
-    mid-sagittal line, or is located on the mid-saggital line.
+    mid-sagittal line, or is located on the mid-sagittal line.
 
     It is reasonable to assume (and supported by data) that an extension of the primary
     tumor significantly increases the risk for metastatic spread to the contralateral
@@ -40,11 +41,11 @@ class Midline(
     side. Formally:
 
     .. math::
-        b_c^{\\in} = \\alpha \\cdot b_i + (1 - \\alpha) \\cdot b_c^{\\not\\in}
+        b_c^{\in} = \alpha \cdot b_i + (1 - \alpha) \cdot b_c^{\not\in}
 
-    where :math:`b_c^{\\in}` is the probability of spread from the primary tumor
+    where :math:`b_c^{\in}` is the probability of spread from the primary tumor
     to the contralateral side for patients with midline extension, and
-    :math:`b_c^{\\not\\in}` for patients without. :math:`\\alpha` is the linear
+    :math:`b_c^{\not\in}` for patients without. :math:`\alpha` is the linear
     mixing parameter.
     """
 
@@ -53,8 +54,9 @@ class Midline(
         graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
         use_mixing: bool = True,
-        use_central: bool = True,
+        use_central: bool = False,
         use_midext_evo: bool = True,
+        named_params: Sequence[str] | None = None,
         marginalize_unknown: bool = True,
         uni_kwargs: dict[str, Any] | None = None,
         **_kwargs,
@@ -73,7 +75,7 @@ class Midline(
         the LNLs. And ``use_central``, which controls whether to use a third
         :py:class:`~.Bilateral` model for the case of a central tumor location.
 
-        The parameter ``use_midext_evo`` decides whether the tumor's midline extions
+        The parameter ``use_midext_evo`` decides whether the tumor's midline extensions
         should be considered a random variable, in which case it is evolved like the
         state of the LNLs, or not.
 
@@ -87,14 +89,13 @@ class Midline(
 
         The ``uni_kwargs`` are passed to all bilateral models.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:class:`Bilateral`: Two to four of these are held as attributes by this
             class. One for the case of a mid-sagittal extension of the primary
             tumor, one for the case of no such extension, (possibly) one for the case of
             a central/symmetric tumor, and (possibly) one for the case of unknown
             midline extension status.
-
         """
         if is_symmetric is None:
             is_symmetric = {}
@@ -152,6 +153,9 @@ class Midline(
             self.mixing_param = 0.0
 
         self.midext_prob = 0.0
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,
@@ -477,7 +481,7 @@ class Midline(
         self,
         *args: float,
         **kwargs: float,
-    ) -> types.ParamsType:
+    ) -> Iterable[float]:
         """Set all parameters of the model.
 
         Combines the calls to :py:meth:`.set_spread_params` and
@@ -599,7 +603,7 @@ class Midline(
         mode: Literal["HMM", "BN"] = "HMM",
         central: bool = False,
     ) -> np.ndarray:
-        """Compute the joint over ipsi- & contralaleral hidden states and midline ext.
+        """Compute the joint over ipsi- & contralateral hidden states and midline ext.
 
         If ``central=False``, the result has shape (2, num_states, num_states), where
         the first axis is for the midline extension status, the second for the
@@ -636,8 +640,8 @@ class Midline(
         ignored. The provided state distribution may be 2D or 3D. The returned
         distribution will have the same dimensionality.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
@@ -728,16 +732,15 @@ class Midline(
         to the :py:class:`.Bilateral` model, the midline model does not support the
         Bayesian network mode.
 
-        Note:
-        ----
+        .. note::
+
             The computation is faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
-        See Also:
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
-
         """
         try:
             # all functions and methods called here should raise a ValueError if the
@@ -769,13 +772,12 @@ class Midline(
         mid-sagittal line (``midext``), and whether it is central (``central``, only
         used if :py:attr:`use_central` is ``True``).
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.types.Model.posterior_state_dist`
                 The corresponding method in the base class.
             :py:meth:`.Bilateral.posterior_state_dist`
                 The bilateral method that is ultimately called by this one.
-
         """
         # NOTE: When given a 2D state distribution, it does not matter which of the
         #       Bilateral models is used to compute the risk, since the state dist is
@@ -876,8 +878,8 @@ class Midline(
         For logical reasons, ``midext=False`` makes no sense if ``central=True`` and
         is thus ignored.
 
-        Warning:
-        -------
+        .. warning::
+
             As in the :py:meth:`.Bilateral.posterior_state_dist` method, you may
             provide a precomputed (joint) state distribution in the ``given_state_dist``
             argument. Here, this ``given_state_dist`` may be a 2D array, in which case
@@ -888,7 +890,6 @@ class Midline(
             argument is *not* ignored: It may be used to select the correct state
             distribution (when ``True`` or ``False``), or marginalize over the midline
             extension status (when ``midext=None``).
-
         """
         posterior_state_dist = self.posterior_state_dist(
             given_params=given_params,

@@ -100,7 +100,9 @@ class Distribution:
             self._frozen = self.pmf
 
     def _init_from_frozen(
-        self, distribution: Iterable[float], max_time: int | None = None
+        self,
+        distribution: Iterable[float],
+        max_time: int | None = None,
     ):
         """Initialize the distribution from a frozen distribution."""
         if max_time is None:
@@ -109,7 +111,7 @@ class Distribution:
         if max_time != len(distribution) - 1:
             raise ValueError(
                 f"max_time {max_time} and len of distribution {len(distribution)} "
-                "don't match"
+                "don't match",
             )
 
         self.max_time = max_time
@@ -343,7 +345,7 @@ class Composite(ABC):
 
             if not are_all_equal:
                 warnings.warn(
-                    f"Not all max_times were equal. Set all to {self._max_time}"
+                    f"Not all max_times were equal. Set all to {self._max_time}",
                 )
 
             return self._max_time
@@ -429,7 +431,8 @@ class Composite(ABC):
                 child.del_distribution(t_stage)
 
     def replace_all_distributions(
-        self: DC, distributions: dict[str, Distribution]
+        self: DC,
+        distributions: dict[str, Distribution],
     ) -> None:
         """Replace all distributions with the given ones."""
         if self._is_distribution_leaf:
@@ -492,12 +495,15 @@ class Composite(ABC):
         return params if as_dict else params.values()
 
     def set_distribution_params(
-        self: DC, *args: float, **kwargs: float
+        self: DC,
+        *args: float,
+        **kwargs: float,
     ) -> tuple[float]:
         """Set the parameters of all distributions."""
         if self._is_distribution_leaf:
             kwargs, global_kwargs = unflatten_and_split(
-                kwargs, expected_keys=self._distributions.keys()
+                kwargs,
+                expected_keys=self._distributions.keys(),
             )
             for t_stage, distribution in self._distributions.items():
                 if not distribution.is_updateable:
@@ -509,7 +515,8 @@ class Composite(ABC):
             return args
 
         kwargs, global_kwargs = unflatten_and_split(
-            kwargs, expected_keys=self._distribution_children.keys()
+            kwargs,
+            expected_keys=self._distribution_children.keys(),
         )
         for key, child in self._distribution_children.items():
             child_kwargs = global_kwargs.copy()

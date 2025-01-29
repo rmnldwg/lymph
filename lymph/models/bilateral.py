@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
-from lymph import diagnosis_times, matrix, modalities, models, types, utils
+from lymph import diagnosis_times, matrix, mixins, modalities, models, types, utils
 
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class Bilateral(
     diagnosis_times.Composite,
     modalities.Composite,
+    mixins.NamedParamsMixin,
     types.Model,
 ):
     """Class that models metastatic progression in a bilateral lymphatic system.
@@ -28,18 +29,18 @@ class Bilateral(
     contralateral side of the neck. The two sides are assumed to be independent of each
     other, given the diagnosis time over which we marginalize.
 
-    See Also
-    --------
+    .. seealso::
+
         :py:class:`~lymph.models.Unilateral`
             Two instances of this class are created as attributes. One for the ipsi- and
             one for the contralateral side of the neck.
-
     """
 
     def __init__(
         self,
         graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
+        named_params: Sequence[str] | None = None,
         uni_kwargs: dict[str, Any] | None = None,
         ipsi_kwargs: dict[str, Any] | None = None,
         contra_kwargs: dict[str, Any] | None = None,
@@ -56,8 +57,8 @@ class Bilateral(
         model are symmetric. Valid keys are ``"tumor_spread"`` and ``"lnl_spread"``.
         The values are booleans, with ``True`` meaning that the aspect is symmetric.
 
-        Note:
-        ----
+        .. note::
+
             The symmetries of tumor and LNL spread are only guaranteed if the
             respective parameters are set via the :py:meth:`.set_params()` method of
             this bilateral model. It is still possible to set different parameters for
@@ -69,7 +70,6 @@ class Bilateral(
         contralateral side, respectively. The ipsi- and contralateral kwargs override
         the unilateral kwargs and may also override the ``graph_dict``. This allows the
         user to specify different graphs for the two sides of the neck.
-
         """
         self._init_models(
             graph_dict=graph_dict,
@@ -85,6 +85,9 @@ class Bilateral(
         is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
 
         self.is_symmetric = is_symmetric
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,
@@ -147,7 +150,7 @@ class Bilateral(
     def is_trinary(self) -> bool:
         """Return whether the model is trinary."""
         if self.ipsi.is_trinary != self.contra.is_trinary:
-            raise ValueError("Both sides must be of the same 'naryity'.")
+            raise ValueError("Both sides must be of the same 'narity'.")
 
         return self.ipsi.is_trinary
 
@@ -155,7 +158,7 @@ class Bilateral(
     def is_binary(self) -> bool:
         """Return whether the model is binary."""
         if self.ipsi.is_binary != self.contra.is_binary:
-            raise ValueError("Both sides must be of the same 'naryity'.")
+            raise ValueError("Both sides must be of the same 'narity'.")
 
         return self.ipsi.is_binary
 
@@ -180,7 +183,7 @@ class Bilateral(
             if params["ipsi"] != params["contra"]:
                 warnings.warn(
                     "The tumor spread parameters are not symmetric. "
-                    "Returning the ipsilateral parameters."
+                    "Returning the ipsilateral parameters.",
                 )
 
             params = params["ipsi"]
@@ -197,7 +200,7 @@ class Bilateral(
     ) -> types.ParamsType:
         """Return the parameters of the model's spread from LNLs to tumor.
 
-        Similarily to the :py:meth:`.get_tumor_spread_params` method, this returns only
+        Similarly to the :py:meth:`.get_tumor_spread_params` method, this returns only
         one dictionary if the attribute dictionary :py:attr:`.is_symmetric` stores the
         key-value pair ``"lnl_spread": True``. Otherwise, the parameters are returned
         as a dictionary with two keys, ``"ipsi"`` and ``"contra"``.
@@ -211,7 +214,7 @@ class Bilateral(
             if params["ipsi"] != params["contra"]:
                 warnings.warn(
                     "The LNL spread parameters are not symmetric. "
-                    "Returning the ipsilateral parameters."
+                    "Returning the ipsilateral parameters.",
                 )
 
             params = params["ipsi"]
@@ -308,7 +311,8 @@ class Bilateral(
     def set_tumor_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread from tumor to LNLs."""
         kwargs, global_kwargs = utils.unflatten_and_split(
-            kwargs, expected_keys=["ipsi", "contra"]
+            kwargs,
+            expected_keys=["ipsi", "contra"],
         )
 
         ipsi_kwargs = global_kwargs.copy()
@@ -417,8 +421,8 @@ class Bilateral(
         first marginalized over the diagnosis time distributions of the respective
         ``t_stage``.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.state_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
@@ -449,8 +453,8 @@ class Bilateral(
     ) -> np.ndarray:
         """Compute the joint distribution over the ipsi- & contralateral observations.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.obs_dist`
                 The corresponding unilateral function. Note that this method returns
                 a 2D array, because it computes the probability of any possible
@@ -530,13 +534,13 @@ class Bilateral(
         determines whether the likelihood is computed for the hidden Markov model
         (``"HMM"``) or the Bayesian network (``"BN"``).
 
-        Note:
-        ----
+        .. note::
+
             The computation is much faster if no parameters are given, since then the
             transition matrix does not need to be recomputed.
 
-        See Also:
-        --------
+        .. seealso::
+
             :py:meth:`.Unilateral.likelihood`
                 The corresponding unilateral function.
 
@@ -571,8 +575,8 @@ class Bilateral(
         Essentially, this is the risk for any possible combination of ipsi- and
         contralateral involvement, given the provided diagnosis.
 
-        Warning:
-        -------
+        .. warning::
+
             As in the :py:meth:`.Unilateral.posterior_state_dist` method, one may
             provide a precomputed (joint) state dist via the ``given_state_dist``
             argument (should be a square matrix). In this case, the ``given_params``
@@ -582,7 +586,6 @@ class Bilateral(
 
             However, this will mean that ``t_stage`` and ``mode`` are also ignored,
             since these are only used to compute the state distribution.
-
         """
         if given_state_dist is None:
             utils.safe_set_params(self, given_params)
@@ -597,7 +600,7 @@ class Bilateral(
                 warnings.warn(f"No diagnosis given for {side}lateral side.")
 
             diagnosis_encoding = getattr(self, side).compute_encoding(
-                given_diagnosis.get(side, {})
+                given_diagnosis.get(side, {}),
             )
             observation_matrix = getattr(self, side).observation_matrix()
             # vector with P(Z=z|X) for each state X. A data matrix for one "patient"
@@ -689,15 +692,14 @@ class Bilateral(
     ) -> pd.DataFrame:
         """Draw ``num`` random patients from the parametrized model.
 
-        See Also
-        --------
+        .. seealso::
+
             :py:meth:`.diagnosis_times.Distribution.draw_diag_times`
                 Method to draw diagnosis times from a distribution.
             :py:meth:`.Unilateral.draw_diagnosis`
                 Method to draw individual diagnosis from a unilateral model.
             :py:meth:`.Unilateral.draw_patients`
                 The unilateral method to draw a synthetic dataset.
-
         """
         if rng is None:
             rng = np.random.default_rng(seed)

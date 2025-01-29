@@ -16,7 +16,7 @@
     :target: https://lymph-model.readthedocs.io
 
 
-A Python package for statistical modelling of lymphatic metastatic spread in head & neck squamous cell carinoma (HNSCC).
+A Python package for statistical modelling of lymphatic metastatic spread in head & neck squamous cell carcinoma (HNSCC).
 
 
 Motivation
@@ -34,7 +34,7 @@ Our Goal
 
 With this Python package we want to provide a framework to accurately predict the risk for microscopic metastases in any lymph node level for the specific diagnosis a particular patient presents with.
 
-The implemented model is highly interpretable and was developed together with clinicians to accurately represent the anatomy of the lymphatic drainiage. It can be trained with data that reports the patterns of lymphatic progression in detail, like the `dataset(s) <https://github.com/rmnldwg/lydata>`_ we collected at our institution, the University Hospital Zurich (USZ).
+The implemented model is highly interpretable and was developed together with clinicians to accurately represent the anatomy of the lymphatic drainage. It can be trained with data that reports the patterns of lymphatic progression in detail, like the `dataset(s) <https://github.com/rmnldwg/lydata>`_ we collected at our institution, the University Hospital Zurich (USZ).
 
 The mathematical details of the models can be found in in our earlier publications [7]_ [8]_.
 
