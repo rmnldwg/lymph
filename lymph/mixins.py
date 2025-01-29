@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from lymph.types import ParamsType
+from lymph.utils import does_contain_in_order
 
 
 class NamedParamsMixin:
@@ -52,14 +53,22 @@ class NamedParamsMixin:
             except TypeError as te:
                 raise ValueError("Named params must be castable to a sequence.") from te
 
-        default_params = self.get_params(as_dict=True, as_flat=True).keys()
-        joined_defaults = "|".join(default_params)
+        default_params = list(self.get_params(as_dict=True, as_flat=True).keys())
 
         for name in new_names:
             if not name.isidentifier():
                 raise ValueError(f"Named param {name} isn't valid identifier.")
-            if name not in joined_defaults:
-                raise ValueError(f"Named param {name} not among settable params.")
+
+            is_valid = False
+            for default_name in default_params:
+                if does_contain_in_order(
+                    sequence=default_name.split("_"),
+                    items=name.split("_"),
+                ):
+                    is_valid = True
+
+            if not is_valid:
+                raise ValueError(f"Named param {name} is not a settable param.")
 
         self._named_params = new_names
 
@@ -77,7 +86,16 @@ class NamedParamsMixin:
         return named_params if as_dict else named_params.values()
 
     def set_named_params(self, *args, **kwargs) -> None:
-        """Set the values of the :py:attr:`.named_params`."""
+        """Set the values of the :py:attr:`.named_params`.
+
+        .. note::
+
+            Positional arguments are overwritten by keyword arguments, which must only
+            contain keys that are in :py:attr:`.named_params`.
+        """
+        if not set(self.named_params).issuperset(kwargs.keys()):
+            raise ValueError(f"Kwargs must be subset of named params, but is {kwargs}.")
+
         new_params = dict(zip(self.named_params, args, strict=False))
         new_params.update(kwargs)
         self.set_params(**new_params)
