@@ -99,15 +99,10 @@ def test_set_named_params_named_easy_subset(
     binary_unilateral_model.named_params = params_subset.keys()
     binary_unilateral_model.set_named_params(**params_subset)
 
-    for param, new_val, subset_val in zip(
-        params.keys(),
-        new_params.values(),
-        params_subset.values(),
-        strict=True,
-    ):
+    for param, new_val in new_params.items():
         stored_params = binary_unilateral_model.get_params(as_dict=True)
         if param in params_subset:
-            assert subset_val == stored_params[param]
+            assert params_subset[param] == stored_params[param]
         else:
             assert new_val == stored_params[param]
 

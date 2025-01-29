@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
 import numpy as np
@@ -34,13 +34,13 @@ class Bilateral(
         :py:class:`~lymph.models.Unilateral`
             Two instances of this class are created as attributes. One for the ipsi- and
             one for the contralateral side of the neck.
-
     """
 
     def __init__(
         self,
         graph_dict: types.GraphDictType,
         is_symmetric: dict[str, bool] | None = None,
+        named_params: Sequence[str] | None = None,
         uni_kwargs: dict[str, Any] | None = None,
         ipsi_kwargs: dict[str, Any] | None = None,
         contra_kwargs: dict[str, Any] | None = None,
@@ -85,6 +85,9 @@ class Bilateral(
         is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
 
         self.is_symmetric = is_symmetric
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,

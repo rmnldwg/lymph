@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from itertools import product
 from typing import Any, Literal
 
@@ -49,6 +49,7 @@ class Unilateral(
     def __init__(
         self,
         graph_dict: types.GraphDictType,
+        named_params: Sequence[str] | None = None,
         tumor_state: int | None = None,
         allowed_states: list[int] | None = None,
         max_time: int = 10,
@@ -98,6 +99,9 @@ class Unilateral(
             tumor_state=tumor_state,
             allowed_states=allowed_states,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,

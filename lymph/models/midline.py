@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
 import numpy as np
@@ -56,6 +56,7 @@ class Midline(
         use_mixing: bool = True,
         use_central: bool = False,
         use_midext_evo: bool = True,
+        named_params: Sequence[str] | None = None,
         marginalize_unknown: bool = True,
         uni_kwargs: dict[str, Any] | None = None,
         **_kwargs,
@@ -95,7 +96,6 @@ class Midline(
             tumor, one for the case of no such extension, (possibly) one for the case of
             a central/symmetric tumor, and (possibly) one for the case of unknown
             midline extension status.
-
         """
         if is_symmetric is None:
             is_symmetric = {}
@@ -153,6 +153,9 @@ class Midline(
             self.mixing_param = 0.0
 
         self.midext_prob = 0.0
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,

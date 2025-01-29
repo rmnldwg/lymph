@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import Sequence
 from functools import wraps
 from typing import Any, Literal
 
@@ -53,6 +54,7 @@ class HPVUnilateral(
     def __init__(
         self,
         graph_dict: types.GraphDictType,
+        named_params: Sequence[str] | None = None,
         uni_kwargs: dict[str, Any] | None = None,
         hpv_kwargs: dict[str, Any] | None = None,
         nohpv_kwargs: dict[str, Any] | None = None,
@@ -71,6 +73,9 @@ class HPVUnilateral(
             hpv_kwargs=hpv_kwargs,
             nohpv_kwargs=nohpv_kwargs,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,
