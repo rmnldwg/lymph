@@ -32,6 +32,16 @@ class DataWarning(UserWarning):
     """Warnings related to potential data issues."""
 
 
+class InvalidParamNamesError(Exception):
+    """Exception raised for invalid parameter names."""
+
+    def __init__(self, invalid_param_names: set[str]) -> None:
+        """Initialize the exception with the invalid parameter names."""
+        self.invalid_param_names = invalid_param_names
+        self.message = f"Invalid parameter names: {invalid_param_names}"
+        super().__init__(self.message)
+
+
 class HasSetParams(Protocol):
     """Protocol for classes that have a ``set_params`` method."""
 
@@ -232,7 +242,8 @@ class Model(ABC):
             contain keys that are in :py:attr:`.named_params`.
         """
         if not set(self.named_params).issuperset(kwargs.keys()):
-            raise ValueError(f"Kwargs must be subset of named params, but is {kwargs}.")
+            invalid = set(kwargs.keys()) - set(self.named_params)
+            raise InvalidParamNamesError(invalid_param_names=invalid)
 
         new_params = dict(zip(self.named_params, args, strict=False))
         new_params.update(kwargs)

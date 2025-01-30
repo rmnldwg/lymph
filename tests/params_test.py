@@ -3,6 +3,7 @@
 import pytest
 
 from lymph import models
+from lymph.types import InvalidParamNamesError
 
 from .fixtures import (
     RNG,
@@ -114,7 +115,7 @@ def test_set_named_params_raises(
 ) -> None:
     """Ensure `set_named_params` raises when provided with invalid keys."""
     binary_unilateral_model.named_params = ["spread"]
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidParamNamesError):
         binary_unilateral_model.set_named_params(invalid=RNG.uniform())
 
 
@@ -124,7 +125,7 @@ def test_set_named_params_named_hard_subset(
     """Ensure `set_named_params` works correctly with a hard subset.
 
     A "hard subset" is a subset that includes "global params". I.e., `spread` would
-    not be a literal subset, because those are nemad something like `TtoII_spread`. But
+    not be a literal subset, because those are named something like `TtoII_spread`. But
     the `set_params()` method does accept it and will set all spread params with the
     provided value. It should be possible to set the `named_params` to such names and
     then set them with the `set_named_params()` method.
