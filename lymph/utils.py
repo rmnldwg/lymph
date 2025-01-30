@@ -408,23 +408,3 @@ def add_or_mult(llh: float, arr: np.ndarray, log: bool = True) -> float:
     if log:
         return llh + np.sum(np.log(arr))
     return llh * np.prod(arr)
-
-
-def does_contain_in_order(sequence: Sequence, items: Sequence) -> bool:
-    """Check if ``sequence`` contains ``items`` in the same order.
-
-    >>> does_contain_in_order(["ipsi", "TtoII", "spread"], ["ipsi", "spread"])
-    True
-    >>> does_contain_in_order(["ipsi", "TtoII", "spread"], ["spread", "ipsi"])
-    False
-    """
-    if not items:
-        return True
-
-    if not sequence:
-        return False
-
-    if sequence[0] == items[0]:
-        return does_contain_in_order(sequence[1:], items[1:])
-
-    return does_contain_in_order(sequence[1:], items)
