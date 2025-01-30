@@ -935,10 +935,8 @@ class Unilateral(
                 Method to draw individual diagnosis.
             :py:meth:`lymph.models.Bilateral.draw_patients`
                 The corresponding bilateral method.
-
         """
-        if rng is None:
-            rng = np.random.default_rng(seed)
+        rng = rng or np.random.default_rng(seed)
 
         if sum(stage_dist) != 1.0:
             warnings.warn("Sum of stage distribution is not 1. Renormalizing.")

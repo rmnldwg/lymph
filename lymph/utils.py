@@ -367,9 +367,9 @@ def safe_set_params(
         return
 
     if isinstance(params, dict):
-        model.set_params(**params)
+        model.set_named_params(**params)
     else:
-        model.set_params(*params)
+        model.set_named_params(*params)
 
 
 def synchronize_params(
