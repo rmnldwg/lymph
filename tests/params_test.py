@@ -3,6 +3,7 @@
 import pytest
 
 from lymph import models
+from lymph.types import ExtraParamsError
 
 from .fixtures import (
     RNG,
@@ -58,16 +59,10 @@ def test_named_params_setter(
 ) -> None:
     """Check that setting `named_params` works correctly."""
     with pytest.raises(ValueError):
-        binary_unilateral_model.named_params = ["some_param"]
-
-    with pytest.raises(ValueError):
         binary_unilateral_model.named_params = ["invalid identifier!"]
 
     with pytest.raises(ValueError):
         binary_unilateral_model.named_params = 123
-
-    with pytest.raises(ValueError):
-        binary_bilateral_model.named_params = ["spread_ipsi"]
 
     params = binary_unilateral_model.get_params(as_dict=True).keys()
     params_subset = [param for param in params if RNG.uniform() > 0.5]
@@ -114,17 +109,17 @@ def test_set_named_params_raises(
 ) -> None:
     """Ensure `set_named_params` raises when provided with invalid keys."""
     binary_unilateral_model.named_params = ["spread"]
-    with pytest.raises(ValueError):
+    with pytest.raises(ExtraParamsError):
         binary_unilateral_model.set_named_params(invalid=RNG.uniform())
 
 
-def test_set_named_params_named_hard_subset(
+def test_set_named_params_hard_subset(
     binary_unilateral_model: models.Unilateral,
 ) -> None:
     """Ensure `set_named_params` works correctly with a hard subset.
 
     A "hard subset" is a subset that includes "global params". I.e., `spread` would
-    not be a literal subset, because those are nemad something like `TtoII_spread`. But
+    not be a literal subset, because those are named something like `TtoII_spread`. But
     the `set_params()` method does accept it and will set all spread params with the
     provided value. It should be possible to set the `named_params` to such names and
     then set them with the `set_named_params()` method.
@@ -152,6 +147,24 @@ def test_set_named_params_named_hard_subset(
             assert params_subset["spread"] == stored_param
         else:
             assert new_val == stored_param
+
+
+def test_get_named_params_hard_subset(
+    binary_unilateral_model: models.Unilateral,
+) -> None:
+    """Check that getting globals like `spread` works correctly."""
+    params = binary_unilateral_model.get_params(as_dict=True)
+    new_params = {param: RNG.uniform() for param in params.keys()}
+    first_lnl = list(binary_unilateral_model.graph.lnls.keys())[0]
+    first_lnl_param = f"Tto{first_lnl}_spread"
+    params_subset = {k: RNG.uniform() for k in ["spread", first_lnl_param]}
+
+    binary_unilateral_model.set_params(**new_params)
+    binary_unilateral_model.named_params = params_subset.keys()
+    binary_unilateral_model.set_named_params(**params_subset)
+
+    stored_params = binary_unilateral_model.get_named_params()
+    assert params_subset == stored_params
 
 
 def test_set_global_params_for_side(

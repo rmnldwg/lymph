@@ -11,10 +11,8 @@ import numpy as np
 import pandas as pd
 from cachetools import LRUCache
 
-from lymph import diagnosis_times, graph, matrix, mixins, modalities, types, utils
-
-# pylint: disable=unused-import
-from lymph.utils import (  # nopycln: import
+from lymph import diagnosis_times, graph, matrix, modalities, types, utils
+from lymph.utils import (
     add_or_mult,
     dict_to_func,  # noqa: F401
     draw_diagnosis,  # noqa: F401
@@ -34,7 +32,6 @@ RAW_T_COL = ("tumor", "1", "t_stage")
 class Unilateral(
     diagnosis_times.Composite,
     modalities.Composite,
-    mixins.NamedParamsMixin,
     types.Model,
 ):
     """Class that models metastatic progression in a unilateral lymphatic system.
@@ -938,10 +935,8 @@ class Unilateral(
                 Method to draw individual diagnosis.
             :py:meth:`lymph.models.Bilateral.draw_patients`
                 The corresponding bilateral method.
-
         """
-        if rng is None:
-            rng = np.random.default_rng(seed)
+        rng = rng or np.random.default_rng(seed)
 
         if sum(stage_dist) != 1.0:
             warnings.warn("Sum of stage distribution is not 1. Renormalizing.")
