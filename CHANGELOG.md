@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2025-01-31
+
+### Bug Fixes
+
+- `get_named_params()` returns only named params and doesn't raise an error anymore.
+- Add deleter to `named_params` property.
+
+### Change
+
+- Move `named_params` stuff from dedicated mixin to `types.Model`.
+- Raise explicit invalid param name error.\
+  This ensures that e.g. during sampling, the likelihood does not simply
+  return `-np.inf` because it sees a `ValueError`.
+- Call `set_named_params()` in likelihoods.\
+  This ensures that a model definition is respected during inference and
+  also when reloading sampled parameters. In case no `named_params` are
+  provided, this will simply behave as `set_params()`.
+
 ## [1.3.0] - 2025-01-29
 
 ### Bug Fixes
@@ -819,10 +837,11 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
+[1.3.1]: https://github.com/rmnldwg/lymph/compare/1.3.0...1.3.1
 [1.3.0]: https://github.com/rmnldwg/lymph/compare/1.2.3...1.3.0
 [1.2.3]: https://github.com/rmnldwg/lymph/compare/1.2.2...1.2.3
 [1.2.2]: https://github.com/rmnldwg/lymph/compare/1.2.1...1.2.2
-[1.2.1]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.1
+[1.2.1]: https://github.com/rmnldwg/lymph/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/rmnldwg/lymph/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/rmnldwg/lymph/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/rmnldwg/lymph/compare/1.0.0.rc2...1.0.0
