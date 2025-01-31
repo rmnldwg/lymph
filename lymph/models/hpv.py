@@ -78,9 +78,6 @@ class HPVUnilateral(
             nohpv_kwargs=nohpv_kwargs,
         )
 
-        if named_params is not None:
-            self.named_params = named_params
-
         diagnosis_times.Composite.__init__(
             self,
             distribution_children={"hpv": self.hpv, "nohpv": self.nohpv},
@@ -91,6 +88,9 @@ class HPVUnilateral(
             modality_children={"hpv": self.hpv, "nohpv": self.nohpv},
             is_modality_leaf=False,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
     def _init_models(
         self,

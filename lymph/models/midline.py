@@ -96,9 +96,7 @@ class Midline(
             a central/symmetric tumor, and (possibly) one for the case of unknown
             midline extension status.
         """
-        if is_symmetric is None:
-            is_symmetric = {}
-
+        is_symmetric = is_symmetric or {}
         is_symmetric["tumor_spread"] = is_symmetric.get("tumor_spread", False)
         is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
 
@@ -153,9 +151,6 @@ class Midline(
 
         self.midext_prob = 0.0
 
-        if named_params is not None:
-            self.named_params = named_params
-
         diagnosis_times.Composite.__init__(
             self,
             distribution_children={
@@ -170,6 +165,9 @@ class Midline(
             modality_children={"ext": self.ext, "noext": self.noext, **other_children},
             is_modality_leaf=False,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
     @classmethod
     def binary(cls, *args, **kwargs) -> Midline:

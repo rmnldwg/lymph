@@ -9,8 +9,9 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 import scipy as sp
+import pytest
 
-from lymph import diagnosis_times
+from lymph import diagnosis_times, models
 from lymph.modalities import Clinical, Modality, Pathological
 from lymph.models import Bilateral, Midline, Unilateral
 from lymph.types import PatternType
@@ -289,3 +290,33 @@ class MidlineFixtureMixin:
                 t_stage,
                 create_random_dist(type_, self.model.max_time, self.rng),
             )
+
+
+@pytest.fixture()
+def binary_unilateral_model() -> models.Unilateral:
+    """Return a binary unilateral model."""
+    model = models.Unilateral(graph_dict=get_graph(size="small"))
+    model.set_distribution(
+        t_stage="early",
+        distribution=_create_random_frozen_dist(max_time=model.max_time),
+    )
+    model.set_distribution(
+        t_stage="late",
+        distribution=_create_random_parametric_dist(max_time=model.max_time),
+    )
+    return model
+
+
+@pytest.fixture()
+def binary_bilateral_model() -> models.Bilateral:
+    """Return a binary bilateral model."""
+    model = models.Bilateral(graph_dict=get_graph(size="small"))
+    model.set_distribution(
+        t_stage="early",
+        distribution=_create_random_frozen_dist(max_time=model.max_time),
+    )
+    model.set_distribution(
+        t_stage="late",
+        distribution=_create_random_parametric_dist(max_time=model.max_time),
+    )
+    return model

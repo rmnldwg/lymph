@@ -77,16 +77,10 @@ class Bilateral(
             contra_kwargs=contra_kwargs,
         )
 
-        if is_symmetric is None:
-            is_symmetric = {}
-
+        is_symmetric = is_symmetric or {}
         is_symmetric["tumor_spread"] = is_symmetric.get("tumor_spread", False)
         is_symmetric["lnl_spread"] = is_symmetric.get("lnl_spread", True)
-
         self.is_symmetric = is_symmetric
-
-        if named_params is not None:
-            self.named_params = named_params
 
         diagnosis_times.Composite.__init__(
             self,
@@ -98,6 +92,9 @@ class Bilateral(
             modality_children={"ipsi": self.ipsi, "contra": self.contra},
             is_modality_leaf=False,
         )
+
+        if named_params is not None:
+            self.named_params = named_params
 
     def _init_models(
         self,

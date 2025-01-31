@@ -6,10 +6,16 @@ import numpy as np
 from lymph import models
 from lymph.utils import flatten
 
-from . import fixtures
+from .fixtures import (
+    BilateralModelMixin,
+    binary_bilateral_model,
+    MODALITIES,
+    create_random_pattern,
+    get_graph,
+)
 
 
-class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
+class BilateralInitTest(BilateralModelMixin, unittest.TestCase):
     """Test the delegation of attrs from the unilateral class to the bilateral one."""
 
     def setUp(self):
@@ -56,8 +62,8 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
 
     def test_asymmetric_model(self):
         """Check if different graphs work for the ipsi and contra side."""
-        ipsi_graph = fixtures.get_graph("medium")
-        contra_graph = fixtures.get_graph("small")
+        ipsi_graph = get_graph("medium")
+        contra_graph = get_graph("small")
 
         model = models.Bilateral(
             graph_dict=ipsi_graph,
@@ -83,14 +89,14 @@ class BilateralInitTest(fixtures.BilateralModelMixin, unittest.TestCase):
 
 
 class ModalityDelegationTestCase(
-    fixtures.BilateralModelMixin,
+    BilateralModelMixin,
     unittest.TestCase,
 ):
     """Make sure the modality is delegated from the ipsi side correctly."""
 
     def setUp(self):
         super().setUp()
-        self.model.replace_all_modalities(fixtures.MODALITIES)
+        self.model.replace_all_modalities(MODALITIES)
 
     def test_modality_access(self):
         """Test that the modality can be accessed."""
@@ -156,7 +162,7 @@ class ModalityDelegationTestCase(
 
 
 class NoSymmetryParamsTestCase(
-    fixtures.BilateralModelMixin,
+    BilateralModelMixin,
     unittest.TestCase,
 ):
     """Test the parameter assignment when the model is not symmetric"""
@@ -241,7 +247,7 @@ class NoSymmetryParamsTestCase(
 
 
 class SymmetryParamsTestCase(
-    fixtures.BilateralModelMixin,
+    BilateralModelMixin,
     unittest.TestCase,
 ):
     """Test the parameter assignment when the model is symmetric."""
@@ -286,12 +292,12 @@ class SymmetryParamsTestCase(
         self.assertEqual(params_to_set, self.model.ipsi.get_params())
 
 
-class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+class LikelihoodTestCase(BilateralModelMixin, unittest.TestCase):
     """Check that the (log-)likelihood is computed correctly."""
 
     def setUp(self):
         super().setUp()
-        self.model.replace_all_modalities(fixtures.MODALITIES)
+        self.model.replace_all_modalities(MODALITIES)
         self.load_patient_data()
 
     def test_compute_likelihood_twice(self):
@@ -301,12 +307,12 @@ class LikelihoodTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         self.assertEqual(first_llh, second_llh)
 
 
-class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
+class RiskTestCase(BilateralModelMixin, unittest.TestCase):
     """Check that the risk is computed correctly."""
 
     def setUp(self):
         super().setUp()
-        self.model.replace_all_modalities(fixtures.MODALITIES)
+        self.model.replace_all_modalities(MODALITIES)
 
     def create_random_diagnosis(self):
         """Create a random diagnosis for each modality and LNL."""
@@ -317,7 +323,7 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
             side_model = getattr(self.model, side)
             lnl_names = side_model.graph.lnls.keys()
             for modality in side_model.get_all_modalities():
-                diagnosis[side][modality] = fixtures.create_random_pattern(lnl_names)
+                diagnosis[side][modality] = create_random_pattern(lnl_names)
 
         return diagnosis
 
@@ -340,8 +346,8 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
         random_parameters = self.create_random_params()
         random_diagnosis = self.create_random_diagnosis()
         random_pattern = {
-            "ipsi": fixtures.create_random_pattern(self.model.ipsi.graph.lnls.keys()),
-            "contra": fixtures.create_random_pattern(
+            "ipsi": create_random_pattern(self.model.ipsi.graph.lnls.keys()),
+            "contra": create_random_pattern(
                 self.model.contra.graph.lnls.keys()
             ),
         }
@@ -358,14 +364,14 @@ class RiskTestCase(fixtures.BilateralModelMixin, unittest.TestCase):
 
 
 class DataGenerationTestCase(
-    fixtures.BilateralModelMixin,
+    BilateralModelMixin,
     unittest.TestCase,
 ):
     """Check the binary model's data generation method."""
 
     def setUp(self):
         super().setUp()
-        self.model.replace_all_modalities(fixtures.MODALITIES)
+        self.model.replace_all_modalities(MODALITIES)
         self.init_diag_time_dists(early="frozen", late="parametric")
         self.model.set_params(**self.create_random_params())
 
@@ -387,3 +393,22 @@ class DataGenerationTestCase(
         self.assertAlmostEqual(
             (dataset["tumor", "1", "t_stage"] == "early").mean(), 0.5, delta=0.02
         )
+
+
+def test_get_params_without_distributions(
+    binary_bilateral_model: models.Bilateral,
+) -> None:
+    """Ensure the `get_params()` method works without distributions."""
+    params = binary_bilateral_model.get_params(as_dict=True, as_flat=True)
+    assert len(params) == binary_bilateral_model.get_num_dims()
+    assert params == binary_bilateral_model.get_named_params()
+
+
+def test_init_with_named_params() -> None:
+    """Make sure initializing a bilateral model with `named_params` works."""
+    model = models.Bilateral(
+        graph_dict=get_graph("small"),
+        named_params=["ipsi_spread", "contra_spread"],
+    )
+    assert model.named_params == ["ipsi_spread", "contra_spread"]
+    assert model.get_num_dims() == 2
