@@ -1,7 +1,8 @@
 """Type aliases and protocols used in the lymph package."""
 
+import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal, Protocol, TypeVar
 
 import numpy as np
@@ -9,7 +10,7 @@ import pandas as pd
 
 
 def does_contain_in_order(sequence: Sequence, items: Sequence) -> bool:
-    """Check if ``sequence`` contains ``items`` in the same order.
+    """Check if ``sequence`` contains ``items`` in the same order (gaps allowed).
 
     >>> does_contain_in_order(["ipsi", "TtoII", "spread"], ["ipsi", "spread"])
     True
@@ -28,18 +29,119 @@ def does_contain_in_order(sequence: Sequence, items: Sequence) -> bool:
     return does_contain_in_order(sequence[1:], items)
 
 
+def search_nested(
+    mapping: Mapping,
+    keys: Sequence[str],
+    raise_keyerror: bool = True,
+) -> list[float]:
+    """Search a nested mapping given a sequence of keys.
+
+    The first of the ``keys`` is used to access the first level of the mapping. If no
+    such key is found, it searches all the values of the first level if they have the
+    first of the ``keys``. Returns all matching values.
+
+    If nothing is found a KeyError is raised unless ``raise_keyerror`` is ``False``.
+
+    >>> nested = {"a": {"x": 0.1, "y": 0.2, "z": 0.3}, "b": {"x": 0.4}}
+    >>> search_nested(nested, ["b", "x"])
+    [0.4]
+    >>> search_nested(nested, ["x"])
+    [0.1, 0.4]
+    >>> search_nested(nested, ["z"])
+    [0.3]
+    >>> search_nested(nested, ["c"])
+    Traceback (most recent call last):
+    ...
+    KeyError: 'c'
+    >>> search_nested(nested, ["c"], raise_keyerror=False)
+    []
+    >>> search_nested(nested, ["a", "x", "foo"])
+    Traceback (most recent call last):
+    ...
+    TypeError: Expected `Mapping`, but got mapping=0.1. Too many keys?
+    """
+    if not isinstance(mapping, Mapping) and len(keys) == 0:
+        return [mapping]
+
+    if not isinstance(mapping, Mapping):
+        raise TypeError(f"Expected `Mapping`, but got {mapping=}. Too many keys?")
+
+    if len(keys) == 0:
+        raise ValueError("No keys provided.")
+
+    if keys[0] in mapping:
+        return search_nested(mapping[keys[0]], keys[1:])
+
+    results = []
+    for value in mapping.values():
+        try:
+            results.extend(search_nested(value, keys))
+        except (TypeError, KeyError):
+            continue
+
+    if len(results) == 0 and raise_keyerror:
+        raise KeyError(keys[0])
+
+    return results
+
+
 class DataWarning(UserWarning):
     """Warnings related to potential data issues."""
 
 
-class InvalidParamNamesError(Exception):
-    """Exception raised for invalid parameter names."""
+class InvalidParamNameWarning(UserWarning):
+    """Issues when an invalid parameter name is used."""
 
-    def __init__(self, invalid_param_names: set[str]) -> None:
-        """Initialize the exception with the invalid parameter names."""
-        self.invalid_param_names = invalid_param_names
-        self.message = f"Invalid parameter names: {invalid_param_names}"
+
+class ExtraParamsError(Exception):
+    """Exception raised when additional unrecognized parameters are passed."""
+
+    def __init__(self, extra_param_names: set[str]) -> None:
+        """Initialize the exception with the extra parameter names."""
+        self.invalid_param_names = extra_param_names
+        self.message = f"Additional unrecognized parameter names: {extra_param_names}"
         super().__init__(self.message)
+
+
+def create_alias_map(
+    all_params: Iterable[str],
+    named_params: Iterable[str],
+) -> dict[str, list[str]]:
+    """Create a mapping from named params to valid param names.
+
+    >>> all_params = ["TtoII_spread", "TtoIII_spread", "IItoIII_spread", "late_p"]
+    >>> named_params = ["spread", "TtoIII_spread"]
+    >>> create_alias_map(all_params, named_params)   # doctest: +NORMALIZE_WHITESPACE
+    {'spread': ['TtoII_spread', 'TtoIII_spread', 'IItoIII_spread'],
+     'TtoIII_spread': ['TtoIII_spread']}
+    """
+    param_aliases = {}
+
+    for named_param in named_params:
+        param_aliases[named_param] = []
+        for param in all_params:
+            if does_contain_in_order(
+                sequence=param.split("_"),
+                items=named_param.split("_"),
+            ):
+                param_aliases[named_param].append(param)
+
+    return param_aliases
+
+
+def reverse_alias_map(aliases: dict[str, Sequence[str]]) -> dict[str, str]:
+    """Reverse mapping from param aliases to valid param names.
+
+    >>> aliases = {
+    ...     "spread": ["TtoII_spread", "TtoIII_spread", "IItoIII_spread"],
+    ...     "TtoIII_spread": ["TtoIII_spread"],
+    ... }
+    >>> reverse_alias_map(aliases)   # doctest: +NORMALIZE_WHITESPACE
+    {'TtoII_spread': 'spread',
+     'TtoIII_spread': 'TtoIII_spread',
+     'IItoIII_spread': 'spread'}
+    """
+    return {alias: name for name, alias_list in aliases.items() for alias in alias_list}
 
 
 class HasSetParams(Protocol):
@@ -190,7 +292,13 @@ class Model(ABC):
                     is_valid = True
 
             if not is_valid:
-                raise ValueError(f"Named param {name} is not a settable param.")
+                warnings.warn(
+                    message=(
+                        f"Named param {name} is not a valid parameter name. "
+                        "This may lead to errors during getting/setting the parameters."
+                    ),
+                    category=InvalidParamNameWarning,
+                )
 
         self._named_params = new_names
 
@@ -229,8 +337,16 @@ class Model(ABC):
             method does not support the keyword argument ``as_flat``. The returned
             dictionary (if ``as_dict=True``) will always be flat.
         """
-        all_params = self.get_params(as_dict=True, as_flat=True)
-        named_params = {k: all_params[k] for k in self.named_params}
+        all_params = self.get_params(as_dict=True)
+        param_aliases = create_alias_map(
+            all_params=all_params.keys(),
+            named_params=self.named_params,
+        )
+
+        reversed_aliases = reverse_alias_map(param_aliases)
+        named_params = {
+            alias: all_params[param] for param, alias in reversed_aliases.items()
+        }
         return named_params if as_dict else named_params.values()
 
     def set_named_params(self, *args, **kwargs) -> None:
@@ -242,8 +358,8 @@ class Model(ABC):
             contain keys that are in :py:attr:`.named_params`.
         """
         if not set(self.named_params).issuperset(kwargs.keys()):
-            invalid = set(kwargs.keys()) - set(self.named_params)
-            raise InvalidParamNamesError(invalid_param_names=invalid)
+            extra = set(kwargs.keys()) - set(self.named_params)
+            raise ExtraParamsError(extra_param_names=extra)
 
         new_params = dict(zip(self.named_params, args, strict=False))
         new_params.update(kwargs)
