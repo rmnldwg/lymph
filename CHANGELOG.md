@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2025-01-31
+
+### Bug Fixes
+
+- `__init__()` without `named_params` now works. Previously, it raised an exception
+  because the distribution composite was not initialized.
+
+### Testing
+
+- `__init__()` with `named_params` must work.
+
 ## [1.3.1] - 2025-01-31
 
 ### Bug Fixes
@@ -837,6 +848,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
+[1.3.2]: https://github.com/rmnldwg/lymph/compare/1.3.1...1.3.2
 [1.3.1]: https://github.com/rmnldwg/lymph/compare/1.3.0...1.3.1
 [1.3.0]: https://github.com/rmnldwg/lymph/compare/1.2.3...1.3.0
 [1.2.3]: https://github.com/rmnldwg/lymph/compare/1.2.2...1.2.3
