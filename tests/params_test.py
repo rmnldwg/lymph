@@ -7,40 +7,9 @@ from lymph.types import ExtraParamsError
 
 from .fixtures import (
     RNG,
-    _create_random_frozen_dist,
-    _create_random_parametric_dist,
-    get_graph,
+    binary_unilateral_model,
+    binary_bilateral_model,
 )
-
-
-@pytest.fixture()
-def binary_unilateral_model() -> models.Unilateral:
-    """Return a binary unilateral model."""
-    model = models.Unilateral(graph_dict=get_graph(size="small"))
-    model.set_distribution(
-        t_stage="early",
-        distribution=_create_random_frozen_dist(max_time=model.max_time),
-    )
-    model.set_distribution(
-        t_stage="late",
-        distribution=_create_random_parametric_dist(max_time=model.max_time),
-    )
-    return model
-
-
-@pytest.fixture()
-def binary_bilateral_model() -> models.Bilateral:
-    """Return a binary bilateral model."""
-    model = models.Bilateral(graph_dict=get_graph(size="small"))
-    model.set_distribution(
-        t_stage="early",
-        distribution=_create_random_frozen_dist(max_time=model.max_time),
-    )
-    model.set_distribution(
-        t_stage="late",
-        distribution=_create_random_parametric_dist(max_time=model.max_time),
-    )
-    return model
 
 
 def test_set_named_params_default_behavior(
