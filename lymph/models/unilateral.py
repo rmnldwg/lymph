@@ -96,10 +96,6 @@ class Unilateral(
             tumor_state=tumor_state,
             allowed_states=allowed_states,
         )
-
-        if named_params is not None:
-            self.named_params = named_params
-
         diagnosis_times.Composite.__init__(
             self,
             max_time=max_time,
@@ -110,6 +106,9 @@ class Unilateral(
         self._cache_version: int = 0
         self._data_matrix_cache: LRUCache = LRUCache(maxsize=64)
         self._diagnosis_matrix_cache: LRUCache = LRUCache(maxsize=64)
+
+        if named_params is not None:
+            self.named_params = named_params
 
     @classmethod
     def binary(cls, graph_dict: types.GraphDictType, **kwargs) -> Unilateral:
