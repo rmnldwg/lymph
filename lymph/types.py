@@ -302,6 +302,11 @@ class Model(ABC):
 
         self._named_params = new_names
 
+    @named_params.deleter
+    def named_params(self) -> None:
+        """Delete the named params."""
+        del self._named_params
+
     @abstractmethod
     def get_params(
         self: ModelT,
