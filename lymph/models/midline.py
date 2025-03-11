@@ -354,7 +354,8 @@ class Midline(
 
         Includes the spread parameters from the call to :py:meth:`get_spread_params`
         and the distribution parameters from the call to
-        :py:meth:`~.diagnosis_times.Composite.get_distribution_params`.
+        :py:meth:`~.diagnosis_times.Composite.get_distribution_params`. It also appends
+        the probability of midline extension to the end of the returned params.
         """
         params = {}
         params.update(self.get_spread_params(as_flat=as_flat))
@@ -482,7 +483,9 @@ class Midline(
         """Set all parameters of the model.
 
         Combines the calls to :py:meth:`.set_spread_params` and
-        :py:meth:`.set_distribution_params`.
+        :py:meth:`.set_distribution_params`. Additionally, it sets the probability
+        for midline extension. Note that this parameter is always the last one that
+        is set after the spread and distribution parameters.
         """
         last_param_idx = self.get_num_dims() - 1
         before, last, after = utils.popat(args, idx=last_param_idx)
