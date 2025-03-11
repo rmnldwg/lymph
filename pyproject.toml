@@ -39,6 +39,7 @@ docs = [
     "ipython",
     "matplotlib",
     "scipy",
+    "emcee",
 ]
 
 [project.urls]

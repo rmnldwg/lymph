@@ -60,6 +60,21 @@ class MidlineSetParamsTestCase(
         self.assertEqual(unused_param, params_to_set[-1])
         self.assertEqual(params_to_set[:-1].tolist(), returned_params)
 
+    def test_midext_prob_is_last(self) -> None:
+        """Check that the midline probability is the last parameter."""
+        expected_midext_prob = self.rng.uniform()
+        self.model.midext_prob = expected_midext_prob
+        self.assertEqual(
+            list(self.model.get_params(as_dict=False))[-1],
+            expected_midext_prob,
+        )
+
+        expected_midext_prob = self.rng.uniform()
+        num_dims = self.model.get_num_dims()
+        params_to_set = [0.0] * (num_dims - 1) + [expected_midext_prob]
+        self.model.set_params(*params_to_set)
+        self.assertEqual(self.model.midext_prob, expected_midext_prob)
+
 
 class MidlineLikelihoodTestCase(
     fixtures.MidlineFixtureMixin,

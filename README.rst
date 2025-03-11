@@ -42,7 +42,7 @@ The mathematical details of the models can be found in in our earlier publicatio
 Get started
 ===========
 
-To learn how to use this package, head over to our `documentation <https://lymph-model.readthedocs.io>`_ where we explain the API of the package and also provide a `quickstart guide <https://lymph-model.readthedocs.io/en/latest/quickstart.html>`_.
+To learn how to use this package, head over to our `documentation <https://lymph-model.readthedocs.io>`_ where we explain the API of the package and also provide a `quickstart guide <https://lymph-model.readthedocs.io/stable/quickstart.html>`_.
 
 The implementation is pure-python and has only a few dependencies. However, it is intended to be used with powerful inference algorithms, e.g. the great sampling package `emcee <https://github.com/dfm/emcee>`_, which we used for our results.
 
