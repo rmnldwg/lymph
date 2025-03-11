@@ -357,9 +357,9 @@ class Midline(
         :py:meth:`~.diagnosis_times.Composite.get_distribution_params`.
         """
         params = {}
-        params["midext_prob"] = self.midext_prob
         params.update(self.get_spread_params(as_flat=as_flat))
         params.update(self.get_distribution_params(as_flat=as_flat))
+        params["midext_prob"] = self.midext_prob
 
         if as_flat or not as_dict:
             params = utils.flatten(params)
@@ -484,8 +484,8 @@ class Midline(
         Combines the calls to :py:meth:`.set_spread_params` and
         :py:meth:`.set_distribution_params`.
         """
-        first, args = utils.popfirst(args)
-        self.midext_prob = kwargs.get("midext_prob", first) or self.midext_prob
+        args, last = utils.poplast(args)
+        self.midext_prob = kwargs.get("midext_prob", last) or self.midext_prob
         args = self.set_spread_params(*args, **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 

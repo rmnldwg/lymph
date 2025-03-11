@@ -279,6 +279,21 @@ def popfirst(seq: Sequence[Any]) -> tuple[Any, Sequence[Any]]:
         return None, seq
 
 
+def poplast(seq: Sequence[Any]) -> tuple[Sequence[Any], Any]:
+    """Return the sequence without the last element and the last element.
+
+    If the sequence is empty, the first element will be ``None`` and the second just
+    the empty sequence. Example:
+
+    >>> poplast([1, 2, 3])
+    ([1, 2], 3)
+    >>> poplast([])
+    ([], None)
+    """
+    first, rest = popfirst(seq[::-1])
+    return rest[::-1], first
+
+
 def flatten(mapping, parent_key="", sep="_") -> dict:
     """Flatten a nested dictionary.
 
