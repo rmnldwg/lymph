@@ -294,6 +294,40 @@ def poplast(seq: Sequence[Any]) -> tuple[Sequence[Any], Any]:
     return rest[::-1], first
 
 
+def popat(seq: Sequence[Any], idx: int) -> tuple[Sequence[Any], Any, Sequence[Any]]:
+    """Return the sequence before, the element at, and the sequence after ``idx``.
+
+    If the sequence is empty, the sequence before and after will be empty and the
+    element at ``idx`` will be ``None``.
+
+    If ``idx`` is too large, the sequence before will be the whole sequence, the element
+    at ``idx`` will be ``None``, and the sequence after will be empty. Example:
+
+    >>> popat([1, 2, 3], 1)
+    ([1], 2, [3])
+    >>> popat([], 0)
+    ([], None, [])
+    >>> popat([1, 2, 3], -1)
+    ([1, 2], 3, [])
+    >>> popat([1, 2, 3], -10)
+    ([], None, [1, 2, 3])
+    >>> popat([1, 2, 3], 10)
+    ([1, 2, 3], None, [])
+    >>> popat((1, 2, 3), 10)
+    ((1, 2, 3), None, ())
+    """
+    if idx < 0:
+        idx += len(seq)
+
+    if idx < 0:
+        return type(seq)(), None, seq
+
+    if idx >= len(seq):
+        return seq, None, type(seq)()
+
+    return seq[:idx], seq[idx], seq[idx + 1 :]
+
+
 def flatten(mapping, parent_key="", sep="_") -> dict:
     """Flatten a nested dictionary.
 

@@ -484,9 +484,10 @@ class Midline(
         Combines the calls to :py:meth:`.set_spread_params` and
         :py:meth:`.set_distribution_params`.
         """
-        args, last = utils.poplast(args)
+        last_param_idx = self.get_num_dims() - 1
+        before, last, after = utils.popat(args, idx=last_param_idx)
         self.midext_prob = kwargs.get("midext_prob", last) or self.midext_prob
-        args = self.set_spread_params(*args, **kwargs)
+        args = self.set_spread_params(*(before + after), **kwargs)
         return self.set_distribution_params(*args, **kwargs)
 
     def load_patient_data(
