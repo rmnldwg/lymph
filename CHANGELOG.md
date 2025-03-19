@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2025-03-11
+
+### Bug Fixes
+
+- Make `midext_prob` last param in get/set methods
+- Midline musn't use last of `set_param` args.\
+  Instead, it should use the one at `num_dims - 1`.
+
+### Documentation
+
+- Fix broken quickstart link.
+- Add `emcee` to requirements for quickstart notebook.
+- Explain midline extension probability in set/get.
+
+### Testing
+
+- `midext_prob` is last parameter in get/set methods.
+
 ## [1.3.2] - 2025-01-31
 
 ### Bug Fixes
@@ -848,6 +866,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
+[1.3.3]: https://github.com/rmnldwg/lymph/compare/1.3.2...1.3.3
 [1.3.2]: https://github.com/rmnldwg/lymph/compare/1.3.1...1.3.2
 [1.3.1]: https://github.com/rmnldwg/lymph/compare/1.3.0...1.3.1
 [1.3.0]: https://github.com/rmnldwg/lymph/compare/1.2.3...1.3.0
