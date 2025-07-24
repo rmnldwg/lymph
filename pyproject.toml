@@ -98,8 +98,10 @@ select = [
 ignore = ["B028"]
 
 [tool.ruff.lint.per-file-ignores]
-"test/*" = [
+"tests/*" = [
+    "D102",
     "S101",
+    "RET503",
 ]
 
 

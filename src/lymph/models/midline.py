@@ -16,8 +16,10 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
-EXT_COL = ("tumor", "1", "extension")
-CENTRAL_COL = ("tumor", "1", "central")
+EXT_COL_OLD = ("tumor", "1", "extension")
+CENT_COL_OLD = ("tumor", "1", "central")
+EXT_COL_NEW = ("tumor", "info", "extension")
+CENTRAL_COL_NEW = ("tumor", "info", "central")
 
 
 class Midline(
@@ -519,13 +521,15 @@ class Midline(
         the respective models.
         """
         # pylint: disable=singleton-comparison
-        is_lateralized = patient_data[EXT_COL] == False  # noqa: E712
-        has_extension = patient_data[EXT_COL] == True  # noqa: E712
-        is_unknown = patient_data[EXT_COL].isna()
+        midext_data = utils.get_item(patient_data, [EXT_COL_NEW, EXT_COL_OLD])
+        is_lateralized = midext_data == False  # noqa: E712
+        has_extension = midext_data == True  # noqa: E712
+        is_unknown = midext_data.isna()
         self.noext.load_patient_data(patient_data[is_lateralized], mapping)
 
         if self.use_central:
-            is_central = patient_data[CENTRAL_COL] == True  # noqa: E712
+            central_data = utils.get_item(patient_data, [CENTRAL_COL_NEW, CENT_COL_OLD])
+            is_central = central_data == True  # noqa: E712
             has_extension = has_extension & ~is_central
             self.central.load_patient_data(patient_data[is_central], mapping)
 
