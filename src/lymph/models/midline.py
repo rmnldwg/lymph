@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 EXT_COL_OLD = ("tumor", "1", "extension")
 CENT_COL_OLD = ("tumor", "1", "central")
-EXT_COL_NEW = ("tumor", "info", "extension")
-CENTRAL_COL_NEW = ("tumor", "info", "central")
+EXT_COL_NEW = ("tumor", "core", "extension")
+CENTRAL_COL_NEW = ("tumor", "core", "central")
 
 
 class Midline(

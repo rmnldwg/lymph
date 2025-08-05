@@ -26,9 +26,9 @@ from lymph.utils import (
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 
-MAP_T_COL = ("_model", "info", "t_stage")
+MAP_T_COL = ("_model", "core", "t_stage")
 RAW_T_COL_OLD = ("tumor", "1", "t_stage")
-RAW_T_COL_NEW = ("tumor", "info", "t_stage")
+RAW_T_COL_NEW = ("tumor", "core", "t_stage")
 
 
 class Unilateral(
@@ -576,7 +576,7 @@ class Unilateral(
         each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
 
         It also contains information on the patient's T-stage under the header
-        ``("_model", "info", "t_stage")``.
+        ``("_model", "core", "t_stage")``.
 
         Additionally, it holds the data encodings and probability of diagnosis given the
         hidden states for each patient under the headers ``("_model", "_encoding",

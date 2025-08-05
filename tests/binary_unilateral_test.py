@@ -11,7 +11,7 @@ from lymph.modalities import Clinical
 
 from . import fixtures
 
-T_COL_NEW = ("tumor", "info", "t_stage")
+T_COL_NEW = ("tumor", "core", "t_stage")
 
 
 class InitTestCase(

@@ -115,7 +115,7 @@ class TrinaryDiagnosisMatricesTestCase(
         for t_stage in ["early", "late"]:
             num_lnls = len(self.model.graph.lnls)
             num_patients = (
-                self.model.patient_data["_model", "info", "t_stage"] == t_stage
+                self.model.patient_data["_model", "core", "t_stage"] == t_stage
             ).sum()
             diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
             self.assertEqual(diagnosis_matrix.shape, (3**num_lnls, num_patients))

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 RAW_HPV_COL_OLD = ("patient", "#", "hpv_status")
-RAW_HPV_COL_NEW = ("patient", "info", "hpv_status")
+RAW_HPV_COL_NEW = ("patient", "core", "hpv_status")
 
 
 def select_hpv_model(method):
