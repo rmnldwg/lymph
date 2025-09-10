@@ -672,7 +672,22 @@ class Unilateral(
             given_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
 
         return given_state_dist @ self.observation_matrix()
-
+    
+    def patient_likelihoods(
+        self,
+        t_stage: str,
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
+        if mode == "HMM":
+            state_dist = self.state_dist_evo()
+            return (self.get_distribution(t_stage).pmf
+                    @ state_dist
+                    @ self.diagnosis_matrix(t_stage).T
+                )
+        else:
+            warnings.warn("Only HMM implemented for patient likelihoods.",)
+    
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood, using the stored params."""
         state_dist = self.state_dist(mode="BN")

@@ -404,6 +404,10 @@ class Bilateral(
         """
         self.ipsi.load_patient_data(patient_data, "ipsi", mapping)
         self.contra.load_patient_data(patient_data, "contra", mapping)
+        # Keep all columns except '_model', but from '_model' only keep those with first subheader '#'
+        cols = [col for col in self.ipsi.patient_data.columns if col[0] != '_model']
+        cols += [col for col in self.ipsi.patient_data.columns if col[0] == '_model' and col[1] == '#']
+        self.patient_data = self.ipsi.patient_data[cols]
 
     def state_dist(
         self,
