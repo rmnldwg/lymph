@@ -679,11 +679,9 @@ class Unilateral(
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the likelihood of each patient individually."""
+        
         if mode == "HMM":
-            state_dist = self.state_dist_evo()
-            return (self.get_distribution(t_stage).pmf
-                    @ state_dist
-                    @ self.diagnosis_matrix(t_stage).T
+            return (self.state_dist(t_stage) @ self.diagnosis_matrix(t_stage).T
                 )
         else:
             warnings.warn("Only HMM implemented for patient likelihoods.",)

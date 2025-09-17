@@ -679,6 +679,8 @@ class Midline(
         t_stage: str = None,
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
+        if mode != "HMM":
+            raise NotImplementedError("Only HMM mode is supported as of now.")
         ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
         contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
