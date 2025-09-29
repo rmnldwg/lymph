@@ -124,7 +124,7 @@ For more complicated stuff, we used [:link:pytest] and [:link:hypothesis] to cov
 
 ## Questions?
 
-If there is still something unclear, feel free to reach out to me: [roman.ludwig@usz.ch](mailto:roman.ludwig@usz.ch).
+If there is still something unclear, feel free to reach out to us: [yoel.perezhaas@usz.ch](mailto:yoel.perezhaas@usz.ch) or [noemi.buehrer@usz.ch](mailto:noemi.buehrer@usz.ch).
 
 [:link:issues]: https://github.com/lycosystem/lymph/issues
 [:link:organization-wide wiki]: https://github.com/lycosystem/.github/wiki

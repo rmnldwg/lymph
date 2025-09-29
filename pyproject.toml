@@ -5,7 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lymph-model"
 description = "Package for statistical modelling of lymphatic metastatic spread."
-authors = [{ name = "Roman Ludwig", email = "roman.ludwig@usz.ch" }]
+authors = [
+    { name = "Roman Ludwig", email = "gygqdstu3@mozmail.com" },
+    { name = "Yoel Pérez Haas", email = "yoel.perezhaas@usz.ch" },
+    { name = "Noemi Bührer", email = "noemi.buehrer@usz.ch" },
+]
 readme = "README.rst"
 requires-python = ">=3.10"
 keywords = ["cancer", "metastasis", "lymphatic progression", "model"]

@@ -15,7 +15,7 @@ from lymph._version import version
 __version__ = version
 __description__ = "Package for statistical modelling of lymphatic metastatic spread."
 __author__ = "Roman Ludwig"
-__email__ = "roman.ludwig@usz.ch"
+__email__ = "gygqdstu3@mozmail.com"
 __uri__ = "https://github.com/lycosystem/lymph"
 
 # nopycln: file
