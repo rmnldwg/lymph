@@ -2,7 +2,8 @@
 
 First, thanks for considering to help out on this project!
 
-Before you start coding away and fixing some of the [:link:issues], let me give you an introduction of the standards and best-practices that we have tried to follow so far:
+> [!WARNING]
+> Before you start coding away and fixing some of the [:link:issues], please familiarize yourself with the conventions we try to adhere to. These are explained in our [:link:organization-wide wiki] on the one hand, and in this document as well. The content of the wiki is more general and probably also more up-to-date, so start there.
 
 ## Git
 
@@ -126,6 +127,7 @@ For more complicated stuff, we used [:link:pytest] and [:link:hypothesis] to cov
 If there is still something unclear, feel free to reach out to me: [roman.ludwig@usz.ch](mailto:roman.ludwig@usz.ch).
 
 [:link:issues]: https://github.com/lycosystem/lymph/issues
+[:link:organization-wide wiki]: https://github.com/lycosystem/.github/wiki
 [:link:git]: https://git-scm.com
 [:link:GitHub]: https://github.com
 [:link:git-flow]: https://nvie.com/posts/a-successful-git-branching-model/
