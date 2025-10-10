@@ -507,10 +507,10 @@ class Midline(
         This amounts to sorting the patients into three bins:
 
         1. Patients whose tumor is clearly lateralized, meaning the column
-           ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+           ``("tumor", "core", "extension")`` reports ``False``. These get assigned to
            the :py:attr:`.noext` attribute.
         2. Those with a central tumor, indicated by ``True`` in the column
-           ``("tumor", "1", "central")``. If the :py:attr:`.use_central` attribute is
+           ``("tumor", "core", "central")``. If the :py:attr:`.use_central` attribute is
            set to ``True``, these patients are assigned to the :py:attr:`.central`
            model. Otherwise, they are assigned to the :py:attr:`.ext` model.
         3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
@@ -963,7 +963,10 @@ class Midline(
             )
 
         ipsi_evo = self.ext.ipsi.state_dist_evo()
-        drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
+        drawn_diags = np.empty(
+            shape=(num, self.ext.ipsi.obs_list.shape[1] * 2),
+            dtype=bool,
+        )
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
             drawn_ipsi_diags = utils.draw_diagnosis(
@@ -1000,8 +1003,8 @@ class Midline(
         dataset = pd.DataFrame(drawn_diags, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset["tumor", "1", "t_stage"] = drawn_t_stages
-        dataset["tumor", "1", "extension"] = drawn_midexts
-        dataset["patient", "#", "diagnosis_time"] = drawn_diag_times
+        dataset["tumor", "core", "t_stage"] = drawn_t_stages
+        dataset["tumor", "core", "extension"] = drawn_midexts
+        dataset["patient", "core", "diagnosis_time"] = drawn_diag_times
 
         return dataset

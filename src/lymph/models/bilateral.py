@@ -730,6 +730,6 @@ class Bilateral(
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
+        dataset[("tumor", "core", "t_stage")] = drawn_t_stages
 
         return dataset
