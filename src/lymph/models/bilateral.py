@@ -404,6 +404,10 @@ class Bilateral(
         """
         self.ipsi.load_patient_data(patient_data, "ipsi", mapping)
         self.contra.load_patient_data(patient_data, "contra", mapping)
+        # Keep all columns except '_model', but from '_model' only keep those with first subheader '#'
+        cols = [col for col in self.ipsi.patient_data.columns if col[0] != '_model']
+        cols += [col for col in self.ipsi.patient_data.columns if col[0] == '_model' and col[1] == '#']
+        self.patient_data = self.ipsi.patient_data[cols]
 
     def state_dist(
         self,
@@ -472,11 +476,14 @@ class Bilateral(
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the likelihood of each patient individually."""
-        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
-        return matrix.fast_trace(
-            self.ipsi.diagnosis_matrix(t_stage),
-            joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
-        )
+        if mode == 'HMM':
+            joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+            return matrix.fast_trace(
+                self.ipsi.diagnosis_matrix(t_stage),
+                joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
+            )
+        else:
+            warnings.warn("Only HMM implemented for patient likelihoods.",)
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
         """Compute the BN likelihood of data, using the stored params."""
