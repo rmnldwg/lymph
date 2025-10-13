@@ -18,6 +18,7 @@ from lymph.utils import (
     draw_diagnosis,  # noqa: F401
     early_late_mapping,
     flatten,
+    get_item,
     get_params_from,
     set_params_for,
 )
@@ -25,8 +26,9 @@ from lymph.utils import (
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 
-MAP_T_COL = ("_model", "#", "t_stage")
-RAW_T_COL = ("tumor", "1", "t_stage")
+MAP_T_COL = ("_model", "core", "t_stage")
+RAW_T_COL_OLD = ("tumor", "1", "t_stage")
+RAW_T_COL_NEW = ("tumor", "core", "t_stage")
 
 
 class Unilateral(
@@ -548,7 +550,11 @@ class Unilateral(
 
                 patient_data["_model", modality, lnl] = column
 
-        patient_data[MAP_T_COL] = patient_data[RAW_T_COL].map(mapping)
+        patient_data[MAP_T_COL] = get_item(
+            mapping=patient_data,
+            keys=[RAW_T_COL_NEW, RAW_T_COL_OLD],
+        ).map(mapping)
+
         self._patient_data = patient_data
         self._cache_version += 1
 
@@ -570,7 +576,7 @@ class Unilateral(
         each of the LNLs in the list :py:attr:`.graph.Representation.lnls`.
 
         It also contains information on the patient's T-stage under the header
-        ``("_model", "#", "t_stage")``.
+        ``("_model", "core", "t_stage")``.
 
         Additionally, it holds the data encodings and probability of diagnosis given the
         hidden states for each patient under the headers ``("_model", "_encoding",
@@ -972,6 +978,6 @@ class Unilateral(
         multi_cols = pd.MultiIndex.from_product([modality_names, ["ipsi"], lnl_names])
 
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
-        dataset[(RAW_T_COL)] = drawn_t_stages
+        dataset[RAW_T_COL_NEW] = drawn_t_stages
 
         return dataset

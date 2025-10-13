@@ -1,6 +1,6 @@
 """Test the binary unilateral system."""
-import unittest
 
+import unittest
 import warnings
 
 import numpy as np
@@ -10,6 +10,8 @@ from lymph.graph import LymphNodeLevel, Tumor
 from lymph.modalities import Clinical
 
 from . import fixtures
+
+T_COL_NEW = ("tumor", "core", "t_stage")
 
 
 class InitTestCase(
@@ -151,7 +153,8 @@ class TransitionMatrixTestCase(
         """Make sure the transition matrix has the correct shape."""
         num_lnls = len({name for kind, name in self.graph_dict if kind == "lnl"})
         self.assertEqual(
-            self.model.transition_matrix().shape, (2**num_lnls, 2**num_lnls)
+            self.model.transition_matrix().shape,
+            (2**num_lnls, 2**num_lnls),
         )
 
     def test_is_probabilistic(self):
@@ -172,13 +175,13 @@ class TransitionMatrixTestCase(
         for i in [0, 1]:
             for j in [0, 1]:
                 return TransitionMatrixTestCase.is_recusively_upper_triangular(
-                    mat[i * half : (i + 1) * half, j * half : (j + 1) * half]
-                )
+                    mat[i * half : (i + 1) * half, j * half : (j + 1) * half],
+                )  # noqa: RET503
 
     def test_is_recusively_upper_triangular(self) -> None:
         """Make sure the transition matrix is recursively upper triangular."""
         self.assertTrue(
-            self.is_recusively_upper_triangular(self.model.transition_matrix())
+            self.is_recusively_upper_triangular(self.model.transition_matrix()),
         )
 
 
@@ -237,7 +240,7 @@ class PatientDataTestCase(
         t_stages_in_diag_time_dists = self.model.get_t_stages("distributions")
         t_stages_in_model = self.model.get_t_stages("valid")
         t_stages_intersection = set(t_stages_in_data).intersection(
-            t_stages_in_diag_time_dists
+            t_stages_in_diag_time_dists,
         )
 
         self.assertNotIn("foo", t_stages_in_model)
@@ -256,7 +259,7 @@ class PatientDataTestCase(
                 {
                     "early": [0, 1, 2],
                     "late": [3, 4],
-                }[t_stage]
+                }[t_stage],
             )
             data_matrix = self.model.data_matrix(t_stage).T
 
@@ -276,7 +279,7 @@ class PatientDataTestCase(
                 {
                     "early": [0, 1, 2],
                     "late": [3, 4],
-                }[t_stage]
+                }[t_stage],
             )
             diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
 
@@ -293,8 +296,8 @@ class PatientDataTestCase(
             self.assertTrue(
                 np.all(
                     np.isclose(diagnosis_matrix, 1.0)
-                    | np.less_equal(diagnosis_matrix, 1.0)
-                )
+                    | np.less_equal(diagnosis_matrix, 1.0),
+                ),
             )
 
     def test_modality_replacement(self) -> None:
@@ -434,7 +437,7 @@ class DataGenerationTestCase(
             rng=self.rng,
         )
         self.assertEqual(len(early_patients), 100)
-        self.assertEqual(sum(early_patients["tumor", "1", "t_stage"] == "early"), 100)
+        self.assertEqual(sum(early_patients[T_COL_NEW] == "early"), 100)
         self.assertIn(("CT", "ipsi", "II"), early_patients.columns)
         self.assertIn(("FNA", "ipsi", "III"), early_patients.columns)
 
@@ -446,7 +449,7 @@ class DataGenerationTestCase(
             rng=self.rng,
         )
         self.assertEqual(len(late_patients), 100)
-        self.assertEqual(sum(late_patients["tumor", "1", "t_stage"] == "late"), 100)
+        self.assertEqual(sum(late_patients[T_COL_NEW] == "late"), 100)
         self.assertIn(("CT", "ipsi", "II"), late_patients.columns)
         self.assertIn(("FNA", "ipsi", "III"), late_patients.columns)
 

@@ -10,10 +10,10 @@
     :target: https://github.com/lycosystem/lymph/actions
 .. image:: https://github.com/lycosystem/lymph/actions/workflows/release.yml/badge.svg?style=flat
     :target: https://pypi.org/project/lymph-model/
-.. image:: https://codecov.io/gh/lycosystem/lymph/branch/main/graph/badge.svg?token=LPXQPK5K78
-    :target: https://codecov.io/gh/lycosystem/lymph
 .. image:: https://readthedocs.org/projects/lymph-model/badge
     :target: https://lymph-model.readthedocs.io
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/lycosystem/lymph/python-coverage-comment-action-data/endpoint.json
+    :target: https://htmlpreview.github.io/?https://github.com/lycosystem/lymph/blob/python-coverage-comment-action-data/htmlcov/index.html
 
 
 A Python package for statistical modelling of lymphatic metastatic spread in head & neck squamous cell carcinoma (HNSCC).

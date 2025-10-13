@@ -16,9 +16,10 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
-EXT_COL = ("tumor", "1", "extension")
-CENTRAL_COL = ("tumor", "1", "central")
-T_STAGE_COL = ("_model", "#", "t_stage")
+EXT_COL_OLD = ("tumor", "1", "extension")
+CENT_COL_OLD = ("tumor", "1", "central")
+EXT_COL_NEW = ("tumor", "core", "extension")
+CENTRAL_COL_NEW = ("tumor", "core", "central")
 
 
 class Midline(
@@ -506,10 +507,10 @@ class Midline(
         This amounts to sorting the patients into three bins:
 
         1. Patients whose tumor is clearly lateralized, meaning the column
-           ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+           ``("tumor", "core", "extension")`` reports ``False``. These get assigned to
            the :py:attr:`.noext` attribute.
         2. Those with a central tumor, indicated by ``True`` in the column
-           ``("tumor", "1", "central")``. If the :py:attr:`.use_central` attribute is
+           ``("tumor", "core", "central")``. If the :py:attr:`.use_central` attribute is
            set to ``True``, these patients are assigned to the :py:attr:`.central`
            model. Otherwise, they are assigned to the :py:attr:`.ext` model.
         3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
@@ -520,17 +521,15 @@ class Midline(
         the respective models.
         """
         # pylint: disable=singleton-comparison
-        # first load complete data into noext to assign the loaded dataset to self
-        self.noext.load_patient_data(patient_data, mapping)
-        self.patient_data = self.noext.patient_data.copy()
-        # now sort patients into the different models
-        is_lateralized = patient_data[EXT_COL] == False  # noqa: E712
-        has_extension = patient_data[EXT_COL] == True  # noqa: E712
-        is_unknown = patient_data[EXT_COL].isna()
+        midext_data = utils.get_item(patient_data, [EXT_COL_NEW, EXT_COL_OLD])
+        is_lateralized = midext_data == False  # noqa: E712
+        has_extension = midext_data == True  # noqa: E712
+        is_unknown = midext_data.isna()
         self.noext.load_patient_data(patient_data[is_lateralized], mapping)
 
         if self.use_central:
-            is_central = patient_data[CENTRAL_COL] == True  # noqa: E712
+            central_data = utils.get_item(patient_data, [CENTRAL_COL_NEW, CENT_COL_OLD])
+            is_central = central_data == True  # noqa: E712
             has_extension = has_extension & ~is_central
             self.central.load_patient_data(patient_data[is_central], mapping)
 
@@ -1009,7 +1008,10 @@ class Midline(
             )
 
         ipsi_evo = self.ext.ipsi.state_dist_evo()
-        drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
+        drawn_diags = np.empty(
+            shape=(num, self.ext.ipsi.obs_list.shape[1] * 2),
+            dtype=bool,
+        )
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
             drawn_ipsi_diags = utils.draw_diagnosis(
@@ -1046,8 +1048,8 @@ class Midline(
         dataset = pd.DataFrame(drawn_diags, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset["tumor", "1", "t_stage"] = drawn_t_stages
-        dataset["tumor", "1", "extension"] = drawn_midexts
-        dataset["patient", "#", "diagnosis_time"] = drawn_diag_times
+        dataset["tumor", "core", "t_stage"] = drawn_t_stages
+        dataset["tumor", "core", "extension"] = drawn_midexts
+        dataset["patient", "core", "diagnosis_time"] = drawn_diag_times
 
         return dataset
