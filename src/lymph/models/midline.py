@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 EXT_COL_OLD = ("tumor", "1", "extension")
 CENT_COL_OLD = ("tumor", "1", "central")
 EXT_COL_NEW = ("tumor", "core", "extension")
+MAP_EXT_COL = ("_model", "core", "extension")
+MAP_CENT_COL = ("_model", "core", "central")
 CENTRAL_COL_NEW = ("tumor", "core", "central")
+MAP_T_COL = ("_model", "core", "t_stage")
+
 
 
 class Midline(
@@ -522,6 +526,11 @@ class Midline(
         """
         # pylint: disable=singleton-comparison
         midext_data = utils.get_item(patient_data, [EXT_COL_NEW, EXT_COL_OLD])
+        # first load complete data into noext to assign the loaded dataset to self
+        self.noext.load_patient_data(patient_data, mapping)
+        main_data = self.noext.patient_data.copy()
+        main_data[MAP_EXT_COL] = midext_data
+        self.patient_data = main_data
         is_lateralized = midext_data == False  # noqa: E712
         has_extension = midext_data == True  # noqa: E712
         is_unknown = midext_data.isna()
@@ -684,16 +693,16 @@ class Midline(
         contra_dist_evo = {}
         contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
         t_stages = self.t_stages if t_stage is None else [t_stage]
-        patient_data = self.patient_data.loc[self.patient_data[T_STAGE_COL].isin(t_stages)]
+        patient_data = self.patient_data.loc[self.patient_data[MAP_T_COL].isin(t_stages)]
         patient_llhs = np.zeros(len(patient_data))
         for stage in t_stages:
-            t_idx = patient_data[T_STAGE_COL] == stage
+            t_idx = patient_data[MAP_T_COL] == stage
             diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
             num_states = ipsi_dist_evo.shape[1]
             marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
             # see the `Bilateral` model for why this is done in this way.
             for case in ["ext", "noext"]:
-                ext_idx = patient_data[EXT_COL] == (case == "ext")
+                ext_idx = patient_data[MAP_EXT_COL] == (case == "ext")
                 joint_state_dist = (
                     ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
                 )
@@ -711,7 +720,7 @@ class Midline(
                     marg_joint_state_dist
                     @ self.unknown.contra.diagnosis_matrix(stage).T,
                 )
-                patient_llhs[t_idx & patient_data[EXT_COL].isna()] = marg_patient_llhs
+                patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = marg_patient_llhs
             except AttributeError:
                 # an AttributeError is raised both when the model has no `unknown`
                 # attribute and when no data is loaded in the `unknown` model.
