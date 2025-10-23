@@ -404,6 +404,15 @@ class Bilateral(
         """
         self.ipsi.load_patient_data(patient_data, "ipsi", mapping)
         self.contra.load_patient_data(patient_data, "contra", mapping)
+        # Keep all columns except '_model'
+        # From '_model' only keep those with first subheader '#' or 'core'
+        cols = [col for col in self.ipsi.patient_data.columns if col[0] != "_model"]
+        cols += [
+            col
+            for col in self.ipsi.patient_data.columns
+            if col[0] == "_model" and (col[1] == "#" or col[1] == "core")
+        ]
+        self.patient_data = self.ipsi.patient_data[cols]
 
     def state_dist(
         self,
@@ -472,10 +481,15 @@ class Bilateral(
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
         """Compute the likelihood of each patient individually."""
-        joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
-        return matrix.fast_trace(
-            self.ipsi.diagnosis_matrix(t_stage),
-            joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
+        if mode == "HMM":
+            joint_state_dist = self.state_dist(t_stage=t_stage, mode=mode)
+            return matrix.fast_trace(
+                self.ipsi.diagnosis_matrix(t_stage),
+                joint_state_dist @ self.contra.diagnosis_matrix(t_stage).T,
+            )
+        raise NotImplementedError(
+            f"Mode '{mode}' not implemented for patient likelihoods. "
+            "Only 'HMM? is supported.",
         )
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
@@ -730,6 +744,6 @@ class Bilateral(
         dataset = pd.DataFrame(drawn_obs, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset[("tumor", "1", "t_stage")] = drawn_t_stages
+        dataset[("tumor", "core", "t_stage")] = drawn_t_stages
 
         return dataset

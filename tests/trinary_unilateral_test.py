@@ -1,4 +1,5 @@
 """Test the trinary unilateral system."""
+
 import unittest
 
 import numpy as np
@@ -114,7 +115,7 @@ class TrinaryDiagnosisMatricesTestCase(
         for t_stage in ["early", "late"]:
             num_lnls = len(self.model.graph.lnls)
             num_patients = (
-                self.model.patient_data["_model", "#", "t_stage"] == t_stage
+                self.model.patient_data["_model", "core", "t_stage"] == t_stage
             ).sum()
             diagnosis_matrix = self.model.diagnosis_matrix(t_stage).T
             self.assertEqual(diagnosis_matrix.shape, (3**num_lnls, num_patients))
@@ -205,7 +206,7 @@ class TrinaryRiskTestCase(
         """Make sure the risk is a probability."""
         risk = self.model.risk(
             involvement=fixtures.create_random_pattern(
-                lnls=list(self.model.graph.lnls.keys())
+                lnls=list(self.model.graph.lnls.keys()),
             ),
             given_diagnosis=self.create_random_diagnosis(),
             given_params=self.create_random_params(),

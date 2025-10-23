@@ -16,8 +16,13 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
-EXT_COL = ("tumor", "1", "extension")
-CENTRAL_COL = ("tumor", "1", "central")
+EXT_COL_OLD = ("tumor", "1", "extension")
+CENT_COL_OLD = ("tumor", "1", "central")
+EXT_COL_NEW = ("tumor", "core", "extension")
+MAP_EXT_COL = ("_model", "core", "extension")
+MAP_CENT_COL = ("_model", "core", "central")
+CENTRAL_COL_NEW = ("tumor", "core", "central")
+MAP_T_COL = ("_model", "core", "t_stage")
 
 
 class Midline(
@@ -505,10 +510,10 @@ class Midline(
         This amounts to sorting the patients into three bins:
 
         1. Patients whose tumor is clearly lateralized, meaning the column
-           ``("tumor", "1", "extension")`` reports ``False``. These get assigned to
+           ``("tumor", "core", "extension")`` reports ``False``. These get assigned to
            the :py:attr:`.noext` attribute.
         2. Those with a central tumor, indicated by ``True`` in the column
-           ``("tumor", "1", "central")``. If the :py:attr:`.use_central` attribute is
+           ``("tumor", "core", "central")``. If the :py:attr:`.use_central` attribute is
            set to ``True``, these patients are assigned to the :py:attr:`.central`
            model. Otherwise, they are assigned to the :py:attr:`.ext` model.
         3. The rest, which amounts to patients whose tumor extends over the mid-sagittal
@@ -519,13 +524,20 @@ class Midline(
         the respective models.
         """
         # pylint: disable=singleton-comparison
-        is_lateralized = patient_data[EXT_COL] == False  # noqa: E712
-        has_extension = patient_data[EXT_COL] == True  # noqa: E712
-        is_unknown = patient_data[EXT_COL].isna()
+        midext_data = utils.get_item(patient_data, [EXT_COL_NEW, EXT_COL_OLD])
+        # first load complete data into noext to assign the loaded dataset to self
+        self.noext.load_patient_data(patient_data, mapping)
+        main_data = self.noext.patient_data.copy()
+        main_data[MAP_EXT_COL] = midext_data
+        self.patient_data = main_data
+        is_lateralized = midext_data == False  # noqa: E712
+        has_extension = midext_data == True  # noqa: E712
+        is_unknown = midext_data.isna()
         self.noext.load_patient_data(patient_data[is_lateralized], mapping)
 
         if self.use_central:
-            is_central = patient_data[CENTRAL_COL] == True  # noqa: E712
+            central_data = utils.get_item(patient_data, [CENTRAL_COL_NEW, CENT_COL_OLD])
+            is_central = central_data == True  # noqa: E712
             has_extension = has_extension & ~is_central
             self.central.load_patient_data(patient_data[is_central], mapping)
 
@@ -668,6 +680,56 @@ class Midline(
             self.ext.obs_dist(given_state_dist=given_state_dist[1]),
         ]
         return np.stack(obs_dist)
+
+    def patient_likelihoods(
+        self,
+        t_stage: str = None,
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
+        if mode != "HMM":
+            raise NotImplementedError("Only HMM mode is supported as of now.")
+        ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
+        contra_dist_evo = {}
+        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
+        t_stages = self.t_stages if t_stage is None else [t_stage]
+        patient_data = self.patient_data.loc[
+            self.patient_data[MAP_T_COL].isin(t_stages)
+        ]
+        patient_llhs = np.zeros(len(patient_data))
+        for stage in t_stages:
+            t_idx = patient_data[MAP_T_COL] == stage
+            diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
+            num_states = ipsi_dist_evo.shape[1]
+            marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
+            # see the `Bilateral` model for why this is done in this way.
+            for case in ["ext", "noext"]:
+                ext_idx = patient_data[MAP_EXT_COL] == (case == "ext")
+                joint_state_dist = (
+                    ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
+                )
+                marg_joint_state_dist += joint_state_dist
+                _model = getattr(self, case)
+                llhs = matrix.fast_trace(
+                    _model.ipsi.diagnosis_matrix(stage),
+                    joint_state_dist @ _model.contra.diagnosis_matrix(stage).T,
+                )
+                patient_llhs[t_idx & ext_idx] = llhs
+
+            try:
+                marg_patient_llhs = matrix.fast_trace(
+                    self.unknown.ipsi.diagnosis_matrix(stage),
+                    marg_joint_state_dist
+                    @ self.unknown.contra.diagnosis_matrix(stage).T,
+                )
+                patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = (
+                    marg_patient_llhs
+                )
+            except AttributeError:
+                # an AttributeError is raised both when the model has no `unknown`
+                # attribute and when no data is loaded in the `unknown` model.
+                pass
+        return patient_llhs
 
     def _hmm_likelihood(
         self,
@@ -959,7 +1021,10 @@ class Midline(
             )
 
         ipsi_evo = self.ext.ipsi.state_dist_evo()
-        drawn_diags = np.empty(shape=(num, len(self.ext.ipsi.obs_list)))
+        drawn_diags = np.empty(
+            shape=(num, self.ext.ipsi.obs_list.shape[1] * 2),
+            dtype=bool,
+        )
         for case in ["ext", "noext"]:
             case_model = getattr(self, case)
             drawn_ipsi_diags = utils.draw_diagnosis(
@@ -996,8 +1061,8 @@ class Midline(
         dataset = pd.DataFrame(drawn_diags, columns=multi_cols)
         dataset = dataset.reorder_levels(order=[1, 0, 2], axis="columns")
         dataset = dataset.sort_index(axis="columns", level=0)
-        dataset["tumor", "1", "t_stage"] = drawn_t_stages
-        dataset["tumor", "1", "extension"] = drawn_midexts
-        dataset["patient", "#", "diagnosis_time"] = drawn_diag_times
+        dataset["tumor", "core", "t_stage"] = drawn_t_stages
+        dataset["tumor", "core", "extension"] = drawn_midexts
+        dataset["patient", "core", "diagnosis_time"] = drawn_diag_times
 
         return dataset

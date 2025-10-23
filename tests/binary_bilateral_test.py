@@ -1,4 +1,5 @@
 """Test the bilateral model."""
+
 import unittest
 
 import numpy as np
@@ -7,9 +8,9 @@ from lymph import models
 from lymph.utils import flatten
 
 from .fixtures import (
-    BilateralModelMixin,
-    binary_bilateral_model,
     MODALITIES,
+    BilateralModelMixin,
+    binary_bilateral_model,  # noqa: F401
     create_random_pattern,
     get_graph,
 )
@@ -23,7 +24,7 @@ class BilateralInitTest(BilateralModelMixin, unittest.TestCase):
             "is_symmetric": {
                 "tumor_spread": True,
                 "lnl_spread": True,
-            }
+            },
         }
         super().setUp()
         self.load_patient_data()
@@ -40,12 +41,12 @@ class BilateralInitTest(BilateralModelMixin, unittest.TestCase):
         ipsi_trans_mat = self.model.ipsi.transition_matrix()
         contra_trans_mat = self.model.contra.transition_matrix()
         rand_ipsi_param = self.rng.choice(
-            list(self.model.ipsi.get_params(as_dict=True).keys())
+            list(self.model.ipsi.get_params(as_dict=True).keys()),
         )
         self.model.set_params(**{f"ipsi_{rand_ipsi_param}": self.rng.random()})
         self.assertFalse(np.all(ipsi_trans_mat == self.model.ipsi.transition_matrix()))
         self.assertFalse(
-            np.all(contra_trans_mat == self.model.contra.transition_matrix())
+            np.all(contra_trans_mat == self.model.contra.transition_matrix()),
         )
 
     def test_modality_sync(self):
@@ -165,14 +166,14 @@ class NoSymmetryParamsTestCase(
     BilateralModelMixin,
     unittest.TestCase,
 ):
-    """Test the parameter assignment when the model is not symmetric"""
+    """Test the parameter assignment when the model is not symmetric."""
 
     def setUp(self):
         self.model_kwargs = {
             "is_symmetric": {
                 "tumor_spread": False,
                 "lnl_spread": False,
-            }
+            },
         }
         super().setUp()
 
@@ -206,16 +207,16 @@ class NoSymmetryParamsTestCase(
     def test_set_params_as_args(self):
         """Test that the parameters can be set."""
         ipsi_tumor_spread_args = self.rng.uniform(
-            size=len(self.model.ipsi.graph.tumor_edges)
+            size=len(self.model.ipsi.graph.tumor_edges),
         )
         ipsi_lnl_spread_args = self.rng.uniform(
-            size=len(self.model.ipsi.graph.lnl_edges)
+            size=len(self.model.ipsi.graph.lnl_edges),
         )
         contra_tumor_spread_args = self.rng.uniform(
-            size=len(self.model.contra.graph.tumor_edges)
+            size=len(self.model.contra.graph.tumor_edges),
         )
         contra_lnl_spread_args = self.rng.uniform(
-            size=len(self.model.contra.graph.lnl_edges)
+            size=len(self.model.contra.graph.lnl_edges),
         )
         dist_params = self.rng.uniform(size=len(self.model.get_distribution_params()))
 
@@ -257,7 +258,7 @@ class SymmetryParamsTestCase(
             "is_symmetric": {
                 "tumor_spread": True,
                 "lnl_spread": True,
-            }
+            },
         }
         super().setUp()
 
@@ -348,7 +349,7 @@ class RiskTestCase(BilateralModelMixin, unittest.TestCase):
         random_pattern = {
             "ipsi": create_random_pattern(self.model.ipsi.graph.lnls.keys()),
             "contra": create_random_pattern(
-                self.model.contra.graph.lnls.keys()
+                self.model.contra.graph.lnls.keys(),
             ),
         }
         random_t_stage = self.rng.choice(["early", "late"])
@@ -391,12 +392,14 @@ class DataGenerationTestCase(
                     self.assertIn(lnl, dataset[mod][side])
 
         self.assertAlmostEqual(
-            (dataset["tumor", "1", "t_stage"] == "early").mean(), 0.5, delta=0.02
+            (dataset["tumor", "core", "t_stage"] == "early").mean(),
+            0.5,
+            delta=0.02,
         )
 
 
 def test_get_params_without_distributions(
-    binary_bilateral_model: models.Bilateral,
+    binary_bilateral_model: models.Bilateral,  # noqa: F811
 ) -> None:
     """Ensure the `get_params()` method works without distributions."""
     params = binary_bilateral_model.get_params(as_dict=True, as_flat=True)

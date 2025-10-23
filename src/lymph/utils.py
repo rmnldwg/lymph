@@ -1,9 +1,9 @@
 """Module containing supporting classes and functions used accross the project."""
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import cached_property, lru_cache, wraps
-from typing import Any
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -457,3 +457,28 @@ def add_or_mult(llh: float, arr: np.ndarray, log: bool = True) -> float:
     if log:
         return llh + np.sum(np.log(arr))
     return llh * np.prod(arr)
+
+
+K, V = TypeVar("K", bound=Any), TypeVar("V", bound=Any)
+
+
+def get_item(mapping: Mapping[K, V], keys: Sequence[K]) -> V:  # type: ignore
+    """Get an item from a mapping using a sequence of keys.
+
+    >>> d = {'a': 1, 'b': 2}
+    >>> get_item(d, ['a'])
+    1
+    >>> get_item(d, ['b', 'a'])
+    2
+    >>> get_item(d, ['x', 'b'])
+    2
+    >>> get_item(d, ['x', 'y'])
+    Traceback (most recent call last):
+        ...
+    KeyError: "None of the keys=['x', 'y'] found in the mapping={'a': 1, 'b': 2}."
+    """
+    for key in keys:
+        if (value := mapping.get(key, None)) is not None:
+            return value
+
+    raise KeyError(f"None of the {keys=} found in the {mapping=}.")

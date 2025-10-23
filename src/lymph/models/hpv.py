@@ -17,6 +17,10 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 logger = logging.getLogger(__name__)
 
 
+RAW_HPV_COL_OLD = ("patient", "#", "hpv_status")
+RAW_HPV_COL_NEW = ("patient", "core", "hpv_status")
+
+
 def select_hpv_model(method):
     """Decorate methods that simply delegate to the `hpv` or `nohpv` model."""
 
@@ -299,8 +303,9 @@ class HPVUnilateral(
         method of both the HPV+ and the HPV- model.
         """
         # TODO: What about patients with unknown HPV status?
-        is_hpv_pos = patient_data["patient", "#", "hpv_status"] == True  # noqa: E712
-        is_hpv_neg = patient_data["patient", "#", "hpv_status"] == False  # noqa: E712
+        hpv_data = utils.get_item(patient_data, [RAW_HPV_COL_NEW, RAW_HPV_COL_OLD])
+        is_hpv_pos = hpv_data == True  # noqa: E712
+        is_hpv_neg = hpv_data == False  # noqa: E712
 
         hpv_patient_data = patient_data.loc[is_hpv_pos]
         nohpv_patient_data = patient_data.loc[is_hpv_neg]
