@@ -10,6 +10,7 @@ from lymph.utils import flatten
 from .fixtures import (
     MODALITIES,
     BilateralModelMixin,
+    binary_bilateral_model,  # noqa: F401
     create_random_pattern,
     get_graph,
 )
@@ -398,7 +399,7 @@ class DataGenerationTestCase(
 
 
 def test_get_params_without_distributions(
-    binary_bilateral_model: models.Bilateral,
+    binary_bilateral_model: models.Bilateral,  # noqa: F811
 ) -> None:
     """Ensure the `get_params()` method works without distributions."""
     params = binary_bilateral_model.get_params(as_dict=True, as_flat=True)
