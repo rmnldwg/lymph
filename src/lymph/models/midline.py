@@ -25,7 +25,6 @@ CENTRAL_COL_NEW = ("tumor", "core", "central")
 MAP_T_COL = ("_model", "core", "t_stage")
 
 
-
 class Midline(
     diagnosis_times.Composite,
     modalities.Composite,
@@ -688,6 +687,7 @@ class Midline(
         mode: Literal["HMM", "BN"] = "HMM",
         selected_patients: Iterable[bool] | None = None,
     ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
         if mode != "HMM":
             raise NotImplementedError("Only HMM mode is supported as of now.")
         ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
