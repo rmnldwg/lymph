@@ -686,45 +686,83 @@ class Midline(
         self,
         t_stage: str = None,
         mode: Literal["HMM", "BN"] = "HMM",
+        selected_patients: Iterable[bool] | None = None,
     ) -> np.ndarray:
         if mode != "HMM":
             raise NotImplementedError("Only HMM mode is supported as of now.")
         ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
         contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
-        t_stages = self.t_stages if t_stage is None else [t_stage]
-        patient_data = self.patient_data.loc[self.patient_data[MAP_T_COL].isin(t_stages)]
-        patient_llhs = np.zeros(len(patient_data))
-        for stage in t_stages:
-            t_idx = patient_data[MAP_T_COL] == stage
-            diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
-            num_states = ipsi_dist_evo.shape[1]
-            marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
-            # see the `Bilateral` model for why this is done in this way.
-            for case in ["ext", "noext"]:
-                ext_idx = patient_data[MAP_EXT_COL] == (case == "ext")
-                joint_state_dist = (
-                    ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
-                )
-                marg_joint_state_dist += joint_state_dist
-                _model = getattr(self, case)
-                llhs = matrix.fast_trace(
-                    _model.ipsi.diagnosis_matrix(stage),
-                    joint_state_dist @ _model.contra.diagnosis_matrix(stage).T,
-                )
-                patient_llhs[t_idx & ext_idx] = llhs
+        if selected_patients is not None: # This version was introduced to speed up the midline mixture model fitting
+            patient_data = self.patient_data.loc[selected_patients]
+            t_stages = patient_data[MAP_T_COL].unique()
+            patient_llhs = np.zeros(len(patient_data))
+            for stage in t_stages:
+                t_idx = patient_data[MAP_T_COL] == stage
+                subsite_key = patient_data['tumor','core','subsite'].unique()[0] # Here we assume only one subsite in the selected patients (see mixture model)
+                diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
+                num_states = ipsi_dist_evo.shape[1]
+                marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
+                for case in ["ext", "noext"]:
+                    ext_idx = patient_data[MAP_EXT_COL] == (case == "ext")
+                    joint_state_dist = (
+                        ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
+                    )
+                    marg_joint_state_dist += joint_state_dist
+                    _model = getattr(self, case)
+                    subset_idx = _model.patient_data.loc[_model.patient_data['tumor','core','t_stage'] == stage]['tumor','core','subsite'] == subsite_key
+                    llhs = matrix.fast_trace(
+                        _model.ipsi.diagnosis_matrix(stage)[subset_idx, :],
+                        joint_state_dist @ _model.contra.diagnosis_matrix(stage)[subset_idx, :].T,
+                    )
+                    patient_llhs[t_idx & ext_idx] = llhs
 
-            try:
-                marg_patient_llhs = matrix.fast_trace(
-                    self.unknown.ipsi.diagnosis_matrix(stage),
-                    marg_joint_state_dist
-                    @ self.unknown.contra.diagnosis_matrix(stage).T,
-                )
-                patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = marg_patient_llhs
-            except AttributeError:
-                # an AttributeError is raised both when the model has no `unknown`
-                # attribute and when no data is loaded in the `unknown` model.
-                pass
+                try:
+                    subset_idx = self.unknown.patient_data.loc[self.unknown.patient_data['tumor','core','t_stage'] == stage]['tumor','core','subsite'] == subsite_key
+                    marg_patient_llhs = matrix.fast_trace(
+                        self.unknown.ipsi.diagnosis_matrix(stage)[subset_idx, :],
+                        marg_joint_state_dist
+                        @ self.unknown.contra.diagnosis_matrix(stage)[subset_idx, :].T,
+                    )
+                    patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = marg_patient_llhs
+                except AttributeError:
+                    # an AttributeError is raised both when the model has no `unknown`
+                    # attribute and when no data is loaded in the `unknown` model.
+                    pass
+        else:
+            t_stages = self.t_stages if t_stage is None else [t_stage]
+            patient_data = self.patient_data.loc[self.patient_data[MAP_T_COL].isin(t_stages)]
+            patient_llhs = np.zeros(len(patient_data))
+            for stage in t_stages:
+                t_idx = patient_data[MAP_T_COL] == stage
+                diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
+                num_states = ipsi_dist_evo.shape[1]
+                marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
+                # see the `Bilateral` model for why this is done in this way.
+                for case in ["ext", "noext"]:
+                    ext_idx = patient_data[MAP_EXT_COL] == (case == "ext")
+                    joint_state_dist = (
+                        ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
+                    )
+                    marg_joint_state_dist += joint_state_dist
+                    _model = getattr(self, case)
+                    llhs = matrix.fast_trace(
+                        _model.ipsi.diagnosis_matrix(stage),
+                        joint_state_dist @ _model.contra.diagnosis_matrix(stage).T,
+                    )
+                    patient_llhs[t_idx & ext_idx] = llhs
+
+                try:
+                    marg_patient_llhs = matrix.fast_trace(
+                        self.unknown.ipsi.diagnosis_matrix(stage),
+                        marg_joint_state_dist
+                        @ self.unknown.contra.diagnosis_matrix(stage).T,
+                    )
+                    patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = marg_patient_llhs
+                except AttributeError:
+                    # an AttributeError is raised both when the model has no `unknown`
+                    # attribute and when no data is loaded in the `unknown` model.
+                    pass
         return patient_llhs
 
     def _hmm_likelihood(
