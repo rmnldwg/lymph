@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.7] - 2025-10-23
+
+### Bug Fixes
+
+- Make models compatible with new data format.
+- Correct array shape mismatch in `draw_patients`.
+
+### Miscellaneous Tasks
+
+- Update codecov badge.
+- Mention wiki in contribution guide.
+- Update email addresses.
+
+### Change
+
+- Adjustments to allow bilateral mixture model.
+- Make compatible with new data format (again).
+- Change dataframe indexing to conform with new standard.
+
 ## [1.3.6] - 2025-06-30
 
 ### Miscellaneous Tasks
