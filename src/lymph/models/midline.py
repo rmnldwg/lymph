@@ -25,7 +25,6 @@ CENTRAL_COL_NEW = ("tumor", "core", "central")
 MAP_T_COL = ("_model", "core", "t_stage")
 
 
-
 class Midline(
     diagnosis_times.Composite,
     modalities.Composite,
@@ -687,13 +686,16 @@ class Midline(
         t_stage: str = None,
         mode: Literal["HMM", "BN"] = "HMM",
     ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
         if mode != "HMM":
             raise NotImplementedError("Only HMM mode is supported as of now.")
         ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
         contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
         t_stages = self.t_stages if t_stage is None else [t_stage]
-        patient_data = self.patient_data.loc[self.patient_data[MAP_T_COL].isin(t_stages)]
+        patient_data = self.patient_data.loc[
+            self.patient_data[MAP_T_COL].isin(t_stages)
+        ]
         patient_llhs = np.zeros(len(patient_data))
         for stage in t_stages:
             t_idx = patient_data[MAP_T_COL] == stage
@@ -720,7 +722,9 @@ class Midline(
                     marg_joint_state_dist
                     @ self.unknown.contra.diagnosis_matrix(stage).T,
                 )
-                patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = marg_patient_llhs
+                patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna()] = (
+                    marg_patient_llhs
+                )
             except AttributeError:
                 # an AttributeError is raised both when the model has no `unknown`
                 # attribute and when no data is loaded in the `unknown` model.
