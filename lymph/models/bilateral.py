@@ -586,10 +586,11 @@ class Bilateral(
         See Also:
             :py:meth:`.Unilateral.posterior_state_dist`
         """
-        if isinstance(given_params, dict):
-            self.set_params(**given_params)
-        else:
-            self.set_params(*given_params)
+        if given_params is not None:
+            if isinstance(given_params, dict):
+                self.set_params(**given_params)
+            else:
+                self.set_params(*given_params)
 
         if given_diagnoses is None:
             given_diagnoses = {}
