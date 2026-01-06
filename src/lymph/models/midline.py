@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 EXT_COL_OLD = ("tumor", "1", "extension")
 CENT_COL_OLD = ("tumor", "1", "central")
 EXT_COL_NEW = ("tumor", "core", "extension")
+MAP_EXT_COL = ("_model", "core", "extension")
+MAP_CENT_COL = ("_model", "core", "central")
 CENTRAL_COL_NEW = ("tumor", "core", "central")
+MAP_T_COL = ("_model", "core", "t_stage")
 
 
 class Midline(
@@ -522,6 +525,11 @@ class Midline(
         """
         # pylint: disable=singleton-comparison
         midext_data = utils.get_item(patient_data, [EXT_COL_NEW, EXT_COL_OLD])
+        # first load complete data into noext to assign the loaded dataset to self
+        self.noext.load_patient_data(patient_data, mapping)
+        main_data = self.noext.patient_data.copy()
+        main_data[MAP_EXT_COL] = midext_data
+        self.patient_data = main_data
         is_lateralized = midext_data == False  # noqa: E712
         has_extension = midext_data == True  # noqa: E712
         is_unknown = midext_data.isna()
@@ -551,7 +559,9 @@ class Midline(
         midext_states[:, 1] = 1.0 - midext_states[:, 0]
         return midext_states
 
-    def contra_state_dist_evo(self) -> tuple[np.ndarray, np.ndarray]:
+    def contra_state_dist_evo(self, 
+        unmodified_midext_prob: bool = False
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Evolve contra side as mixture of with & without midline extension.
 
         This computes the evolution of the contralateral state distribution for both
@@ -571,8 +581,9 @@ class Midline(
         midline extension at each time step, following a recusion formula.
         """
         noext_contra_dist_evo = self.noext.contra.state_dist_evo()
-
-        if not self.use_midext_evo:
+        if unmodified_midext_prob:
+            ext_contra_dist_evo = self.ext.contra.state_dist_evo()
+        elif not self.use_midext_evo:
             ext_contra_dist_evo = self.ext.contra.state_dist_evo()
             noext_contra_dist_evo *= 1.0 - self.midext_prob
             ext_contra_dist_evo *= self.midext_prob
@@ -677,45 +688,47 @@ class Midline(
         self,
         t_stage: str = None,
         mode: Literal["HMM", "BN"] = "HMM",
+        ext_noext_arrays: bool = False,
     ) -> np.ndarray:
+        """Compute the likelihood of each patient individually."""
         if mode != "HMM":
             raise NotImplementedError("Only HMM mode is supported as of now.")
         ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
         contra_dist_evo = {}
-        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo()
+        contra_dist_evo["noext"], contra_dist_evo["ext"] = self.contra_state_dist_evo(unmodified_midext_prob=ext_noext_arrays)
         t_stages = self.t_stages if t_stage is None else [t_stage]
-        patient_data = self.patient_data.loc[self.patient_data[T_STAGE_COL].isin(t_stages)]
-        patient_llhs = np.zeros(len(patient_data))
+        patient_data = self.patient_data.loc[self.patient_data[MAP_T_COL].isin(t_stages)]
+        patient_llhs = np.zeros((len(patient_data), 2))
         for stage in t_stages:
-            t_idx = patient_data[T_STAGE_COL] == stage
+            t_idx = patient_data[MAP_T_COL] == stage
             diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
             num_states = ipsi_dist_evo.shape[1]
-            marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
             # see the `Bilateral` model for why this is done in this way.
             for case in ["ext", "noext"]:
-                ext_idx = patient_data[EXT_COL] == (case == "ext")
+                loc = 0 if case == "ext" else 1
+                ext_idx = patient_data[MAP_EXT_COL] == (case == "ext")
                 joint_state_dist = (
                     ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
                 )
-                marg_joint_state_dist += joint_state_dist
                 _model = getattr(self, case)
                 llhs = matrix.fast_trace(
                     _model.ipsi.diagnosis_matrix(stage),
                     joint_state_dist @ _model.contra.diagnosis_matrix(stage).T,
                 )
-                patient_llhs[t_idx & ext_idx] = llhs
-
-            try:
-                marg_patient_llhs = matrix.fast_trace(
-                    self.unknown.ipsi.diagnosis_matrix(stage),
-                    marg_joint_state_dist
-                    @ self.unknown.contra.diagnosis_matrix(stage).T,
-                )
-                patient_llhs[t_idx & patient_data[EXT_COL].isna()] = marg_patient_llhs
-            except AttributeError:
-                # an AttributeError is raised both when the model has no `unknown`
-                # attribute and when no data is loaded in the `unknown` model.
-                pass
+                patient_llhs[t_idx & ext_idx, loc] = llhs
+                try:
+                    marg_patient_llhs = matrix.fast_trace(
+                        self.unknown.ipsi.diagnosis_matrix(stage),
+                        joint_state_dist
+                        @ self.unknown.contra.diagnosis_matrix(stage).T,
+                    )
+                    patient_llhs[t_idx & patient_data[MAP_EXT_COL].isna(),loc] = marg_patient_llhs
+                except AttributeError:
+                    # an AttributeError is raised both when the model has no `unknown`
+                    # attribute and when no data is loaded in the `unknown` model.
+                    pass
+        if not ext_noext_arrays: # here we colapse the two columns into one likelihood per patient
+            patient_llhs = patient_llhs.sum(axis=1)
         return patient_llhs
 
     def _hmm_likelihood(
