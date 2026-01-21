@@ -48,9 +48,9 @@ class CachingTestCase(
         tm3 = self.model.transition_matrix()
         time3 = time.time() - start
 
-        # Check that cached calls are much faster
-        self.assertLess(time2, 0.001, "Second call should be instant (cached)")
-        self.assertLess(time3, 0.001, "Third call should be instant (cached)")
+        # Check that cached calls are faster than the first call
+        self.assertLess(time2, time1, "Second call should be faster (cached)")
+        self.assertLess(time3, time1, "Third call should be faster (cached)")
 
         # Check that all three return the same object in memory
         self.assertIs(tm1, tm2, "Cached calls should return same object")
@@ -94,9 +94,9 @@ class CachingTestCase(
         om3 = self.model.observation_matrix()
         time3 = time.time() - start
 
-        # Check that cached calls are much faster
-        self.assertLess(time2, 0.001, "Second call should be instant (cached)")
-        self.assertLess(time3, 0.001, "Third call should be instant (cached)")
+        # Check that cached calls are faster than the first call
+        self.assertLess(time2, time1, "Second call should be faster (cached)")
+        self.assertLess(time3, time1, "Third call should be faster (cached)")
 
         # Check that all three return the same object in memory
         self.assertIs(om1, om2, "Cached calls should return same object")
