@@ -249,13 +249,13 @@ class HPVUnilateral(
         """Set the parameters of the model's spread from tumor to LNLs."""
         kwargs, global_kwargs = utils.unflatten_and_split(
             kwargs,
-            expected_keys=["HPV", "noHPV"],
+            expected_keys=["hpv", "nohpv"],
         )
 
         hpv_kwargs = global_kwargs.copy()
-        hpv_kwargs.update(kwargs.get("HPV", {}))
+        hpv_kwargs.update(kwargs.get("hpv", {}))
         nohpv_kwargs = global_kwargs.copy()
-        nohpv_kwargs.update(kwargs.get("noHPV", {}))
+        nohpv_kwargs.update(kwargs.get("nohpv", {}))
 
         args = self.hpv.set_tumor_spread_params(*args, **hpv_kwargs)
         args = self.nohpv.set_tumor_spread_params(*args, **nohpv_kwargs)
@@ -270,13 +270,13 @@ class HPVUnilateral(
         """Set the parameters of the model's spread from LNLs to tumor."""
         kwargs, global_kwargs = utils.unflatten_and_split(
             kwargs,
-            expected_keys=["HPV", "noHPV"],
+            expected_keys=["hpv", "nohpv"],
         )
 
         hpv_kwargs = global_kwargs.copy()
-        hpv_kwargs.update(kwargs.get("HPV", {}))
+        hpv_kwargs.update(kwargs.get("hpv", {}))
         nohpv_kwargs = global_kwargs.copy()
-        nohpv_kwargs.update(kwargs.get("noHPV", {}))
+        nohpv_kwargs.update(kwargs.get("nohpv", {}))
 
         args = self.hpv.set_lnl_spread_params(*args, **hpv_kwargs)
         return self.nohpv.set_lnl_spread_params(*args, **nohpv_kwargs)
@@ -422,10 +422,23 @@ class HPVUnilateral(
         """
         return model.marginalize(*args, **kwargs)
 
-    @select_hpv_model
-    def risk(self, model: models.Unilateral, *args, **kwargs) -> np.ndarray:
+    def risk(
+        self,
+        involvement: types.PatternType,
+        HPV: bool | False,
+        given_params: types.ParamsType | None = None,
+        given_state_dist: np.ndarray | None = None,
+        given_diagnosis: dict[str, types.PatternType] | None = None,
+        t_stage: str = "early",
+        mode: Literal["HMM", "BN"] = "HMM",
+    ) -> float:
         """Compute risk of a certain ``involvement``, using the ``given_diagnosis``.
 
         See :py:meth:`.models.Unilateral.risk` for more information.
         """
-        return model.risk(*args, **kwargs)
+        if HPV == False:
+            return self.nohpv.risk(involvement = involvement, given_params = given_params, given_state_dist = given_state_dist, given_diagnosis = given_diagnosis, t_stage = t_stage, mode = mode)
+        elif HPV == True:
+            return self.hpv.risk(involvement = involvement, given_params = given_params, given_state_dist = given_state_dist, given_diagnosis = given_diagnosis, t_stage = t_stage, mode = mode)
+        else:
+            raise ValueError("HPV value needs to be True or False")

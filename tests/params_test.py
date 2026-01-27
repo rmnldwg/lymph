@@ -82,6 +82,26 @@ def test_set_named_params_raises(
         binary_unilateral_model.set_named_params(invalid=RNG.uniform())
 
 
+def test_set_named_params_allows_global_alias_not_named(
+    binary_unilateral_model: models.Unilateral,
+) -> None:
+    """Allow global keys like `spread` even if not in `named_params`."""
+    params = binary_unilateral_model.get_params(as_dict=True)
+    new_params = {param: RNG.uniform() for param in params.keys()}
+    first_lnl = list(binary_unilateral_model.graph.lnls.keys())[0]
+    first_lnl_param = f"Tto{first_lnl}_spread"
+
+    binary_unilateral_model.set_params(**new_params)
+    binary_unilateral_model.named_params = [first_lnl_param]
+    spread_val = RNG.uniform()
+    binary_unilateral_model.set_named_params(spread=spread_val)
+
+    stored_params = binary_unilateral_model.get_params(as_dict=True)
+    for param, stored_param in stored_params.items():
+        if "spread" in param:
+            assert stored_param == spread_val
+
+
 def test_set_named_params_hard_subset(
     binary_unilateral_model: models.Unilateral,
 ) -> None:

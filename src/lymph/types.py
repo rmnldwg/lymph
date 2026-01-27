@@ -362,9 +362,14 @@ class Model(ABC):
             Positional arguments are overwritten by keyword arguments, which must only
             contain keys that are in :py:attr:`.named_params`.
         """
-        if not set(self.named_params).issuperset(kwargs.keys()):
-            extra = set(kwargs.keys()) - set(self.named_params)
-            raise ExtraParamsError(extra_param_names=extra)
+        if kwargs:
+            all_params = self.get_params(as_dict=True)
+            alias_map = create_alias_map(all_params.keys(), kwargs.keys())
+            aliasable_keys = {key for key, matches in alias_map.items() if matches}
+            allowed_keys = set(self.named_params) | aliasable_keys
+            extra = set(kwargs.keys()) - allowed_keys
+            if extra:
+                raise ExtraParamsError(extra_param_names=extra)
 
         new_params = dict(zip(self.named_params, args, strict=False))
         new_params.update(kwargs)
