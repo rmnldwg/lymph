@@ -71,7 +71,11 @@ class CachingTestCase(
         tm2 = self.model.transition_matrix()
 
         # Matrices should be different
-        self.assertIsNot(tm1, tm2, "Different params should produce different cached matrices")
+        self.assertIsNot(
+            tm1,
+            tm2,
+            "Different params should produce different cached matrices",
+        )
         self.assertFalse(
             np.array_equal(tm1, tm2),
             "Different param values should produce different transition matrices",

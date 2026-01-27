@@ -1,4 +1,5 @@
 """Make sure the models work with the emcee package."""
+
 import unittest
 
 import emcee

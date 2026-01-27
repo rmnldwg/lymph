@@ -1,4 +1,5 @@
 """Test the graph representation class of the package."""
+
 import unittest
 
 import numpy as np

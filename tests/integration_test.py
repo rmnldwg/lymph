@@ -3,6 +3,7 @@
 This is directly taken from the quickstart guide. Aimed at checking the computed value
 of the likelihood function.
 """
+
 import unittest
 
 import numpy as np

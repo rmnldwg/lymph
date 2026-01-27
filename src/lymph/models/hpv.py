@@ -437,8 +437,21 @@ class HPVUnilateral(
         See :py:meth:`.models.Unilateral.risk` for more information.
         """
         if HPV == False:
-            return self.nohpv.risk(involvement = involvement, given_params = given_params, given_state_dist = given_state_dist, given_diagnosis = given_diagnosis, t_stage = t_stage, mode = mode)
-        elif HPV == True:
-            return self.hpv.risk(involvement = involvement, given_params = given_params, given_state_dist = given_state_dist, given_diagnosis = given_diagnosis, t_stage = t_stage, mode = mode)
-        else:
-            raise ValueError("HPV value needs to be True or False")
+            return self.nohpv.risk(
+                involvement=involvement,
+                given_params=given_params,
+                given_state_dist=given_state_dist,
+                given_diagnosis=given_diagnosis,
+                t_stage=t_stage,
+                mode=mode,
+            )
+        if HPV == True:
+            return self.hpv.risk(
+                involvement=involvement,
+                given_params=given_params,
+                given_state_dist=given_state_dist,
+                given_diagnosis=given_diagnosis,
+                t_stage=t_stage,
+                mode=mode,
+            )
+        raise ValueError("HPV value needs to be True or False")

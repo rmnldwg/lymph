@@ -7,8 +7,6 @@ from lymph.types import ExtraParamsError
 
 from .fixtures import (
     RNG,
-    binary_unilateral_model,
-    binary_bilateral_model,
 )
 
 

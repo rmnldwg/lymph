@@ -403,7 +403,7 @@ class Unilateral(
         """
         return matrix.generate_transition(
             lnls=tuple(self.graph.lnls.values()),  # Convert to tuple for chaching
-            edges= tuple(self.graph.edges.values()),  # Convert to tuple for chaching
+            edges=tuple(self.graph.edges.values()),  # Convert to tuple for chaching
             num_states=3 if self.is_trinary else 2,
         )
 
