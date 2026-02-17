@@ -66,6 +66,8 @@ class HPVUnilateral(
         uni_kwargs: dict[str, Any] | None = None,
         hpv_kwargs: dict[str, Any] | None = None,
         nohpv_kwargs: dict[str, Any] | None = None,
+        growth_mod: float | None = 1.0,
+        use_growth_mod: bool = True,
         **_kwargs,
     ) -> None:
         """Initialize a ``unilateral`` HPV model.
@@ -74,6 +76,9 @@ class HPVUnilateral(
         values. It is passed to both :py:class:`.models.Unilateral` instances,
         which in turn pass it to the :py:class:`.graph.Representation` class that
         stores the graph.
+
+        Note: ``use_growth_mod`` is an initialization-only switch for trinary models;
+        only ``growth_mod`` is treated as a tunable parameter after construction.
         """
         self._init_models(
             graph_dict=graph_dict,
@@ -81,6 +86,19 @@ class HPVUnilateral(
             hpv_kwargs=hpv_kwargs,
             nohpv_kwargs=nohpv_kwargs,
         )
+        self.growth_mod: float | None = None
+        self.use_growth_mod: bool = False
+        if self.is_trinary:
+            if growth_mod is None:
+                growth_mod = 1.0
+            if growth_mod < 0:
+                raise ValueError("growth_mod must be non-negative.")
+            self.growth_mod = growth_mod
+            self.use_growth_mod = use_growth_mod
+        elif growth_mod not in (None, 1.0):
+            raise ValueError("growth_mod is only supported for trinary models.")
+        elif use_growth_mod:
+            raise ValueError("use_growth_mod is only supported for trinary models.")
 
         diagnosis_times.Composite.__init__(
             self,
@@ -198,7 +216,7 @@ class HPVUnilateral(
         However, since the spread from LNLs is symmetric in HPV and noHPV,
         the spread parameters are the same and only one set is returned.
         """
-        params = self.hpv.get_lnl_spread_params(as_flat=as_flat)
+        params = self.nohpv.get_lnl_spread_params(as_flat=as_flat)
 
         if as_flat or not as_dict:
             params = utils.flatten(params)
@@ -238,6 +256,8 @@ class HPVUnilateral(
         symmetry settings affect the return value.
         """
         params = self.get_spread_params(as_flat=as_flat)
+        if self.is_trinary and self.use_growth_mod:
+            params["growth_mod"] = self.growth_mod
         params.update(self.get_distribution_params(as_flat=as_flat))
 
         if as_flat or not as_dict:
@@ -273,13 +293,52 @@ class HPVUnilateral(
             expected_keys=["hpv", "nohpv"],
         )
 
+        growth_mod = global_kwargs.pop("growth_mod", None)
+        if growth_mod is not None and self.use_growth_mod is True:
+            if not self.is_trinary:
+                raise ValueError("growth_mod is only supported for trinary models.")
+            if growth_mod < 0:
+                raise ValueError("growth_mod must be non-negative.")
+            self.growth_mod = growth_mod
+
         hpv_kwargs = global_kwargs.copy()
         hpv_kwargs.update(kwargs.get("hpv", {}))
         nohpv_kwargs = global_kwargs.copy()
         nohpv_kwargs.update(kwargs.get("nohpv", {}))
 
+        reset_growth = growth_mod is not None or any(
+            key.endswith("_growth")
+            for key in (
+                *global_kwargs.keys(),
+                *kwargs.get("hpv", {}).keys(),
+                *kwargs.get("nohpv", {}).keys(),
+            )
+        )
+
         args = self.hpv.set_lnl_spread_params(*args, **hpv_kwargs)
-        return self.nohpv.set_lnl_spread_params(*args, **nohpv_kwargs)
+        args = self.nohpv.set_lnl_spread_params(*args, **nohpv_kwargs)
+
+        if (
+            self.is_trinary
+            and self.growth_mod is not None
+            and self.use_growth_mod
+            and reset_growth
+        ):
+            nohpv_growth_params = {
+                key: value
+                for key, value in self.nohpv.get_lnl_spread_params(
+                    as_flat=True,
+                ).items()
+                if key.endswith("_growth")
+            }
+            if nohpv_growth_params:
+                hpv_growth_params = {
+                    key: value**self.growth_mod
+                    for key, value in nohpv_growth_params.items()
+                }
+                self.hpv.set_lnl_spread_params(**hpv_growth_params)
+
+        return args
 
     def set_spread_params(self, *args: float, **kwargs: float) -> tuple[float]:
         """Set the parameters of the model's spread edges."""
@@ -425,7 +484,7 @@ class HPVUnilateral(
     def risk(
         self,
         involvement: types.PatternType,
-        HPV: bool | False,
+        hpv: bool = False,
         given_params: types.ParamsType | None = None,
         given_state_dist: np.ndarray | None = None,
         given_diagnosis: dict[str, types.PatternType] | None = None,
@@ -436,7 +495,7 @@ class HPVUnilateral(
 
         See :py:meth:`.models.Unilateral.risk` for more information.
         """
-        if HPV == False:
+        if not hpv:
             return self.nohpv.risk(
                 involvement=involvement,
                 given_params=given_params,
@@ -445,7 +504,7 @@ class HPVUnilateral(
                 t_stage=t_stage,
                 mode=mode,
             )
-        if HPV == True:
+        if hpv:
             return self.hpv.risk(
                 involvement=involvement,
                 given_params=given_params,
