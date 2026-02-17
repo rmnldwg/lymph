@@ -1,4 +1,5 @@
 """Unit tests for the Edge class."""
+
 import unittest
 
 import numpy as np

@@ -1,4 +1,5 @@
 """Test the Bayesian Unilateral Model."""
+
 import unittest
 
 import numpy as np

@@ -18,9 +18,12 @@ from lymph.utils import get_state_idx_matrix, row_wise_kron, tile_and_repeat
 @lru_cache(maxsize=128)
 def generate_transition(
     lnls: Iterable[graph.LymphNodeLevel],
+    edges: Iterable[graph.Edge],
     num_states: int,
 ) -> np.ndarray:
-    """Compute the transition matrix of the lymph model."""
+    """Compute the transition matrix of the lymph model.
+    the edges are included for caching purposes.
+    """
     lnls = list(lnls)  # necessary for `index()` call
     num_lnls = len(lnls)
     transition_matrix = np.ones(shape=(num_states**num_lnls, num_states**num_lnls))

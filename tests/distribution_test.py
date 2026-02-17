@@ -1,6 +1,6 @@
 """Check functionality of the distribution over diagnosis times."""
-import unittest
 
+import unittest
 import warnings
 
 import numpy as np

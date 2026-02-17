@@ -8,8 +8,8 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-import scipy as sp
 import pytest
+import scipy as sp
 
 from lymph import diagnosis_times, models
 from lymph.modalities import Clinical, Modality, Pathological
@@ -135,7 +135,7 @@ class BinaryUnilateralModelMixin:
                     f"{t_stage}_{type_}": self.rng.random()
                     for t_stage, dist in self.model.get_all_distributions().items()
                     for type_ in dist.get_params(as_dict=True).keys()
-                }
+                },
             )
         return params
 
@@ -225,7 +225,7 @@ class TrinaryFixtureMixin:
                     f"{t_stage}_{type_}": self.rng.random()
                     for t_stage, dist in self.model.get_all_distributions().items()
                     for type_ in dist.get_params(as_dict=True).keys()
-                }
+                },
             )
 
         return params

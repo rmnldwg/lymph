@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.7] - 2025-10-23
+
+### Bug Fixes
+
+- Make models compatible with new data format.
+- Correct array shape mismatch in `draw_patients`.
+
+### Miscellaneous Tasks
+
+- Update codecov badge.
+- Mention wiki in contribution guide.
+- Update email addresses.
+
+### Change
+
+- Adjustments to allow bilateral mixture model.
+- Make compatible with new data format (again).
+- Change dataframe indexing to conform with new standard.
+
 ## [1.3.6] - 2025-06-30
 
 ### Miscellaneous Tasks
@@ -948,6 +967,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
+[1.3.7]: https://github.com/lycosystem/lymph/compare/1.3.6...1.3.7
 [1.3.6]: https://github.com/lycosystem/lymph/compare/1.3.5...1.3.6
 [1.3.5]: https://github.com/lycosystem/lymph/compare/1.3.4...1.3.5
 [1.3.4]: https://github.com/lycosystem/lymph/compare/1.3.3...1.3.4

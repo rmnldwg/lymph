@@ -1,4 +1,5 @@
 """Unit tests for the Node classes."""
+
 import unittest
 
 from lymph import graph

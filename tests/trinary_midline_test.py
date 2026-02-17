@@ -1,4 +1,5 @@
 """Test the midline model for the binary case."""
+
 import unittest
 from typing import Literal
 
