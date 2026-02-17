@@ -255,10 +255,18 @@ class Distribution:
                 del self._frozen
 
         try:
-            _ = self.pmf
+            pmf_result = self.pmf
         except ValueError as val_err:
             self._func.keywords.update(old_kwargs)
             raise ValueError("Invalid params provided to distribution") from val_err
+
+        if np.any(np.isnan(pmf_result)):
+            invalid_params = self._func.keywords.copy()
+            self._func.keywords.update(old_kwargs)
+            del self._frozen
+            raise ValueError(
+                f"Distribution function returned NaN with parameters {invalid_params}.",
+            )
 
         return args
 

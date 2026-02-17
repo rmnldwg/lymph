@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.8] - 2025-02-17
+
+### Bug Fixes
+
+- Make quickstart  compatible with new data format.
+- Raise error when distribution over diagnosis times returns NaN.
+- (**types**) Allow alias params in set_named_params validation.
+
+### Documentation
+
+- Update quickstart.
+- Update quickstart with model predictions.
+- Fix error in quickstart.
+
+### Features
+
+- Improve hpv model implementation.\
+  Fixed shortcomings from the latest update. The model works correctly now, though some improvements could still be made.
+
+
+### Change
+
+- Extend patient_likelihoods to speed up mixture model fitting.
+- Added tests for caching.
+- Updated testing.
+- https://github.com/lycosystem/lymph/issues/113
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
 ## [1.3.7] - 2025-10-23
 
 ### Bug Fixes
@@ -967,6 +998,7 @@ Almost the entire API has changed. I'd therefore recommend to have a look at the
 - fix pyproject.toml typo
 - add pre-commit hook to check commit msg
 
+[1.3.8]: https://github.com/lycosystem/lymph/compare/1.3.7...1.3.8
 [1.3.7]: https://github.com/lycosystem/lymph/compare/1.3.6...1.3.7
 [1.3.6]: https://github.com/lycosystem/lymph/compare/1.3.5...1.3.6
 [1.3.5]: https://github.com/lycosystem/lymph/compare/1.3.4...1.3.5

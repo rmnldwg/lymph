@@ -1,9 +1,10 @@
 """Test the midline model for the binary case."""
+
 import unittest
-import pytest
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from lymph import models
 
@@ -160,7 +161,8 @@ class MidlineRiskTestCase(
         self.assertEqual(state_dist_3d.shape, (2, 4, 4))
 
         risk_from_state_dist = self.model.risk(
-            given_state_dist=state_dist_3d, midext=True
+            given_state_dist=state_dist_3d,
+            midext=True,
         )
         risk_direct = self.model.risk(midext=True)
         self.assertTrue(np.allclose(risk_from_state_dist, risk_direct))
@@ -214,7 +216,6 @@ class MidlineDrawPatientsTestCase(unittest.TestCase):
             rng=self.rng,
         )
         self.assertEqual(len(drawn_data), 100)
-
 
 
 @pytest.fixture

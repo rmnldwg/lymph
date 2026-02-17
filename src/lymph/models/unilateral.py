@@ -402,7 +402,8 @@ class Unilateral(
 
         """
         return matrix.generate_transition(
-            lnls=self.graph.lnls.values(),
+            lnls=tuple(self.graph.lnls.values()),  # Convert to tuple for chaching
+            edges=tuple(self.graph.edges.values()),  # Convert to tuple for chaching
             num_states=3 if self.is_trinary else 2,
         )
 
@@ -422,7 +423,7 @@ class Unilateral(
 
         """
         return matrix.generate_observation(
-            modalities=self.get_all_modalities().values(),
+            modalities=tuple(self.get_all_modalities().values()),
             num_lnls=len(self.graph.lnls),
             base=3 if self.is_trinary else 2,
         )
