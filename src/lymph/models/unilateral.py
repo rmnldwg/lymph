@@ -526,7 +526,11 @@ class Unilateral(
             .reset_index(drop=True)
         )
 
-        data_modalities = set(patient_data.columns.levels[0]) - {"patient", "tumor"}
+        data_modalities = set(patient_data.columns.levels[0]) - {
+            "patient",
+            "tumor",
+            "dataset",
+        }
         for modality in data_modalities:
             if side not in patient_data[modality]:
                 warnings.warn(
