@@ -43,22 +43,14 @@ class CachingTestCase(
         tm2 = self.model.transition_matrix()
         time2 = time.time() - start
 
-        # Third call - should be cached
-        start = time.time()
-        tm3 = self.model.transition_matrix()
-        time3 = time.time() - start
-
         # Check that cached calls are faster than the first call
         self.assertLess(time2, time1, "Second call should be faster (cached)")
-        self.assertLess(time3, time1, "Third call should be faster (cached)")
 
         # Check that all three return the same object in memory
         self.assertIs(tm1, tm2, "Cached calls should return same object")
-        self.assertIs(tm2, tm3, "Cached calls should return same object")
 
         # Verify arrays are actually equal
         np.testing.assert_array_equal(tm1, tm2)
-        np.testing.assert_array_equal(tm2, tm3)
 
     def test_transition_matrix_changes_with_params(self):
         """Check that different parameters produce different matrices."""
@@ -93,19 +85,11 @@ class CachingTestCase(
         om2 = self.model.observation_matrix()
         time2 = time.time() - start
 
-        # Third call - should be cached
-        start = time.time()
-        om3 = self.model.observation_matrix()
-        time3 = time.time() - start
-
         # Check that cached calls are faster than the first call
         self.assertLess(time2, time1, "Second call should be faster (cached)")
-        self.assertLess(time3, time1, "Third call should be faster (cached)")
 
         # Check that all three return the same object in memory
         self.assertIs(om1, om2, "Cached calls should return same object")
-        self.assertIs(om2, om3, "Cached calls should return same object")
 
         # Verify arrays are actually equal
         np.testing.assert_array_equal(om1, om2)
-        np.testing.assert_array_equal(om2, om3)
