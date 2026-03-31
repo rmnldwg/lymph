@@ -489,7 +489,7 @@ class Bilateral(
             )
         raise NotImplementedError(
             f"Mode '{mode}' not implemented for patient likelihoods. "
-            "Only 'HMM? is supported.",
+            "Only 'HMM' is supported.",
         )
 
     def _bn_likelihood(self, log: bool = True, t_stage: str | None = None) -> float:
