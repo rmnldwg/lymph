@@ -130,6 +130,16 @@ class Midline(
                     is_symmetric=self.is_symmetric,
                 )
             ext_children = {f"ext{coh}": self.ext_coh[coh] for coh in self.cohorts}
+
+            # add model to marginalise over unknown cohorts
+            # right now it's the default, later on we might add a flag specifying this
+            self.ext = models.Bilateral(
+                graph_dict=graph_dict,
+                uni_kwargs=uni_kwargs,
+                is_symmetric=self.is_symmetric,
+            )
+            ext_children.update({"ext": self.ext})
+
         else:
             self.ext = models.Bilateral(
                 graph_dict=graph_dict,
@@ -152,6 +162,12 @@ class Midline(
                 # Actually, this shouldn't be too hard, but we still need to think
                 # about it for a bit.
             )
+        if self.use_midext_evo and self.use_cohorts:
+            raise ValueError(
+                "Evolution of cohorts not yet implemented. Choose to use either "
+                "the cohorts model or the midline extension evolution.",
+            )
+
         other_children = {}
         if use_central:
             self._central = models.Bilateral(
@@ -177,7 +193,10 @@ class Midline(
             else:
                 self.mixing_param = 0.5
 
-        self.midext_prob = 0.5
+        if self.use_cohorts:
+            self.midext_probs = dict.fromkeys(self.cohorts, 0.2)
+        else:
+            self.midext_prob = 0.5
 
         diagnosis_times.Composite.__init__(
             self,
@@ -237,6 +256,46 @@ class Midline(
         self._midext_prob = value
 
     @property
+    def midext_probs(self) -> float:
+        """Return the probability of midline extension."""
+        if hasattr(self, "_midext_probs"):
+            return self._midext_probs
+        return 0.0
+
+    @midext_probs.setter
+    def midext_probs(self, value: dict) -> None:
+        """Set the probability of midline extension."""
+        if value is not None and (
+            not all(0.0 <= v for v in value.values()) or not sum(value.values()) <= 1.0
+        ):
+            raise ValueError("The midline extension prob must be in the range [0, 1].")
+        self._midext_probs = value
+
+    def set_midext_prob_for_cohort(self, cohort: int, value: float) -> None:
+        """Set midline extension probability for a specific cohort."""
+        if not hasattr(self, "_midext_probs"):
+            raise RuntimeError("midext_probs not initialized")
+        if cohort not in self._midext_probs:
+            raise ValueError(f"Cohort {cohort} not in valid cohorts")
+
+        # Create updated dict and validate as a whole
+        updated = dict(self._midext_probs)
+        updated[cohort] = value
+        self._validate_midext_probs(updated)
+
+        self._midext_probs = updated
+
+    def _validate_midext_probs(self, probs: dict) -> None:
+        """Validate midline extension probabilities."""
+        if not all(0.0 <= v <= 1.0 for v in probs.values()):
+            raise ValueError("All midline extension probs must be in [0, 1].")
+        if sum(probs.values()) > 1.0:
+            raise ValueError(
+                f"Sum of midline extension probs must be ≤ 1.0, "
+                f"got {sum(probs.values())}",
+            )
+
+    @property
     def mixing_param(self) -> float | None:
         """Return the mixing parameter."""
         if hasattr(self, "_mixing_param"):
@@ -258,7 +317,7 @@ class Midline(
         return {}
 
     @mixing_params.setter
-    def mixing_params(self, value: float) -> None:
+    def mixing_params(self, value: dict) -> None:
         """Set the mixing parameter."""
         if not all(0.0 <= v <= 1.0 for v in value.values()):
             raise ValueError("The mixing parameter must be in the range [0, 1].")
@@ -348,7 +407,7 @@ class Midline(
         and one for the contralateral side (if ``False``).
         """
         if self.use_cohorts:
-            ext_lnl_params = self.ext_coh[1].ipsi.get_lnl_spread_params(as_flat=False)
+            ext_lnl_params = self.ext_coh[1].get_lnl_spread_params(as_flat=False)
         else:
             ext_lnl_params = self.ext.get_lnl_spread_params(as_flat=False)
         noext_lnl_params = self.noext.get_lnl_spread_params(as_flat=False)
@@ -413,7 +472,10 @@ class Midline(
         params = {}
         params.update(self.get_spread_params(as_flat=as_flat))
         params.update(self.get_distribution_params(as_flat=as_flat))
-        params["midext_prob"] = self.midext_prob
+        if self.use_cohorts:
+            params["midext_probs"] = self.midext_probs
+        else:
+            params["midext_prob"] = self.midext_prob
 
         if as_flat or not as_dict:
             params = utils.flatten(params)
@@ -600,8 +662,34 @@ class Midline(
         """
         last_param_idx = self.get_num_dims() - 1
         before, last, after = utils.popat(args, idx=last_param_idx)
-        if kwargs.get("midext_prob", last) is not None:
-            self.midext_prob = kwargs.get("midext_prob", last)
+        # if self.use_cohorts:
+        #     if kwargs.get("midext_probs", last) is not None:
+        #         self.midext_probs = kwargs.get("midext_probs", last)
+        if self.use_cohorts:
+            # Extract and reconstruct flattened midext_probs_* keys
+            midext_probs_dict = {}
+            for cohort in self.cohorts:
+                key = f"midext_probs_{cohort}"
+                if key in kwargs:
+                    midext_probs_dict[cohort] = kwargs.pop(key)
+
+            # If no flattened keys found, try the singular "midext_probs" key
+            if not midext_probs_dict and "midext_probs" in kwargs:
+                midext_probs_dict = kwargs.pop("midext_probs")
+
+            # If we got any values, validate and set
+            if midext_probs_dict:
+                if isinstance(midext_probs_dict, dict):
+                    self._validate_midext_probs(midext_probs_dict)
+                    self._midext_probs = midext_probs_dict
+                else:
+                    if last is not None:
+                        # For now, skip setting if we can't unambiguously reconstruct
+                        pass
+                    args = before + after
+        else:
+            if kwargs.get("midext_prob", last) is not None:
+                self.midext_prob = kwargs.get("midext_prob", last)
 
         args = self.set_spread_params(*(before + after), **kwargs)
         return self.set_distribution_params(*args, **kwargs)
@@ -639,7 +727,7 @@ class Midline(
 
         if self.use_cohorts:
             mask_noext = patient_data[EXT_COH_COL] == 0
-            self.noext.load_patient_data(patient_data[mask_noext], mapping)
+            # self.noext.load_patient_data(patient_data[mask_noext], mapping)
             if not np.array_equal(
                 self.cohorts,
                 np.arange(1, patient_data[EXT_COH_COL].max() + 1),
@@ -651,6 +739,14 @@ class Midline(
             for coh in self.cohorts:
                 mask_ext = patient_data[EXT_COH_COL] == coh
                 self.ext_coh[coh].load_patient_data(patient_data[mask_ext], mapping)
+
+            unknown_cohort = patient_data[EXT_COH_COL].isna()
+            unknown_noext = unknown_cohort & (midext_data == False) | mask_noext  # noqa: E712
+            unknown_ext = unknown_cohort & (midext_data == True)  # noqa: E712
+            if unknown_noext.sum() > 0:
+                self.noext.load_patient_data(patient_data[unknown_noext], mapping)
+            if unknown_ext.sum() > 0:
+                self.ext.load_patient_data(patient_data[unknown_ext], mapping)
         else:
             is_lateralized = midext_data == False  # noqa: E712
             has_extension = midext_data == True  # noqa: E712
@@ -766,11 +862,13 @@ class Midline(
 
         if self.use_cohorts:
             noext_contra_dist_evo = self.noext.contra.state_dist_evo()
-            noext_contra_dist_evo *= 1.0 - self.midext_prob
+            noext_contra_dist_evo *= 1.0 - sum(
+                [self.midext_probs[coh] for coh in self.cohorts],
+            )
             ext_contra_dist_evo = {}
             for coh in self.cohorts:
                 ext_contra_dist_evo[coh] = self.ext_coh[coh].contra.state_dist_evo()
-                ext_contra_dist_evo[coh] *= self.midext_prob
+                ext_contra_dist_evo[coh] *= self.midext_probs[coh]
 
             if mode == "HMM":
                 result = np.empty(
@@ -911,11 +1009,11 @@ class Midline(
             ipsi_dist_evo = self.ext_coh[1].ipsi.state_dist_evo()
             contra_dist_evo = {}
             contra_dist_evo[0] = self.noext.contra.state_dist_evo() * (
-                1 - self.midext_prob
+                1 - sum([self.midext_probs[coh] for coh in self.cohorts])
             )
             for coh in self.cohorts:
                 contra_dist_evo[coh] = (
-                    self.ext_coh[coh].contra.state_dist_evo() * self.midext_prob
+                    self.ext_coh[coh].contra.state_dist_evo() * self.midext_probs[coh]
                 )
             cases = np.arange(0, len(self.cohorts) + 1)
             t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
@@ -923,11 +1021,14 @@ class Midline(
                 diag_time_matrix = np.diag(self.get_distribution(stage).pmf)
                 num_states = ipsi_dist_evo.shape[1]
                 marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
+                ext_marg_joint_state_dist = np.zeros(shape=(num_states, num_states))
                 for case in cases:
                     joint_state_dist = (
                         ipsi_dist_evo.T @ diag_time_matrix @ contra_dist_evo[case]
                     )
                     marg_joint_state_dist += joint_state_dist
+                    if case != 0:
+                        ext_marg_joint_state_dist += joint_state_dist
                     _model = self.noext if case == 0 else self.ext_coh[case]
                     patient_llhs = matrix.fast_trace(
                         _model.ipsi.diagnosis_matrix(stage),
@@ -935,6 +1036,13 @@ class Midline(
                     )
                     llh = utils.add_or_mult(llh, patient_llhs, log=log)
                 try:
+                    ext_marg_patient_llh = matrix.fast_trace(
+                        self.ext.ispi.diagnosis_matrix(stage),
+                        ext_marg_joint_state_dist
+                        @ self.ext.contra.diagnosis_matrix(stage).T,
+                    )
+                    llh = utils.add_or_mult(llh, ext_marg_patient_llh, log=log)
+
                     marg_patient_llhs = matrix.fast_trace(
                         self.unknown.ipsi.diagnosis_matrix(stage),
                         marg_joint_state_dist
@@ -1070,7 +1178,9 @@ class Midline(
                 if cohort is not None:
                     _model = self.no_ext if cohort == 0 else self.ext_coh[cohort]
                 else:
-                    # Default to one cohort -> could also marginalise over them!
+                    # Default to one cohort -> could also marginalise over them! I
+                    # think here it does not really matter, but I am also
+                    # not entirely sure!
                     _model = self.ext_coh[1] if hasattr(self, "ext_coh") else self.ext
             else:
                 _model = self.ext
@@ -1163,9 +1273,17 @@ class Midline(
 
         if self.use_cohorts:
             if cohort is None:
-                given_state_dist = np.sum(given_state_dist, axis=0)
+                if midext is None:
+                    given_state_dist = np.sum(given_state_dist, axis=0)
+                else:
+                    if midext:
+                        given_state_dist = np.sum(given_state_dist[1:], axis=0)
+                    else:
+                        given_state_dist = given_state_dist[0]
                 _model = self.ext_coh[1] if hasattr(self, "ext_coh") else self.ext
             else:
+                # don't normalize here, we are computing the probability of belonging
+                # to that specific cohort as well
                 given_state_dist = given_state_dist[cohort]
                 _model = self.noext if cohort == 0 else self.ext_coh[cohort]
         else:
