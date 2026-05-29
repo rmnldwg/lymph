@@ -162,11 +162,12 @@ class Midline(
                 # Actually, this shouldn't be too hard, but we still need to think
                 # about it for a bit.
             )
-        if self.use_midext_evo and self.use_cohorts:
-            raise ValueError(
-                "Evolution of cohorts not yet implemented. Choose to use either "
-                "the cohorts model or the midline extension evolution.",
-            )
+        # need to take this out again!!!
+        # if self.use_midext_evo and self.use_cohorts:
+        #     raise ValueError(
+        #         "Evolution of cohorts not yet implemented. Choose to use either "
+        #         "the cohorts model or the midline extension evolution.",
+        #     )
 
         other_children = {}
         if use_central:
@@ -780,6 +781,18 @@ class Midline(
         midext_states[:, 1] = 1.0 - midext_states[:, 0]
         return midext_states
 
+    def midext_evo_cohorts(self) -> np.ndarray:
+        """Evolve only the state of the cohorts."""
+        # really not sure conceputally what this means in terms of the
+        # cohorts!
+        # will just consider with or without midext extension for now
+        # but not sure if this is the right way
+        time_steps = np.arange(self.max_time + 1)
+        midext_states = np.zeros(shape=(self.max_time + 1, 2), dtype=float)
+        midext_states[:, 0] = (1.0 - self.midext_probs[1]) ** time_steps
+        midext_states[:, 1] = 1.0 - midext_states[:, 0]
+        return midext_states
+
     # not implemented for the cohorts so far! so midext evo will not work!
     def contra_state_dist_evo(
         self,
@@ -838,6 +851,51 @@ class Midline(
 
         return noext_contra_dist_evo, ext_contra_dist_evo
 
+    def contra_state_dist_evo_cohorts(
+        self,
+    ) -> tuple[np.ndarray, dict[int, np.ndarray]]:
+        noext_contra_dist_evo = self.noext.contra.state_dist_evo()
+        if not self.use_midext_evo:
+            noext_contra_dist_evo *= 1.0 - sum(
+                [self.midext_probs[coh] for coh in self.cohorts],
+            )
+            ext_contra_dist_evo = {}
+            for coh in self.cohorts:
+                ext_contra_dist_evo[coh] = self.ext_coh[coh].contra.state_dist_evo()
+                ext_contra_dist_evo[coh] *= self.midext_probs[coh]
+
+        else:
+            ext_contra_dist_evo = {}
+            midext_evo_coh = self.midext_evo_cohorts()
+            noext_contra_dist_evo *= midext_evo_coh[:, 0].reshape(-1, 1)
+
+            # calculate evolution for first cohort (grows over midline)
+            ext_contra_dist_evo_temp = np.zeros_like(noext_contra_dist_evo)
+            for t in range(self.max_time):
+                ext_contra_dist_evo_temp[t + 1] = (
+                    self.midext_probs[1] * noext_contra_dist_evo[t]
+                    + (1 - self.midext_probs[2]) * ext_contra_dist_evo_temp[t]
+                ) @ self.ext_coh[1].contra.transition_matrix()
+            ext_contra_dist_evo[1] = ext_contra_dist_evo_temp
+
+            ext_contra_dist_evo_temp = np.zeros_like(noext_contra_dist_evo)
+            for t in range(self.max_time):
+                ext_contra_dist_evo_temp[t + 1] = (
+                    self.midext_probs[2] * ext_contra_dist_evo[(2 - 1)][t]
+                    + (1 - self.midext_probs[3]) * ext_contra_dist_evo_temp[t]
+                ) @ self.ext_coh[2].contra.transition_matrix()
+            ext_contra_dist_evo[2] = ext_contra_dist_evo_temp
+
+            ext_contra_dist_evo_temp = np.zeros_like(noext_contra_dist_evo)
+            for t in range(self.max_time):
+                ext_contra_dist_evo_temp[t + 1] = (
+                    self.midext_probs[3] * ext_contra_dist_evo[(3 - 1)][t]
+                    + ext_contra_dist_evo_temp[t]
+                ) @ self.ext_coh[3].contra.transition_matrix()
+            ext_contra_dist_evo[3] = ext_contra_dist_evo_temp
+
+        return noext_contra_dist_evo, ext_contra_dist_evo
+
     def state_dist(
         self,
         t_stage: str = "early",
@@ -861,14 +919,9 @@ class Midline(
             ipsi_dist_evo = self.ext.ipsi.state_dist_evo()
 
         if self.use_cohorts:
-            noext_contra_dist_evo = self.noext.contra.state_dist_evo()
-            noext_contra_dist_evo *= 1.0 - sum(
-                [self.midext_probs[coh] for coh in self.cohorts],
+            noext_contra_dist_evo, ext_contra_dist_evo = (
+                self.contra_state_dist_evo_cohorts()
             )
-            ext_contra_dist_evo = {}
-            for coh in self.cohorts:
-                ext_contra_dist_evo[coh] = self.ext_coh[coh].contra.state_dist_evo()
-                ext_contra_dist_evo[coh] *= self.midext_probs[coh]
 
             if mode == "HMM":
                 result = np.empty(
@@ -1007,14 +1060,20 @@ class Midline(
 
         if self.use_cohorts:
             ipsi_dist_evo = self.ext_coh[1].ipsi.state_dist_evo()
-            contra_dist_evo = {}
-            contra_dist_evo[0] = self.noext.contra.state_dist_evo() * (
-                1 - sum([self.midext_probs[coh] for coh in self.cohorts])
+            # contra_dist_evo = {}
+            # contra_dist_evo[0] = self.noext.contra.state_dist_evo() * (
+            #     1 - sum([self.midext_probs[coh] for coh in self.cohorts])
+            # )
+            # for coh in self.cohorts:
+            #     contra_dist_evo[coh] = (
+            #         self.ext_coh[coh].contra.state_dist_evo() * self.midext_probs[coh]
+            #     )
+
+            contra_dist_evo_noext, contra_dist_evo_dict = (
+                self.contra_state_dist_evo_cohorts()
             )
-            for coh in self.cohorts:
-                contra_dist_evo[coh] = (
-                    self.ext_coh[coh].contra.state_dist_evo() * self.midext_probs[coh]
-                )
+            contra_dist_evo = {0: contra_dist_evo_noext, **contra_dist_evo_dict}
+
             cases = np.arange(0, len(self.cohorts) + 1)
             t_stages = self.t_stages if for_t_stage is None else [for_t_stage]
             for stage in t_stages:
